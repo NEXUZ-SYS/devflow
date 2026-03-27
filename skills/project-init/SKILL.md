@@ -36,10 +36,13 @@ digraph init_strategy {
 ### Tier 1: dotcontext MCP already available
 MCP tools are ready — produces the richest content with semantic analysis and tree-sitter:
 ```
-context({ action: "init" })    → scaffolds .context/ structure
-context({ action: "fill" })    → fills with semantic analysis
+context({ action: "init" })            → scaffolds .context/ structure
+context({ action: "fill" })            → fills with AI-powered analysis
+context({ action: "buildSemantic" })   → deep codebase analysis (symbols, deps, patterns)
+context({ action: "getMap" })          → generates codebase-map.json
+context({ action: "detectPatterns" })  → identifies architecture patterns and conventions
 ```
-After dotcontext fills, DevFlow adds any missing files that dotcontext doesn't generate.
+After dotcontext fills and reinforces, DevFlow adds any missing files that dotcontext doesn't generate.
 
 ### Tier 2: dotcontext installable (npx available)
 Install dotcontext as MCP server (non-interactive), then use MCP tools:
@@ -116,10 +119,24 @@ Check if .context/ exists
 
 ## Step 3a: Tier 1 — dotcontext MCP
 
+### 3a-1: Scaffold and fill
 ```
 context({ action: "init" })
 context({ action: "fill" })
 ```
+
+### 3a-2: Reinforce with deep analysis
+```
+context({ action: "buildSemantic" })    → AST analysis, symbol extraction, dependency graph
+context({ action: "getMap" })           → rich codebase-map.json with file descriptions
+context({ action: "detectPatterns" })   → architecture patterns, conventions, code organization
+```
+
+These three calls reinforce `.context/` with data that `fill` alone doesn't capture:
+- **buildSemantic** — tree-sitter AST parsing, class/function/type extraction, cross-file references
+- **getMap** — machine-readable codebase structure with symbol counts and key exports
+- **detectPatterns** — identifies MVC, service layer, repository pattern, etc.
+
 Then proceed to Step 4 (fill gaps).
 
 ## Step 3b: Tier 2 — Install dotcontext MCP + use
@@ -140,16 +157,19 @@ This writes `.mcp.json` to the project root with the dotcontext MCP server confi
 }
 ```
 
-### Step 3b-2: Use MCP tools
+### Step 3b-2: Scaffold, fill, and reinforce via MCP
 Once the MCP server is registered, use the same flow as Tier 1:
 ```
-context({ action: "init" })    → scaffolds .context/ structure
-context({ action: "fill" })    → fills with semantic analysis
+context({ action: "init" })            → scaffolds .context/ structure
+context({ action: "fill" })            → fills with AI-powered analysis
+context({ action: "buildSemantic" })   → deep codebase analysis
+context({ action: "getMap" })          → generates codebase-map.json
+context({ action: "detectPatterns" })  → identifies architecture patterns
 ```
 
-**Note:** `init` and `fill` are MCP-only operations — they do NOT exist as CLI commands. The CLI is only used for `mcp:install`.
+**Note:** All of these are MCP-only operations — they do NOT exist as CLI commands. The CLI is only used for `mcp:install`.
 
-**Important:** `context({ action: "fill" })` uses AI to analyze the codebase and generate rich, project-specific content with semantic analysis, tree-sitter AST parsing, and symbol extraction. This is slower but produces significantly better results than DevFlow's manual scan.
+**Important:** `fill` uses AI to populate docs/agents/skills. `buildSemantic` adds tree-sitter AST parsing, symbol extraction, and cross-file dependency analysis. `getMap` and `detectPatterns` further reinforce with structural and architectural context.
 
 After completion, the project is now in **Full mode** — dotcontext MCP is available for all subsequent DevFlow operations.
 

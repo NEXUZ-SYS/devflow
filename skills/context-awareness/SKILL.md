@@ -21,24 +21,29 @@ Enriches tasks with deep project context by leveraging dotcontext's semantic ana
 
 ### Full Mode — Semantic Analysis
 
+Always run these three to get comprehensive context:
 ```
-context({ action: "buildSemantic" })
+context({ action: "buildSemantic" })   # AST analysis, symbols, deps, cross-file refs
+context({ action: "getMap" })          # Codebase map (file tree + descriptions + stats)
+context({ action: "detectPatterns" })  # Architecture patterns and conventions
 ```
 
 Returns:
 - Complete codebase structure with file relationships
 - Symbol definitions and references (via tree-sitter)
 - Dependency graph
-- Code patterns and conventions
+- Architecture patterns (MVC, service layer, repository, etc.)
+- Code conventions and organization style
 
-Additional queries:
+Task-specific queries:
 ```
-context({ action: "getMap" })         # Codebase map (file tree + descriptions)
-context({ action: "detectPatterns" }) # Detected patterns and conventions
 context({ action: "searchQA" })       # Search project Q&A knowledge base
 explore({ action: "analyze", path: "<file>" })  # Deep analysis of specific file
 explore({ action: "search", query: "<term>" })   # Semantic code search
+explore({ action: "getStructure" })   # Full directory structure
 ```
+
+**Tip:** `buildSemantic` + `getMap` + `detectPatterns` should be run together — they complement each other. `buildSemantic` gives symbols, `getMap` gives structure, `detectPatterns` gives architectural context.
 
 ### Lite Mode — Direct File Reading
 
