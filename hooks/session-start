@@ -14,11 +14,20 @@ superpowers_available="false"
 dotcontext_mcp="false"
 dotcontext_lite="false"
 
-# Check superpowers: look for the plugin in Claude's plugin directory
-if [ -d "${HOME}/.claude/plugins/superpowers" ] || \
-   [ -d "${HOME}/.config/claude/plugins/superpowers" ] || \
-   command -v superpowers >/dev/null 2>&1; then
+# Check superpowers: look in installed_plugins.json (Claude Code plugin system)
+installed_plugins="${HOME}/.claude/plugins/installed_plugins.json"
+if [ -f "$installed_plugins" ] && grep -q '"superpowers@' "$installed_plugins" 2>/dev/null; then
   superpowers_available="true"
+fi
+
+# Fallback: check if superpowers skills directory exists in plugin cache
+if [ "$superpowers_available" = "false" ]; then
+  for dir in "${HOME}/.claude/plugins/cache"/*/superpowers/*/skills; do
+    if [ -d "$dir" ]; then
+      superpowers_available="true"
+      break
+    fi
+  done
 fi
 
 # Check dotcontext MCP: look for .mcp.json or mcp config referencing dotcontext

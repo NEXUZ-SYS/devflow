@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "plugins": [
+    {
+      "name": "devflow",
+      "description": "Unified development workflow — bridges superpowers (discipline/TDD) with dotcontext (agents/PREVC/context)",
+      "path": "."
+    }
+  ]
+}
