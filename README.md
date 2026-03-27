@@ -40,8 +40,8 @@ See `references/tool-mapping.md` for platform-specific setup.
 - **superpowers** plugin installed (provides brainstorming, TDD, SDD, code review skills)
 
 ### Optional (enables Full mode)
-- **dotcontext** MCP server running (`npx dotcontext mcp:install`)
-- `.context/` directory initialized (`npx dotcontext init`)
+- **dotcontext** MCP server running (`npm i -g @dotcontext/cli && dotcontext mcp:install`)
+- `.context/` directory initialized (via MCP `context({ action: "init" })`)
 
 ### Standalone (Minimal mode)
 DevFlow works without either dependency, but with reduced capabilities.

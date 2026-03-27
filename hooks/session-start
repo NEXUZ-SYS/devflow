@@ -41,9 +41,11 @@ elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "dotcontext" "${HOME}/.
   mode="full"
 fi
 
-# Check dotcontext CLI: npx dotcontext available for installation
-if [ "$mode" != "full" ] && command -v npx >/dev/null 2>&1; then
-  if npx dotcontext --version >/dev/null 2>&1; then
+# Check dotcontext CLI: global install or npx available
+if [ "$mode" != "full" ]; then
+  if command -v dotcontext >/dev/null 2>&1; then
+    dotcontext_cli="true"
+  elif command -v npx >/dev/null 2>&1 && npx --yes @dotcontext/cli --version >/dev/null 2>&1; then
     dotcontext_cli="true"
   fi
 fi

@@ -78,7 +78,7 @@ This exports to: Claude (.claude/), Cursor (.cursor/), Copilot (.copilot/), Wind
 
 ### Lite Mode
 If any `.context/` files were updated, manually note that sync hasn't been run.
-Suggest: "Run `npx dotcontext sync` to export context to all AI tools."
+Suggest: "Run `dotcontext sync-agents` to export context to all AI tools."
 
 ### Minimal Mode
 Skip sync.

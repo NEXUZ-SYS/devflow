@@ -23,9 +23,9 @@ digraph init_strategy {
     node [shape=diamond];
 
     "dotcontext MCP available?" -> "Tier 1: Use MCP" [label="yes"];
-    "dotcontext MCP available?" -> "npx dotcontext installable?" [label="no"];
-    "npx dotcontext installable?" -> "Tier 2: Install MCP + use" [label="yes"];
-    "npx dotcontext installable?" -> "Tier 3: DevFlow standalone" [label="no"];
+    "dotcontext MCP available?" -> "dotcontext CLI available?" [label="no"];
+    "dotcontext CLI available?" -> "Tier 2: Install MCP + use" [label="yes"];
+    "dotcontext CLI available?" -> "Tier 3: DevFlow standalone" [label="no"];
 
     "Tier 1: Use MCP" [shape=box, style=filled, fillcolor="#e8f5e9"];
     "Tier 2: Install MCP + use" [shape=box, style=filled, fillcolor="#e3f2fd"];
@@ -44,12 +44,25 @@ context({ action: "detectPatterns" })  → identifies architecture patterns and 
 ```
 After dotcontext fills and reinforces, DevFlow adds any missing files that dotcontext doesn't generate.
 
-### Tier 2: dotcontext installable (npx available)
-Install dotcontext as MCP server (non-interactive), then use MCP tools:
+### Tier 2: dotcontext installable (CLI available)
+Install dotcontext as MCP server (non-interactive), then use MCP tools.
+
+**Step 1 — Ensure dotcontext CLI is available:**
 ```bash
-npx dotcontext mcp:install claude --local   → writes .mcp.json, no prompts
+# Check if already installed globally
+dotcontext --version
+
+# If not found, install globally (npx subcommands with ":" break on npm 11+)
+npm install -g @dotcontext/cli
+```
+
+**Step 2 — Install MCP server:**
+```bash
+dotcontext mcp:install claude --local   → writes .mcp.json, no prompts
 ```
 **Important:** Pass `claude --local` to skip the interactive tool selection prompt. This writes the MCP config to `.mcp.json` in the project root.
+
+**Warning:** Do NOT use `npx dotcontext mcp:install` — npm 11+ misinterprets the `:` in `mcp:install` as an npm script separator. Always use the globally installed `dotcontext` binary for subcommands.
 
 Once the MCP server is registered, it becomes available in the session. Then use the same MCP flow as Tier 1:
 ```
@@ -59,7 +72,7 @@ context({ action: "fill" })    → fills with semantic analysis
 
 **Note:** `init` and `fill` are MCP-only — they do NOT exist as CLI commands. The CLI is only used for `mcp:install`. Everything else goes through MCP tools.
 
-Check availability: run `npx dotcontext --version` via Bash. If it succeeds (exit 0), install and use MCP.
+Check availability: run `dotcontext --version` or `npx --yes @dotcontext/cli --version` via Bash. If either succeeds (exit 0), install and use MCP.
 This upgrades the project from Minimal to **Full mode** permanently.
 
 ### Tier 3: DevFlow standalone (no dotcontext, no npx)
@@ -76,7 +89,7 @@ Every file DevFlow generates in `.context/` MUST:
 - Use the exact field names dotcontext expects (`type`, `name`, `description`, `status`, `generated`)
 - Use the exact section headings dotcontext expects (agents: 11 sections, skills: 4 sections)
 - Set `status: filled` when DevFlow populates content, `status: unfilled` for scaffolds
-- Be readable by `npx dotcontext` without errors
+- Be readable by `dotcontext` without errors
 
 ## Checklist
 
@@ -97,14 +110,19 @@ Run these checks in order:
 ### Check 1: dotcontext MCP already running (Full mode)
 If the session context shows `dotcontext MCP: true`, use Tier 1.
 
-### Check 2: dotcontext installable via npx
+### Check 2: dotcontext CLI available
 ```bash
-npx dotcontext --version
+# Try global install first
+dotcontext --version
+
+# If not found, try via npx (note: only --version works via npx on npm 11+)
+npx --yes @dotcontext/cli --version
 ```
-If this succeeds (exit code 0), dotcontext can be installed as MCP. Use Tier 2.
+If either succeeds (exit code 0), dotcontext can be installed as MCP. Use Tier 2.
+If not globally installed, run `npm install -g @dotcontext/cli` first — `npx` cannot reliably run dotcontext subcommands on npm 11+.
 
 ### Check 3: Standalone
-If neither MCP is running nor npx is available, use Tier 3.
+If neither MCP is running nor dotcontext CLI is available, use Tier 3.
 
 ## Step 2: Check Existing State
 
@@ -143,7 +161,11 @@ Then proceed to Step 4 (fill gaps).
 
 ### Step 3b-1: Install MCP server (non-interactive)
 ```bash
-npx dotcontext mcp:install claude --local
+# Ensure dotcontext is globally available (npx can't run subcommands with ":" on npm 11+)
+command -v dotcontext >/dev/null || npm install -g @dotcontext/cli
+
+# Install MCP config
+dotcontext mcp:install claude --local
 ```
 This writes `.mcp.json` to the project root with the dotcontext MCP server config. No interactive prompts. The MCP entry it adds:
 ```json
@@ -396,7 +418,7 @@ Present a summary:
 
 ### Next steps
 - Run `/flow <task>` to start your first PREVC workflow
-- [If Tier 3] Install dotcontext (`npm i -g @dotcontext/cli && npx dotcontext mcp:install`) for Full mode
+- [If Tier 3] Install dotcontext (`npm i -g @dotcontext/cli && dotcontext mcp:install claude --local`) for Full mode
 ```
 
 ## Anti-Patterns

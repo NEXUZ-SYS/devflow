@@ -33,7 +33,7 @@ Verifique:
 Só precisa fazer isso uma vez:
 
 ```bash
-claude /plugin marketplace add NEXUZ-SYS --source github --repo NEXUZ-SYS/devflow
+claude plugin marketplace add NEXUZ-SYS/devflow
 ```
 
 ---
@@ -92,18 +92,21 @@ DevFlow Mode: minimal
 
 Isso dispara a skill `devflow:project-init` que executa:
 
-### Se npx está disponível (Tier 2 — recomendado):
+### Se dotcontext CLI está disponível (Tier 2 — recomendado):
 ```
-1. npx dotcontext mcp:install claude --local    ← instala MCP server
-2. context({ action: "init" })                  ← scaffolda .context/
-3. context({ action: "fill" })                  ← preenche com AI
-4. context({ action: "buildSemantic" })         ← análise AST profunda
-5. context({ action: "getMap" })                ← gera codebase-map.json
-6. context({ action: "detectPatterns" })        ← detecta padrões
-7. DevFlow preenche gaps                        ← agentes/skills extras
+1. npm install -g @dotcontext/cli              ← instala globalmente (se não existe)
+2. dotcontext mcp:install claude --local       ← instala MCP server → .mcp.json
+3. context({ action: "init" })                 ← scaffolda .context/
+4. context({ action: "fill" })                 ← preenche com AI
+5. context({ action: "buildSemantic" })        ← análise AST profunda
+6. context({ action: "getMap" })               ← gera codebase-map.json
+7. context({ action: "detectPatterns" })       ← detecta padrões
+8. DevFlow preenche gaps                       ← agentes/skills extras
 ```
 
-### Se npx NÃO está disponível (Tier 3):
+> **Nota:** Não use `npx dotcontext mcp:install` — npm 11+ interpreta o `:` como separador de script npm. Sempre use o binário global `dotcontext`.
+
+### Se dotcontext NÃO está disponível (Tier 3):
 ```
 1. DevFlow escaneia o projeto sozinho
 2. Gera .context/ em formato dotcontext v2
@@ -263,7 +266,7 @@ Skills podem ser invocadas a qualquer momento, fora de um workflow:
 ```bash
 # 1. Instalar plugins (uma vez)
 claude /plugin install superpowers@claude-plugins-official --scope user
-claude /plugin marketplace add NEXUZ-SYS --source github --repo NEXUZ-SYS/devflow
+claude plugin marketplace add NEXUZ-SYS/devflow
 claude /plugin install devflow@NEXUZ-SYS --scope user
 
 # 2. No projeto, abrir Claude Code
