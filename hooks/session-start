@@ -12,6 +12,7 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 mode="minimal"
 superpowers_available="false"
 dotcontext_mcp="false"
+dotcontext_cli="false"
 dotcontext_lite="false"
 
 # Check superpowers: look in installed_plugins.json (Claude Code plugin system)
@@ -38,6 +39,13 @@ if [ -f "${project_root}/.mcp.json" ] && grep -q "dotcontext" "${project_root}/.
 elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "dotcontext" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
   dotcontext_mcp="true"
   mode="full"
+fi
+
+# Check dotcontext CLI: npx dotcontext available for installation
+if [ "$mode" != "full" ] && command -v npx >/dev/null 2>&1; then
+  if npx dotcontext --version >/dev/null 2>&1; then
+    dotcontext_cli="true"
+  fi
 fi
 
 # Check dotcontext lite: .context/ directory exists
@@ -69,7 +77,13 @@ using_devflow_escaped=$(escape_for_json "$using_devflow_content")
 mode_context="\\n\\n**DevFlow Mode: ${mode}**\\n"
 mode_context+="- superpowers: ${superpowers_available}\\n"
 mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
+mode_context+="- dotcontext CLI (npx): ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
+
+# Hint: if CLI is available but MCP is not, suggest /flow init to upgrade
+if [ "$dotcontext_cli" = "true" ] && [ "$dotcontext_mcp" = "false" ]; then
+  mode_context+="- **Tip:** Run \`/flow init\` to install dotcontext MCP and upgrade to Full mode\\n"
+fi
 
 mode_escaped=$(escape_for_json "$mode_context")
 
