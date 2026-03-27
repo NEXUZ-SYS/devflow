@@ -8,7 +8,9 @@ Pure Markdown + shell. No runtime dependencies. Works as a plugin for Claude Cod
 
 - **PREVC workflow** (from dotcontext): 5-phase gated process — Planning, Review, Execution, Validation, Confirmation
 - **Scale-adaptive routing**: QUICK (E→V), SMALL (P→E→V), MEDIUM/LARGE (full P→R→E→V→C)
+- **21 skills**: PREVC phases, on-demand expertise (API design, security audit, test generation...), and project initialization
 - **14 specialist agents**: architect, feature-developer, bug-fixer, code-reviewer, test-writer, and 9 more
+- **Project-aware scaffolding**: `/flow init` scans your project and generates project-specific agents, skills, and docs in `.context/` (100% dotcontext-compatible)
 - **Discipline enforcement** (from superpowers): TDD iron law, Socratic brainstorming, 2-stage code review, anti-rationalization
 - **Graceful degradation**: Works in Full (MCP), Lite (.context/ files), or Minimal (standalone) mode
 
@@ -44,26 +46,34 @@ See `references/tool-mapping.md` for platform-specific setup.
 ### Standalone (Minimal mode)
 DevFlow works without either dependency, but with reduced capabilities.
 
+## Quick Start
+
+```bash
+# 1. Initialize DevFlow in your project (scaffolds .context/)
+/flow init
+
+# 2. Start a workflow
+/flow add user authentication with OAuth
+
+# 3. Or with explicit scale
+/flow scale:QUICK fix typo in README
+```
+
 ## Usage
 
 ```bash
-# Start a workflow
-/flow add user authentication with OAuth
+# Workflow management
+/flow init                              # Initialize project context
+/flow [description]                     # Start workflow (auto-scale)
+/flow scale:MEDIUM [description]        # Start with explicit scale
 
-# Start with explicit scale
-/flow scale:QUICK fix typo in README
+# Phase navigation
+/phase                                  # Show current phase
+/phase advance                          # Advance to next phase
 
-# Check current phase
-/phase
-
-# Advance to next phase
-/phase advance
-
-# List available agents
-/agents
-
-# Dispatch a specific agent
-/agents dispatch backend-specialist
+# Agent management
+/agents                                 # List available agents
+/agents dispatch backend-specialist     # Dispatch specific agent
 ```
 
 ## Operating Modes
@@ -80,13 +90,24 @@ Mode is auto-detected at session start.
 
 ```
 devflow/
-├── skills/           # 9 skills (meta, PREVC phases, bridge)
-├── agents/           # 14 specialist agent playbooks
+├── skills/           # 21 skills (meta, PREVC phases, bridge, on-demand)
+├── agents/           # 14 specialist agent playbooks (generic fallback)
+├── templates/        # Scaffold templates for .context/ generation
 ├── hooks/            # SessionStart hook with mode detection
 ├── commands/         # /flow, /phase, /agents slash commands
-├── references/       # Tool mapping for multi-platform support
+├── references/       # Skills map + tool mapping
 ├── .claude-plugin/   # Claude Code plugin manifest
 └── .cursor-plugin/   # Cursor plugin manifest
+```
+
+### Generated per-project (by `/flow init`)
+```
+your-project/
+└── .context/         # dotcontext-compatible, project-specific
+    ├── agents/       # Project-aware agent playbooks
+    ├── skills/       # Project-aware skill guides
+    ├── docs/         # Project documentation
+    └── plans/        # PREVC workflow plans
 ```
 
 ## How It Bridges

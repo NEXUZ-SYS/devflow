@@ -47,6 +47,7 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 ### Workflow Entry
 | Skill | When to use |
 |-------|-------------|
+| `devflow:project-init` | Initialize DevFlow in a new project — scaffolds `.context/` with project-aware content (dotcontext-compatible) |
 | `devflow:prevc-flow` | Start or continue a PREVC workflow — the main orchestrator |
 
 ### Phase Skills (invoked by prevc-flow, rarely directly)

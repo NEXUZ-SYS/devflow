@@ -16,6 +16,7 @@ Complete index of all skills across DevFlow, superpowers, and dotcontext. Each s
 | Skill | Origin | Invoke as | Phases | Mode | Description |
 |-------|--------|-----------|--------|------|-------------|
 | using-devflow | devflow | `devflow:using-devflow` | any | Minimal | Meta-skill: entry point for the unified system |
+| project-init | devflow | `devflow:project-init` | any | Minimal | Initialize project with .context/ (dotcontext-compatible) |
 | prevc-flow | devflow | `devflow:prevc-flow` | any | Minimal | Main PREVC workflow orchestrator with scale routing |
 | prevc-planning | devflow | `devflow:prevc-planning` | P | Minimal | Brainstorming + plan writing with context enrichment |
 | prevc-review | devflow | `devflow:prevc-review` | R | Minimal | Design/code review with agent orchestration |
@@ -122,6 +123,7 @@ User runs /flow "add caching layer"
 
 | I want to... | Use this skill |
 |--------------|---------------|
+| Initialize DevFlow in a project | `devflow:project-init` or `/flow init` |
 | Start a new feature | `devflow:prevc-flow` → auto-routes |
 | Fix a bug | `devflow:prevc-flow` scale:QUICK or `devflow:bug-investigation` |
 | Design an API | `devflow:api-design` |
