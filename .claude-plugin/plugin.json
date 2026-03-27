@@ -1,7 +1,20 @@
 {
   "name": "devflow",
+  "description": "Unified development workflow — bridges superpowers (discipline/TDD) with dotcontext (agents/PREVC/context)",
   "version": "0.1.0",
-  "description": "Unified software development workflow — bridges superpowers (discipline/tools) with dotcontext (agents/workflow/context)",
-  "author": "nxz",
-  "homepage": "https://github.com/nxz/devflow"
+  "author": {
+    "name": "NEXUZ-SYS"
+  },
+  "homepage": "https://github.com/NEXUZ-SYS/devflow",
+  "repository": "https://github.com/NEXUZ-SYS/devflow",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "prevc",
+    "agents",
+    "tdd",
+    "brainstorming",
+    "superpowers",
+    "dotcontext"
+  ]
 }
