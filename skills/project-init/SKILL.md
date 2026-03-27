@@ -42,16 +42,21 @@ context({ action: "fill" })    → fills with semantic analysis
 After dotcontext fills, DevFlow adds any missing files that dotcontext doesn't generate.
 
 ### Tier 2: dotcontext installable (npx available)
-Install dotcontext as MCP server, then use MCP tools for init and fill:
+Install dotcontext as MCP server (non-interactive), then use MCP tools:
 ```bash
-npx dotcontext mcp:install     → registers dotcontext as MCP server
+npx dotcontext mcp:install claude --local   → writes .mcp.json, no prompts
 ```
-Once installed, dotcontext MCP tools become available in the current session. Then use the same MCP flow as Tier 1:
+**Important:** Pass `claude --local` to skip the interactive tool selection prompt. This writes the MCP config to `.mcp.json` in the project root.
+
+Once the MCP server is registered, it becomes available in the session. Then use the same MCP flow as Tier 1:
 ```
 context({ action: "init" })    → scaffolds .context/ structure
 context({ action: "fill" })    → fills with semantic analysis
 ```
-Check availability: run `npx dotcontext --version` via Bash. If it succeeds, install and use MCP.
+
+**Note:** `init` and `fill` are MCP-only — they do NOT exist as CLI commands. The CLI is only used for `mcp:install`. Everything else goes through MCP tools.
+
+Check availability: run `npx dotcontext --version` via Bash. If it succeeds (exit 0), install and use MCP.
 This upgrades the project from Minimal to **Full mode** permanently.
 
 ### Tier 3: DevFlow standalone (no dotcontext, no npx)
@@ -119,16 +124,30 @@ Then proceed to Step 4 (fill gaps).
 
 ## Step 3b: Tier 2 — Install dotcontext MCP + use
 
-First, install dotcontext as MCP server:
+### Step 3b-1: Install MCP server (non-interactive)
 ```bash
-npx dotcontext mcp:install
+npx dotcontext mcp:install claude --local
+```
+This writes `.mcp.json` to the project root with the dotcontext MCP server config. No interactive prompts. The MCP entry it adds:
+```json
+{
+  "mcpServers": {
+    "dotcontext": {
+      "command": "npx",
+      "args": ["-y", "@dotcontext/cli@latest", "mcp"]
+    }
+  }
+}
 ```
 
-This registers dotcontext as an MCP server for the current project. Once installed, the MCP tools become available. Then use the same flow as Tier 1:
+### Step 3b-2: Use MCP tools
+Once the MCP server is registered, use the same flow as Tier 1:
 ```
-context({ action: "init" })
-context({ action: "fill" })
+context({ action: "init" })    → scaffolds .context/ structure
+context({ action: "fill" })    → fills with semantic analysis
 ```
+
+**Note:** `init` and `fill` are MCP-only operations — they do NOT exist as CLI commands. The CLI is only used for `mcp:install`.
 
 **Important:** `context({ action: "fill" })` uses AI to analyze the codebase and generate rich, project-specific content with semantic analysis, tree-sitter AST parsing, and symbol extraction. This is slower but produces significantly better results than DevFlow's manual scan.
 
