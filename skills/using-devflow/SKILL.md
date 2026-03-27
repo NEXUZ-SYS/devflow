@@ -58,11 +58,28 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:prevc-validation` | **V** | Verification + test/security agents |
 | `devflow:prevc-confirmation` | **C** | Branch finishing + documentation + sync |
 
-### Bridge Skills
+### Bridge Skills (orchestration)
 | Skill | When to use |
 |-------|-------------|
 | `devflow:agent-dispatch` | Discover, select, and invoke agents by role for the current task |
 | `devflow:context-awareness` | Enrich any task with project context (codebase map, semantic analysis) |
+| `devflow:parallel-dispatch` | Coordinate parallel execution of independent tasks |
+
+### On-Demand Skills (invoke anytime)
+| Skill | When to use |
+|-------|-------------|
+| `devflow:api-design` | Designing, modifying, or reviewing APIs (REST, GraphQL, RPC) |
+| `devflow:bug-investigation` | Triaging bugs, investigating unexpected behavior, root cause analysis |
+| `devflow:commit-message` | Writing clear conventional commit messages |
+| `devflow:documentation` | Writing, updating, or reviewing documentation |
+| `devflow:feature-breakdown` | Decomposing large features into implementable chunks |
+| `devflow:pr-review` | Creating or reviewing pull requests |
+| `devflow:refactoring` | Restructuring code without changing behavior |
+| `devflow:security-audit` | OWASP-based security assessment |
+| `devflow:test-generation` | Designing test suites, generating test cases, reviewing coverage |
+| `devflow:skill-creation` | Creating new DevFlow skills with TDD-for-docs methodology |
+
+For the complete skills map across all three systems, see `references/skills-map.md`.
 
 ## Scale-Adaptive Routing
 
@@ -92,13 +109,17 @@ DevFlow invokes superpowers skills when discipline enforcement is needed. These 
 
 - `superpowers:brainstorming` — via prevc-planning
 - `superpowers:writing-plans` — via prevc-planning
+- `superpowers:executing-plans` — via prevc-execution (when no subagents)
 - `superpowers:subagent-driven-development` — via prevc-execution
 - `superpowers:test-driven-development` — via prevc-execution
-- `superpowers:requesting-code-review` — via prevc-review
-- `superpowers:systematic-debugging` — when debugging is needed
+- `superpowers:systematic-debugging` — via bug-investigation
+- `superpowers:requesting-code-review` — via prevc-review, pr-review
+- `superpowers:receiving-code-review` — processing review feedback
+- `superpowers:dispatching-parallel-agents` — via parallel-dispatch
 - `superpowers:finishing-a-development-branch` — via prevc-confirmation
 - `superpowers:using-git-worktrees` — via prevc-execution
 - `superpowers:verification-before-completion` — via prevc-validation
+- `superpowers:writing-skills` — via skill-creation
 
 ## The Rule
 
