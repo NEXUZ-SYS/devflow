@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# DevFlow SessionStart hook
+# Detects available systems and injects unified context
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# --- Mode Detection ---
+
+mode="minimal"
+superpowers_available="false"
+dotcontext_mcp="false"
+dotcontext_lite="false"
+
+# Check superpowers: look for the plugin in Claude's plugin directory
+if [ -d "${HOME}/.claude/plugins/superpowers" ] || \
+   [ -d "${HOME}/.config/claude/plugins/superpowers" ] || \
+   command -v superpowers >/dev/null 2>&1; then
+  superpowers_available="true"
+fi
+
+# Check dotcontext MCP: look for .mcp.json or mcp config referencing dotcontext
+project_root="${PWD}"
+if [ -f "${project_root}/.mcp.json" ] && grep -q "dotcontext" "${project_root}/.mcp.json" 2>/dev/null; then
+  dotcontext_mcp="true"
+  mode="full"
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "dotcontext" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  dotcontext_mcp="true"
+  mode="full"
+fi
+
+# Check dotcontext lite: .context/ directory exists
+if [ "$mode" != "full" ] && [ -d "${project_root}/.context" ]; then
+  dotcontext_lite="true"
+  mode="lite"
+fi
+
+# --- Read using-devflow skill ---
+
+using_devflow_content=$(cat "${PLUGIN_ROOT}/skills/using-devflow/SKILL.md" 2>&1 || echo "Error reading using-devflow skill")
+
+# --- Escape for JSON ---
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+using_devflow_escaped=$(escape_for_json "$using_devflow_content")
+
+# --- Build mode context ---
+
+mode_context="\\n\\n**DevFlow Mode: ${mode}**\\n"
+mode_context+="- superpowers: ${superpowers_available}\\n"
+mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
+mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
+
+mode_escaped=$(escape_for_json "$mode_context")
+
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n</DEVFLOW_CONTEXT>"
+
+# --- Output for platform ---
+
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+  printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+else
+  printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
+fi
+
+exit 0

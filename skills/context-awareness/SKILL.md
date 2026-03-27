@@ -1,0 +1,120 @@
+---
+name: context-awareness
+description: "Use when you need to enrich any task with project context — codebase structure, semantic analysis, patterns, and conventions"
+---
+
+# Context Awareness
+
+Enriches tasks with deep project context by leveraging dotcontext's semantic analysis (Full mode), .context/ files (Lite mode), or direct exploration (Minimal mode).
+
+**Announce at start:** "I'm using the devflow:context-awareness skill to gather project context."
+
+## When to Invoke
+
+- Before brainstorming (prevc-planning calls this automatically)
+- When entering a new area of the codebase
+- When making architectural decisions
+- When resolving a bug in unfamiliar code
+- When a task requires understanding existing patterns
+
+## Context Gathering by Mode
+
+### Full Mode — Semantic Analysis
+
+```
+context({ action: "buildSemantic" })
+```
+
+Returns:
+- Complete codebase structure with file relationships
+- Symbol definitions and references (via tree-sitter)
+- Dependency graph
+- Code patterns and conventions
+
+Additional queries:
+```
+context({ action: "getMap" })         # Codebase map (file tree + descriptions)
+context({ action: "detectPatterns" }) # Detected patterns and conventions
+context({ action: "searchQA" })       # Search project Q&A knowledge base
+explore({ action: "analyze", path: "<file>" })  # Deep analysis of specific file
+explore({ action: "search", query: "<term>" })   # Semantic code search
+```
+
+### Lite Mode — Direct File Reading
+
+Read these files in order (stop when you have enough context):
+
+1. **Project overview:** `.context/docs/project-overview.md`
+   - Project description, goals, architecture summary
+
+2. **Codebase map:** `.context/docs/codebase-map.json`
+   - File structure, component descriptions, dependencies
+
+3. **Development workflow:** `.context/docs/development-workflow.md`
+   - Branch strategy, CI/CD, coding conventions
+
+4. **Testing strategy:** `.context/docs/testing-strategy.md`
+   - Test framework, coverage expectations, test patterns
+
+5. **Tooling:** `.context/docs/tooling.md`
+   - Build tools, linters, formatters, deployment
+
+6. **Agent playbooks** (for domain-specific context):
+   - `.context/agents/<relevant-agent>.md`
+
+7. **Skill files** (for task-specific guidance):
+   - `.context/skills/<relevant-skill>/SKILL.md`
+
+### Minimal Mode — Direct Exploration
+
+Standard code exploration:
+1. Read `README.md`, `CONTRIBUTING.md`, `package.json`/`Cargo.toml`/`go.mod`
+2. Explore directory structure
+3. Read recent git log for context on current work
+4. Read key files in the area being modified
+
+## Context Output Format
+
+After gathering context, summarize for the consuming skill:
+
+```markdown
+## Project Context
+
+**Type:** [CLI / Web / Library / API / Monorepo]
+**Stack:** [key technologies]
+**Patterns:** [key patterns found — e.g., "service layer + repository pattern"]
+
+### Relevant Files
+- `path/to/file.ts` — [what it does, why it's relevant]
+
+### Conventions
+- [coding conventions discovered]
+
+### Dependencies
+- [key dependencies relevant to the task]
+
+### Recent Activity
+- [recent changes in the area being modified]
+```
+
+## Context Caching
+
+### Full Mode
+dotcontext caches semantic context automatically. Re-building is only needed when:
+- Significant code changes since last build
+- Entering a different area of the codebase
+
+### Lite Mode
+Context files are static — read once per session unless the task modifies them.
+
+### Minimal Mode
+No caching — explore as needed.
+
+## Anti-Patterns
+
+| Thought | Reality |
+|---------|---------|
+| "I know this codebase" | Context changes. Gather fresh context, especially after other agents worked. |
+| "Context gathering is slow" | In Full mode it's cached. In Lite mode it's a few file reads. Worth it. |
+| "I'll just read the relevant file" | Isolation without context leads to inconsistent code. Understand the whole. |
+| "Semantic analysis is overkill" | Only available in Full mode. In Lite/Minimal, context is lightweight. |
