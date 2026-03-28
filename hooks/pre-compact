@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# DevFlow PreCompact hook
+# Saves a minimal snapshot before context compaction
+
+set -euo pipefail
+
+CHECKPOINT_DIR=".context/workflow/.checkpoint"
+mkdir -p "$CHECKPOINT_DIR" 2>/dev/null || true
+
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+LAST_COMMIT=$(git log --format='%h %s' -1 2>/dev/null || echo "none")
+
+cat > "$CHECKPOINT_DIR/last.json" << EOF
+{
+  "timestamp": "$TIMESTAMP",
+  "branch": "$BRANCH",
+  "last_commit": "$LAST_COMMIT"
+}
+EOF
+
+exit 0
