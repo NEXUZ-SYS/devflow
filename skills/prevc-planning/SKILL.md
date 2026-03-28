@@ -21,7 +21,7 @@ You MUST create a task for each of these items and complete them in order:
 2. **Invoke brainstorming** — `superpowers:brainstorming` for the 9-step Socratic process
 3. **Enrich spec with context** — annotate spec with codebase-specific details
 4. **Write implementation plan** — `superpowers:writing-plans`
-5. **Link plan to workflow** (Full mode only)
+5. **Handoff to dotcontext** (mode-aware)
 6. **Gate check** — spec approved + plan written = ready to advance
 
 ## Step 1: Gather Project Context
@@ -111,12 +111,31 @@ For each task group, note which agent role is best suited:
 ...
 ```
 
-## Step 5: Link Plan (Full Mode)
+## Step 5: Handoff to Dotcontext
 
-```
-plan({ action: "scaffold", planName: "<feature>" })
-plan({ action: "link", planId: "<id>", workflowId: "<id>" })
-```
+After writing-plans generates the plan and the user approves:
+
+### Full Mode
+1. Read the complete spec (written by `superpowers:brainstorming` in Step 2, typically at `docs/superpowers/specs/<file>.md`)
+2. Derive planName from the spec title (slugified)
+3. Create the plan in dotcontext:
+   ```
+   context({ action: "scaffoldPlan", planName: "<slug>", title: "<spec title>", summary: "<FULL SPEC CONTENT>", semantic: true, autoFill: true })
+   ```
+4. Link to active workflow:
+   ```
+   plan({ action: "link", planSlug: "<slug>" })
+   ```
+5. Inform user: "Plan linked to dotcontext workflow. Ready for Review."
+
+### Lite Mode
+1. Convert the Markdown plan to dotcontext v2 format
+2. Save as `.context/plans/<slug>.md`
+3. Include the full spec as a section of the file
+4. Track via Claude Code tasks
+
+### Minimal Mode
+No conversion — execution follows superpowers workflow.
 
 ## Step 6: Gate Check
 
@@ -125,7 +144,9 @@ The Planning phase gate requires:
 - Implementation plan written
 - Plan linked to workflow (Full mode) or saved to docs/
 
-**When gate is met:** Announce readiness to advance. In Full mode:
+**When gate is met:** Announce readiness to advance.
+
+### Full Mode
 ```
 workflow-advance()  # Moves to R phase
 ```
@@ -138,3 +159,4 @@ workflow-advance()  # Moves to R phase
 | "The spec is obvious" | Obvious specs still need user approval. No exceptions. |
 | "Plans are busywork" | Bite-sized plans prevent 3-hour debugging sessions. Write them. |
 | "Agent annotations are overhead" | They enable parallel execution in E phase. Worth the 2 minutes. |
+| "I can skip the dotcontext handoff" | Without it, agents execute blind. The handoff is the bridge. |
