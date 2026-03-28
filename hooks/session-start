@@ -79,13 +79,31 @@ using_devflow_escaped=$(escape_for_json "$using_devflow_content")
 mode_context="\\n\\n**DevFlow Mode: ${mode}**\\n"
 mode_context+="- superpowers: ${superpowers_available}\\n"
 mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
-mode_context+="- dotcontext CLI (npx): ${dotcontext_cli}\\n"
+mode_context+="- dotcontext CLI: ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
 
-# Hint: if CLI is available but MCP is not, suggest /flow init to upgrade
-if [ "$dotcontext_cli" = "true" ] && [ "$dotcontext_mcp" = "false" ]; then
-  mode_context+="- **Tip:** Run \`/flow init\` to install dotcontext MCP and upgrade to Full mode\\n"
+# --- Mode status announcement ---
+# The LLM must inform the user about their mode on first interaction
+
+if [ "$mode" = "full" ]; then
+  mode_context+="\\n**STATUS:** ✅ Full Mode ativo. Todas as funcionalidades disponíveis (agent orchestration, PREVC workflow, rehydration).\\n"
+elif [ "$mode" = "lite" ]; then
+  mode_context+="\\n**STATUS:** ⚠️ Lite Mode — funcionalidades limitadas.\\n"
+  mode_context+="Você tem \`.context/\` mas o MCP do dotcontext não está ativo.\\n"
+  mode_context+="**Recomendação:** Ative o Full Mode para ter agent orchestration, handoffs automáticos e rehydration.\\n"
+  if [ "$dotcontext_cli" = "true" ]; then
+    mode_context+="Para ativar: \`dotcontext mcp:install claude --local\` e reinicie a sessão.\\n"
+  else
+    mode_context+="Para ativar: \`npm install -g @dotcontext/cli && dotcontext mcp:install claude --local\` e reinicie a sessão.\\n"
+  fi
+  mode_context+="Ou execute \`/flow init\` para setup guiado.\\n"
+elif [ "$mode" = "minimal" ]; then
+  mode_context+="\\n**STATUS:** ⚠️ Minimal Mode — apenas superpowers disponível, sem contexto de projeto.\\n"
+  mode_context+="**Recomendação:** Ative o Full Mode para aproveitar agent orchestration, workflow PREVC completo e rehydration automática.\\n"
+  mode_context+="Para ativar: execute \`/flow init\` que configura tudo automaticamente.\\n"
 fi
+
+mode_context+="\\n**INSTRUÇÃO:** Na primeira interação desta sessão, informe brevemente ao usuário o modo atual do DevFlow e, se não for Full Mode, recomende a ativação.\\n"
 
 mode_escaped=$(escape_for_json "$mode_context")
 
