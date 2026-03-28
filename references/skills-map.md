@@ -81,7 +81,7 @@ These skills are provided by dotcontext's MCP server. In Full mode, they are cal
 ## How Skills Compose
 
 ```
-User runs /flow "add caching layer"
+User runs /devflow "add caching layer"
   │
   ├─ devflow:prevc-flow (orchestrator)
   │   ├─ Scale: MEDIUM → P → R → E → V → C
@@ -124,7 +124,7 @@ User runs /flow "add caching layer"
 
 | I want to... | Use this skill |
 |--------------|---------------|
-| Initialize DevFlow in a project | `devflow:project-init` or `/flow init` |
+| Initialize DevFlow in a project | `devflow:project-init` or `/devflow init` |
 | Start a new feature | `devflow:prevc-flow` → auto-routes |
 | Fix a bug | `devflow:prevc-flow` scale:QUICK or `devflow:bug-investigation` |
 | Design an API | `devflow:api-design` |

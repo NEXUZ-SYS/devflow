@@ -69,7 +69,7 @@ Adopted from dotcontext, determines which PREVC phases are required:
 | **MEDIUM** | Multi-component feature | P → R → E → V → C |
 | **LARGE** | System-wide change, new subsystem | P → R → E → V → C (with checkpoints) |
 
-Scale is auto-detected from task description or explicitly set via `/flow scale:MEDIUM`.
+Scale is auto-detected from task description or explicitly set via `/devflow scale:MEDIUM`.
 
 ## 4. Skill Architecture
 
@@ -134,12 +134,12 @@ Sections: Mission, Responsibilities, Workflow Steps, Skills Integration, Handoff
 
 ## 7. Slash Commands
 
-- `/flow [description]` — Start a new PREVC workflow (auto-scales)
-- `/flow scale:X [description]` — Start with explicit scale
-- `/phase` — Show current phase and progress
-- `/phase advance` — Attempt to advance to next phase (checks gates)
-- `/agents` — List available agents for current phase
-- `/agents dispatch <role>` — Dispatch specific agent
+- `/devflow [description]` — Start a new PREVC workflow (auto-scales)
+- `/devflow scale:X [description]` — Start with explicit scale
+- `/devflow-status` — Show current phase and progress
+- `/devflow-next` — Attempt to advance to next phase (checks gates)
+- `/devflow-dispatch` — List available agents for current phase
+- `/devflow-dispatch <role>` — Dispatch specific agent
 
 ## 8. File Structure
 

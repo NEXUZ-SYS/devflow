@@ -96,11 +96,11 @@ elif [ "$mode" = "lite" ]; then
   else
     mode_context+="Para ativar: \`npm install -g @dotcontext/cli && dotcontext mcp:install claude --local\` e reinicie a sessão.\\n"
   fi
-  mode_context+="Ou execute \`/flow init\` para setup guiado.\\n"
+  mode_context+="Ou execute \`/devflow init\` para setup guiado.\\n"
 elif [ "$mode" = "minimal" ]; then
   mode_context+="\\n**STATUS:** ⚠️ Minimal Mode — apenas superpowers disponível, sem contexto de projeto.\\n"
   mode_context+="**Recomendação:** Ative o Full Mode para aproveitar agent orchestration, workflow PREVC completo e rehydration automática.\\n"
-  mode_context+="Para ativar: execute \`/flow init\` que configura tudo automaticamente.\\n"
+  mode_context+="Para ativar: execute \`/devflow init\` que configura tudo automaticamente.\\n"
 fi
 
 mode_context+="\\n**INSTRUÇÃO:** Na primeira interação desta sessão, informe brevemente ao usuário o modo atual do DevFlow e, se não for Full Mode, recomende a ativação.\\n"

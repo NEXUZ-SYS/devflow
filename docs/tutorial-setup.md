@@ -1,34 +1,42 @@
-# DevFlow — Tutorial Completo de Setup
+# DevFlow — Tutorial de Setup
 
-Guia passo a passo para instalar e testar o DevFlow em um projeto novo.
+Guia completo para instalar e configurar o DevFlow. Cobre tanto projetos novos quanto projetos existentes (com ou sem dotcontext).
 
 ---
 
 ## Pré-requisitos
 
-- [Claude Code](https://claude.ai/claude-code) instalado
-- Node.js 20+ (para dotcontext)
-- Git
+Antes de começar, verifique que você tem:
+
+| Ferramenta | Como verificar | Instalar |
+|------------|---------------|----------|
+| Claude Code | `claude --version` | [claude.ai/claude-code](https://claude.ai/claude-code) |
+| Node.js 20+ | `node --version` | [nodejs.org](https://nodejs.org/) |
+| Git 2.x+ | `git --version` | [git-scm.com](https://git-scm.com/) |
 
 ---
 
-## Passo 1: Instalar superpowers (dependência)
+## Parte 1 — Instalação (uma vez por máquina)
 
-O DevFlow usa skills do superpowers. Instale como plugin global:
+### 1.1 Instalar superpowers
+
+Superpowers é a camada de disciplina do DevFlow — TDD, brainstorming socrático, code review, subagent-driven development.
 
 ```bash
 claude /plugin install superpowers@claude-plugins-official --scope user
 ```
 
-Verifique:
-```bash
-# Dentro do Claude Code, as skills devem aparecer
-# superpowers:brainstorming, superpowers:test-driven-development, etc.
+Para verificar, abra o Claude Code e digite `/`. As seguintes skills devem aparecer na lista:
+
+```
+superpowers:brainstorming
+superpowers:test-driven-development
+superpowers:writing-plans
+superpowers:systematic-debugging
+...
 ```
 
----
-
-## Passo 2: Registrar marketplace do DevFlow
+### 1.2 Registrar o marketplace do DevFlow
 
 Só precisa fazer isso uma vez:
 
@@ -36,95 +44,122 @@ Só precisa fazer isso uma vez:
 claude plugin marketplace add NEXUZ-SYS/devflow
 ```
 
----
-
-## Passo 3: Criar ou navegar até seu projeto
+### 1.3 Instalar o DevFlow
 
 ```bash
-# Projeto novo
-mkdir meu-projeto && cd meu-projeto
-git init
-
-# Ou projeto existente
-cd /caminho/do/meu-projeto
+claude /plugin install devflow@NEXUZ-SYS --scope user
 ```
 
----
-
-## Passo 4: Instalar DevFlow no projeto
-
+Para verificar:
 ```bash
-claude /plugin install devflow@NEXUZ-SYS
-```
-
-Verifique que foi instalado:
-```bash
-# Dentro do Claude Code, rode:
 cat ~/.claude/plugins/installed_plugins.json | grep devflow
 ```
 
+### 1.4 Instalar dotcontext (opcional — habilita Full Mode)
+
+Dotcontext é a camada de contexto e orquestração — agentes via MCP, análise semântica, sync multi-tool.
+
+```bash
+npm install -g @dotcontext/cli
+```
+
+Para verificar:
+```bash
+dotcontext --version
+```
+
+> ⚠️ **Importante:** Nunca use `npx` para subcomandos do dotcontext com `:` (ex: `mcp:install`). O npm 11+ interpreta o `:` como separador de script. Sempre use o binário global `dotcontext`.
+
+### Resultado da instalação
+
+Neste ponto você tem tudo instalado na máquina. Agora precisa inicializar em cada projeto.
+
+```
+✅ Claude Code          — runtime
+✅ superpowers plugin   — disciplina (TDD, brainstorming, code review)
+✅ devflow plugin       — workflow PREVC, agentes, skills
+✅ dotcontext CLI       — análise semântica, MCP (opcional)
+```
+
 ---
 
-## Passo 5: Iniciar uma sessão Claude Code
+## Parte 2 — Inicializar em um projeto
+
+### 2.1 Navegar até o projeto
+
+```bash
+# Projeto novo
+mkdir meu-projeto && cd meu-projeto && git init
+
+# Projeto existente
+cd /caminho/do/meu-projeto
+```
+
+### 2.2 Abrir o Claude Code
 
 ```bash
 claude
 ```
 
-Na inicialização, o hook SessionStart do DevFlow roda **silenciosamente** e injeta o contexto do workflow no modelo. Você não verá output visual no terminal — isso é normal.
+Na inicialização, o hook SessionStart do DevFlow roda **silenciosamente** — ele injeta o contexto do workflow no modelo mas não exibe nada no terminal. Isso é normal.
 
-Para confirmar que o DevFlow está ativo, pergunte ao Claude:
-
-```
-Em que modo o DevFlow está rodando?
-```
-
-Ele deve responder com algo como:
-```
-DevFlow Mode: minimal
-- superpowers: true
-- dotcontext MCP: false
-- dotcontext CLI: true
-```
-
----
-
-## Passo 6: Inicializar DevFlow no projeto
+### 2.3 Inicializar o DevFlow
 
 ```
-/flow init
+/devflow init
 ```
 
-Isso dispara a skill `devflow:project-init` que executa:
+O que acontece por trás:
 
-### Se dotcontext CLI está disponível (Tier 2 — recomendado):
+**Se dotcontext está instalado (Full Mode):**
+
 ```
-1. npm install -g @dotcontext/cli              ← instala globalmente (se não existe)
-2. dotcontext mcp:install claude --local       ← instala MCP server → .mcp.json
-3. context({ action: "init" })                 ← scaffolda .context/
-4. context({ action: "fill" })                 ← preenche com AI
-5. context({ action: "buildSemantic" })        ← análise AST profunda
-6. context({ action: "getMap" })               ← gera codebase-map.json
-7. context({ action: "detectPatterns" })       ← detecta padrões
-8. DevFlow preenche gaps                       ← agentes/skills extras
+1. dotcontext mcp:install claude --local    ← cria .mcp.json no projeto
+2. context({ action: "init" })              ← scaffolda .context/
+3. context({ action: "fill" })              ← preenche com análise AI
+4. context({ action: "buildSemantic" })     ← análise AST do codebase
+5. context({ action: "getMap" })            ← gera codebase-map.json
+6. context({ action: "detectPatterns" })    ← detecta padrões de arquitetura
+7. DevFlow preenche gaps                    ← agentes e skills extras
 ```
 
-> **Nota:** Não use `npx dotcontext mcp:install` — npm 11+ interpreta o `:` como separador de script npm. Sempre use o binário global `dotcontext`.
+**Se dotcontext NÃO está instalado (Lite Mode):**
 
-### Se dotcontext NÃO está disponível (Tier 3):
 ```
 1. DevFlow escaneia o projeto sozinho
 2. Gera .context/ em formato dotcontext v2
-3. Modo Lite ativado
+3. Modo Lite ativado (sem MCP, leitura direta dos playbooks)
 ```
 
-### Resultado:
+### 2.4 Verificar o modo ativo
+
+```
+/devflow-status
+```
+
+Saída esperada:
+```
+DevFlow Mode: full
+- superpowers: true
+- dotcontext MCP: true
+- dotcontext lite (.context/): true
+
+No active workflow. Start one with:
+  /devflow <description>
+```
+
+> Se o modo aparece como `minimal` ou `lite` quando esperava `full`, veja a seção de Troubleshooting.
+
+### 2.5 Estrutura gerada
+
+Após o `/devflow init`, seu projeto terá:
+
 ```
 meu-projeto/
-├── .mcp.json                    ← dotcontext MCP config (se Tier 2)
-└── .context/
+├── .mcp.json                          ← config do MCP (se dotcontext instalado)
+└── .context/                          ← contexto do projeto (compatível dotcontext)
     ├── agents/
-    │   ├── architect-specialist.md
+    │   ├── architect-specialist.md    ← playbook personalizado para o projeto
     │   ├── backend-specialist.md
     │   ├── code-reviewer.md
     │   ├── feature-developer.md
@@ -136,151 +171,246 @@ meu-projeto/
     │   ├── commit-message/SKILL.md
     │   └── ...
     ├── docs/
-    │   ├── project-overview.md
-    │   ├── codebase-map.json
+    │   ├── project-overview.md        ← visão geral gerada por AI
+    │   ├── codebase-map.json          ← mapa semântico do codebase
     │   ├── development-workflow.md
     │   └── testing-strategy.md
-    └── plans/
+    └── plans/                         ← planos dos workflows PREVC
 ```
 
 ---
 
-## Passo 7: Verificar o modo ativo
+## Parte 3 — Projeto existente com dotcontext
 
-Inicie uma nova sessão ou rode `/phase`:
+Se o seu projeto **já tem** `.context/` configurado (por uso anterior do dotcontext), o `/devflow init` detecta isso automaticamente:
+
+1. **Não sobrescreve** o `.context/` existente
+2. **Adiciona** apenas os agentes e skills do DevFlow que estão faltando
+3. **Mantém** toda a configuração existente do dotcontext
+4. **Instala** o MCP server se ainda não estiver no `.mcp.json`
 
 ```
-DevFlow Mode: full               ← se Tier 2 foi usado
-- superpowers: true
-- dotcontext MCP: true
-- dotcontext lite (.context/): true
+/devflow init
+
+→ .context/ detectado. Adicionando agentes DevFlow faltantes...
+→ .mcp.json detectado com dotcontext. Full Mode habilitado.
+→ Pronto. 3 agentes adicionados, 2 skills adicionados.
 ```
+
+Se o projeto tem `.mcp.json` com outros servidores MCP, o DevFlow adiciona o entry do dotcontext sem alterar os existentes.
 
 ---
 
-## Passo 8: Testar com um workflow real
+## Parte 4 — Testando o DevFlow
 
-### Teste QUICK (bug fix — só E→V):
+Agora que está tudo configurado, vamos testar cada funcionalidade.
+
+### 4.1 Teste rápido — QUICK (bug fix, só E→V)
+
 ```
-/flow scale:QUICK fix typo in README
+/devflow scale:QUICK fix typo no README
 ```
 
 O que acontece:
 1. DevFlow detecta escala QUICK
-2. Pula direto para **E (Execution)** → TDD, implementa o fix
-3. Depois **V (Validation)** → verifica testes, spec compliance
+2. Pula direto para **E (Execution)** — TDD, implementa o fix
+3. Depois **V (Validation)** — verifica testes, spec compliance
 4. Workflow completo
 
-### Teste SMALL (feature simples — P→E→V):
+### 4.2 Teste simples — SMALL (feature, P→E→V)
+
 ```
-/flow add a hello world endpoint
+/devflow add um endpoint hello world
 ```
 
 O que acontece:
-1. **P (Planning)** — brainstorming socrático, gera spec + plan
-2. **E (Execution)** — TDD, subagents, agent handoffs
+1. **P (Planning)** — brainstorming socrático de 9 etapas, gera spec + plano
+2. **E (Execution)** — TDD com subagents e agent handoffs
 3. **V (Validation)** — testes, security check
 4. Workflow completo
 
-### Teste MEDIUM (feature multi-componente — P→R→E→V→C):
+### 4.3 Teste completo — MEDIUM (multi-componente, P→R→E→V→C)
+
 ```
-/flow scale:MEDIUM add user authentication with JWT
+/devflow scale:MEDIUM add autenticação com JWT
 ```
 
 O que acontece:
-1. **P (Planning)** — brainstorming + context enrichment + plan writing
+1. **P (Planning)** — brainstorming + enriquecimento de contexto + escrita do plano
 2. **R (Review)** — architect + code-reviewer validam o design
 3. **E (Execution)** — SDD com agent handoffs (backend → test-writer)
 4. **V (Validation)** — testes + security-auditor + spec compliance
-5. **C (Confirmation)** — branch finish + docs update + context sync
+5. **C (Confirmation)** — finalização de branch + atualização de docs + sync de contexto
+
+### 4.4 Testar comandos de navegação
+
+```bash
+# Ver em que fase está
+/devflow-status
+
+# Avançar para a próxima fase (valida gates)
+/devflow-next
+
+# Ver qual agente é recomendado para o contexto atual
+/devflow-dispatch
+
+# Despachar um agente específico
+/devflow-dispatch backend-specialist
+```
+
+### 4.5 Testar capabilities on-demand
+
+As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um workflow. Basta pedir em linguagem natural:
+
+```
+"Faça uma auditoria de segurança no código de autenticação"
+→ DevFlow ativa a capability de Security Audit
+
+"Gere testes para o módulo de usuários"
+→ DevFlow ativa Test Generation + TDD
+
+"Revise o PR #42"
+→ DevFlow ativa PR Review
+
+"Investigue o erro de timeout no login"
+→ DevFlow ativa Bug Investigation + Systematic Debugging
+
+"Quebre a feature de cache em tarefas menores"
+→ DevFlow ativa Feature Breakdown
+
+"Qual a melhor estratégia de branch para essa feature?"
+→ DevFlow ativa Git Strategy
+```
 
 ---
 
-## Passo 9: Testar comandos individuais
+## Parte 5 — Atualização
 
-### Ver fase atual:
-```
-/phase
-```
+### Atualizar plugins
 
-### Avançar de fase:
-```
-/phase advance
-```
+```bash
+# Atualizar DevFlow
+claude /plugin update devflow@NEXUZ-SYS
 
-### Listar agentes:
-```
-/agents
+# Atualizar superpowers
+claude /plugin update superpowers@claude-plugins-official
+
+# Atualizar dotcontext
+npm update -g @dotcontext/cli
 ```
 
-### Despachar agente específico:
-```
-/agents dispatch backend-specialist
-```
+### Atualizar o .context/ do projeto
 
----
-
-## Passo 10: Testar skills on-demand
-
-Skills podem ser invocadas a qualquer momento, fora de um workflow:
+Se uma nova versão do DevFlow trouxer agentes ou skills novos:
 
 ```
-# Pedir uma revisão de segurança
-"Use devflow:security-audit para revisar o código de autenticação"
-
-# Gerar testes
-"Use devflow:test-generation para o módulo de usuários"
-
-# Revisar um PR
-"Use devflow:pr-review para o PR #42"
-
-# Investigar um bug
-"Use devflow:bug-investigation para o erro de timeout no login"
+/devflow init
 ```
+
+O init é idempotente — só adiciona o que falta, nunca sobrescreve o existente.
 
 ---
 
 ## Troubleshooting
 
-### "DevFlow Mode: minimal" mesmo depois do /flow init
-- Verifique se `.mcp.json` foi criado no projeto
-- Reinicie a sessão Claude Code (os hooks rodam no início)
-- Verifique: `cat .mcp.json` — deve ter `dotcontext` entry
+### `/devflow-status` mostra "Minimal" quando esperava "Full"
 
-### superpowers: false
-- Verifique instalação: `cat ~/.claude/plugins/installed_plugins.json | grep superpowers`
-- Reinstale: `claude /plugin install superpowers@claude-plugins-official`
+1. Verifique se `.mcp.json` foi criado no projeto:
+   ```bash
+   cat .mcp.json
+   ```
+   Deve conter um entry para `dotcontext`.
 
-### dotcontext CLI (npx): false
-- Verifique Node.js: `node --version` (precisa 20+)
-- Verifique npx: `npx --version`
-- Instale dotcontext globalmente: `npm i -g @dotcontext/cli`
+2. Reinicie a sessão do Claude Code — os hooks rodam apenas no início:
+   ```bash
+   # Saia e entre novamente
+   exit
+   claude
+   ```
 
-### context.fill() demora muito
-- Normal — análise de codebase grande leva 1-3 minutos
-- Para projetos muito grandes, pode demorar mais
+3. Verifique se dotcontext está acessível:
+   ```bash
+   dotcontext --version
+   ```
 
-### Skills não são encontradas
-- Verifique que o DevFlow está instalado: `grep devflow ~/.claude/plugins/installed_plugins.json`
-- Reinstale: `claude /plugin install devflow@NEXUZ-SYS`
+### superpowers aparece como `false`
+
+```bash
+# Verificar instalação
+cat ~/.claude/plugins/installed_plugins.json | grep superpowers
+
+# Reinstalar
+claude /plugin install superpowers@claude-plugins-official --scope user
+```
+
+### dotcontext CLI não encontrado
+
+```bash
+# Verificar Node.js (precisa 20+)
+node --version
+
+# Instalar dotcontext globalmente
+npm install -g @dotcontext/cli
+
+# Verificar
+dotcontext --version
+```
+
+### `context.fill()` demora muito
+
+Normal para projetos grandes — a análise semântica do codebase pode levar 1-3 minutos. Para projetos muito grandes (1000+ arquivos), pode demorar mais.
+
+### Skills do DevFlow não aparecem
+
+```bash
+# Verificar instalação
+grep devflow ~/.claude/plugins/installed_plugins.json
+
+# Reinstalar
+claude /plugin install devflow@NEXUZ-SYS --scope user
+```
+
+### Erro com `npx dotcontext mcp:install`
+
+O npm 11+ interpreta `:` como separador de script. Use o binário global:
+
+```bash
+# Errado
+npx dotcontext mcp:install claude --local
+
+# Certo
+dotcontext mcp:install claude --local
+```
 
 ---
 
-## Ordem resumida (copie e cole)
+## Resumo — Copie e cole
+
+### Instalação completa (uma vez)
 
 ```bash
-# 1. Instalar plugins (uma vez)
+# Plugins
 claude /plugin install superpowers@claude-plugins-official --scope user
 claude plugin marketplace add NEXUZ-SYS/devflow
 claude /plugin install devflow@NEXUZ-SYS --scope user
 
-# 2. No projeto, abrir Claude Code
+# Dotcontext (opcional, habilita Full Mode)
+npm install -g @dotcontext/cli
+```
+
+### Inicializar em cada projeto
+
+```bash
 cd meu-projeto
 claude
 
-# 3. Dentro do Claude Code
-/flow init
+# Dentro do Claude Code:
+/devflow init
+/devflow-status
+```
 
-# 4. Começar a trabalhar
-/flow add minha feature incrível
+### Começar a trabalhar
+
+```bash
+/devflow add minha feature incrível
 ```

@@ -97,12 +97,12 @@ When starting a workflow, DevFlow auto-detects or accepts explicit scale:
 
 | Command | Action |
 |---------|--------|
-| `/flow [description]` | Start a new PREVC workflow (auto-scales) |
-| `/flow scale:X [description]` | Start with explicit scale (QUICK/SMALL/MEDIUM/LARGE) |
-| `/phase` | Show current phase, progress, and available actions |
-| `/phase advance` | Attempt to advance to next phase (checks gates) |
-| `/agents` | List available agents for current phase and mode |
-| `/agents dispatch <role>` | Dispatch a specific agent |
+| `/devflow [description]` | Start a new PREVC workflow (auto-scales) |
+| `/devflow scale:X [description]` | Start with explicit scale (QUICK/SMALL/MEDIUM/LARGE) |
+| `/devflow-status` | Show current phase, progress, and available actions |
+| `/devflow-next` | Attempt to advance to next phase (checks gates) |
+| `/devflow-dispatch` | List available agents for current phase and mode |
+| `/devflow-dispatch <role>` | Dispatch a specific agent |
 
 ## Superpowers Integration
 
@@ -128,7 +128,7 @@ DevFlow invokes superpowers skills when discipline enforcement is needed. These 
 
 | Thought | Reality |
 |---------|---------|
-| "This is just a quick fix" | Use `/flow scale:QUICK` — it skips to E→V |
+| "This is just a quick fix" | Use `/devflow scale:QUICK` — it skips to E→V |
 | "I don't need agents for this" | The skill decides that based on mode. Invoke it. |
 | "Let me just write the code" | TDD iron law: no production code without failing test first |
 | "I'll brainstorm in my head" | No. Brainstorming produces a spec. Specs prevent wasted work. |

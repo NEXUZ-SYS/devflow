@@ -417,7 +417,7 @@ Present a summary:
 - [list of files not overwritten]
 
 ### Next steps
-- Run `/flow <task>` to start your first PREVC workflow
+- Run `/devflow <task>` to start your first PREVC workflow
 - [If Tier 3] Install dotcontext (`npm i -g @dotcontext/cli && dotcontext mcp:install claude --local`) for Full mode
 ```
 
