@@ -1,128 +1,130 @@
 ---
 name: prevc-execution
-description: "Use during PREVC Execution phase — implements the approved plan using subagent-driven development, TDD iron law, and agent handoffs"
+description: "Use during PREVC Execution phase — implements the approved plan using dotcontext agent orchestration (Full Mode) or superpowers SDD/TDD (Lite/Minimal)"
 ---
 
 # PREVC Execution Phase
 
-Implements the approved plan task-by-task using subagent-driven development with TDD enforcement and agent-guided handoffs.
-
-<HARD-GATE>
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. Code written before tests must be deleted — no exceptions. This is the TDD iron law inherited from superpowers.
-</HARD-GATE>
+Implements the approved plan task-by-task using dotcontext agent orchestration in Full Mode, or superpowers-driven development in Lite/Minimal Mode.
 
 **Announce at start:** "I'm using the devflow:prevc-execution skill for the Execution phase."
 
 ## Checklist
 
-1. **Set up workspace** — git worktree for isolation
+1. **Set up workspace** — git strategy gate (devflow:git-strategy)
 2. **Load plan** — read and validate the implementation plan
-3. **Determine execution strategy** — SDD (subagents) or sequential
-4. **Execute tasks** — one by one, TDD, with 2-stage review
-5. **Agent handoffs** — transition between specialist agents per task group
-6. **Track progress** — update plan status after each task
-7. **Gate check** — all tasks complete + all tests pass = ready to advance
+3. **Determine execution mode** — Full (dotcontext) or Lite/Minimal (superpowers)
+4. **Execute tasks** — agent-orchestrated or SDD/sequential
+5. **Track progress** — update plan status after each task
+6. **Gate check** — all tasks complete + all tests pass = ready to advance
 
 ## Step 1: Set Up Workspace
 
-**REQUIRED SUB-SKILL:** Invoke `superpowers:using-git-worktrees`
+**REQUIRED SUB-SKILL:** Invoke `devflow:git-strategy`
 
-Create an isolated worktree for this feature. Never implement on main/master without explicit user consent.
+The git strategy skill checks branch protection and creates the appropriate isolation (worktree, branch, or none) based on the project's configured strategy.
 
 ## Step 2: Load Plan
 
-Read the implementation plan from the Planning phase. Review critically:
-- Are steps still valid given current codebase state?
-- Any concerns? Raise with user before starting.
-- Create a task list from plan steps.
-
-## Step 3: Execution Strategy
-
-### If subagents are available (Claude Code, Codex)
-**REQUIRED SUB-SKILL:** Invoke `superpowers:subagent-driven-development`
-
-Dispatch one fresh subagent per task. Each subagent:
-1. Gets the task description + relevant context
-2. Follows TDD iron law (RED → GREEN → REFACTOR)
-3. Undergoes 2-stage review:
-   - Stage 1: Spec compliance — does the code match the plan?
-   - Stage 2: Code quality — is the code clean, tested, idiomatic?
-
-### If no subagents (Cursor, Windsurf)
-**REQUIRED SUB-SKILL:** Invoke `superpowers:executing-plans`
-
-Execute tasks sequentially with self-review checkpoints.
-
-## Step 4: Agent-Guided Execution
-
-For each task group in the plan, consult the annotated agent role:
-
 ### Full Mode
 ```
-agent({ action: "getSequence", task: "<task-group-description>" })
+plan({ action: "getDetails", planSlug: "<slug>" })
 ```
-Follow the handoff sequence. Example:
-```
-backend-specialist → frontend-specialist → test-writer
-```
-
-Between handoffs:
-```
-workflow-manage({ action: "handoff", from: "backend-specialist", to: "frontend-specialist" })
-```
+Review the plan from dotcontext. Verify steps are still valid.
 
 ### Lite Mode
-Read the relevant agent playbook before starting each task group:
-- `.context/agents/<agent-name>.md`
-- Apply the agent's workflow steps and best practices
+Read `.context/plans/<slug>.md` and review.
 
 ### Minimal Mode
-Execute tasks per superpowers SDD/executing-plans without agent guidance.
+Read `docs/superpowers/plans/<file>.md` and review.
 
-## Step 5: TDD Per Task
+In all modes: raise concerns with user before starting.
 
-Every task follows this exact sequence:
+## Step 3: Execution Mode
+
+### Full Mode (dotcontext owns execution)
+
+**Step 3a — Get agent sequence:**
+```
+agent({ action: "getSequence", task: "<plan description>" })
+```
+Returns ordered sequence. Automatically includes:
+- `test-writer` (if not present)
+- `code-reviewer` (if includeReview is true, which is the default)
+- `documentation-writer` (at the end)
+
+**Step 3b — For each step, get agent:**
+```
+agent({ action: "orchestrate", task: "<step description>" })
+```
+Returns recommended agent(s) with docs and playbook path. Uses ONLY `task` parameter (do not combine with `role` or `phase`).
+
+**Step 3c — Agent executes step following its playbook**
+
+**Step 3d — Update progress (continuously, not just at completion):**
+
+> `phaseId` and `stepIndex` are obtained from `plan({ action: "getDetails" })` response.
 
 ```
-1. Write the failing test          ← RED
-2. Run it — confirm it fails
-3. Write minimal code to pass      ← GREEN
-4. Run tests — confirm all pass
-5. Refactor if needed              ← REFACTOR
-6. Run tests — confirm still pass
-7. Commit
+plan({ action: "updateStep", planSlug: "<slug>", phaseId: "<id>", stepIndex: <n>,
+  status: "in_progress",
+  notes: "<decisions made so far, what's next>"
+})
 ```
 
-**Violations that require deleting code:**
-- Production code written without a failing test
-- Test written after production code
-- "I'll write the test after" — delete the code, write the test first
-
-## Step 6: Track Progress
-
-### Full Mode
-After each task completes:
+On completion:
 ```
-plan({ action: "updateStep", stepId: "<id>", status: "completed" })
+plan({ action: "updateStep", planSlug: "<slug>", phaseId: "<id>", stepIndex: <n>,
+  status: "completed",
+  output: "<step result>",
+  notes: "<decisions, rationale, test results>"
+})
 ```
 
-### Lite/Minimal Mode
-Update task list checkboxes in the plan document.
+**Step 3e — Handoff between agents (when agent changes between steps):**
+```
+workflow-manage({ action: "handoff", from: "<previous-agent>", to: "<next-agent>",
+  artifacts: ["src/path/file.ts", "tests/path/test.ts"]
+})
+```
 
-## Step 7: Gate Check
+**Step 3f — After all steps complete:**
+```
+workflow-advance({ outputs: ["All steps completed", "N tests passing"] })
+```
+Returns orchestration + quickStart for the next phase.
+
+### Lite Mode
+Read the relevant agent playbook before each task group:
+- `.context/agents/<agent-name>.md`
+- Apply the agent's workflow steps and best practices
+- Track progress by editing `.context/plans/<slug>.md`
+
+### Minimal Mode
+**REQUIRED SUB-SKILL:** Invoke `superpowers:subagent-driven-development` (if subagents available) or `superpowers:executing-plans` (sequential).
+
+Execute tasks per superpowers workflow without agent guidance.
+
+## Step 4: Gate Check
 
 The Execution phase gate requires:
 - All plan tasks completed
 - All tests passing
-- No unresolved review findings from 2-stage reviews
+- No unresolved review findings
 - Code committed to feature branch
 
 **When gate is met:**
 
-Full mode:
+### Full Mode
 ```
 workflow-advance()  # Moves to V phase
 ```
+
+### Lite Mode
+Mark the plan as complete in `.context/plans/<slug>.md`. Update task checkboxes.
+
+### Minimal Mode
+Verify all superpowers review stages passed. Plan document updated with completion status.
 
 ## LARGE Scale: Checkpoints
 
@@ -136,8 +138,7 @@ For LARGE scale workflows, add checkpoints every 3-5 tasks:
 
 | Thought | Reality |
 |---------|---------|
-| "I'll write tests at the end" | TDD iron law. Delete the code. Write the test first. |
-| "This task is too simple for a subagent" | Fresh context prevents contamination. Use subagents when available. |
-| "Agent handoffs are overhead" | Specialists catch domain-specific issues generalists miss. |
+| "I'll skip the agent sequence" | Agents catch domain-specific issues. Use orchestrate. |
+| "Notes in updateStep are optional" | Notes are critical for rehydration after compaction. Always write them. |
+| "Agent handoffs are overhead" | Handoffs with artifacts prevent context loss between specialists. |
 | "The plan changed, I'll adapt on the fly" | Update the plan document first. Then execute the updated plan. |
-| "Tests pass, move on" | 2-stage review comes after tests. Spec compliance + code quality. |
