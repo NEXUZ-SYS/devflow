@@ -71,15 +71,20 @@ cat ~/.claude/plugins/installed_plugins.json | grep devflow
 claude
 ```
 
-Na inicialização, o hook SessionStart do DevFlow vai rodar e mostrar:
+Na inicialização, o hook SessionStart do DevFlow roda **silenciosamente** e injeta o contexto do workflow no modelo. Você não verá output visual no terminal — isso é normal.
 
+Para confirmar que o DevFlow está ativo, pergunte ao Claude:
+
+```
+Em que modo o DevFlow está rodando?
+```
+
+Ele deve responder com algo como:
 ```
 DevFlow Mode: minimal
 - superpowers: true
 - dotcontext MCP: false
-- dotcontext CLI (npx): true    ← se Node.js está instalado
-- dotcontext lite (.context/): false
-- Tip: Run /flow init to install dotcontext MCP and upgrade to Full mode
+- dotcontext CLI: true
 ```
 
 ---
