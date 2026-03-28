@@ -23,6 +23,7 @@ Complete index of all skills across DevFlow, superpowers, and dotcontext. Each s
 | prevc-execution | devflow | `devflow:prevc-execution` | E | Minimal | SDD + TDD + agent handoffs |
 | prevc-validation | devflow | `devflow:prevc-validation` | V | Minimal | Verification + test/security agents |
 | prevc-confirmation | devflow | `devflow:prevc-confirmation` | C | Minimal | Branch finishing + docs + sync |
+| git-strategy | devflow | `devflow:git-strategy` | P | Minimal | Git strategy gate: branch protection + isolation (branch-flow/worktree/trunk-based) |
 
 ## Discipline & Process (from superpowers)
 
@@ -98,8 +99,8 @@ User runs /flow "add caching layer"
   │   │   └─ superpowers:requesting-code-review (structured review)
   │   │
   │   ├─ E: devflow:prevc-execution
-  │   │   ├─ superpowers:subagent-driven-development (task dispatch)
-  │   │   ├─ superpowers:test-driven-development (TDD per task)
+  │   │   ├─ devflow:git-strategy (workspace isolation)
+  │   │   ├─ agent orchestration via dotcontext (Full Mode)
   │   │   ├─ devflow:test-generation (test strategy per component)
   │   │   ├─ devflow:refactoring (if code restructuring needed)
   │   │   ├─ devflow:commit-message (per-task commits)
@@ -136,5 +137,6 @@ User runs /flow "add caching layer"
 | Update docs | `devflow:documentation` |
 | Run tasks in parallel | `devflow:parallel-dispatch` |
 | Create a new skill | `devflow:skill-creation` |
+| Check git strategy / branch safety | `devflow:git-strategy` |
 | Debug a tricky issue | `superpowers:systematic-debugging` + `devflow:bug-investigation` |
 | Break down a big feature | `devflow:feature-breakdown` |
