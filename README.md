@@ -40,8 +40,14 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 
 ### 1. Instalar superpowers (dependência)
 
+No terminal:
 ```bash
-claude /plugin install superpowers@claude-plugins-official --scope user
+claude plugin install superpowers@claude-plugins-official --scope user
+```
+
+Ou dentro do Claude Code:
+```
+/plugin install superpowers@claude-plugins-official --scope user
 ```
 
 Verifique dentro do Claude Code — as skills devem aparecer:
@@ -51,12 +57,22 @@ superpowers:brainstorming, superpowers:test-driven-development, etc.
 
 ### 2. Registrar o marketplace e instalar o DevFlow
 
+No terminal:
 ```bash
 # Registrar marketplace (uma vez)
 claude plugin marketplace add NEXUZ-SYS/devflow
 
 # Instalar o plugin
-claude /plugin install devflow@NEXUZ-SYS --scope user
+claude plugin install devflow@NEXUZ-SYS --scope user
+```
+
+Ou dentro do Claude Code:
+```
+# Registrar marketplace (uma vez)
+/plugin marketplace add NEXUZ-SYS/devflow
+
+# Instalar o plugin
+/plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 ### 3. Instalar dotcontext (opcional — habilita Full Mode)
@@ -93,15 +109,22 @@ O que acontece:
 
 ## Atualização
 
+No terminal:
 ```bash
 # Atualizar DevFlow
-claude /plugin update devflow@NEXUZ-SYS
+claude plugin update devflow@NEXUZ-SYS
 
 # Atualizar superpowers
-claude /plugin update superpowers@claude-plugins-official
+claude plugin update superpowers@claude-plugins-official
 
 # Atualizar dotcontext
 npm update -g @dotcontext/cli
+```
+
+Ou dentro do Claude Code:
+```
+/plugin update devflow@NEXUZ-SYS
+/plugin update superpowers@claude-plugins-official
 ```
 
 ---
@@ -260,7 +283,7 @@ seu-projeto/
 | Problema | Solução |
 |----------|---------|
 | `/devflow-status` mostra "Minimal" | Verifique se `.mcp.json` existe. Reinicie a sessão do Claude Code. |
-| superpowers: false | `claude /plugin install superpowers@claude-plugins-official --scope user` |
+| superpowers: false | Terminal: `claude plugin install superpowers@claude-plugins-official --scope user` |
 | dotcontext CLI não encontrado | `npm install -g @dotcontext/cli` (Node.js 20+ necessário) |
 | Skills não aparecem | Verifique: `cat ~/.claude/plugins/installed_plugins.json \| grep devflow` |
 | `context.fill()` demora | Normal — análise de codebase grande leva 1-3 minutos |

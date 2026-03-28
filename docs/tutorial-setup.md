@@ -22,8 +22,14 @@ Antes de começar, verifique que você tem:
 
 Superpowers é a camada de disciplina do DevFlow — TDD, brainstorming socrático, code review, subagent-driven development.
 
+No terminal:
 ```bash
-claude /plugin install superpowers@claude-plugins-official --scope user
+claude plugin install superpowers@claude-plugins-official --scope user
+```
+
+Ou dentro do Claude Code:
+```
+/plugin install superpowers@claude-plugins-official --scope user
 ```
 
 Para verificar, abra o Claude Code e digite `/`. As seguintes skills devem aparecer na lista:
@@ -38,16 +44,28 @@ superpowers:systematic-debugging
 
 ### 1.2 Registrar o marketplace do DevFlow
 
-Só precisa fazer isso uma vez:
+Só precisa fazer isso uma vez.
 
+No terminal:
 ```bash
 claude plugin marketplace add NEXUZ-SYS/devflow
 ```
 
+Ou dentro do Claude Code:
+```
+/plugin marketplace add NEXUZ-SYS/devflow
+```
+
 ### 1.3 Instalar o DevFlow
 
+No terminal:
 ```bash
-claude /plugin install devflow@NEXUZ-SYS --scope user
+claude plugin install devflow@NEXUZ-SYS --scope user
+```
+
+Ou dentro do Claude Code:
+```
+/plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 Para verificar:
@@ -288,15 +306,22 @@ As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um
 
 ### Atualizar plugins
 
+No terminal:
 ```bash
 # Atualizar DevFlow
-claude /plugin update devflow@NEXUZ-SYS
+claude plugin update devflow@NEXUZ-SYS
 
 # Atualizar superpowers
-claude /plugin update superpowers@claude-plugins-official
+claude plugin update superpowers@claude-plugins-official
 
 # Atualizar dotcontext
 npm update -g @dotcontext/cli
+```
+
+Ou dentro do Claude Code:
+```
+/plugin update devflow@NEXUZ-SYS
+/plugin update superpowers@claude-plugins-official
 ```
 
 ### Atualizar o .context/ do projeto
@@ -339,8 +364,8 @@ O init é idempotente — só adiciona o que falta, nunca sobrescreve o existent
 # Verificar instalação
 cat ~/.claude/plugins/installed_plugins.json | grep superpowers
 
-# Reinstalar
-claude /plugin install superpowers@claude-plugins-official --scope user
+# Reinstalar (no terminal)
+claude plugin install superpowers@claude-plugins-official --scope user
 ```
 
 ### dotcontext CLI não encontrado
@@ -366,8 +391,8 @@ Normal para projetos grandes — a análise semântica do codebase pode levar 1-
 # Verificar instalação
 grep devflow ~/.claude/plugins/installed_plugins.json
 
-# Reinstalar
-claude /plugin install devflow@NEXUZ-SYS --scope user
+# Reinstalar (no terminal)
+claude plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 ### Erro com `npx dotcontext mcp:install`
@@ -388,14 +413,22 @@ dotcontext mcp:install claude --local
 
 ### Instalação completa (uma vez)
 
+No terminal:
 ```bash
 # Plugins
-claude /plugin install superpowers@claude-plugins-official --scope user
+claude plugin install superpowers@claude-plugins-official --scope user
 claude plugin marketplace add NEXUZ-SYS/devflow
-claude /plugin install devflow@NEXUZ-SYS --scope user
+claude plugin install devflow@NEXUZ-SYS --scope user
 
 # Dotcontext (opcional, habilita Full Mode)
 npm install -g @dotcontext/cli
+```
+
+Ou dentro do Claude Code:
+```
+/plugin install superpowers@claude-plugins-official --scope user
+/plugin marketplace add NEXUZ-SYS/devflow
+/plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 ### Inicializar em cada projeto

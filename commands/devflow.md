@@ -93,11 +93,16 @@ OPERATING MODES
 
   Mode is auto-detected at session start. Check with /devflow-status
 
-SETUP (one-time)
-  1. claude /plugin install superpowers@claude-plugins-official --scope user
+SETUP (one-time, no terminal)
+  1. claude plugin install superpowers@claude-plugins-official --scope user
   2. claude plugin marketplace add NEXUZ-SYS/devflow
-  3. claude /plugin install devflow@NEXUZ-SYS --scope user
+  3. claude plugin install devflow@NEXUZ-SYS --scope user
   4. npm install -g @dotcontext/cli          (optional, enables Full mode)
+
+  Ou dentro do Claude Code (sem "claude" na frente):
+  1. /plugin install superpowers@claude-plugins-official --scope user
+  2. /plugin marketplace add NEXUZ-SYS/devflow
+  3. /plugin install devflow@NEXUZ-SYS --scope user
 
 EXAMPLES
   /devflow init
