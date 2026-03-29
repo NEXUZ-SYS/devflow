@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")" && git rev-parse --show-toplevel)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # Directories that require a version bump when changed
 WATCHED_DIRS="commands/ skills/ agents/ hooks/ templates/"
