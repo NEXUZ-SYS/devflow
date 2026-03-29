@@ -14,12 +14,22 @@ O hook retorna `permissionDecision: "deny"` — o LLM **não consegue** editar s
 
 **Fluxo quando bloqueado:**
 1. LLM tenta Edit/Write em branch protegida → hook BLOQUEIA
-2. Hook instrui o LLM a invocar este skill (`devflow:git-strategy`)
+2. Hook instrui o LLM a invocar este skill automaticamente via `Skill({ skill: "devflow:git-strategy" })`
 3. Skill pergunta ao usuário o tipo de branch (feature/fix/hotfix/release)
 4. Branch criada → LLM retenta o Edit/Write → hook permite
 
-**Exceções (hook permite sem gate):**
+**Exceções — arquivos permitidos em qualquer branch (hook não bloqueia):**
+- `.context/workflow/.checkpoint/*` — handoff, checkpoints
+- `.context/workflow/*` — estado do workflow
+- `.context/plans/*` — planos PREVC
+- `.context/docs/*` — docs do projeto (sync)
+- `.context/agents/*` — playbooks de agentes (sync)
+- `.context/skills/*` — skills do projeto (sync)
+- `docs/superpowers/*` — planos do superpowers
+- `docs/specs/*` — design specs
 - Arquivos do plugin DevFlow (`$CLAUDE_PLUGIN_ROOT/*`)
+
+**Exceções — branches não protegidas (hook não bloqueia):**
 - Branches de trabalho (`feature/*`, `fix/*`, `hotfix/*`, `release/*`)
 - Estratégia trunk-based configurada
 - Impossibilidade de detectar branch (fora de repo git)

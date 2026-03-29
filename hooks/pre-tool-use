@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # DevFlow PreToolUse hook — Branch Protection Gate
 # Blocks Edit/Write on protected branches.
-# Forces LLM to invoke devflow:git-strategy before editing.
+# Allows workflow files (handoff, checkpoints, plans, .context/workflow/).
+# On block: instructs LLM to invoke devflow:git-strategy automatically.
 #
 # Protected branches default: main, master, develop
 # Override via: .context/docs/development-workflow.md (protectedBranches field)
@@ -28,6 +29,53 @@ print(d.get('cwd', ''))
 
 if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
   exit 0
+fi
+
+# --- Extract file path ---
+
+FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('file_path', ti.get('file', '')))
+" 2>/dev/null || echo "")
+
+# --- Allow workflow/infrastructure files on any branch ---
+# These are operational files, not project code.
+
+if [ -n "$FILE_PATH" ]; then
+  case "$FILE_PATH" in
+    # Handoff and checkpoint files
+    */.context/workflow/.checkpoint/*)
+      exit 0
+      ;;
+    # Workflow state files
+    */.context/workflow/*)
+      exit 0
+      ;;
+    # Plans (PREVC workflow plans)
+    */.context/plans/*)
+      exit 0
+      ;;
+    # Context docs (sync updates these)
+    */.context/docs/*)
+      exit 0
+      ;;
+    # Context agents and skills (sync/init updates these)
+    */.context/agents/*)
+      exit 0
+      ;;
+    */.context/skills/*)
+      exit 0
+      ;;
+    # Design specs and superpowers plans
+    */docs/superpowers/*)
+      exit 0
+      ;;
+    */docs/specs/*)
+      exit 0
+      ;;
+  esac
 fi
 
 # --- Get current branch ---
@@ -75,32 +123,21 @@ for pb in $PROTECTED_BRANCHES; do
 done
 
 if [ "$IS_PROTECTED" = "false" ]; then
-  # Not on protected branch — allow
   exit 0
 fi
 
 # --- Also check: is the file being edited inside the plugin itself? ---
-# Plugin files (hooks, skills, etc.) are OK to edit on any branch
-# since they're the devflow plugin, not user project code.
-
-FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-ti = d.get('tool_input', {})
-print(ti.get('file_path', ti.get('file', '')))
-" 2>/dev/null || echo "")
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -n "$PLUGIN_ROOT" ] && [ -n "$FILE_PATH" ]; then
   case "$FILE_PATH" in
     "$PLUGIN_ROOT"*)
-      # Editing plugin files — allow
       exit 0
       ;;
   esac
 fi
 
-# --- BLOCK: on protected branch, editing project files ---
+# --- BLOCK: on protected branch, editing project source code ---
 
 escape_for_json() {
     local s="$1"
@@ -112,14 +149,16 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
-REASON="BLOQUEADO: Você está na branch protegida '${BRANCH}'. Não é permitido editar arquivos do projeto diretamente nesta branch.
+REASON="BLOQUEADO: Você está na branch protegida '${BRANCH}'. Não é permitido editar código do projeto diretamente nesta branch.
 
-AÇÃO OBRIGATÓRIA antes de editar:
-1. Invoque o skill devflow:git-strategy para criar uma branch de trabalho
-2. Ou crie manualmente: git checkout -b feature/<nome> ou fix/<nome>
-3. Só então tente editar novamente
+AÇÃO AUTOMÁTICA OBRIGATÓRIA:
+Invoque o skill devflow:git-strategy AGORA usando: Skill({ skill: \"devflow:git-strategy\" })
+O skill vai perguntar ao usuário o tipo de branch e criar o isolamento automaticamente.
+Após criar a branch, retente a edição.
 
-Se o usuário explicitamente pediu para editar na ${BRANCH}, pergunte para confirmar antes de prosseguir."
+Arquivo bloqueado: ${FILE_PATH}
+
+NOTA: Arquivos em .context/ (workflow, checkpoints, plans, docs, agents, skills) e docs/superpowers/ são permitidos em qualquer branch."
 
 REASON_ESCAPED=$(escape_for_json "$REASON")
 
