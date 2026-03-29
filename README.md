@@ -109,22 +109,39 @@ O que acontece:
 
 ## Atualização
 
+> ⚠️ **Importante:** Antes de atualizar um plugin, atualize o marketplace correspondente. O Claude Code resolve versões a partir do cache local do marketplace — sem essa etapa, ele não detecta a nova versão e mantém a antiga.
+
 No terminal:
 ```bash
-# Atualizar DevFlow
+# 1. Atualizar o marketplace (obrigatório antes do update)
+claude plugin marketplace update NEXUZ-SYS
+
+# 2. Atualizar DevFlow
 claude plugin update devflow@NEXUZ-SYS
 
-# Atualizar superpowers
+# 3. Atualizar superpowers
 claude plugin update superpowers@claude-plugins-official
 
-# Atualizar dotcontext
+# 4. Atualizar dotcontext
 npm update -g @dotcontext/cli
 ```
 
 Ou dentro do Claude Code:
 ```
+# 1. Atualizar marketplace primeiro
+/plugin marketplace update NEXUZ-SYS
+
+# 2. Depois atualizar o plugin
 /plugin update devflow@NEXUZ-SYS
 /plugin update superpowers@claude-plugins-official
+```
+
+Se o update não refletir a nova versão, force a reinstalação:
+```bash
+# Limpar cache antigo e reinstalar
+rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
+claude plugin marketplace update NEXUZ-SYS
+claude plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 ---
@@ -285,6 +302,7 @@ seu-projeto/
 | `/devflow-status` mostra "Minimal" | Verifique se `.mcp.json` existe. Reinicie a sessão do Claude Code. |
 | superpowers: false | Terminal: `claude plugin install superpowers@claude-plugins-official --scope user` |
 | dotcontext CLI não encontrado | `npm install -g @dotcontext/cli` (Node.js 20+ necessário) |
+| Plugin não atualiza (versão antiga) | `claude plugin marketplace update NEXUZ-SYS` antes do update. Se persistir: `rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/` e reinstale |
 | Skills não aparecem | Verifique: `cat ~/.claude/plugins/installed_plugins.json \| grep devflow` |
 | `context.fill()` demora | Normal — análise de codebase grande leva 1-3 minutos |
 

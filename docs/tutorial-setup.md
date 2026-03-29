@@ -304,24 +304,43 @@ As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um
 
 ## Parte 5 — Atualização
 
+> ⚠️ **Passo obrigatório:** Sempre atualize o marketplace antes de atualizar o plugin. O Claude Code resolve versões a partir do cache local do marketplace — sem essa etapa, ele não detecta a nova versão e mantém a antiga.
+
 ### Atualizar plugins
 
 No terminal:
 ```bash
-# Atualizar DevFlow
+# 1. Atualizar o marketplace (SEMPRE fazer antes do update)
+claude plugin marketplace update NEXUZ-SYS
+
+# 2. Atualizar DevFlow
 claude plugin update devflow@NEXUZ-SYS
 
-# Atualizar superpowers
+# 3. Atualizar superpowers
 claude plugin update superpowers@claude-plugins-official
 
-# Atualizar dotcontext
+# 4. Atualizar dotcontext
 npm update -g @dotcontext/cli
 ```
 
 Ou dentro do Claude Code:
 ```
+# 1. Atualizar marketplace primeiro
+/plugin marketplace update NEXUZ-SYS
+
+# 2. Depois atualizar o plugin
 /plugin update devflow@NEXUZ-SYS
 /plugin update superpowers@claude-plugins-official
+```
+
+### Se o update não funcionar
+
+Se após o update a versão antiga persistir:
+```bash
+# Limpar cache e reinstalar
+rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
+claude plugin marketplace update NEXUZ-SYS
+claude plugin install devflow@NEXUZ-SYS --scope user
 ```
 
 ### Atualizar o .context/ do projeto
