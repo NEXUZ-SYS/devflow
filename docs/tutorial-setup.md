@@ -200,22 +200,37 @@ meu-projeto/
 
 ## Parte 3 — Projeto existente com dotcontext
 
-Se o seu projeto **já tem** `.context/` configurado (por uso anterior do dotcontext), o `/devflow init` detecta isso automaticamente:
-
-1. **Não sobrescreve** o `.context/` existente
-2. **Adiciona** apenas os agentes e skills do DevFlow que estão faltando
-3. **Mantém** toda a configuração existente do dotcontext
-4. **Instala** o MCP server se ainda não estiver no `.mcp.json`
+Se o seu projeto **já tem** `.context/` configurado (por uso anterior do dotcontext), o `/devflow init` detecta isso automaticamente e executa um **sync** em vez de inicializar do zero:
 
 ```
 /devflow init
 
-→ .context/ detectado. Adicionando agentes DevFlow faltantes...
+→ .context/docs/ detectado. Executando sync para atualizar conteúdo...
+→ Atualizando project-overview.md, codebase-map.json, ...
 → .mcp.json detectado com dotcontext. Full Mode habilitado.
-→ Pronto. 3 agentes adicionados, 2 skills adicionados.
+→ Sync completo. 8 docs atualizados, 3 agentes adicionados.
 ```
 
+O que acontece:
+1. **Detecta** `.context/docs/` existente → entende que o projeto já tem contexto
+2. **Delega** para `devflow:context-sync` que atualiza docs, agents e skills
+3. **Adiciona** apenas os agentes e skills do DevFlow que estão faltando
+4. **Instala** o MCP server se ainda não estiver no `.mcp.json`
+
 Se o projeto tem `.mcp.json` com outros servidores MCP, o DevFlow adiciona o entry do dotcontext sem alterar os existentes.
+
+### Atualizar o contexto manualmente
+
+Após mudanças significativas no projeto (novo módulo, mudança de stack, refactoring grande), atualize o `.context/`:
+
+```
+/devflow-sync                   # Atualiza tudo (docs + agents + skills)
+/devflow-sync docs              # Atualiza apenas docs
+/devflow-sync agents            # Atualiza apenas agents
+/devflow-sync skills            # Atualiza apenas skills
+```
+
+O sync usa dotcontext MCP (`fillSingle`) em Full Mode, ou scan standalone em Lite Mode.
 
 ---
 
@@ -260,7 +275,19 @@ O que acontece:
 4. **V (Validation)** — testes + security-auditor + spec compliance
 5. **C (Confirmation)** — finalização de branch + atualização de docs + sync de contexto
 
-### 4.4 Testar comandos de navegação
+### 4.4 Testar sync de contexto
+
+```bash
+# Atualizar todo o .context/ com o estado atual do projeto
+/devflow-sync
+
+# Atualizar apenas docs (project-overview, codebase-map, etc.)
+/devflow-sync docs
+```
+
+O sync é útil após mudanças significativas — novo módulo, mudança de stack, refactoring grande.
+
+### 4.5 Testar comandos de navegação
 
 ```bash
 # Ver em que fase está
@@ -276,7 +303,7 @@ O que acontece:
 /devflow-dispatch backend-specialist
 ```
 
-### 4.5 Testar capabilities on-demand
+### 4.6 Testar capabilities on-demand
 
 As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um workflow. Basta pedir em linguagem natural:
 
@@ -345,13 +372,22 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 
 ### Atualizar o .context/ do projeto
 
-Se uma nova versão do DevFlow trouxer agentes ou skills novos:
+Após atualizar o plugin, sincronize o contexto do projeto:
 
 ```
+# Sync completo — atualiza docs, agents e skills com o estado atual do projeto
+/devflow-sync
+
+# Ou via init (detecta .context/ existente e executa sync automaticamente)
 /devflow init
 ```
 
-O init é idempotente — só adiciona o que falta, nunca sobrescreve o existente.
+Para atualizar apenas uma parte:
+```
+/devflow-sync docs              # Apenas docs (project-overview, codebase-map, etc.)
+/devflow-sync agents            # Apenas agents
+/devflow-sync skills            # Apenas skills
+```
 
 ---
 
@@ -459,6 +495,13 @@ claude
 # Dentro do Claude Code:
 /devflow init
 /devflow-status
+```
+
+### Atualizar contexto do projeto
+
+```bash
+/devflow-sync                   # Atualiza .context/ com estado atual
+/devflow-sync docs              # Apenas docs
 ```
 
 ### Começar a trabalhar

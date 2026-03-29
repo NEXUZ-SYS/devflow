@@ -157,6 +157,12 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 /devflow scale:MEDIUM add sistema de cache com Redis
 /devflow scale:LARGE migrar de REST para GraphQL
 
+# Atualizar contexto do projeto (.context/)
+/devflow-sync
+
+# Atualizar apenas docs
+/devflow-sync docs
+
 # Ver progresso
 /devflow-status
 
@@ -182,9 +188,11 @@ Para ver todos os comandos e capabilities:
 | Comando | O que faz |
 |---------|-----------|
 | `/devflow help` | Mostra a referência completa |
-| `/devflow init` | Inicializa DevFlow no projeto |
+| `/devflow init` | Inicializa DevFlow no projeto (se já existe `.context/`, executa sync) |
 | `/devflow <descrição>` | Inicia workflow (auto-detecta escala) |
 | `/devflow scale:X <desc>` | Inicia com escala explícita (QUICK/SMALL/MEDIUM/LARGE) |
+| `/devflow-sync` | Atualiza `.context/` com o estado atual do projeto |
+| `/devflow-sync <escopo>` | Atualiza apenas `docs`, `agents` ou `skills` |
 | `/devflow-status` | Mostra fase atual, progresso e modo |
 | `/devflow-next` | Avança para próxima fase (valida gates) |
 | `/devflow-dispatch` | Recomenda agente para o contexto atual |
@@ -273,11 +281,11 @@ O modo é detectado automaticamente ao iniciar a sessão. Verifique com `/devflo
 
 ```
 devflow/
-├── commands/         # /devflow, /devflow-status, /devflow-next, /devflow-dispatch
-├── skills/           # 21 skills (PREVC, bridge, on-demand)
+├── commands/         # /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch
+├── skills/           # 24 skills (PREVC, bridge, on-demand, context-sync)
 ├── agents/           # 14 playbooks de agentes (fallback genérico)
 ├── templates/        # Templates para scaffolding do .context/
-├── hooks/            # SessionStart com detecção de modo
+├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse
 ├── references/       # Mapa de skills + mapeamento de ferramentas
 ├── .claude-plugin/   # Manifesto do plugin para Claude Code
 └── .cursor-plugin/   # Manifesto do plugin para Cursor
