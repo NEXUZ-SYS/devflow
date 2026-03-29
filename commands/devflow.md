@@ -26,6 +26,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow-status                        # Show current phase and progress
 /devflow-next                          # Advance to next phase
 /devflow-dispatch [role]               # Dispatch or recommend agents
+/devflow-sync [docs|agents|skills]     # Update .context/ with current project state
 ```
 
 ## Behavior
@@ -41,12 +42,14 @@ Display the help text below. Output it **exactly as-is** (formatted for terminal
 
 COMMANDS
   /devflow help               Show this help
-  /devflow init               Initialize DevFlow in this project
+  /devflow init               Initialize DevFlow (or sync if already exists)
   /devflow <desc>             Start workflow (auto-detects scale)
   /devflow-status             Show current phase, progress, and mode
   /devflow-next               Advance to next phase (checks gates)
   /devflow-dispatch           Recommend best agent for current task
   /devflow-dispatch <role>    Dispatch a specific specialist agent
+  /devflow-sync               Update .context/ with current project state
+  /devflow-sync <scope>       Update only docs, agents, or skills
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -107,6 +110,13 @@ SETUP (one-time, no terminal)
 EXAMPLES
   /devflow init
     → Scans project, scaffolds .context/ with agents, skills, and docs
+    → If .context/ already exists, runs sync to update existing content
+
+  /devflow-sync
+    → Updates all .context/ docs, agents, and skills with current project state
+
+  /devflow-sync docs
+    → Updates only .context/docs/ files
 
   /devflow fix the login timeout bug
     → Auto-detects QUICK, runs E → V
@@ -134,6 +144,7 @@ QUICK REFERENCE
   ─────────────────────────────────────────────────────
   Start a new feature           /devflow <description>
   Fix a bug                     /devflow scale:QUICK <desc>
+  Update project context        /devflow-sync
   Check current progress        /devflow-status
   Advance to next phase         /devflow-next
   List available agents         /devflow-dispatch
@@ -152,10 +163,16 @@ QUICK REFERENCE
 
 ### `/devflow init`
 1. Invoke `devflow:project-init` skill
-2. Scans the project (stack, structure, patterns)
-3. Scaffolds `.context/` with project-aware agents, skills, and docs
-4. Output is 100% dotcontext-compatible
+2. Se `.context/docs/` já existe → delega para `devflow:context-sync` (atualização)
+3. Se não existe → scaffolds `.context/` com agents, skills, e docs do zero
+4. Output é 100% dotcontext-compatible
 5. Enables Lite mode automatically
+
+### `/devflow-sync [scope]`
+1. Invoke `devflow:context-sync` skill
+2. Atualiza `.context/` existente com o estado atual do projeto
+3. Scope opcional: `docs`, `agents`, `skills` (default: tudo)
+4. Usa dotcontext MCP (Full) ou scan standalone (Lite)
 
 ### `/devflow [description]`
 1. Parse the description and optional scale parameter
