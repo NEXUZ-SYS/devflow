@@ -7,6 +7,23 @@ description: "Gate bloqueante auto-ativado antes de qualquer edição. Detecta a
 
 ⛔ **REGRA BLOQUEANTE**: Esta verificação DEVE ser executada ANTES de qualquer edição de arquivo.
 
+## Enforcement Automático
+
+Este skill é enforced por um **hook PreToolUse** que bloqueia `Edit` e `Write` em branches protegidas.
+O hook retorna `permissionDecision: "deny"` — o LLM **não consegue** editar sem antes criar uma branch de trabalho.
+
+**Fluxo quando bloqueado:**
+1. LLM tenta Edit/Write em branch protegida → hook BLOQUEIA
+2. Hook instrui o LLM a invocar este skill (`devflow:git-strategy`)
+3. Skill pergunta ao usuário o tipo de branch (feature/fix/hotfix/release)
+4. Branch criada → LLM retenta o Edit/Write → hook permite
+
+**Exceções (hook permite sem gate):**
+- Arquivos do plugin DevFlow (`$CLAUDE_PLUGIN_ROOT/*`)
+- Branches de trabalho (`feature/*`, `fix/*`, `hotfix/*`, `release/*`)
+- Estratégia trunk-based configurada
+- Impossibilidade de detectar branch (fora de repo git)
+
 **Announce at start:** "I'm using the devflow:git-strategy skill to verify branch safety."
 
 ## 3 Estratégias Suportadas

@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# DevFlow PreToolUse hook — Branch Protection Gate
+# Blocks Edit/Write on protected branches.
+# Forces LLM to invoke devflow:git-strategy before editing.
+#
+# Protected branches default: main, master, develop
+# Override via: .context/docs/development-workflow.md (protectedBranches field)
+
+set -euo pipefail
+
+# --- Read stdin (Claude Code passes tool context as JSON) ---
+
+INPUT=$(cat)
+
+TOOL_NAME=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('tool_name', ''))
+" 2>/dev/null || echo "")
+
+CWD=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('cwd', ''))
+" 2>/dev/null || echo "")
+
+# --- Only act on Edit and Write ---
+
+if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
+  exit 0
+fi
+
+# --- Get current branch ---
+
+if [ -n "$CWD" ]; then
+  BRANCH=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+else
+  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+fi
+
+# If we can't determine branch, allow (don't block on git errors)
+if [ -z "$BRANCH" ]; then
+  exit 0
+fi
+
+# --- Determine protected branches ---
+
+PROTECTED_BRANCHES="main master develop"
+
+# Try reading from project config
+WORKFLOW_FILE=""
+if [ -n "$CWD" ]; then
+  WORKFLOW_FILE="$CWD/.context/docs/development-workflow.md"
+fi
+
+if [ -n "$WORKFLOW_FILE" ] && [ -f "$WORKFLOW_FILE" ]; then
+  custom_protected=$(grep -i 'protectedBranches' "$WORKFLOW_FILE" 2>/dev/null \
+    | sed 's/.*protectedBranches[[:space:]]*:[[:space:]]*//' \
+    | tr ',' ' ' \
+    | tr -d '[]"' \
+    | xargs 2>/dev/null || echo "")
+  if [ -n "$custom_protected" ]; then
+    PROTECTED_BRANCHES="$custom_protected"
+  fi
+fi
+
+# --- Check if current branch is protected ---
+
+IS_PROTECTED=false
+for pb in $PROTECTED_BRANCHES; do
+  if [ "$BRANCH" = "$pb" ]; then
+    IS_PROTECTED=true
+    break
+  fi
+done
+
+if [ "$IS_PROTECTED" = "false" ]; then
+  # Not on protected branch — allow
+  exit 0
+fi
+
+# --- Also check: is the file being edited inside the plugin itself? ---
+# Plugin files (hooks, skills, etc.) are OK to edit on any branch
+# since they're the devflow plugin, not user project code.
+
+FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('file_path', ti.get('file', '')))
+" 2>/dev/null || echo "")
+
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -n "$PLUGIN_ROOT" ] && [ -n "$FILE_PATH" ]; then
+  case "$FILE_PATH" in
+    "$PLUGIN_ROOT"*)
+      # Editing plugin files — allow
+      exit 0
+      ;;
+  esac
+fi
+
+# --- BLOCK: on protected branch, editing project files ---
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+REASON="BLOQUEADO: Você está na branch protegida '${BRANCH}'. Não é permitido editar arquivos do projeto diretamente nesta branch.
+
+AÇÃO OBRIGATÓRIA antes de editar:
+1. Invoque o skill devflow:git-strategy para criar uma branch de trabalho
+2. Ou crie manualmente: git checkout -b feature/<nome> ou fix/<nome>
+3. Só então tente editar novamente
+
+Se o usuário explicitamente pediu para editar na ${BRANCH}, pergunte para confirmar antes de prosseguir."
+
+REASON_ESCAPED=$(escape_for_json "$REASON")
+
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
+
+exit 0

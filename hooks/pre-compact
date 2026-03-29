@@ -1,21 +1,85 @@
 #!/usr/bin/env bash
 # DevFlow PreCompact hook
-# Saves a minimal snapshot before context compaction
+# Saves enriched snapshot before context compaction
+# Captures: git state, handoff.md, active plan
 
 set -euo pipefail
 
 CHECKPOINT_DIR=".context/workflow/.checkpoint"
 mkdir -p "$CHECKPOINT_DIR" 2>/dev/null || true
 
+# --- Git state ---
+
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 LAST_COMMIT=$(git log --format='%h %s' -1 2>/dev/null || echo "none")
 
+# Dirty files (modified + untracked, limit to 20)
+DIRTY_FILES="[]"
+if command -v git >/dev/null 2>&1; then
+  dirty=$(git status --porcelain 2>/dev/null | head -20 | while IFS= read -r line; do
+    [ -n "$line" ] && printf '"%s",' "$line"
+  done)
+  dirty="${dirty%,}"
+  [ -n "$dirty" ] && DIRTY_FILES="[$dirty]"
+fi
+
+# --- Handoff content (from continuous handoff, layer 3) ---
+
+HANDOFF_CONTENT=""
+HANDOFF_FILE="$CHECKPOINT_DIR/handoff.md"
+if [ -f "$HANDOFF_FILE" ]; then
+  HANDOFF_CONTENT=$(cat "$HANDOFF_FILE" 2>/dev/null || echo "")
+fi
+
+# --- Active plan (newest .md in .context/plans/) ---
+
+ACTIVE_PLAN=""
+PLANS_DIR=".context/plans"
+if [ -d "$PLANS_DIR" ]; then
+  newest_plan=$(ls -t "$PLANS_DIR"/*.md 2>/dev/null | head -1)
+  if [ -n "$newest_plan" ]; then
+    # Capture first 200 lines to keep snapshot manageable
+    ACTIVE_PLAN=$(head -200 "$newest_plan" 2>/dev/null || echo "")
+  fi
+fi
+
+# Also check superpowers plans dir
+SP_PLANS_DIR="docs/superpowers/plans"
+if [ -z "$ACTIVE_PLAN" ] && [ -d "$SP_PLANS_DIR" ]; then
+  newest_plan=$(ls -t "$SP_PLANS_DIR"/*.md 2>/dev/null | head -1)
+  if [ -n "$newest_plan" ]; then
+    ACTIVE_PLAN=$(head -200 "$newest_plan" 2>/dev/null || echo "")
+  fi
+fi
+
+# --- Escape for JSON ---
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+handoff_escaped=$(escape_for_json "$HANDOFF_CONTENT")
+plan_escaped=$(escape_for_json "$ACTIVE_PLAN")
+
+# --- Write enriched checkpoint ---
+
 cat > "$CHECKPOINT_DIR/last.json" << EOF
 {
   "timestamp": "$TIMESTAMP",
-  "branch": "$BRANCH",
-  "last_commit": "$LAST_COMMIT"
+  "git": {
+    "branch": "$BRANCH",
+    "last_commit": "$LAST_COMMIT",
+    "dirty_files": $DIRTY_FILES
+  },
+  "handoff": "$handoff_escaped",
+  "active_plan": "$plan_escaped"
 }
 EOF
 

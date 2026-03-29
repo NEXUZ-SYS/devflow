@@ -1,38 +1,13 @@
 #!/usr/bin/env bash
 # DevFlow PostCompact hook
-# Injects rehydration instructions into LLM context after compaction
+# Injects enriched checkpoint directly into LLM context
+# Self-sufficient: does NOT depend on external APIs
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHECKPOINT=".context/workflow/.checkpoint/last.json"
-
-# --- Build rehydration context ---
-
-rehydration="REHYDRATION OBRIGATÓRIA — Contexto foi compactado.
-
-Antes de continuar qualquer tarefa, execute na ordem:
-
-1. workflow-status()
-   Retorna: fase atual, workflow ativo, progresso
-
-2. plan({ action: \"getStatus\", planSlug: \"<slug do workflow>\" })
-   Retorna: steps completados, step atual, porcentagem
-
-3. plan({ action: \"getDetails\", planSlug: \"<slug>\" })
-   Retorna: plano completo com notes de cada step (decisões e contexto)
-
-4. Se há step com status in_progress → retomar de onde parou
-   Se todos completed na fase atual → workflow-advance()"
-
-if [ -f "$CHECKPOINT" ]; then
-  checkpoint_content=$(cat "$CHECKPOINT" 2>/dev/null || echo "{}")
-  rehydration="$rehydration
-
-Último snapshot:
-$checkpoint_content"
-fi
 
 # --- Escape for JSON ---
 
@@ -46,9 +21,98 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
-rehydration_escaped=$(escape_for_json "$rehydration")
+# --- Build rehydration context ---
+
+rehydration="REHYDRATION — Contexto foi compactado. Use o snapshot abaixo para retomar."
+
+if [ -f "$CHECKPOINT" ]; then
+  checkpoint_content=$(cat "$CHECKPOINT" 2>/dev/null || echo "{}")
+
+  # Extract handoff directly (most valuable for resumption)
+  handoff=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$CHECKPOINT'))
+    h = d.get('handoff', '')
+    if h: print(h)
+except: pass
+" 2>/dev/null || echo "")
+
+  # Extract git info
+  git_info=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$CHECKPOINT'))
+    g = d.get('git', {})
+    print(f\"Branch: {g.get('branch','?')} | Commit: {g.get('last_commit','?')}\")
+    dirty = g.get('dirty_files', [])
+    if dirty:
+        print(f\"Dirty files: {', '.join(dirty[:10])}\")
+except: pass
+" 2>/dev/null || echo "")
+
+  # Extract plan summary
+  plan=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$CHECKPOINT'))
+    p = d.get('active_plan', '')
+    if p: print(p[:3000])
+except: pass
+" 2>/dev/null || echo "")
+
+  # Build context with available data
+  if [ -n "$git_info" ]; then
+    rehydration="$rehydration
+
+--- Git State ---
+$git_info"
+  fi
+
+  if [ -n "$handoff" ]; then
+    rehydration="$rehydration
+
+--- Handoff (onde parei) ---
+$handoff"
+  fi
+
+  if [ -n "$plan" ]; then
+    rehydration="$rehydration
+
+--- Plano Ativo ---
+$plan"
+  fi
+
+  # Fallback instructions only if no handoff was captured
+  if [ -z "$handoff" ] && [ -z "$plan" ]; then
+    rehydration="$rehydration
+
+--- Fallback: Recuperação Manual ---
+Nenhum handoff ou plano foi capturado. Tente:
+1. Verificar .context/workflow/.checkpoint/handoff.md
+2. Verificar .context/plans/ para planos ativos
+3. Usar git log para entender o trabalho recente
+4. Se dotcontext MCP disponível: workflow-status() e plan({ action: \"getStatus\" })"
+  fi
+
+else
+  rehydration="$rehydration
+
+Nenhum checkpoint encontrado. Verifique:
+1. git log para trabalho recente
+2. .context/plans/ para planos ativos
+3. Se dotcontext MCP disponível: workflow-status()"
+fi
+
+rehydration="$rehydration
+
+--- Instrução ---
+Retome o trabalho de onde parou. Se o handoff acima estiver presente, use-o como guia.
+Mantenha .context/workflow/.checkpoint/handoff.md atualizado conforme avançar."
 
 # --- Output ---
+
+rehydration_escaped=$(escape_for_json "$rehydration")
 
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PostCompact",\n    "additionalContext": "%s"\n  }\n}\n' "$rehydration_escaped"

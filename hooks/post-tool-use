@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# DevFlow PostToolUse hook
+# Injects reminder for LLM to update handoff.md after TaskUpdate or Write events
+# This enables continuous handoff — context is preserved progressively
+
+set -euo pipefail
+
+# --- Escape for JSON ---
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+# --- Build reminder ---
+
+reminder="HANDOFF UPDATE: Atualize .context/workflow/.checkpoint/handoff.md com o estado atual:
+
+\`\`\`markdown
+## Current Task
+<o que está sendo feito agora>
+
+## Decisions
+- <decisões tomadas nesta sessão>
+
+## Next Steps
+- <próximo passo imediato>
+
+## Blockers
+- <bloqueios encontrados, se houver>
+\`\`\`
+
+Mantenha conciso. Este arquivo é lido pelo PreCompact antes da compactação."
+
+reminder_escaped=$(escape_for_json "$reminder")
+
+# --- Output ---
+
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PostToolUse",\n    "additionalContext": "%s"\n  }\n}\n' "$reminder_escaped"
+else
+  printf '{\n  "additional_context": "%s"\n}\n' "$reminder_escaped"
+fi
+
+exit 0
