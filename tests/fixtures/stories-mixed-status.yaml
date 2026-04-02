@@ -1,0 +1,48 @@
+feature: "Mixed status test"
+autonomy: assisted
+escalation:
+  max_retries_per_story: 2
+  max_consecutive_failures: 3
+stats:
+  total: 5
+  completed: 2
+  failed: 1
+  escalated: 1
+  consecutive_failures: 1
+  current_autonomy: "assisted"
+stories:
+  - id: "S1"
+    title: "Completed story"
+    agent: "backend-specialist"
+    priority: 1
+    status: completed
+    attempts: 1
+    blocked_by: []
+  - id: "S2"
+    title: "Also completed"
+    agent: "backend-specialist"
+    priority: 2
+    status: completed
+    attempts: 1
+    blocked_by: [S1]
+  - id: "S3"
+    title: "Failed story retryable"
+    agent: "frontend-specialist"
+    priority: 3
+    status: failed
+    attempts: 1
+    blocked_by: [S1]
+  - id: "S4"
+    title: "Escalated story"
+    agent: "frontend-specialist"
+    priority: 4
+    status: escalated
+    attempts: 2
+    blocked_by: [S1]
+  - id: "S5"
+    title: "Pending blocked by escalated"
+    agent: "backend-specialist"
+    priority: 5
+    status: pending
+    attempts: 0
+    blocked_by: [S4]

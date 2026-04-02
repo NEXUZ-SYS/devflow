@@ -1,0 +1,29 @@
+feature: "Quoted IDs test"
+autonomy: autonomous
+escalation:
+  max_retries_per_story: 2
+stats:
+  total: 3
+  current_autonomy: "autonomous"
+stories:
+  - id: S1
+    title: "Unquoted ID"
+    agent: "backend-specialist"
+    priority: 1
+    status: pending
+    attempts: 0
+    blocked_by: []
+  - id: "S2"
+    title: "Double-quoted ID"
+    agent: "backend-specialist"
+    priority: 2
+    status: pending
+    attempts: 0
+    blocked_by: []
+  - id: 'S3'
+    title: "Single-quoted ID"
+    agent: "backend-specialist"
+    priority: 3
+    status: pending
+    attempts: 0
+    blocked_by: []

@@ -1,0 +1,23 @@
+feature: "Stuck session test"
+autonomy: autonomous
+escalation:
+  max_retries_per_story: 3
+stats:
+  total: 2
+  completed: 0
+  current_autonomy: "autonomous"
+stories:
+  - id: "S1"
+    title: "Stuck in progress"
+    agent: "backend-specialist"
+    priority: 1
+    status: in_progress
+    attempts: 1
+    blocked_by: []
+  - id: "S2"
+    title: "Waiting"
+    agent: "frontend-specialist"
+    priority: 2
+    status: pending
+    attempts: 0
+    blocked_by: []

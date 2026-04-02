@@ -61,6 +61,34 @@ if [ "$mode" != "full" ] && [ -d "${project_root}/.context" ]; then
   mode="lite"
 fi
 
+# --- Detect active autonomous workflow ---
+
+autonomous_context=""
+stories_file="${project_root}/.context/workflow/stories.yaml"
+if [ -f "$stories_file" ]; then
+  # Extract key stats from stories.yaml using grep (no yaml parser needed)
+  # Sanitize: strip anything outside safe chars to prevent prompt injection
+  sanitize_str() { printf '%s' "$1" | tr -cd 'a-zA-Z0-9 _./:-'; }
+  sanitize_int() { printf '%s' "$1" | tr -cd '0-9'; }
+
+  autonomy_mode=$(sanitize_str "$(grep '^autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/autonomy: *//' | tr -d '"' || echo "")")
+  current_autonomy=$(sanitize_str "$(grep 'current_autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*current_autonomy: *//' | tr -d '"' || echo "")")
+  total=$(sanitize_int "$(grep 'total:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*total: *//' || echo "0")")
+  completed=$(sanitize_int "$(grep 'completed:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*completed: *//' || echo "0")")
+  escalated=$(sanitize_int "$(grep 'escalated:' "$stories_file" 2>/dev/null | head -2 | tail -1 | sed 's/.*escalated: *//' || echo "0")")
+  feature=$(sanitize_str "$(grep '^feature:' "$stories_file" 2>/dev/null | head -1 | sed 's/feature: *//' | tr -d '"' || echo "")")
+
+  # Guard: skip injection if key fields are empty (malformed YAML)
+  if [ -n "$autonomy_mode" ] && [ "$autonomy_mode" != "supervised" ] && [ -n "$total" ] && [ "$total" != "0" ]; then
+    active_mode="${current_autonomy:-$autonomy_mode}"
+    autonomous_context="\\n**AUTONOMOUS WORKFLOW ACTIVE**\\n"
+    autonomous_context+="- Feature: ${feature}\\n"
+    autonomous_context+="- Mode: ${active_mode}\\n"
+    autonomous_context+="- Progress: ${completed}/${total} stories (${escalated} escalated)\\n"
+    autonomous_context+="- To resume: say \\\"continue\\\" or invoke devflow:autonomous-loop\\n"
+  fi
+fi
+
 # --- Read using-devflow skill ---
 
 using_devflow_content=$(cat "${PLUGIN_ROOT}/skills/using-devflow/SKILL.md" 2>&1 || echo "Error reading using-devflow skill")
@@ -165,7 +193,8 @@ fi
 
 mode_escaped=$(escape_for_json "$mode_context")
 
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n</DEVFLOW_CONTEXT>"
+autonomous_escaped=$(escape_for_json "$autonomous_context")
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 

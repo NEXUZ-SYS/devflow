@@ -111,6 +111,54 @@ For each task group, note which agent role is best suited:
 ...
 ```
 
+### Step 4.5: Generate stories.yaml (if autonomy is assisted or autonomous)
+
+After the plan is written and approved, decompose it into stories for the autonomous loop.
+
+**Source selection (in priority order):**
+
+1. **`--from-prd` flag or PRD detected in Step 1.5 of prevc-flow:** Convert PRD phases into stories directly (skip brainstorming for story generation, use PRD scope as source)
+2. **Implementation plan exists:** Decompose plan task groups into stories
+3. **Neither:** Error — cannot generate stories without a plan or PRD
+
+#### Path A: From PRD (existing projects)
+
+When `--from-prd` is set or prevc-flow detected an active PRD:
+
+1. Read the PRD file (`.context/plans/*-prd.md`)
+2. Find the current phase (marked `⏳ In Progress`)
+3. Parse the phase's **Scope** section — each bullet point becomes a story
+4. For each scope item:
+   - `id`: Sequential (S1, S2, S3, ...)
+   - `title`: Scope item text
+   - `description`: Expand from PRD context + existing `.context/docs/` (codebase map, project overview)
+   - `agent`: Infer from scope item content (e.g., "API endpoint" → `backend-specialist`, "UI component" → `frontend-specialist`, "migration" → `database-specialist`)
+   - `priority`: Sequential based on PRD order
+   - `blocked_by`: Derive from natural dependencies (DB schema before API, API before UI)
+5. Set escalation defaults from `templates/stories-schema.yaml`
+6. Write to `.context/workflow/stories.yaml`
+7. Announce: "Generated stories.yaml with <N> stories from PRD phase <phase>."
+
+**Important:** Enrich story descriptions with existing project context. Read `.context/docs/project-overview.md` and `.context/docs/codebase-map.json` to include real file paths, existing patterns, and conventions in each story description.
+
+#### Path B: From implementation plan (default)
+
+1. Read the implementation plan
+2. For each task group in the plan, create a story entry:
+   - `id`: Sequential (S1, S2, S3, ...)
+   - `title`: Task group title
+   - `description`: Combine the task group's steps into a concise description that fits in 1 context window
+   - `agent`: Use the agent annotation from the plan (e.g., `backend-specialist`)
+   - `priority`: Sequential based on plan order
+   - `blocked_by`: Derive from task dependencies (if Task 3 depends on Task 1, S3 blocked_by [S1])
+3. Set escalation defaults from `templates/stories-schema.yaml`
+4. Write to `.context/workflow/stories.yaml`
+5. Announce: "Generated stories.yaml with <N> stories for autonomous execution."
+
+**Reference:** See `templates/stories-schema.yaml` for the full schema.
+
+**Important:** Each story MUST fit in a single context window. If a task group is too large, split it into multiple stories. A good story is: one model, one endpoint, one component, one migration — not "build the entire API."
+
 ## Step 5: Handoff to Dotcontext
 
 After writing-plans generates the plan and the user approves:
@@ -137,11 +185,32 @@ After writing-plans generates the plan and the user approves:
 ### Minimal Mode
 No conversion — execution follows superpowers workflow.
 
+## Step 5.5: Validate Test-First Ordering in Plan
+
+<HARD-GATE>
+Before the Planning gate can pass, verify the implementation plan follows TDD ordering:
+
+1. **Every task group must start with a test step** — "Write failing test" before any "Implement" step
+2. **Test types must be specified** — each task group must declare which test types are needed:
+   - Unit tests (always)
+   - Integration tests (if task touches API, DB, or service boundaries)
+   - E2E tests (if task touches auth, payments, user flows, CLI tools)
+3. **No implementation step without a preceding test step** — if a task group has implementation code but no test code before it, the plan is invalid
+
+**Quick check:** Scan the plan for task groups. For each group:
+- Does "test" or "spec" appear BEFORE "implement" or "code"?
+- Are test types annotated? (e.g., `**Tests:** unit + integration`)
+- Is there at least one test file path in the `Test:` field?
+
+If any task group violates test-first ordering, fix the plan before advancing.
+</HARD-GATE>
+
 ## Step 6: Gate Check
 
 The Planning phase gate requires:
 - Design spec written and approved by user
 - Implementation plan written
+- Plan validates test-first ordering (Step 5.5)
 - Plan linked to workflow (Full mode) or saved to docs/
 
 **When gate is met:** Announce readiness to advance.
