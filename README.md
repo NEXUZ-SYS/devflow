@@ -22,6 +22,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Checkpoint e rehydration** — `last.json` persiste estado do workflow entre sessões; hooks PreCompact/PostCompact salvam e restauram contexto após compactação
 - **Context sync** — `/devflow-sync` mantém `.context/` atualizado com o estado real do projeto
 - **Scaffolding inteligente** — `/devflow init` analisa seu projeto e gera agentes, skills e docs personalizados em `.context/`
+- **Multilíngue** — `/devflow language` para escolher idioma (en-US, pt-BR, es-ES); todas as respostas, hooks e interações mudam para o idioma selecionado
 - **3 modos** — Full (MCP), Lite (.context/), Minimal (standalone) — funciona com o que você tiver instalado
 
 ---
@@ -104,11 +105,12 @@ Dentro do Claude Code:
 ```
 
 O que acontece:
-1. Analisa o projeto (stack, estrutura, padrões)
-2. Instala o MCP server do dotcontext (`.mcp.json`) — se disponível
-3. Scaffolda `.context/` com agentes, skills e docs personalizados
-4. Configura git strategy (branch protection, isolamento)
-5. Detecta o modo automaticamente (Full/Lite/Minimal)
+1. **Pergunta o idioma** (se ainda não configurado) — en-US, pt-BR ou es-ES
+2. Analisa o projeto (stack, estrutura, padrões)
+3. Instala o MCP server do dotcontext (`.mcp.json`) — se disponível
+4. Scaffolda `.context/` com agentes, skills e docs personalizados
+5. Configura git strategy (branch protection, isolamento)
+6. Detecta o modo automaticamente (Full/Lite/Minimal)
 
 ---
 
@@ -162,6 +164,10 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 /devflow scale:MEDIUM add sistema de cache com Redis
 /devflow scale:LARGE migrar de REST para GraphQL
 
+# Configurar idioma
+/devflow language
+/devflow language pt-BR
+
 # Gerar PRD (roadmap de produto com entrevista socrática)
 /devflow prd
 
@@ -202,6 +208,8 @@ Para ver todos os comandos e capabilities:
 | `/devflow scale:X <desc>` | Inicia com escala explícita (QUICK/SMALL/MEDIUM/LARGE) |
 | `/devflow prd` | Gera PRD com entrevista socrática, RICE scoring e roadmap faseado |
 | `/devflow prd --status` | Mostra progresso das fases do PRD |
+| `/devflow language` | Configura o idioma (en-US, pt-BR, es-ES) |
+| `/devflow language <code>` | Define idioma diretamente |
 | `/devflow-sync` | Atualiza `.context/` com o estado atual do projeto |
 | `/devflow-sync <escopo>` | Atualiza apenas `docs`, `agents` ou `skills` |
 | `/devflow-status` | Mostra fase atual, progresso, modo e status do PRD (se existir) |
@@ -346,7 +354,8 @@ devflow/
 ├── skills/           # 25+ skills (PREVC, bridge, on-demand, PRD, context-sync, git-strategy)
 ├── agents/           # 15 playbooks de agentes (fallback genérico)
 ├── templates/        # Templates para scaffolding do .context/
-├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse
+├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n
+├── locales/          # Traduções (en-US, pt-BR, es-ES)
 ├── references/       # Mapa de skills + mapeamento de ferramentas por plataforma
 ├── .claude-plugin/   # Manifesto do plugin para Claude Code
 └── .cursor-plugin/   # Manifesto do plugin para Cursor
@@ -356,6 +365,7 @@ devflow/
 ```
 seu-projeto/
 ├── .mcp.json                          ← config do MCP (se dotcontext instalado)
+├── .devflow-language                  ← idioma selecionado (ex: pt-BR)
 └── .context/                          ← contexto do projeto (compatível dotcontext)
     ├── agents/
     │   ├── architect.md               ← playbook personalizado para o projeto

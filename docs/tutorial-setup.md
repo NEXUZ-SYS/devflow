@@ -17,8 +17,9 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [3.1 Projeto novo](#31-projeto-novo)
   - [3.2 Projeto existente](#32-projeto-existente)
   - [3.3 Projeto com dotcontext existente](#33-projeto-com-dotcontext-existente)
-  - [3.4 Verificar o modo ativo](#34-verificar-o-modo-ativo)
-  - [3.5 O que foi gerado](#35-o-que-foi-gerado)
+  - [3.4 Configurar idioma](#34-configurar-idioma)
+  - [3.5 Verificar o modo ativo](#35-verificar-o-modo-ativo)
+  - [3.6 O que foi gerado](#36-o-que-foi-gerado)
 - [4. Conceitos fundamentais](#4-conceitos-fundamentais)
   - [4.1 O workflow PREVC](#41-o-workflow-prevc)
   - [4.2 Escalas](#42-escalas)
@@ -164,11 +165,12 @@ Dentro do Claude Code:
 ```
 
 O DevFlow vai:
-1. Escanear o projeto (stack, estrutura, padrões)
-2. Instalar o MCP server do dotcontext (se disponível)
-3. Scaffoldar `.context/` com agentes, skills e docs personalizados
-4. Perguntar sua estratégia git (branch-flow, worktree ou trunk-based)
-5. Detectar o modo (Full/Lite/Minimal)
+1. **Perguntar o idioma** (se ainda não configurado) — en-US, pt-BR ou es-ES
+2. Escanear o projeto (stack, estrutura, padrões)
+3. Instalar o MCP server do dotcontext (se disponível)
+4. Scaffoldar `.context/` com agentes, skills e docs personalizados
+5. Perguntar sua estratégia git (branch-flow, worktree ou trunk-based)
+6. Detectar o modo (Full/Lite/Minimal)
 
 ### 3.2 Projeto existente
 
@@ -196,7 +198,49 @@ Se o projeto já tem `.context/`, o `/devflow init` detecta e executa um **sync*
 → Sync completo. 8 docs atualizados, 3 agentes adicionados.
 ```
 
-### 3.4 Verificar o modo ativo
+### 3.4 Configurar idioma
+
+O DevFlow é multilíngue. Na primeira inicialização (`/devflow init`), ele pergunta o idioma automaticamente. Para mudar depois:
+
+```
+/devflow language
+```
+
+Menu interativo:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DevFlow — Select your language
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. English
+  2. Português (Brasil)
+  3. Español
+
+  Current: pt-BR
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Ou diretamente:
+```
+/devflow language pt-BR
+/devflow language en-US
+/devflow language es-ES
+```
+
+**O que muda:**
+- Todas as respostas do Claude passam a ser no idioma selecionado
+- Mensagens dos hooks (branch protection, rehydration, handoff) são traduzidas
+- A preferência é salva em `.devflow-language` (projeto) ou `~/.devflow-language` (global)
+- As respostas mudam imediatamente; as mensagens dos hooks mudam na próxima sessão
+
+**Resolução de idioma (prioridade):**
+1. `.devflow-language` no projeto (por projeto)
+2. `~/.devflow-language` (global do usuário)
+3. Variável `$LANG` do sistema
+4. Fallback: `en-US`
+
+### 3.5 Verificar o modo ativo
 
 ```
 /devflow-status
@@ -213,11 +257,12 @@ No active workflow. Start one with:
   /devflow prd              (generate product roadmap)
 ```
 
-### 3.5 O que foi gerado
+### 3.6 O que foi gerado
 
 ```
 meu-projeto/
 ├── .mcp.json                              ← config do MCP (se dotcontext)
+├── .devflow-language                      ← idioma selecionado (ex: pt-BR)
 └── .context/
     ├── agents/
     │   ├── architect.md                   ← design de sistema
@@ -882,6 +927,7 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 | `/devflow-dispatch <role>` | Despacha um agente específico | Para forçar um especialista |
 | `/devflow-sync` | Atualiza `.context/` com estado atual | Após mudanças grandes |
 | `/devflow prd --status` | Mostra progresso das fases do PRD | Para acompanhar roadmap |
+| `/devflow language` | Configura idioma (en-US, pt-BR, es-ES) | Para mudar idioma das interações |
 | `/devflow help` | Referência completa de comandos | Quando esquecer algo |
 
 **Exemplos de navegação durante um workflow:**
@@ -1144,6 +1190,8 @@ Normal para projetos grandes — análise semântica pode levar 1-3 min. Projeto
 /devflow scale:SMALL <desc>            # Feature simples (P → E → V)
 /devflow scale:MEDIUM <desc>           # Multi-componente (P → R → E → V → C)
 /devflow scale:LARGE <desc>            # Migração (P → R → E → V → C + checkpoints)
+/devflow language                      # Configurar idioma
+/devflow language pt-BR                # Definir idioma diretamente
 /devflow prd                           # Gerar roadmap de produto
 /devflow prd --status                  # Ver progresso do PRD
 /devflow-status                        # Fase atual e progresso
