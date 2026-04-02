@@ -14,6 +14,8 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow help                          # Show full help
 /devflow init                          # Initialize DevFlow in this project
 /devflow <description>                 # Auto-detect scale and start workflow
+/devflow language                      # Set conversation language (en/pt/es)
+/devflow language <code>               # Set language directly (e.g., pt-BR)
 /devflow prd                           # Generate or update product PRD
 /devflow prd --status                  # Show PRD phase status
 /devflow scale:QUICK <description>     # Explicit scale
@@ -45,6 +47,8 @@ Display the help text below. Output it **exactly as-is** (formatted for terminal
 COMMANDS
   /devflow help               Show this help
   /devflow init               Initialize DevFlow (or sync if already exists)
+  /devflow language           Set conversation language (en/pt/es)
+  /devflow language <code>    Set language directly (en-US, pt-BR, es-ES)
   /devflow prd                Generate or update product PRD
   /devflow prd --status       Show PRD phase status
   /devflow <desc>             Start workflow (auto-detects scale)
@@ -147,6 +151,7 @@ EXAMPLES
 QUICK REFERENCE
   I want to...                  Use this
   ─────────────────────────────────────────────────────
+  Change language               /devflow language
   Define product roadmap        /devflow prd
   Check roadmap progress        /devflow prd --status
   Start a new feature           /devflow <description>
@@ -164,9 +169,16 @@ QUICK REFERENCE
   Break down a big feature      "break down the X feature"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DevFlow v0.5.0 — https://github.com/NEXUZ-SYS/devflow
+  DevFlow v0.6.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+### `/devflow language [code]`
+1. Invoke `devflow:language` skill
+2. If code provided (e.g., `pt-BR`, `es`, `português`), skip the interactive menu
+3. Saves `.devflow-language` in project root (or `~/.devflow-language` for global)
+4. Switches conversation language immediately
+5. Hook messages switch on next session start
 
 ### `/devflow prd`
 1. Invoke `devflow:prd-generation` skill
@@ -201,6 +213,8 @@ QUICK REFERENCE
 - `help` — display the full help reference
 - `init` — triggers project initialization (devflow:project-init)
 - `prd` — generate or update product PRD (devflow:prd-generation)
+- `language` — interactive language selection (devflow:language)
+- `language <code>` — set language directly (en-US, pt-BR, es-ES)
 - `prd --status` — display PRD phase status
 - `scale:X` — optional explicit scale (QUICK/SMALL/MEDIUM/LARGE)
 - Everything else is passed as the task description to the PREVC flow orchestrator

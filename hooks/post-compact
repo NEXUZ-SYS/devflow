@@ -9,6 +9,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHECKPOINT=".context/workflow/.checkpoint/last.json"
 
+# --- Load i18n ---
+
+source "${SCRIPT_DIR}/i18n.sh"
+load_i18n
+
 # --- Escape for JSON ---
 
 escape_for_json() {
@@ -23,7 +28,7 @@ escape_for_json() {
 
 # --- Build rehydration context ---
 
-rehydration="REHYDRATION — Contexto foi compactado. Use o snapshot abaixo para retomar."
+rehydration="$MSG_REHYDRATION_HEADER"
 
 if [ -f "$CHECKPOINT" ]; then
   checkpoint_content=$(cat "$CHECKPOINT" 2>/dev/null || echo "{}")
@@ -72,14 +77,14 @@ $git_info"
   if [ -n "$handoff" ]; then
     rehydration="$rehydration
 
---- Handoff (onde parei) ---
+$MSG_REHYDRATION_HANDOFF_HEADER
 $handoff"
   fi
 
   if [ -n "$plan" ]; then
     rehydration="$rehydration
 
---- Plano Ativo ---
+$MSG_REHYDRATION_PLAN_HEADER
 $plan"
   fi
 
@@ -87,28 +92,28 @@ $plan"
   if [ -z "$handoff" ] && [ -z "$plan" ]; then
     rehydration="$rehydration
 
---- Fallback: Recuperação Manual ---
-Nenhum handoff ou plano foi capturado. Tente:
-1. Verificar .context/workflow/.checkpoint/handoff.md
-2. Verificar .context/plans/ para planos ativos
-3. Usar git log para entender o trabalho recente
-4. Se dotcontext MCP disponível: workflow-status() e plan({ action: \"getStatus\" })"
+$MSG_REHYDRATION_FALLBACK_HEADER
+$MSG_REHYDRATION_FALLBACK"
   fi
 
 else
   rehydration="$rehydration
 
-Nenhum checkpoint encontrado. Verifique:
-1. git log para trabalho recente
-2. .context/plans/ para planos ativos
-3. Se dotcontext MCP disponível: workflow-status()"
+$MSG_REHYDRATION_NO_CHECKPOINT"
 fi
 
 rehydration="$rehydration
 
---- Instrução ---
-Retome o trabalho de onde parou. Se o handoff acima estiver presente, use-o como guia.
-Mantenha .context/workflow/.checkpoint/handoff.md atualizado conforme avançar."
+--- $(echo "$MSG_REHYDRATION_INSTRUCTION" | head -1) ---
+$MSG_REHYDRATION_INSTRUCTION"
+
+# --- Append language context ---
+
+lang_context=$(build_language_context)
+rehydration="$rehydration
+
+--- Language ---
+$lang_context"
 
 # --- Output ---
 

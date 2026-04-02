@@ -67,6 +67,11 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:context-awareness` | Enrich any task with project context (codebase map, semantic analysis) |
 | `devflow:parallel-dispatch` | Coordinate parallel execution of independent tasks |
 
+### Configuration Skills
+| Skill | When to use |
+|-------|-------------|
+| `devflow:language` | Set conversation language (en-US, pt-BR, es-ES) — all responses switch to selected language |
+
 ### On-Demand Skills (invoke anytime)
 | Skill | When to use |
 |-------|-------------|
@@ -102,6 +107,8 @@ When starting a workflow, DevFlow auto-detects or accepts explicit scale:
 |---------|--------|
 | `/devflow [description]` | Start a new PREVC workflow (auto-scales) |
 | `/devflow scale:X [description]` | Start with explicit scale (QUICK/SMALL/MEDIUM/LARGE) |
+| `/devflow language` | Set conversation language interactively |
+| `/devflow language <code>` | Set language directly (en-US, pt-BR, es-ES) |
 | `/devflow prd` | Generate or update product PRD with phased roadmap |
 | `/devflow-status` | Show current phase, progress, and available actions |
 | `/devflow-next` | Attempt to advance to next phase (checks gates) |

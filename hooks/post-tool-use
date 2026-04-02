@@ -5,6 +5,14 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# --- Load i18n ---
+
+source "${SCRIPT_DIR}/i18n.sh"
+load_i18n
+
 # --- Escape for JSON ---
 
 escape_for_json() {
@@ -19,23 +27,7 @@ escape_for_json() {
 
 # --- Build reminder ---
 
-reminder="HANDOFF UPDATE: Atualize .context/workflow/.checkpoint/handoff.md com o estado atual:
-
-\`\`\`markdown
-## Current Task
-<o que está sendo feito agora>
-
-## Decisions
-- <decisões tomadas nesta sessão>
-
-## Next Steps
-- <próximo passo imediato>
-
-## Blockers
-- <bloqueios encontrados, se houver>
-\`\`\`
-
-Mantenha conciso. Este arquivo é lido pelo PreCompact antes da compactação."
+reminder="$MSG_HANDOFF_REMINDER"
 
 reminder_escaped=$(escape_for_json "$reminder")
 

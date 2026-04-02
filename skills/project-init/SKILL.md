@@ -23,6 +23,41 @@ Para atualizar docs existentes, o usuário deve usar `/devflow-sync`.
 
 **Announce at start:** "I'm using the devflow:project-init skill to initialize this project."
 
+## Step 0: Language Selection
+
+Before any initialization, check if a language preference already exists:
+
+```bash
+# Check project-level
+cat .devflow-language 2>/dev/null
+
+# Check user-level
+cat ~/.devflow-language 2>/dev/null
+```
+
+**If NO preference exists**, present the language selection menu FIRST:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DevFlow — Select your language / Selecione o idioma / Selecciona tu idioma
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. 🇺🇸  English
+  2. 🇧🇷  Português (Brasil)
+  3. 🇪🇸  Español
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+After the user selects, save the preference:
+```bash
+echo "<language-code>" > .devflow-language
+```
+
+**Then continue all subsequent messages and interactions in the selected language.**
+
+If a preference already exists, skip this step and use the existing language.
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:

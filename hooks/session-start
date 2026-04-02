@@ -7,6 +7,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# --- Load i18n ---
+
+source "${SCRIPT_DIR}/i18n.sh"
+load_i18n
+
 # --- Mode Detection ---
 
 mode="minimal"
@@ -82,28 +87,33 @@ mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
 mode_context+="- dotcontext CLI: ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
 
-# --- Mode status announcement ---
-# The LLM must inform the user about their mode on first interaction
+# --- Mode status announcement (i18n) ---
 
 if [ "$mode" = "full" ]; then
-  mode_context+="\\n**STATUS:** ✅ Full Mode ativo. Todas as funcionalidades disponíveis (agent orchestration, PREVC workflow, rehydration).\\n"
+  mode_context+="\\n**STATUS:** ✅ ${MSG_STATUS_FULL}\\n"
 elif [ "$mode" = "lite" ]; then
-  mode_context+="\\n**STATUS:** ⚠️ Lite Mode — funcionalidades limitadas.\\n"
-  mode_context+="Você tem \`.context/\` mas o MCP do dotcontext não está ativo.\\n"
-  mode_context+="**Recomendação:** Ative o Full Mode para ter agent orchestration, handoffs automáticos e rehydration.\\n"
+  mode_context+="\\n**STATUS:** ⚠️ ${MSG_STATUS_LITE}\\n"
+  mode_context+="${MSG_STATUS_LITE_DETAIL}\\n"
+  mode_context+="${MSG_STATUS_LITE_RECOMMEND}\\n"
   if [ "$dotcontext_cli" = "true" ]; then
-    mode_context+="Para ativar: \`dotcontext mcp:install claude --local\` e reinicie a sessão.\\n"
+    mode_context+="${MSG_STATUS_LITE_ACTIVATE_CLI}\\n"
   else
-    mode_context+="Para ativar: \`npm install -g @dotcontext/cli && dotcontext mcp:install claude --local\` e reinicie a sessão.\\n"
+    mode_context+="${MSG_STATUS_LITE_ACTIVATE_FULL}\\n"
   fi
-  mode_context+="Ou execute \`/devflow init\` para setup guiado.\\n"
+  mode_context+="${MSG_STATUS_LITE_INIT}\\n"
 elif [ "$mode" = "minimal" ]; then
-  mode_context+="\\n**STATUS:** ⚠️ Minimal Mode — apenas superpowers disponível, sem contexto de projeto.\\n"
-  mode_context+="**Recomendação:** Ative o Full Mode para aproveitar agent orchestration, workflow PREVC completo e rehydration automática.\\n"
-  mode_context+="Para ativar: execute \`/devflow init\` que configura tudo automaticamente.\\n"
+  mode_context+="\\n**STATUS:** ⚠️ ${MSG_STATUS_MINIMAL}\\n"
+  mode_context+="${MSG_STATUS_MINIMAL_RECOMMEND}\\n"
+  mode_context+="${MSG_STATUS_MINIMAL_ACTIVATE}\\n"
 fi
 
-mode_context+="\\n**INSTRUÇÃO:** Na primeira interação desta sessão, informe brevemente ao usuário o modo atual do DevFlow e, se não for Full Mode, recomende a ativação.\\n"
+mode_context+="\\n**INSTRUÇÃO:** ${MSG_SESSION_INSTRUCTION}\\n"
+
+# --- Language context injection ---
+
+lang_context=$(build_language_context)
+mode_context+="\\n**${lang_context}**\\n"
+mode_context+="\\n**DevFlow Language:** ${DEVFLOW_LANGUAGE} (${DEVFLOW_LANGUAGE_NAME})\\n"
 
 mode_escaped=$(escape_for_json "$mode_context")
 
