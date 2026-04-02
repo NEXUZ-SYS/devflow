@@ -63,15 +63,70 @@ Ask the user which scope they prefer. Default to **project-level** if they don't
 
 The file contains just the language code (e.g., `pt-BR`), no other content.
 
-## Step 3: Confirm and switch
+## Step 3: Propagate to dotcontext and superpowers
+
+After saving the preference file, propagate the language to integrated tools:
+
+### dotcontext MCP (if available)
+
+The dotcontext CLI accepts `--lang <locale>` as a global flag. Update `.mcp.json` to pass the language to the MCP server:
+
+```bash
+# Read current .mcp.json and update the dotcontext args to include --lang
+```
+
+Use python3 to update the `.mcp.json`:
+
+```python
+import json
+
+mcp_path = ".mcp.json"
+with open(mcp_path) as f:
+    config = json.load(f)
+
+if "dotcontext" in config.get("mcpServers", {}):
+    args = config["mcpServers"]["dotcontext"]["args"]
+    # Remove existing --lang/-l flags
+    new_args = []
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("--lang", "-l"):
+            skip_next = True
+            continue
+        new_args.append(arg)
+    # Add --lang before "mcp" subcommand
+    mcp_idx = new_args.index("mcp") if "mcp" in new_args else len(new_args)
+    new_args.insert(mcp_idx, LANGUAGE_CODE)
+    new_args.insert(mcp_idx, "--lang")
+    config["mcpServers"]["dotcontext"]["args"] = new_args
+
+    with open(mcp_path, "w") as f:
+        json.dump(config, f, indent=2)
+```
+
+**Map DevFlow locale codes to dotcontext locale codes:**
+- `en-US` → `en`
+- `pt-BR` → `pt-BR`
+- `es-ES` → `es`
+
+**Important:** After updating `.mcp.json`, inform the user that the dotcontext MCP server language will take effect on the next session restart.
+
+### superpowers
+
+Superpowers does not have a dedicated language configuration. However, the language instruction injected by the SessionStart hook already controls the LLM's response language, which covers all superpowers skill interactions. No additional propagation needed.
+
+## Step 4: Confirm and switch
 
 After saving, immediately switch your conversation language to the selected one. Confirm in the new language:
 
-- **en-US**: "Language set to English. All DevFlow interactions will now be in English. This takes full effect on the next session — hook messages will also switch."
-- **pt-BR**: "Idioma definido para Português (Brasil). Todas as interações do DevFlow agora serão em português. Isso terá efeito completo na próxima sessão — mensagens dos hooks também serão traduzidas."
-- **es-ES**: "Idioma configurado a Español. Todas las interacciones de DevFlow ahora serán en español. Esto tendrá efecto completo en la próxima sesión — los mensajes de los hooks también se traducirán."
+- **en-US**: "Language set to English. All DevFlow interactions will now be in English. Hook messages and dotcontext will switch on the next session."
+- **pt-BR**: "Idioma definido para Português (Brasil). Todas as interações do DevFlow agora serão em português. Mensagens dos hooks e dotcontext serão traduzidas na próxima sessão."
+- **es-ES**: "Idioma configurado a Español. Todas las interacciones de DevFlow ahora serán en español. Los mensajes de hooks y dotcontext se traducirán en la próxima sesión."
 
-## Step 4: Apply immediately in conversation
+## Step 5: Apply immediately in conversation
 
 From this point forward in the current conversation, respond in the selected language. The hook messages (session-start, post-compact, etc.) will switch automatically on the next session start.
 
