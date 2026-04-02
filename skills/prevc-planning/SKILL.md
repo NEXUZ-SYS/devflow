@@ -111,6 +111,26 @@ For each task group, note which agent role is best suited:
 ...
 ```
 
+### Step 4.5: Generate stories.yaml (if autonomy is assisted or autonomous)
+
+After the plan is written and approved, decompose it into stories for the autonomous loop:
+
+1. Read the implementation plan
+2. For each task group in the plan, create a story entry:
+   - `id`: Sequential (S1, S2, S3, ...)
+   - `title`: Task group title
+   - `description`: Combine the task group's steps into a concise description that fits in 1 context window
+   - `agent`: Use the agent annotation from the plan (e.g., `backend-specialist`)
+   - `priority`: Sequential based on plan order
+   - `blocked_by`: Derive from task dependencies (if Task 3 depends on Task 1, S3 blocked_by [S1])
+3. Set escalation defaults from `templates/stories-schema.yaml`
+4. Write to `.context/workflow/stories.yaml`
+5. Announce: "Generated stories.yaml with <N> stories for autonomous execution."
+
+**Reference:** See `templates/stories-schema.yaml` for the full schema.
+
+**Important:** Each story MUST fit in a single context window. If a task group is too large, split it into multiple stories. A good story is: one model, one endpoint, one component, one migration — not "build the entire API."
+
 ## Step 5: Handoff to Dotcontext
 
 After writing-plans generates the plan and the user approves:
