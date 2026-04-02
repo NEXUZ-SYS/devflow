@@ -66,6 +66,7 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:agent-dispatch` | Discover, select, and invoke agents by role for the current task |
 | `devflow:context-awareness` | Enrich any task with project context (codebase map, semantic analysis) |
 | `devflow:parallel-dispatch` | Coordinate parallel execution of independent tasks |
+| `devflow:autonomous-loop` | Story-by-story autonomous execution with specialist agents and escalation |
 
 ### Configuration Skills
 | Skill | When to use |
@@ -106,6 +107,21 @@ When starting a workflow, DevFlow auto-detects or accepts explicit scale:
 | **MEDIUM** | P → R → E → V → C | Multi-component feature |
 | **LARGE** | P → R → E → V → C + checkpoints | System-wide change, new subsystem |
 
+## Autonomy Modes
+
+Control how much human involvement each workflow requires:
+
+| Mode | Syntax | Human Involvement |
+|------|--------|------------------|
+| **supervised** | `/devflow <desc>` (default) | Human approves every phase |
+| **assisted** | `/devflow autonomy:assisted <desc>` | Human in P+R+V+C, autonomous E |
+| **autonomous** | `/devflow auto <desc>` | Fully autonomous, escalates on failure |
+
+Autonomy modes feature bidirectional escalation:
+- **Downgrade:** 2 failures on same story → escalate to human (autonomous → assisted)
+- **Upgrade:** 5 consecutive successes → suggest autonomous mode (assisted → autonomous)
+- **Security:** Any security finding → immediate escalation regardless of mode
+
 ## Slash Commands
 
 | Command | Action |
@@ -120,6 +136,8 @@ When starting a workflow, DevFlow auto-detects or accepts explicit scale:
 | `/devflow-dispatch` | List available agents for current phase and mode |
 | `/devflow-dispatch <role>` | Dispatch a specific agent |
 | `/devflow-sync [scope]` | Update .context/ with current project state (docs/agents/skills) |
+| `/devflow auto [description]` | Start fully autonomous workflow with smart escalation |
+| `/devflow autonomy:X [description]` | Start with explicit autonomy (supervised/assisted/autonomous) |
 
 ## Superpowers Integration
 
