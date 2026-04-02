@@ -23,6 +23,10 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow scale:SMALL <description>
 /devflow scale:MEDIUM <description>
 /devflow scale:LARGE <description>
+/devflow auto <description>            # Alias for autonomy:autonomous
+/devflow autonomy:supervised <desc>    # Human approves each phase (default)
+/devflow autonomy:assisted <desc>      # Human in P+R+V+C, autonomous E
+/devflow autonomy:autonomous <desc>    # Fully autonomous with escalation
 ```
 
 ## Related Commands
@@ -66,6 +70,12 @@ SCALE
   /devflow scale:SMALL <d>    Simple feature         → P → E → V
   /devflow scale:MEDIUM <d>   Multi-component        → P → R → E → V → C
   /devflow scale:LARGE <d>    System-wide change     → P → R → E → V → C + checkpoints
+
+AUTONOMY
+  /devflow auto <d>                Fully autonomous with smart escalation
+  /devflow autonomy:supervised <d> Human approves each phase (default)
+  /devflow autonomy:assisted <d>   Human in planning+review, autonomous execution
+  /devflow autonomy:autonomous <d> All phases autonomous, escalates on failure
 
 PHASES (PREVC)
   P  Planning       Brainstorming, context enrichment, plan writing
@@ -150,6 +160,16 @@ EXAMPLES
   /devflow-next
     → Gate check passed. Advancing to V (Validation)...
 
+  /devflow auto implement user CRUD with validation
+    → Autonomous mode: P→R→E→V→C without human intervention
+    → Generates stories.yaml, executes story-by-story
+    → Escalates to human only on repeated failures or security issues
+
+  /devflow autonomy:assisted add payment processing
+    → Human involved in Planning and Review
+    → Autonomous execution of stories
+    → Human reviews Validation and Confirmation
+
 QUICK REFERENCE
   I want to...                  Use this
   ─────────────────────────────────────────────────────
@@ -164,6 +184,8 @@ QUICK REFERENCE
   Advance to next phase         /devflow-next
   List available agents         /devflow-dispatch
   Dispatch a specialist         /devflow-dispatch <role>
+  Run fully autonomous           /devflow auto <desc>
+  Run with assisted autonomy     /devflow autonomy:assisted <desc>
   Design an API                 "design the API for X"
   Write tests                   "generate tests for X"
   Review code                   "review the implementation"
@@ -264,6 +286,14 @@ After all steps complete, show a summary table with what was updated and their v
 2. Invoke `devflow:prevc-flow` skill
 3. The skill handles mode detection, scale routing, and phase orchestration
 
+### `/devflow auto <description>` / `/devflow autonomy:X <description>`
+1. Parse autonomy parameter (or `auto` alias → `autonomous`)
+2. Invoke `devflow:prevc-flow` skill with autonomy context
+3. Phase skills adapt behavior based on autonomy mode:
+   - `supervised`: current behavior (no change)
+   - `assisted`: P+R with human, E autonomous, V+C with human
+   - `autonomous`: all phases autonomous with escalation on failure
+
 ## Arguments
 
 - `help` — display the full help reference
@@ -274,4 +304,6 @@ After all steps complete, show a summary table with what was updated and their v
 - `update` — update marketplace, plugins, and dotcontext in sequence
 - `prd --status` — display PRD phase status
 - `scale:X` — optional explicit scale (QUICK/SMALL/MEDIUM/LARGE)
+- `autonomy:X` — optional autonomy mode (supervised/assisted/autonomous)
+- `auto` — alias for `autonomy:autonomous`
 - Everything else is passed as the task description to the PREVC flow orchestrator
