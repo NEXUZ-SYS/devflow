@@ -1,0 +1,6 @@
+# Estórias são opcionalmente versionadas
+# Descomente a linha abaixo para não versionar nenhuma estória
+# *
+
+# Sempre versionar este .gitignore
+!.gitignore

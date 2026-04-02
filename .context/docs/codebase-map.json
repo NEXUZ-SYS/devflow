@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "generated": "2026-04-02",
+  "stack": {
+    "languages": ["markdown", "bash", "json"],
+    "frameworks": ["claude-code-plugins", "superpowers", "dotcontext"],
+    "databases": [],
+    "tools": ["git", "npm", "dotcontext-cli", "dotcontext-mcp"]
+  },
+  "structure": {
+    "directories": {
+      "commands/": "5 slash command definitions (/devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch)",
+      "skills/": "25 skill directories with SKILL.md files — PREVC phases, bridge skills, and on-demand capabilities",
+      "agents/": "15 specialist agent playbooks (architect, backend, frontend, security, etc.)",
+      "templates/": "Scaffold templates for generating project-specific agents, skills, and docs",
+      "hooks/": "7 lifecycle hooks (session-start, pre/post-compact, pre/post-tool-use, hooks.json)",
+      "references/": "Skills map index and tool compatibility matrix across IDEs",
+      "scripts/": "Version bump and pre-commit validation scripts",
+      "docs/": "Additional documentation (tutorial, AI workflow docs)",
+      ".claude-plugin/": "Plugin manifest (v0.5.0) and marketplace registration",
+      ".cursor-plugin/": "Cursor IDE plugin manifest",
+      ".context/": "Per-project generated context (agents, skills, docs, plans, workflow checkpoints)"
+    }
+  },
+  "keyFiles": [
+    "commands/devflow.md",
+    "skills/using-devflow/SKILL.md",
+    "skills/prevc-flow/SKILL.md",
+    "skills/prevc-planning/SKILL.md",
+    "skills/prevc-execution/SKILL.md",
+    "skills/prevc-validation/SKILL.md",
+    "skills/prevc-confirmation/SKILL.md",
+    "skills/project-init/SKILL.md",
+    "hooks/session-start",
+    "hooks/hooks.json",
+    "agents/architect.md",
+    "agents/product-manager.md",
+    "references/skills-map.md",
+    ".claude-plugin/plugin.json",
+    "README.md"
+  ],
+  "stats": {
+    "totalFiles": 85,
+    "totalSkills": 25,
+    "totalAgents": 15,
+    "totalCommands": 5,
+    "totalHooks": 7
+  }
+}

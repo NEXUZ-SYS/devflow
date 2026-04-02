@@ -1,0 +1,14 @@
+{
+  "active": [
+    {
+      "slug": "autonomous-loop",
+      "path": "plans/autonomous-loop.md",
+      "title": "Autonomous Loop Implementation",
+      "summary": "Add autonomy modes (supervised/assisted/autonomous) to DevFlow PREVC workflow. 10 tasks: stories.yaml schema, autonomous-loop skill, prevc-flow/execution/planning modifications, command docs, hook updates, Node.js safety net runner, integration verification.",
+      "linkedAt": "2026-04-02T20:16:28.705Z",
+      "status": "active"
+    }
+  ],
+  "completed": [],
+  "primary": "autonomous-loop"
+}
