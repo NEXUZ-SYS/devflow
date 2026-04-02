@@ -54,6 +54,11 @@ After the user selects, save the preference:
 echo "<language-code>" > .devflow-language
 ```
 
+**Propagate to dotcontext:** If `.mcp.json` exists with a dotcontext server entry, update its args to include `--lang <dotcontext-locale>`:
+- `en-US` → `--lang en`
+- `pt-BR` → `--lang pt-BR`
+- `es-ES` → `--lang es`
+
 **Then continue all subsequent messages and interactions in the selected language.**
 
 If a preference already exists, skip this step and use the existing language.

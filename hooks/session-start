@@ -115,6 +115,54 @@ lang_context=$(build_language_context)
 mode_context+="\\n**${lang_context}**\\n"
 mode_context+="\\n**DevFlow Language:** ${DEVFLOW_LANGUAGE} (${DEVFLOW_LANGUAGE_NAME})\\n"
 
+# --- Sync dotcontext MCP language (if mcp.json exists) ---
+
+if [ -f "${project_root}/.mcp.json" ] && [ -f "${project_root}/.devflow-language" ] || [ -f "${HOME}/.devflow-language" ]; then
+  # Map DevFlow locale to dotcontext locale
+  case "$DEVFLOW_LANGUAGE" in
+    en-US) dc_lang="en" ;;
+    pt-BR) dc_lang="pt-BR" ;;
+    es-ES) dc_lang="es" ;;
+    *) dc_lang="" ;;
+  esac
+
+  if [ -n "$dc_lang" ] && [ -f "${project_root}/.mcp.json" ]; then
+    python3 -c "
+import json, sys
+try:
+    with open('${project_root}/.mcp.json') as f:
+        config = json.load(f)
+    dc = config.get('mcpServers', {}).get('dotcontext', {})
+    args = dc.get('args', [])
+    # Check if --lang already matches
+    for i, a in enumerate(args):
+        if a in ('--lang', '-l') and i+1 < len(args) and args[i+1] == '${dc_lang}':
+            sys.exit(0)  # already synced
+    # Remove existing --lang/-l flags
+    new_args = []
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+            continue
+        if a in ('--lang', '-l'):
+            skip = True
+            continue
+        new_args.append(a)
+    # Insert --lang before 'mcp'
+    idx = new_args.index('mcp') if 'mcp' in new_args else len(new_args)
+    new_args.insert(idx, '${dc_lang}')
+    new_args.insert(idx, '--lang')
+    config['mcpServers']['dotcontext']['args'] = new_args
+    with open('${project_root}/.mcp.json', 'w') as f:
+        json.dump(config, f, indent=2)
+        f.write('\n')
+except Exception:
+    pass
+" 2>/dev/null || true
+  fi
+fi
+
 mode_escaped=$(escape_for_json "$mode_context")
 
 session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n</DEVFLOW_CONTEXT>"
