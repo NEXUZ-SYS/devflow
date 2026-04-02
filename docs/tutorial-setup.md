@@ -24,9 +24,11 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [4.1 O workflow PREVC](#41-o-workflow-prevc)
   - [4.2 Escalas](#42-escalas)
   - [4.3 Modos de operação](#43-modos-de-operação)
-  - [4.4 Agentes especialistas](#44-agentes-especialistas)
-  - [4.5 Git strategy (branch protection)](#45-git-strategy-branch-protection)
-  - [4.6 Persistência entre sessões](#46-persistência-entre-sessões)
+  - [4.4 Modos de autonomia](#44-modos-de-autonomia)
+  - [4.5 Agentes especialistas](#45-agentes-especialistas)
+  - [4.6 TDD obrigatório (HARD-GATE)](#46-tdd-obrigatório-hard-gate)
+  - [4.7 Git strategy (branch protection)](#47-git-strategy-branch-protection)
+  - [4.8 Persistência entre sessões](#48-persistência-entre-sessões)
 - [5. Fluxo completo: do PRD ao merge](#5-fluxo-completo-do-prd-ao-merge)
   - [5.1 Gerar o PRD (roadmap de produto)](#51-gerar-o-prd-roadmap-de-produto)
   - [5.2 Iniciar a primeira fase do PRD](#52-iniciar-a-primeira-fase-do-prd)
@@ -36,25 +38,31 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [5.6 V — Validation](#56-v--validation)
   - [5.7 C — Confirmation](#57-c--confirmation)
   - [5.8 Fechar a fase no PRD e seguir para a próxima](#58-fechar-a-fase-no-prd-e-seguir-para-a-próxima)
-- [6. Exemplos por escala](#6-exemplos-por-escala)
-  - [6.1 QUICK — Bug fix](#61-quick--bug-fix)
-  - [6.2 SMALL — Feature simples](#62-small--feature-simples)
-  - [6.3 MEDIUM — Feature multi-componente](#63-medium--feature-multi-componente)
-  - [6.4 LARGE — Migração sistêmica](#64-large--migração-sistêmica)
-- [7. Capabilities on-demand](#7-capabilities-on-demand)
-  - [7.1 Sem workflow ativo](#71-sem-workflow-ativo)
-  - [7.2 Durante um workflow](#72-durante-um-workflow)
-- [8. Comandos de navegação](#8-comandos-de-navegação)
-- [9. Agentes em detalhe](#9-agentes-em-detalhe)
-  - [9.1 Quando cada agente é usado](#91-quando-cada-agente-é-usado)
-  - [9.2 Sequências comuns](#92-sequências-comuns)
-  - [9.3 Despachar manualmente](#93-despachar-manualmente)
-- [10. Manutenção do projeto](#10-manutenção-do-projeto)
-  - [10.1 Atualizar contexto](#101-atualizar-contexto)
-  - [10.2 Atualizar plugins](#102-atualizar-plugins)
-- [11. Compatibilidade com outras ferramentas](#11-compatibilidade-com-outras-ferramentas)
-- [12. Troubleshooting](#12-troubleshooting)
-- [13. Referência rápida](#13-referência-rápida)
+- [6. Loop autônomo](#6-loop-autônomo)
+  - [6.1 stories.yaml](#61-storiesyaml)
+  - [6.2 Fluxo de execução](#62-fluxo-de-execução)
+  - [6.3 PRD para stories (--from-prd)](#63-prd-para-stories---from-prd)
+  - [6.4 Upgrade de autonomia mid-workflow](#64-upgrade-de-autonomia-mid-workflow)
+  - [6.5 devflow-runner.mjs (safety net)](#65-devflow-runnermjs-safety-net)
+- [7. Exemplos por escala](#7-exemplos-por-escala)
+  - [7.1 QUICK — Bug fix](#71-quick--bug-fix)
+  - [7.2 SMALL — Feature simples](#72-small--feature-simples)
+  - [7.3 MEDIUM — Feature multi-componente](#73-medium--feature-multi-componente)
+  - [7.4 LARGE — Migração sistêmica](#74-large--migração-sistêmica)
+- [8. Capabilities on-demand](#8-capabilities-on-demand)
+  - [8.1 Sem workflow ativo](#81-sem-workflow-ativo)
+  - [8.2 Durante um workflow](#82-durante-um-workflow)
+- [9. Comandos de navegação](#9-comandos-de-navegação)
+- [10. Agentes em detalhe](#10-agentes-em-detalhe)
+  - [10.1 Quando cada agente é usado](#101-quando-cada-agente-é-usado)
+  - [10.2 Sequências comuns](#102-sequências-comuns)
+  - [10.3 Despachar manualmente](#103-despachar-manualmente)
+- [11. Manutenção do projeto](#11-manutenção-do-projeto)
+  - [11.1 Atualizar contexto](#111-atualizar-contexto)
+  - [11.2 Atualizar plugins](#112-atualizar-plugins)
+- [12. Compatibilidade com outras ferramentas](#12-compatibilidade-com-outras-ferramentas)
+- [13. Troubleshooting](#13-troubleshooting)
+- [14. Referência rápida](#14-referência-rápida)
 
 ---
 
@@ -132,7 +140,7 @@ npm install -g @dotcontext/cli
 dotcontext --version
 ```
 
-> ⚠️ **Nunca use `npx` para subcomandos do dotcontext com `:` (ex: `mcp:install`).** O npm 11+ interpreta o `:` como separador de script. Sempre use o binário global.
+> **Nunca use `npx` para subcomandos do dotcontext com `:` (ex: `mcp:install`).** O npm 11+ interpreta o `:` como separador de script. Sempre use o binário global.
 
 ### 2.5 Verificar instalação
 
@@ -209,7 +217,7 @@ O DevFlow é multilíngue. Na primeira inicialização (`/devflow init`), ele pe
 Menu interativo:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DevFlow — Select your language
+  DevFlow — Selecione seu idioma
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   1. English
@@ -252,9 +260,9 @@ DevFlow Mode: full
 - dotcontext MCP: true
 - dotcontext lite (.context/): true
 
-No active workflow. Start one with:
-  /devflow <description>
-  /devflow prd              (generate product roadmap)
+Nenhum workflow ativo. Inicie um com:
+  /devflow <descrição>
+  /devflow prd              (gerar roadmap de produto)
 ```
 
 ### 3.6 O que foi gerado
@@ -282,9 +290,11 @@ meu-projeto/
     │   ├── development-workflow.md        ← git strategy e convenções
     │   └── testing-strategy.md            ← frameworks e padrões de teste
     ├── plans/                             ← planos PREVC e PRDs
-    └── workflow/.checkpoint/
-        ├── last.json                      ← snapshot para persistência
-        └── handoff.md                     ← diário de progresso
+    └── workflow/
+        ├── stories.yaml                   ← stories para loop autônomo
+        └── .checkpoint/
+            ├── last.json                  ← snapshot para persistência
+            └── handoff.md                 ← diário de progresso
 ```
 
 Cada agente é **personalizado para o seu projeto** — contém paths reais, classes reais, padrões reais. Não são templates genéricos.
@@ -334,7 +344,54 @@ O DevFlow ajusta o fluxo com base na complexidade. Você pode deixar a detecçã
 
 O modo é detectado automaticamente. Todas as skills se adaptam — se uma feature precisa de MCP mas você está em Lite, ela faz fallback graceful.
 
-### 4.4 Agentes especialistas
+### 4.4 Modos de autonomia
+
+O DevFlow suporta 3 níveis de autonomia para o workflow PREVC:
+
+| Modo | Quem controla | Quando usar |
+|------|--------------|-------------|
+| **supervised** (padrão) | Humano controla tudo, Claude executa | Tarefas críticas, primeiros usos, código sensível |
+| **assisted** | Humano faz P+R+V+C, Claude faz E automaticamente | Dia a dia — você planeja e valida, Claude implementa |
+| **autonomous** | Claude faz tudo, escalona ao humano em falha | Grandes features com stories claras, execução overnight |
+
+**Como ativar:**
+
+```bash
+# Supervised (padrão — não precisa especificar)
+/devflow add user profile page
+
+# Assisted — humano nas pontas, execução automática
+/devflow add user profile page autonomy:assisted
+
+# Autonomous — loop completo com safety net
+/devflow add user profile page autonomy:autonomous
+```
+
+**No modo autonomous:**
+1. O DevFlow gera um `stories.yaml` durante o Planning com todas as stories priorizadas
+2. Na Execution, roda o **loop autônomo**: seleciona a próxima story, despacha o agente, executa com TDD, marca como completa
+3. Se uma story falha mais vezes que `max_retries_per_story`, é escalada ao humano
+4. Se houver 2+ falhas consecutivas, o modo faz **downgrade automático** para supervised
+
+**Para projetos existentes com PRD:**
+
+```bash
+# Converter PRD existente em stories.yaml
+/devflow autonomy:autonomous --from-prd
+```
+
+Isso lê o PRD em `.context/plans/*-prd.md`, converte cada item do scope em stories com agentes inferidos, e inicia o loop.
+
+**Upgrade de autonomia mid-workflow:**
+
+```bash
+# Workflow supervised em andamento → upgrade para autonomous
+/devflow autonomy:autonomous
+```
+
+O progresso é preservado — stories já completadas mantêm o status.
+
+### 4.5 Agentes especialistas
 
 O DevFlow tem **15 agentes**, cada um com um papel definido:
 
@@ -358,7 +415,47 @@ O DevFlow tem **15 agentes**, cada um com um papel definido:
 
 Os agentes são despachados **automaticamente** durante o workflow ou **manualmente** via `/devflow-dispatch`.
 
-### 4.5 Git strategy (branch protection)
+### 4.6 TDD obrigatório (HARD-GATE)
+
+O DevFlow impõe TDD como um **HARD-GATE bloqueante** — nenhum código de produção pode ser escrito sem um teste falhando primeiro. Isso vale para **TODOS os modos** (supervised, assisted, autonomous) e **TODAS as escalas** (QUICK, SMALL, MEDIUM, LARGE).
+
+**O ciclo obrigatório:**
+
+```
+RED     → Escreve teste que FALHA (confirma que falha pelo motivo certo)
+GREEN   → Escreve código MÍNIMO para passar
+REFACTOR → Melhora sem mudar comportamento
+```
+
+**Tipos de teste por área de implementação:**
+
+| Área | Unit | Integration | E2E |
+|------|:----:|:-----------:|:---:|
+| Business logic, utils | Obrigatório | — | — |
+| API endpoints | Obrigatório | Obrigatório | — |
+| Database queries | — | Obrigatório | — |
+| Auth, pagamentos, registro | Obrigatório | Obrigatório | **Obrigatório** |
+| CLI, user flows críticos | Obrigatório | — | **Obrigatório** |
+| UI components | Obrigatório | — | — |
+
+**Quando E2E é obrigatório:**
+- Autenticação e autorização
+- Pagamentos e checkout
+- Registro de usuário
+- Fluxos CLI do projeto
+- Qualquer user flow crítico
+
+**O que conta como teste E2E:**
+- Executa o sistema REAL (não mocks)
+- Testa o fluxo completo do início ao fim
+- Script real que pode ser executado independentemente
+
+**Enforcement no workflow:**
+- **Planning (P)**: o plano deve ter steps de teste ANTES de steps de implementação para cada task group
+- **Execution (E)**: o agente test-writer roda ANTES do agente de implementação em Full Mode
+- **Validation (V)**: verifica não só "testes passam" mas "os TIPOS certos de teste existem" — se E2E era obrigatório e não existe, o workflow retorna à fase E
+
+### 4.7 Git strategy (branch protection)
 
 O DevFlow protege suas branches automaticamente via hook:
 
@@ -383,7 +480,7 @@ Na primeira execução, o `/devflow init` pergunta qual estratégia usar. A conf
 - Branches de trabalho: `feature/*`, `fix/*`, `hotfix/*`, `release/*`
 - Trunk-based configurado
 
-### 4.6 Persistência entre sessões
+### 4.8 Persistência entre sessões
 
 O DevFlow mantém estado automaticamente:
 
@@ -423,19 +520,19 @@ O que acontece:
 
 **3. Entrevista socrática** — uma pergunta por vez:
 ```
-DevFlow: "Does this analysis of what exists match your understanding?"
+DevFlow: "Essa análise do que já existe corresponde ao seu entendimento?"
 Você: "Sim, mas o módulo de auth ainda está incompleto"
 
-DevFlow: "What do you consider already complete vs still in progress?"
+DevFlow: "O que você considera completo vs ainda em progresso?"
 Você: "User CRUD completo, auth 60%, API de pagamentos nem começou"
 
-DevFlow: "What's the end goal — what does the finished product look like?"
+DevFlow: "Qual é o objetivo final — como é o produto finalizado?"
 Você: "Um SaaS de gestão com auth, pagamentos Stripe e dashboard analytics"
 
-DevFlow: "What are the next deliverables in priority order?"
+DevFlow: "Quais são as próximas entregas em ordem de prioridade?"
 Você: "1. Terminar auth  2. Pagamentos  3. Dashboard  4. Mobile"
 
-DevFlow: "Any constraints?"
+DevFlow: "Alguma restrição?"
 Você: "Preciso de pagamentos funcionando em 3 semanas"
 ```
 
@@ -443,38 +540,38 @@ Você: "Preciso de pagamentos funcionando em 3 semanas"
 ```markdown
 # PRD: MeuSaaS
 
-## Executive Summary
-- Problem: ...
-- Solution: ...
-- Business Impact: ...
+## Resumo Executivo
+- Problema: ...
+- Solução: ...
+- Impacto no Negócio: ...
 
-## Phased Roadmap
+## Roadmap Faseado
 
-### Phase 1: Authentication — Must Have
-- Scope: Completar OAuth, 2FA, session management
+### Fase 1: Autenticação — Must Have
+- Escopo: Completar OAuth, 2FA, session management
 - RICE Score: 12.0
-- Done Criteria: Login/logout funcional, 2FA ativo, testes E2E passando
-- Status: ⬚ Pending
+- Critérios de Conclusão: Login/logout funcional, 2FA ativo, testes E2E passando
+- Status: ⬚ Pendente
 
-### Phase 2: Payments (Stripe) — Must Have
-- Scope: Checkout, subscriptions, webhooks, invoices
-- Depends on: Phase 1
+### Fase 2: Pagamentos (Stripe) — Must Have
+- Escopo: Checkout, subscriptions, webhooks, invoices
+- Depende de: Fase 1
 - RICE Score: 10.0
-- Status: ⬚ Pending
+- Status: ⬚ Pendente
 
-### Phase 3: Dashboard Analytics — Should Have
+### Fase 3: Dashboard Analytics — Should Have
 ...
 
-### Phase 4: Mobile App — Could Have
+### Fase 4: App Mobile — Could Have
 ...
 ```
 
 **5. Aprovação seção por seção:**
 ```
-DevFlow: "Executive Summary + Product Vision — approve?"
-DevFlow: "Phased Roadmap — approve scope and order of each phase?"
-DevFlow: "Out of Scope — anything missing?"
-DevFlow: "Risks & Success Metrics — approve?"
+DevFlow: "Resumo Executivo + Visão do Produto — aprovado?"
+DevFlow: "Roadmap Faseado — escopo e ordem de cada fase estão corretos?"
+DevFlow: "Fora do Escopo — falta algo?"
+DevFlow: "Riscos e Métricas de Sucesso — aprovado?"
 ```
 
 **6. Salva em** `.context/plans/<projeto>-prd.md`
@@ -484,8 +581,8 @@ DevFlow: "Risks & Success Metrics — approve?"
 Após o PRD aprovado:
 
 ```
-DevFlow: "PRD saved. Phase 1 (Authentication) is ready for PREVC. Start now?"
-Você: "Yes"
+DevFlow: "PRD salvo. Fase 1 (Autenticação) está pronta para o PREVC. Iniciar agora?"
+Você: "Sim"
 ```
 
 Ou manualmente:
@@ -500,11 +597,11 @@ O DevFlow detecta que é MEDIUM (multi-componente) e roda: **P → R → E → V
 **O que você vê:**
 
 ```
-DevFlow: "I'm using devflow:prevc-planning to plan this task."
+DevFlow: "Estou usando devflow:prevc-planning para planejar esta tarefa."
 
-Phase: P (Planning)
-Scale: MEDIUM
-Task: "Completar autenticação — OAuth, 2FA, session management"
+Fase: P (Planning)
+Escala: MEDIUM
+Tarefa: "Completar autenticação — OAuth, 2FA, session management"
 ```
 
 **Passo 1 — Contexto:**
@@ -512,13 +609,13 @@ O DevFlow lê automaticamente o `.context/` para entender a stack, padrões e c�
 
 **Passo 2 — Brainstorming socrático (9 etapas):**
 ```
-DevFlow: "Let's brainstorm. What are the key challenges with OAuth + 2FA?"
+DevFlow: "Vamos fazer um brainstorming. Quais são os principais desafios com OAuth + 2FA?"
 Você: "Preciso suportar Google e GitHub OAuth, e TOTP para 2FA"
 
-DevFlow: "Should 2FA be mandatory or opt-in?"
-Você: "Opt-in por agora, mandatory numa fase futura"
+DevFlow: "O 2FA deve ser obrigatório ou opt-in?"
+Você: "Opt-in por agora, obrigatório numa fase futura"
 
-DevFlow: "Where does session state live? JWT, server-side, or hybrid?"
+DevFlow: "Onde fica o estado da sessão? JWT, server-side ou híbrido?"
 Você: "JWT com refresh token, Redis para blacklist"
 ...
 ```
@@ -528,26 +625,52 @@ Brainstorming gera uma spec com requisitos, decisões técnicas e edge cases.
 
 **Passo 4 — Plano de implementação:**
 ```
-Plan: "Complete Authentication System"
+Plano: "Sistema de Autenticação Completo"
 
-Tasks (bite-sized, 2-5 min each):
-  1. [ ] Add Google OAuth provider config
-  2. [ ] Implement OAuth callback handler
-  3. [ ] Add GitHub OAuth provider
-  4. [ ] Create TOTP secret generation endpoint
-  5. [ ] Implement TOTP verification middleware
-  6. [ ] Add JWT refresh token rotation
-  7. [ ] Set up Redis session blacklist
-  8. [ ] Write integration tests for OAuth flow
-  9. [ ] Write E2E tests for 2FA enrollment
-  10. [ ] Update API documentation
+Tarefas (pequenas, 2-5 min cada):
+  1. [ ] Adicionar config do Google OAuth provider
+  2. [ ] Implementar handler de callback OAuth
+  3. [ ] Adicionar GitHub OAuth provider
+  4. [ ] Criar endpoint de geração de secret TOTP
+  5. [ ] Implementar middleware de verificação TOTP
+  6. [ ] Adicionar rotação de JWT refresh token
+  7. [ ] Configurar blacklist de sessão com Redis
+  8. [ ] Escrever testes de integração para fluxo OAuth
+  9. [ ] Escrever testes E2E para enrollment de 2FA
+  10. [ ] Atualizar documentação da API
 ```
 
-**Gate para avançar:** Spec aprovada + plano escrito.
+**Passo 4.5 — Geração de stories.yaml** (se autonomia não é supervised):
+
+Para modos `assisted` e `autonomous`, o Planning também gera um `stories.yaml`:
+
+```yaml
+feature: "Sistema de Autenticação Completo"
+autonomy: autonomous
+stories:
+  - id: S1
+    title: "Adicionar Google OAuth provider"
+    agent: backend-specialist
+    priority: 1
+    status: pending
+    blocked_by: []
+  - id: S2
+    title: "Adicionar GitHub OAuth provider"
+    agent: backend-specialist
+    priority: 2
+    status: pending
+    blocked_by: [S1]
+  ...
+```
+
+**Passo 5.5 — Validação test-first (HARD-GATE):**
+O DevFlow verifica que o plano tem steps de teste ANTES de steps de implementação para cada grupo de tasks. Se a ordenação não é test-first, o plano é rejeitado e corrigido.
+
+**Gate para avançar:** Spec aprovada + plano escrito + ordenação test-first validada.
 
 ```
 /devflow-next
-→ Gate check passed. Advancing to R (Review)...
+→ Verificação do gate aprovada. Avançando para R (Review)...
 ```
 
 ### 5.4 R — Review
@@ -555,8 +678,8 @@ Tasks (bite-sized, 2-5 min each):
 **O que acontece automaticamente:**
 
 ```
-Phase: R (Review)
-Agents: architect, code-reviewer, security-auditor
+Fase: R (Review)
+Agentes: architect, code-reviewer, security-auditor
 ```
 
 **1. Architect review:**
@@ -576,20 +699,20 @@ Agents: architect, code-reviewer, security-auditor
 
 **Resultado:**
 ```
-Review Summary:
-  ✓ Architecture: PASS — clean separation of concerns
-  ⚠ WARN: Consider rate limiting on /auth/verify-2fa (brute force risk)
-  ✓ Plan completeness: PASS — all spec requirements covered
-  ✓ Security pre-check: PASS with 1 WARNING
+Resumo da Revisão:
+  ✓ Arquitetura: OK — boa separação de responsabilidades
+  ⚠ AVISO: Considerar rate limiting em /auth/verify-2fa (risco de força bruta)
+  ✓ Completude do plano: OK — todos os requisitos da spec cobertos
+  ✓ Pré-check de segurança: OK com 1 AVISO
 
-Proceed to Execution? (the WARNING can be addressed during implementation)
+Prosseguir para Execution? (o AVISO pode ser tratado durante a implementação)
 ```
 
 **Gate:** Todas as revisões passam, nenhum BLOCK finding.
 
 ```
 /devflow-next
-→ Advancing to E (Execution)...
+→ Avançando para E (Execution)...
 ```
 
 ### 5.5 E — Execution
@@ -602,32 +725,34 @@ Proceed to Execution? (the WARNING can be addressed during implementation)
 **Para cada task, o ciclo é:**
 
 ```
-Task 1/10: Add Google OAuth provider config
+Tarefa 1/10: Adicionar config do Google OAuth provider
 
   RED:   Escreve teste que falha
          → test_google_oauth_config_loads_from_env()
-         → FAIL ✗ (GoogleOAuthProvider not found)
+         → FALHOU ✗ (GoogleOAuthProvider não encontrado)
 
   GREEN: Escreve código mínimo para passar
-         → GoogleOAuthProvider class + env config
-         → PASS ✓
+         → Classe GoogleOAuthProvider + config via env
+         → PASSOU ✓
 
   REFACTOR: Melhora sem mudar comportamento
-         → Extract base OAuthProvider class
-         → PASS ✓
+         → Extrair classe base OAuthProvider
+         → PASSOU ✓
 
   COMMIT: feat(auth): add Google OAuth provider config
 
-─── Task complete. Moving to task 2/10...
+─── Tarefa concluída. Avançando para tarefa 2/10...
 ```
 
-**Agent handoffs durante Execution:**
+**No modo autonomous**, a Execution é delegada ao loop autônomo (veja [seção 6](#6-loop-autônomo)). O DevFlow seleciona automaticamente a próxima story do `stories.yaml`, despacha o agente apropriado, e avança.
+
+**Handoffs entre agentes durante Execution:**
 ```
-Task 1-3: backend-specialist (OAuth providers)
-Task 4-5: backend-specialist → security-auditor (2FA com TOTP)
-Task 6-7: backend-specialist (JWT + Redis)
-Task 8-9: test-writer (integration + E2E tests)
-Task 10:  documentation-writer (API docs)
+Tarefas 1-3: backend-specialist (OAuth providers)
+Tarefas 4-5: backend-specialist → security-auditor (2FA com TOTP)
+Tarefas 6-7: backend-specialist (JWT + Redis)
+Tarefas 8-9: test-writer (testes de integração + E2E)
+Tarefa 10:   documentation-writer (documentação da API)
 ```
 
 **Gate:** Todas as tasks completas, todos os testes passando, código commitado.
@@ -635,17 +760,17 @@ Task 10:  documentation-writer (API docs)
 ```
 /devflow-status
 
-Workflow: "Complete Authentication" (MEDIUM)
-  P Planning      ✓ Complete
-  R Review        ✓ Complete
-  E Execution     ● In Progress (7/10 tasks)
-  V Validation    ○ Pending
-  C Confirmation  ○ Pending
+Workflow: "Autenticação Completa" (MEDIUM)
+  P Planning      ✓ Concluído
+  R Review        ✓ Concluído
+  E Execution     ● Em Progresso (7/10 tarefas)
+  V Validation    ○ Pendente
+  C Confirmation  ○ Pendente
 ```
 
 ```
 /devflow-next
-→ Advancing to V (Validation)...
+→ Avançando para V (Validation)...
 ```
 
 ### 5.6 V — Validation
@@ -653,55 +778,74 @@ Workflow: "Complete Authentication" (MEDIUM)
 **Verificação completa antes do merge:**
 
 ```
-Phase: V (Validation)
-Checks: test suite, spec compliance, security, performance
+Fase: V (Validation)
+Verificações: suíte de testes, conformidade com spec, segurança, performance, adequação de tipos de teste
 ```
 
-**1. Full test suite:**
+**1. Suíte completa de testes:**
 ```
-Running all tests...
-  ✓ 47 unit tests passed
-  ✓ 12 integration tests passed
-  ✓ 3 E2E tests passed
-  ✗ 0 failures
-  Coverage: 94%
-```
-
-**2. Spec compliance:**
-```
-Checking spec requirements...
-  ✓ Google OAuth login/callback      → implemented + tested
-  ✓ GitHub OAuth login/callback      → implemented + tested
-  ✓ TOTP generation                  → implemented + tested
-  ✓ TOTP verification                → implemented + tested
-  ✓ JWT refresh token rotation       → implemented + tested
-  ✓ Redis session blacklist          → implemented + tested
-  ✓ Rate limiting on verify-2fa      → implemented (addresses R-phase WARNING)
-  All 7 requirements satisfied.
+Rodando todos os testes...
+  ✓ 47 testes unitários passaram
+  ✓ 12 testes de integração passaram
+  ✓ 3 testes E2E passaram
+  ✗ 0 falhas
+  Cobertura: 94%
 ```
 
-**3. Security validation (OWASP Top 10):**
+**2. Adequação de tipos de teste (HARD-GATE):**
 ```
-Security audit results:
-  ✓ A01 Broken Access Control    — roles enforced, no privilege escalation
-  ✓ A02 Cryptographic Failures   — TOTP secrets encrypted, JWT signed with RS256
-  ✓ A03 Injection                — parameterized queries, no string concat
-  ✓ A07 Auth Failures            — rate limiting, account lockout after 5 attempts
-  No vulnerabilities found.
-```
-
-**4. Performance check:**
-```
-  ✓ No N+1 queries detected
-  ✓ Redis calls use connection pooling
-  ✓ JWT verification is O(1)
+Verificando tipos de teste por área de implementação...
+  ✓ Endpoints de auth  → unit + integration + E2E  ✓
+  ✓ Lógica TOTP       → unit + integration          ✓
+  ✓ Gestão de JWT     → unit                         ✓
+  ✓ Integração Redis  → integration                  ✓
+  Todos os tipos de teste obrigatórios presentes.
 ```
 
-**Gate:** Tudo passa.
+Se E2E for obrigatório para a área (auth, pagamentos) e não existir, o workflow **retorna à fase E** até que os testes sejam escritos.
+
+**3. Verificação de ordenação TDD:**
+```
+Verificando histórico de commits para ordenação TDD...
+  ✓ Commits de teste precedem commits de implementação
+  Ordenação TDD: ✓ Verificada
+```
+
+**4. Conformidade com a spec:**
+```
+Verificando requisitos da spec...
+  ✓ Google OAuth login/callback      → implementado + testado
+  ✓ GitHub OAuth login/callback      → implementado + testado
+  ✓ Geração TOTP                     → implementado + testado
+  ✓ Verificação TOTP                 → implementado + testado
+  ✓ Rotação de JWT refresh token     → implementado + testado
+  ✓ Blacklist de sessão Redis        → implementado + testado
+  ✓ Rate limiting em verify-2fa      → implementado (resolve AVISO da fase R)
+  Todos os 7 requisitos satisfeitos.
+```
+
+**5. Validação de segurança (OWASP Top 10):**
+```
+Resultados da auditoria de segurança:
+  ✓ A01 Controle de Acesso Quebrado  — roles enforçados, sem escalação de privilégios
+  ✓ A02 Falhas Criptográficas        — secrets TOTP encriptados, JWT assinado com RS256
+  ✓ A03 Injeção                      — queries parametrizadas, sem concatenação de strings
+  ✓ A07 Falhas de Autenticação       — rate limiting, bloqueio de conta após 5 tentativas
+  Nenhuma vulnerabilidade encontrada.
+```
+
+**6. Verificação de performance:**
+```
+  ✓ Nenhuma query N+1 detectada
+  ✓ Chamadas Redis usam connection pooling
+  ✓ Verificação JWT é O(1)
+```
+
+**Gate:** Tudo passa, incluindo adequação de tipos de teste e ordenação TDD.
 
 ```
 /devflow-next
-→ Advancing to C (Confirmation)...
+→ Avançando para C (Confirmation)...
 ```
 
 ### 5.7 C — Confirmation
@@ -709,39 +853,39 @@ Security audit results:
 **Finalização:**
 
 ```
-Phase: C (Confirmation)
+Fase: C (Confirmation)
 ```
 
-**1. Branch cleanup:**
+**1. Limpeza da branch:**
 ```
-→ Squash commits? Merge commits? (based on project convention)
-→ Rebasing feature/auth-complete onto main...
-→ All tests still pass after rebase.
-```
-
-**2. Documentation update:**
-```
-→ Updated API docs: 3 new endpoints documented
-→ Updated README: auth section added
-→ Updated .context/docs/project-overview.md
+→ Squash commits? Merge commits? (baseado na convenção do projeto)
+→ Rebasing feature/auth-complete em main...
+→ Todos os testes continuam passando após rebase.
 ```
 
-**3. Context sync:**
+**2. Atualização de documentação:**
 ```
-→ .context/ updated with new components
-→ codebase-map.json refreshed
-```
-
-**4. PR creation (se gh/glab configurado):**
-```
-→ PR #42 created: "feat(auth): complete OAuth + 2FA system"
-→ Description includes: spec compliance checklist, test coverage, security audit results
+→ Docs da API atualizados: 3 novos endpoints documentados
+→ README atualizado: seção de auth adicionada
+→ .context/docs/project-overview.md atualizado
 ```
 
-**5. PRD update:**
+**3. Sync de contexto:**
 ```
-→ Phase 1 (Authentication) marked as ✓ Completed
-→ Phase 2 (Payments) is next pending phase
+→ .context/ atualizado com novos componentes
+→ codebase-map.json regenerado
+```
+
+**4. Criação de PR (se gh/glab configurado):**
+```
+→ PR #42 criado: "feat(auth): complete OAuth + 2FA system"
+→ Descrição inclui: checklist de conformidade, cobertura de testes, resultados da auditoria de segurança
+```
+
+**5. Atualização do PRD:**
+```
+→ Fase 1 (Autenticação) marcada como ✓ Concluída
+→ Fase 2 (Pagamentos) é a próxima fase pendente
 ```
 
 ### 5.8 Fechar a fase no PRD e seguir para a próxima
@@ -750,10 +894,10 @@ Phase: C (Confirmation)
 /devflow prd --status
 
 PRD: MeuSaaS
-  Phase 1: Authentication          ✓ Completed
-  Phase 2: Payments (Stripe)       ⬚ Pending ← next
-  Phase 3: Dashboard Analytics     ⬚ Pending
-  Phase 4: Mobile App              ⬚ Pending
+  Fase 1: Autenticação              ✓ Concluída
+  Fase 2: Pagamentos (Stripe)       ⬚ Pendente ← próxima
+  Fase 3: Dashboard Analytics        ⬚ Pendente
+  Fase 4: App Mobile                 ⬚ Pendente
 ```
 
 Para iniciar a próxima fase:
@@ -761,13 +905,160 @@ Para iniciar a próxima fase:
 /devflow Implementar pagamentos com Stripe — checkout, subscriptions, webhooks
 ```
 
-O ciclo PREVC recomeça para a Phase 2.
+O ciclo PREVC recomeça para a Fase 2.
 
 ---
 
-## 6. Exemplos por escala
+## 6. Loop autônomo
 
-### 6.1 QUICK — Bug fix
+O loop autônomo é o motor que executa stories automaticamente nos modos `assisted` e `autonomous`. Cada story roda com **contexto fresco** — sem acúmulo de lixo de contexto entre stories.
+
+### 6.1 stories.yaml
+
+O arquivo `stories.yaml` (em `.context/workflow/`) define as stories a executar:
+
+```yaml
+feature: "Sistema de Autenticação Completo"
+autonomy: autonomous
+
+escalation:
+  max_retries_per_story: 2
+  max_consecutive_failures: 2
+  security_immediate: true
+
+stats:
+  total: 6
+  completed: 0
+  failed: 0
+  escalated: 0
+  consecutive_failures: 0
+
+stories:
+  - id: S1
+    title: "Adicionar Google OAuth provider"
+    description: "Implementar Google OAuth com fluxo PKCE"
+    agent: backend-specialist
+    priority: 1
+    status: pending
+    attempts: 0
+    blocked_by: []
+
+  - id: S2
+    title: "Adicionar GitHub OAuth provider"
+    agent: backend-specialist
+    priority: 2
+    status: pending
+    attempts: 0
+    blocked_by: [S1]
+
+  - id: S3
+    title: "Implementar 2FA com TOTP"
+    agent: backend-specialist
+    priority: 3
+    status: pending
+    attempts: 0
+    blocked_by: [S1]
+```
+
+**Ciclo de vida dos status:**
+- `pending` → `in_progress` → `completed` (sucesso)
+- `pending` → `in_progress` → `failed` → retry ou `escalated`
+
+**Escalação automática:**
+- Story falha mais que `max_retries_per_story` → marcada como `escalated`
+- 2+ falhas consecutivas → downgrade automático para supervised
+- Problema de segurança → escalação imediata ao humano
+
+### 6.2 Fluxo de execução
+
+```
+[Lê stories.yaml] → [Seleciona próxima story] → [Spawna Claude com contexto fresco]
+        ↑                                                    │
+        └──────── [Atualiza stories.yaml] ←──────────────────┘
+```
+
+Para cada iteração:
+1. **Lê** o `stories.yaml` atualizado (detecta mudanças entre iterações)
+2. **Seleciona** a próxima story elegível (prioridade: `in_progress` > `failed retryable` > `pending`)
+3. **Verifica bloqueios** — stories com `blocked_by` não-resolvidos são puladas
+4. **Despacha** o agente anotado na story (ex: `backend-specialist`)
+5. **Executa** com TDD obrigatório (RED → GREEN → REFACTOR)
+6. **Atualiza** o status no `stories.yaml`
+7. **Repete** até todas as stories estarem completed/escalated
+
+### 6.3 PRD para stories (--from-prd)
+
+Para projetos que já têm um PRD, o `--from-prd` converte automaticamente:
+
+```bash
+/devflow autonomy:autonomous --from-prd
+```
+
+O que acontece:
+1. Lê o PRD em `.context/plans/*-prd.md`
+2. Para cada item no scope da fase pendente:
+   - Cria uma story com título e descrição
+   - Infere o agente a partir do conteúdo (backend, frontend, database, etc.)
+   - Define prioridade baseada na ordem
+   - Configura `blocked_by` a partir das dependências do PRD
+3. Enriquece com contexto existente (`.context/docs/project-overview.md`, `codebase-map.json`)
+4. Gera o `stories.yaml` e inicia o loop
+
+### 6.4 Upgrade de autonomia mid-workflow
+
+Você pode mudar o nível de autonomia a qualquer momento durante um workflow:
+
+**Upgrade (supervised → autonomous):**
+```bash
+/devflow autonomy:autonomous
+```
+
+3 cenários possíveis:
+- **stories.yaml já existe**: mantém o arquivo, respeita status existentes
+- **stories.yaml não existe + plano PREVC ativo**: gera stories a partir do plano
+- **stories.yaml não existe + PRD existe**: gera stories a partir do PRD (Path A)
+
+**Downgrade (autonomous → supervised):**
+```bash
+/devflow autonomy:supervised
+```
+
+O progresso é **100% preservado** — stories completadas mantêm status, o workflow continua de onde parou.
+
+**Downgrade automático:** acontece quando `max_consecutive_failures` é atingido (padrão: 2 falhas seguidas).
+
+### 6.5 devflow-runner.mjs (safety net)
+
+Para execução autônoma de longa duração, o DevFlow inclui um runner externo em Node.js que supervisiona o processo:
+
+```bash
+node scripts/devflow-runner.mjs \
+  --stories .context/workflow/stories.yaml \
+  --max-iterations 20 \
+  --timeout 300000
+```
+
+O runner:
+- Spawna uma instância Claude por story (contexto fresco)
+- Relê o `stories.yaml` entre iterações (detecta mudanças manuais)
+- Detecta stall (mesma story selecionada 3+ vezes)
+- Imprime relatório final com status de todas as stories
+- Suporta `--dry-run` para preview sem executar
+
+**Flags disponíveis:**
+
+| Flag | Default | Descrição |
+|------|---------|-----------|
+| `--stories <path>` | obrigatório | Caminho para o stories.yaml |
+| `--max-iterations` | 20 | Número máximo de iterações |
+| `--timeout` | 300000 | Timeout por story (ms) |
+| `--dry-run` | false | Mostra stories sem executar |
+
+---
+
+## 7. Exemplos por escala
+
+### 7.1 QUICK — Bug fix
 
 ```
 /devflow fix o botão de login não funciona no Safari
@@ -788,10 +1079,10 @@ V (Validation):
   → Testes passam (incluindo novo teste de regressão)
   → Bug fix verificado
 
-Done.
+Concluído.
 ```
 
-### 6.2 SMALL — Feature simples
+### 7.2 SMALL — Feature simples
 
 ```
 /devflow add endpoint GET /api/health
@@ -812,10 +1103,10 @@ V (Validation):
   → Testes passam
   → Endpoint responde 200 com status
 
-Done.
+Concluído.
 ```
 
-### 6.3 MEDIUM — Feature multi-componente
+### 7.3 MEDIUM — Feature multi-componente
 
 ```
 /devflow scale:MEDIUM add sistema de notificações por email
@@ -838,12 +1129,12 @@ E: backend-specialist (queue + service)
    → test-writer (integration tests)
    → 12 tasks com TDD
 
-V: Suite completa, spec compliance, security check
+V: Suite completa, spec compliance, security check, test-type adequacy
 
 C: Branch merged, docs atualizados, PR criado
 ```
 
-### 6.4 LARGE — Migração sistêmica
+### 7.4 LARGE — Migração sistêmica
 
 ```
 /devflow scale:LARGE migrar de REST para GraphQL
@@ -877,9 +1168,9 @@ C: Branch merged, docs migrados, PR com migration guide
 
 ---
 
-## 7. Capabilities on-demand
+## 8. Capabilities on-demand
 
-### 7.1 Sem workflow ativo
+### 8.1 Sem workflow ativo
 
 Você pode usar qualquer capability do DevFlow a qualquer momento, sem iniciar um workflow PREVC. Basta pedir em linguagem natural:
 
@@ -890,17 +1181,17 @@ Você pode usar qualquer capability do DevFlow a qualquer momento, sem iniciar u
 | Revisar PR | "Revise o PR #42" | pr-review + code-reviewer |
 | Investigar bug | "Investigue o timeout no login" | bug-investigation + systematic-debugging |
 | Decompor feature | "Quebre a feature de cache em tarefas" | feature-breakdown |
-| Escolher git strategy | "Qual branch strategy para essa feature?" | git-strategy |
-| Design de API | "Design a API de billing" | api-design + architect |
+| Escolher git strategy | "Qual estratégia de branch para essa feature?" | git-strategy |
+| Design de API | "Desenhe a API de billing" | api-design + architect |
 | Refatorar | "Refatore o módulo de pagamentos" | refactoring + refactoring-specialist |
 | Gerar PRD | "Gere um roadmap de produto" | prd-generation + product-manager |
 | Escrever commit | "Escreva a mensagem de commit" | commit-message |
 | Atualizar docs | "Atualize a documentação do auth" | documentation + documentation-writer |
 | Brainstorming | "Vamos discutir a feature de busca" | brainstorming (9 etapas) |
 | Implementar com TDD | "Implemente com TDD" | test-driven-development |
-| Debug | "Debug o memory leak no worker" | systematic-debugging (4 fases) |
+| Debug | "Investigue o memory leak no worker" | systematic-debugging (4 fases) |
 
-### 7.2 Durante um workflow
+### 8.2 Durante um workflow
 
 Durante a Execution (fase E), você pode pedir capabilities extras sem sair do workflow:
 
@@ -917,7 +1208,7 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 
 ---
 
-## 8. Comandos de navegação
+## 9. Comandos de navegação
 
 | Comando | O que faz | Quando usar |
 |---------|-----------|-------------|
@@ -926,6 +1217,7 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 | `/devflow-dispatch` | Recomenda agente(s) para o contexto | Para ver quem deveria estar trabalhando |
 | `/devflow-dispatch <role>` | Despacha um agente específico | Para forçar um especialista |
 | `/devflow-sync` | Atualiza `.context/` com estado atual | Após mudanças grandes |
+| `/devflow-sync workflow` | Valida e sincroniza `.context/workflow/` | Validar stories.yaml, detectar referências órfãs |
 | `/devflow prd --status` | Mostra progresso das fases do PRD | Para acompanhar roadmap |
 | `/devflow language` | Configura idioma (en-US, pt-BR, es-ES) | Para mudar idioma das interações |
 | `/devflow help` | Referência completa de comandos | Quando esquecer algo |
@@ -935,32 +1227,32 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 ```bash
 # "Em que fase estou?"
 /devflow-status
-→ E Execution ● In Progress (7/12 tasks)
+→ E Execution ● Em Progresso (7/12 tarefas)
 
 # "Posso avançar?"
 /devflow-next
-→ ✗ Gate not met: 5 tasks remaining, 2 tests failing
+→ ✗ Gate não atendido: 5 tarefas restantes, 2 testes falhando
 
-# (corrige os testes, completa as tasks)
+# (corrige os testes, completa as tarefas)
 
 /devflow-next
-→ ✓ Gate passed. Advancing to V (Validation)...
+→ ✓ Gate aprovado. Avançando para V (Validation)...
 
 # "Quem deveria estar trabalhando agora?"
 /devflow-dispatch
-→ Recommended: test-writer → security-auditor (V phase)
+→ Recomendado: test-writer → security-auditor (fase V)
 
 # "Quero o security-auditor especificamente"
 /devflow-dispatch security-auditor
-→ Loading playbook: security-auditor.md
-→ Running OWASP Top 10 assessment...
+→ Carregando playbook: security-auditor.md
+→ Executando avaliação OWASP Top 10...
 ```
 
 ---
 
-## 9. Agentes em detalhe
+## 10. Agentes em detalhe
 
-### 9.1 Quando cada agente é usado
+### 10.1 Quando cada agente é usado
 
 ```
 P (Planning):
@@ -985,7 +1277,7 @@ E (Execution):
 
 V (Validation):
   code-reviewer      → revisão final do código
-  test-writer        → review de cobertura
+  test-writer        → review de cobertura + test-type adequacy
   security-auditor   → OWASP audit completo
   performance-opt.   → profiling, bottlenecks
 
@@ -995,7 +1287,7 @@ C (Confirmation):
   product-manager    → atualiza PRD
 ```
 
-### 9.2 Sequências comuns
+### 10.2 Sequências comuns
 
 | Tipo de tarefa | Sequência de agentes |
 |----------------|---------------------|
@@ -1008,18 +1300,18 @@ C (Confirmation):
 | Security fix | security-auditor → backend/frontend → test-writer |
 | Performance | performance-optimizer → backend/frontend → test-writer |
 
-### 9.3 Despachar manualmente
+### 10.3 Despachar manualmente
 
 ```bash
 # Ver recomendação
 /devflow-dispatch
-→ Recommended: backend-specialist → test-writer
+→ Recomendado: backend-specialist → test-writer
 
 # Despachar específico
 /devflow-dispatch database-specialist
-→ Loading: database-specialist.md
-→ Mission: Schema design, query optimization, safe migrations
-→ Starting workflow...
+→ Carregando: database-specialist.md
+→ Missão: Design de schema, otimização de queries, migrations seguras
+→ Iniciando workflow...
 
 # Disponíveis:
 /devflow-dispatch architect
@@ -1041,9 +1333,9 @@ C (Confirmation):
 
 ---
 
-## 10. Manutenção do projeto
+## 11. Manutenção do projeto
 
-### 10.1 Atualizar contexto
+### 11.1 Atualizar contexto
 
 Após mudanças significativas (novo módulo, mudança de stack, refactoring grande):
 
@@ -1052,11 +1344,18 @@ Após mudanças significativas (novo módulo, mudança de stack, refactoring gra
 /devflow-sync docs              # Apenas docs
 /devflow-sync agents            # Apenas agents
 /devflow-sync skills            # Apenas skills
+/devflow-sync workflow          # Validar stories.yaml e .context/workflow/
 ```
 
 O sync relê o projeto e atualiza os playbooks com paths, classes e padrões atuais.
 
-### 10.2 Atualizar plugins
+**`/devflow-sync workflow`** faz:
+- Cria `.context/workflow/` se não existir
+- Valida estrutura do `stories.yaml` (campos obrigatórios, status válidos)
+- Detecta referências órfãs em `blocked_by` (IDs que não existem)
+- Sugere `--from-prd` se existe PRD mas não existe `stories.yaml`
+
+### 11.2 Atualizar plugins
 
 A forma mais rápida — dentro do Claude Code:
 ```
@@ -1073,7 +1372,7 @@ Isso executa em sequência:
 <details>
 <summary>Atualização manual (se preferir)</summary>
 
-> ⚠️ **Sempre atualize o marketplace antes do plugin.** O Claude Code resolve versões pelo cache local.
+> **Sempre atualize o marketplace antes do plugin.** O Claude Code resolve versões pelo cache local.
 
 ```bash
 claude plugin marketplace update NEXUZ-SYS
@@ -1098,23 +1397,23 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 
 ---
 
-## 11. Compatibilidade com outras ferramentas
+## 12. Compatibilidade com outras ferramentas
 
 O DevFlow funciona como plugin em múltiplas plataformas:
 
 | Ferramenta | Suporte a subagents | MCP | Hooks |
 |------------|:---:|:---:|:---:|
-| **Claude Code** | ✅ Full | ✅ | ✅ |
-| **Cursor** | ❌ Sequential only | ✅ | ✅ |
-| **Codex** | ✅ Full | ❌ | ❌ |
-| **Gemini CLI** | ❌ Sequential only | ✅ | ❌ |
-| **OpenCode** | ❌ Sequential only | ✅ | ❌ |
+| **Claude Code** | Completo | Completo | Completo |
+| **Cursor** | Apenas sequencial | Completo | Completo |
+| **Codex** | Completo | -- | -- |
+| **Gemini CLI** | Apenas sequencial | Completo | -- |
+| **OpenCode** | Apenas sequencial | Completo | -- |
 
 Quando subagents não estão disponíveis, o DevFlow usa `superpowers:executing-plans` (execução sequencial) em vez de `superpowers:subagent-driven-development`.
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Modo aparece como "Minimal" quando esperava "Full"
 
@@ -1187,9 +1486,25 @@ claude
 
 Normal para projetos grandes — análise semântica pode levar 1-3 min. Projetos com 1000+ arquivos podem demorar mais.
 
+### Loop autônomo não avança (stall)
+
+```bash
+# Verificar stories.yaml
+cat .context/workflow/stories.yaml
+
+# Causas comuns:
+# 1. Dependência circular em blocked_by
+# 2. Todas as stories elegíveis estão escalated
+# 3. max_consecutive_failures atingido → downgrade para supervised
+```
+
+### Story fica em "in_progress" indefinidamente
+
+Isso pode acontecer se a sessão Claude morreu durante a execução. O loop autônomo trata `in_progress` como prioridade máxima — na próxima iteração, a story será retomada automaticamente.
+
 ---
 
-## 13. Referência rápida
+## 14. Referência rápida
 
 ### Comandos
 
@@ -1206,12 +1521,16 @@ Normal para projetos grandes — análise semântica pode levar 1-3 min. Projeto
 /devflow update                        # Atualizar tudo (marketplace + plugins + dotcontext)
 /devflow prd                           # Gerar roadmap de produto
 /devflow prd --status                  # Ver progresso do PRD
+/devflow autonomy:assisted <desc>      # Workflow com execução automática
+/devflow autonomy:autonomous <desc>    # Loop autônomo completo
+/devflow autonomy:autonomous --from-prd  # Autônomo a partir do PRD existente
 /devflow-status                        # Fase atual e progresso
 /devflow-next                          # Avançar de fase
 /devflow-dispatch                      # Recomendar agente
 /devflow-dispatch <role>               # Despachar agente
 /devflow-sync                          # Atualizar .context/
 /devflow-sync docs|agents|skills       # Atualizar parcial
+/devflow-sync workflow                 # Validar workflow e stories.yaml
 ```
 
 ### Instalação (copie e cole)
@@ -1236,4 +1555,12 @@ cd meu-projeto && claude
 /devflow add minha feature             # Workflow direto
 /devflow-status                        # Acompanhar
 /devflow-next                          # Avançar
+```
+
+### Primeiro loop autônomo
+
+```bash
+/devflow prd                                    # Gerar roadmap
+/devflow autonomy:autonomous --from-prd         # Converter PRD em stories e executar
+/devflow-status                                 # Acompanhar progresso
 ```
