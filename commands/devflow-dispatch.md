@@ -45,11 +45,11 @@ Context: "add JWT authentication" (E phase, MEDIUM scale)
 ## Available Roles
 
 ```
-architect               feature-developer       bug-fixer
-code-reviewer           test-writer             documentation-writer
-refactoring-specialist  performance-optimizer   security-auditor
-backend-specialist      frontend-specialist     database-specialist
-devops-specialist       mobile-specialist
+architect               product-manager         feature-developer
+bug-fixer               code-reviewer           test-writer
+documentation-writer    refactoring-specialist  performance-optimizer
+security-auditor        backend-specialist      frontend-specialist
+database-specialist     devops-specialist       mobile-specialist
 ```
 
 ## Mode Behavior

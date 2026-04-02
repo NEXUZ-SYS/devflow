@@ -14,7 +14,7 @@ DevFlow detects available systems at session start and operates in the highest a
 
 | Mode | Requirements | Capabilities |
 |------|-------------|-------------|
-| **Full** | superpowers installed + dotcontext MCP running | PREVC workflow, 14 agents with MCP orchestration, semantic context, multi-tool sync |
+| **Full** | superpowers installed + dotcontext MCP running | PREVC workflow, 15 agents with MCP orchestration, semantic context, multi-tool sync |
 | **Lite** | superpowers installed + `.context/` directory exists | PREVC workflow, agent playbooks (direct read), plans, no semantic/sync |
 | **Minimal** | superpowers installed (or standalone) | Brainstorming, TDD, SDD, code review — linear flow without PREVC |
 
@@ -92,7 +92,7 @@ All skills follow superpowers format (YAML frontmatter with `name` + `descriptio
 
 ## 5. Agent Playbooks
 
-14 agents from dotcontext, adapted to reference superpowers skills. Format:
+15 agents from dotcontext, adapted to reference superpowers skills. Format:
 
 ```yaml
 ---

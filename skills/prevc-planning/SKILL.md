@@ -59,7 +59,7 @@ The superpowers brainstorming skill runs the full 9-step process:
 9. Transition to writing-plans
 
 **DevFlow addition:** When proposing approaches, annotate each with:
-- Which agents would be involved (from the 14 available)
+- Which agents would be involved (from the 15 available)
 - Which existing code/patterns to leverage (from context)
 - Estimated scale (QUICK/SMALL/MEDIUM/LARGE)
 

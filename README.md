@@ -10,16 +10,17 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 
 ## O que você ganha
 
-- **Workflow PREVC** — 5 fases com gates: Planning → Review → Execution → Validation → Confirmation
-- **Escala adaptativa** — DevFlow detecta a complexidade e ajusta o fluxo automaticamente
-- **15 agentes especialistas** — architect, backend, frontend, security-auditor, product-manager e mais
+- **Workflow PREVC** — 5 fases com gates automáticos: Planning → Review → Execution → Validation → Confirmation
+- **Escala adaptativa** — DevFlow detecta a complexidade e ajusta o fluxo (QUICK/SMALL/MEDIUM/LARGE)
+- **15 agentes especialistas** — architect, product-manager, backend, frontend, security-auditor e mais
 - **25+ skills** — API design, refactoring, debugging, test generation, security audit, PRD generation...
 - **TDD obrigatório** — RED → GREEN → REFACTOR, sem atalhos
 - **Brainstorming socrático** — 9 etapas de refinamento antes de escrever código
 - **Code review em 2 estágios** — revisão estruturada com anti-racionalização
-- **PRD generation** — `/devflow prd` gera roadmap de produto com o agente product-manager
-- **Checkpoint automático** — `last.json` persiste estado do workflow entre sessões
-- **Git strategy inteligente** — auto-detecta branch-flow, worktree ou trunk-based; proteção de branches
+- **PRD generation** — `/devflow prd` gera roadmap de produto completo com entrevista socrática, RICE scoring e fases
+- **Git strategy inteligente** — gate bloqueante que detecta branch-flow, worktree ou trunk-based; protege branches automaticamente via hook
+- **Checkpoint e rehydration** — `last.json` persiste estado do workflow entre sessões; hooks PreCompact/PostCompact salvam e restauram contexto após compactação
+- **Context sync** — `/devflow-sync` mantém `.context/` atualizado com o estado real do projeto
 - **Scaffolding inteligente** — `/devflow init` analisa seu projeto e gera agentes, skills e docs personalizados em `.context/`
 - **3 modos** — Full (MCP), Lite (.context/), Minimal (standalone) — funciona com o que você tiver instalado
 
@@ -104,9 +105,10 @@ Dentro do Claude Code:
 
 O que acontece:
 1. Analisa o projeto (stack, estrutura, padrões)
-2. Instala o MCP server do dotcontext (`.mcp.json`)
+2. Instala o MCP server do dotcontext (`.mcp.json`) — se disponível
 3. Scaffolda `.context/` com agentes, skills e docs personalizados
-4. Detecta o modo automaticamente (Full/Lite/Minimal)
+4. Configura git strategy (branch protection, isolamento)
+5. Detecta o modo automaticamente (Full/Lite/Minimal)
 
 ---
 
@@ -160,16 +162,17 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 /devflow scale:MEDIUM add sistema de cache com Redis
 /devflow scale:LARGE migrar de REST para GraphQL
 
-# Gerar PRD (roadmap de produto)
+# Gerar PRD (roadmap de produto com entrevista socrática)
 /devflow prd
+
+# Ver status do PRD
+/devflow prd --status
 
 # Atualizar contexto do projeto (.context/)
 /devflow-sync
-
-# Atualizar apenas docs
 /devflow-sync docs
 
-# Ver progresso
+# Ver progresso do workflow
 /devflow-status
 
 # Avançar para próxima fase
@@ -197,10 +200,11 @@ Para ver todos os comandos e capabilities:
 | `/devflow init` | Inicializa DevFlow no projeto (se já existe `.context/`, executa sync) |
 | `/devflow <descrição>` | Inicia workflow (auto-detecta escala) |
 | `/devflow scale:X <desc>` | Inicia com escala explícita (QUICK/SMALL/MEDIUM/LARGE) |
-| `/devflow prd` | Gera PRD (Product Requirements Document) com o agente product-manager |
+| `/devflow prd` | Gera PRD com entrevista socrática, RICE scoring e roadmap faseado |
+| `/devflow prd --status` | Mostra progresso das fases do PRD |
 | `/devflow-sync` | Atualiza `.context/` com o estado atual do projeto |
 | `/devflow-sync <escopo>` | Atualiza apenas `docs`, `agents` ou `skills` |
-| `/devflow-status` | Mostra fase atual, progresso e modo |
+| `/devflow-status` | Mostra fase atual, progresso, modo e status do PRD (se existir) |
 | `/devflow-next` | Avança para próxima fase (valida gates) |
 | `/devflow-dispatch` | Recomenda agente para o contexto atual |
 | `/devflow-dispatch <role>` | Despacha um agente especialista |
@@ -235,7 +239,7 @@ Para ver todos os comandos e capabilities:
 | Agente | Papel | Fases |
 |--------|-------|-------|
 | architect | Design de sistema e componentes | P, R |
-| product-manager | Estratégia de produto, PRDs e roadmaps | P |
+| product-manager | Estratégia de produto, PRDs e roadmaps | P, C |
 | feature-developer | Implementação de features | E |
 | bug-fixer | Correção de bugs | E |
 | code-reviewer | Revisão de qualidade | R, V |
@@ -256,7 +260,7 @@ Para ver todos os comandos e capabilities:
 
 | Modo | O que precisa | O que ganha |
 |------|--------------|-------------|
-| **Full** | superpowers + dotcontext MCP | Tudo: PREVC, agentes via MCP, análise semântica, sync multi-tool |
+| **Full** | superpowers + dotcontext MCP | Tudo: PREVC, 15 agentes via MCP, análise semântica, sync multi-tool |
 | **Lite** | superpowers + `.context/` | PREVC, playbooks de agentes (leitura direta), planos |
 | **Minimal** | superpowers (ou standalone) | Brainstorming, TDD, SDD, code review — fluxo linear |
 
@@ -264,25 +268,73 @@ O modo é detectado automaticamente ao iniciar a sessão. Verifique com `/devflo
 
 ---
 
+## Capabilities on-demand
+
+Skills que podem ser usadas a qualquer momento, mesmo fora de um workflow — basta pedir em linguagem natural:
+
+| Capability | Exemplo |
+|------------|---------|
+| API Design | "design the API for user endpoints" |
+| Bug Investigation | "investigate the timeout in login" |
+| Commit Messages | "write a commit message for these changes" |
+| Feature Breakdown | "break down the caching feature" |
+| Git Strategy | "what branch strategy for this feature?" |
+| PRD Generation | "generate a product roadmap" |
+| PR Review | "review this PR" / "create a PR" |
+| Refactoring | "refactor the payment module safely" |
+| Security Audit | "audit the auth code for vulnerabilities" |
+| Test Generation | "generate tests for the user service" |
+| Documentation | "update the docs for the auth module" |
+| Brainstorming | "let's brainstorm the search feature" |
+| TDD | "implement with TDD" |
+| Debugging | "debug the memory leak in worker" |
+| Code Review | "review my implementation" |
+
+---
+
 ## Como o DevFlow conecta tudo
 
 ```
-┌─────────────────────────────────────────────┐
-│                  DevFlow                     │
-│         (skills + agents + hooks)            │
-├──────────────────┬──────────────────────────┤
-│   superpowers    │       dotcontext          │
-│   (disciplina)   │   (contexto + workflow)   │
-├──────────────────┼──────────────────────────┤
-│ brainstorming    │ fases PREVC              │
-│ TDD iron law     │ 15 agentes              │
-│ SDD (subagents)  │ análise semântica        │
-│ code review 2x   │ gestão de planos        │
-│ anti-racional.   │ sync multi-tool          │
-│ git worktrees    │ escala adaptativa        │
-│ PRD generation   │ checkpoint (last.json)   │
-└──────────────────┴──────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                      DevFlow                         │
+│          (skills + agents + hooks + gates)            │
+├────────────────────┬─────────────────────────────────┤
+│    superpowers      │          dotcontext              │
+│    (disciplina)     │    (contexto + workflow)         │
+├────────────────────┼─────────────────────────────────┤
+│ brainstorming       │ fases PREVC                     │
+│ TDD iron law        │ 15 agentes via MCP              │
+│ SDD (subagents)     │ análise semântica               │
+│ code review 2x      │ gestão de planos                │
+│ anti-racional.      │ sync multi-tool                 │
+│ git worktrees       │ escala adaptativa               │
+├────────────────────┴─────────────────────────────────┤
+│              DevFlow-only features                    │
+├──────────────────────────────────────────────────────┤
+│ PRD generation (product-manager + RICE + MoSCoW)     │
+│ git-strategy gate (branch protection via hook)       │
+│ checkpoint/rehydration (PreCompact + PostCompact)    │
+│ context-sync (/devflow-sync)                         │
+│ scale routing (QUICK/SMALL/MEDIUM/LARGE)             │
+└──────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Persistência entre sessões
+
+O DevFlow mantém o estado do workflow através de sessões usando um sistema de checkpoint:
+
+1. **PreCompact hook** — Antes de cada compactação de contexto, salva um snapshot em `.context/workflow/.checkpoint/last.json` contendo:
+   - Estado do git (branch, último commit, arquivos modificados)
+   - Handoff notes (onde o trabalho parou)
+   - Plano ativo (conteúdo do plano PREVC em execução)
+
+2. **PostCompact hook** — Após a compactação, injeta o snapshot no contexto do modelo para retomar de onde parou.
+
+3. **Handoff contínuo** — O arquivo `.context/workflow/.checkpoint/handoff.md` é mantido atualizado durante o workflow, servindo como "diário" do progresso.
+
+Isso significa que mesmo quando o Claude Code compacta o contexto (em conversas longas), o DevFlow consegue retomar o trabalho sem perda de estado.
 
 ---
 
@@ -291,11 +343,11 @@ O modo é detectado automaticamente ao iniciar a sessão. Verifique com `/devflo
 ```
 devflow/
 ├── commands/         # /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch
-├── skills/           # 25+ skills (PREVC, bridge, on-demand, PRD, context-sync)
+├── skills/           # 25+ skills (PREVC, bridge, on-demand, PRD, context-sync, git-strategy)
 ├── agents/           # 15 playbooks de agentes (fallback genérico)
 ├── templates/        # Templates para scaffolding do .context/
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse
-├── references/       # Mapa de skills + mapeamento de ferramentas
+├── references/       # Mapa de skills + mapeamento de ferramentas por plataforma
 ├── .claude-plugin/   # Manifesto do plugin para Claude Code
 └── .cursor-plugin/   # Manifesto do plugin para Cursor
 ```
@@ -303,11 +355,30 @@ devflow/
 ### Gerado por projeto (via `/devflow init`)
 ```
 seu-projeto/
-└── .context/         # Compatível com dotcontext, específico do projeto
-    ├── agents/       # Playbooks personalizados para o projeto
-    ├── skills/       # Guias de skills para o projeto
-    ├── docs/         # Documentação do projeto
-    └── plans/        # Planos dos workflows PREVC
+├── .mcp.json                          ← config do MCP (se dotcontext instalado)
+└── .context/                          ← contexto do projeto (compatível dotcontext)
+    ├── agents/
+    │   ├── architect.md               ← playbook personalizado para o projeto
+    │   ├── product-manager.md
+    │   ├── backend-specialist.md
+    │   ├── code-reviewer.md
+    │   ├── test-writer.md
+    │   └── ...
+    ├── skills/
+    │   ├── code-review/SKILL.md
+    │   ├── test-generation/SKILL.md
+    │   ├── commit-message/SKILL.md
+    │   └── ...
+    ├── docs/
+    │   ├── project-overview.md        ← visão geral gerada por AI
+    │   ├── codebase-map.json          ← mapa semântico do codebase
+    │   ├── development-workflow.md    ← inclui git strategy configurada
+    │   └── testing-strategy.md
+    ├── plans/                         ← planos dos workflows PREVC e PRDs
+    └── workflow/
+        └── .checkpoint/               ← estado persistido entre sessões
+            ├── last.json              ← snapshot (git, handoff, plano)
+            └── handoff.md             ← diário de progresso
 ```
 
 ---
@@ -322,6 +393,8 @@ seu-projeto/
 | Plugin não atualiza (versão antiga) | `claude plugin marketplace update NEXUZ-SYS` antes do update. Se persistir: `rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/` e reinstale |
 | Skills não aparecem | Verifique: `cat ~/.claude/plugins/installed_plugins.json \| grep devflow` |
 | `context.fill()` demora | Normal — análise de codebase grande leva 1-3 minutos |
+| Edit/Write bloqueado em main | O git-strategy hook protege branches. Crie uma branch de trabalho com `/devflow-dispatch` ou aceite a sugestão automática |
+| Contexto perdido após compactação | Verifique `.context/workflow/.checkpoint/last.json` — o PostCompact hook deve reinjetar automaticamente |
 
 ---
 

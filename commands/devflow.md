@@ -68,12 +68,12 @@ PHASES (PREVC)
   V  Validation     Tests, security audit, spec compliance
   C  Confirmation   Branch finish, docs update, PR creation
 
-AGENTS (14 specialists)
-  architect               feature-developer       bug-fixer
-  code-reviewer           test-writer             documentation-writer
-  refactoring-specialist  performance-optimizer   security-auditor
-  backend-specialist      frontend-specialist     database-specialist
-  devops-specialist       mobile-specialist
+AGENTS (15 specialists)
+  architect               product-manager         feature-developer
+  bug-fixer               code-reviewer           test-writer
+  documentation-writer    refactoring-specialist  performance-optimizer
+  security-auditor        backend-specialist      frontend-specialist
+  database-specialist     devops-specialist       mobile-specialist
 
 ON-DEMAND CAPABILITIES (used automatically or via natural language)
   API Design              "design the API for user endpoints"
@@ -84,6 +84,7 @@ ON-DEMAND CAPABILITIES (used automatically or via natural language)
   Feature Breakdown       "break down the caching feature"
   Git Strategy            "what branch strategy for this feature?"
   Parallel Dispatch       "run these tasks in parallel"
+  PRD Generation          "generate a product roadmap"
   PR Review               "review this PR" / "create a PR"
   Refactoring             "refactor the payment module safely"
   Security Audit          "audit the auth code for vulnerabilities"
@@ -163,7 +164,7 @@ QUICK REFERENCE
   Break down a big feature      "break down the X feature"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DevFlow v0.1.0 — https://github.com/NEXUZ-SYS/devflow
+  DevFlow v0.5.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 

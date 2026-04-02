@@ -307,7 +307,7 @@ Only scaffold agents relevant to the detected project type:
 
 | Project Type | Agents to scaffold |
 |-------------|-------------------|
-| All | architect, code-reviewer, test-writer, documentation-writer |
+| All | architect, product-manager, code-reviewer, test-writer, documentation-writer |
 | Web/Mobile | + frontend-specialist |
 | API/Web | + backend-specialist |
 | Has DB | + database-specialist |

@@ -30,7 +30,7 @@ DevFlow detects your environment at session start and operates in the highest av
 
 | Mode | What's available | Capabilities |
 |------|-----------------|-------------|
-| **Full** | superpowers + dotcontext MCP | PREVC workflow, 14 agents via MCP, semantic context, multi-tool sync |
+| **Full** | superpowers + dotcontext MCP | PREVC workflow, 15 agents via MCP, semantic context, multi-tool sync |
 | **Lite** | superpowers + `.context/` dir | PREVC workflow, agent playbooks (read directly), plans — no semantic/sync |
 | **Minimal** | standalone | Brainstorming, TDD, SDD, code review — linear flow without PREVC phases |
 
@@ -75,6 +75,8 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:commit-message` | Writing clear conventional commit messages |
 | `devflow:documentation` | Writing, updating, or reviewing documentation |
 | `devflow:feature-breakdown` | Decomposing large features into implementable chunks |
+| `devflow:git-strategy` | Selecting git workflow (branch-flow, worktree, trunk-based), branch protection |
+| `devflow:prd-generation` | Generating Product Requirements Documents with phased roadmap |
 | `devflow:pr-review` | Creating or reviewing pull requests |
 | `devflow:refactoring` | Restructuring code without changing behavior |
 | `devflow:security-audit` | OWASP-based security assessment |
@@ -100,10 +102,12 @@ When starting a workflow, DevFlow auto-detects or accepts explicit scale:
 |---------|--------|
 | `/devflow [description]` | Start a new PREVC workflow (auto-scales) |
 | `/devflow scale:X [description]` | Start with explicit scale (QUICK/SMALL/MEDIUM/LARGE) |
+| `/devflow prd` | Generate or update product PRD with phased roadmap |
 | `/devflow-status` | Show current phase, progress, and available actions |
 | `/devflow-next` | Attempt to advance to next phase (checks gates) |
 | `/devflow-dispatch` | List available agents for current phase and mode |
 | `/devflow-dispatch <role>` | Dispatch a specific agent |
+| `/devflow-sync [scope]` | Update .context/ with current project state (docs/agents/skills) |
 
 ## Superpowers Integration
 

@@ -11,11 +11,12 @@ Discovers and invokes specialist agents based on task requirements and current P
 
 ## Available Agents
 
-DevFlow provides 14 specialist agents, each with defined roles and phase participation:
+DevFlow provides 15 specialist agents, each with defined roles and phase participation:
 
 | Agent | Role | Phases | When to use |
 |-------|------|--------|-------------|
 | architect | architect | P, R | System design, technical decisions, scalability review |
+| product-manager | strategist | P | Product strategy, PRDs, roadmap definition, prioritization |
 | feature-developer | developer | E | Feature implementation following specs |
 | bug-fixer | developer | E | Root cause analysis and targeted fixes |
 | code-reviewer | reviewer | R, V | Code quality, patterns, best practices review |
@@ -54,6 +55,7 @@ Match task keywords to agent roles:
 - "refactor", "restructure", "clean up" → refactoring-specialist
 - "docs", "README", "API docs" → documentation-writer
 - "architecture", "design", "system" → architect
+- "product", "roadmap", "PRD", "requirements" → product-manager
 
 **Minimal Mode:**
 No agent dispatch — proceed with general-purpose approach.
