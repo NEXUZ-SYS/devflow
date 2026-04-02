@@ -55,11 +55,34 @@ Auto-detect from the task description, or accept explicit `scale:X`:
 
 If ambiguous, ask the user: "This could be SMALL or MEDIUM. Which scale fits better?"
 
+## Step 2.5: Determine Autonomy
+
+Parse the `autonomy:X` parameter from the command, or default to `supervised`:
+
+| Parameter | Mode | Behavior |
+|-----------|------|----------|
+| `autonomy:supervised` (default) | Supervised | Human approves each phase transition |
+| `autonomy:assisted` | Assisted | Human in P+R, autonomous E, human in V+C |
+| `autonomy:autonomous` | Autonomous | All phases run without human intervention |
+| `auto` (alias) | Autonomous | Shorthand for `autonomy:autonomous` |
+
+**Autonomy affects phase behavior:**
+
+| Phase | supervised | assisted | autonomous |
+|-------|-----------|----------|------------|
+| **P** | Socratic brainstorming with human | Socratic brainstorming with human | Auto-generate spec + plan + stories.yaml |
+| **R** | Human reviews | Human reviews | Agents review (escalate on BLOCK) |
+| **E** | Sequential with checkpoints | Autonomous loop (stories.yaml) | Autonomous loop (stories.yaml) |
+| **V** | Human reviews findings | Human reviews findings | Agent reviews (escalate on critical) |
+| **C** | Human confirms PR | Human confirms PR | Auto-create PR with summary |
+
+Pass the autonomy mode to each phase skill as context. Phase skills check the autonomy mode and adapt their behavior accordingly.
+
 ## Step 3: Initialize Workflow
 
 ### Full Mode
 ```
-workflow-init({ name: "<task-slug>", scale: "<SCALE>" })
+workflow-init({ name: "<task-slug>", scale: "<SCALE>", autonomous: <true if autonomy is autonomous> })
 ```
 
 ### Lite/Minimal Mode
@@ -155,3 +178,6 @@ Read these files if they exist:
 - Respect gates: no advancing without meeting requirements
 - Scale can be adjusted mid-workflow if scope changes (with user approval)
 - In Full mode, use `workflow-status()` to check current state at any time
+- Autonomy mode is passed to phase skills as context — each skill adapts its behavior
+- `autonomous` mode still respects all quality gates — it just doesn't ask the human
+- If autonomy mode causes a phase to fail, the skill can downgrade to `assisted` automatically
