@@ -20,6 +20,28 @@ Check the DevFlow mode from session context:
 - **Lite mode**: Track phases manually, read `.context/` files directly
 - **Minimal mode**: Fall back to linear superpowers flow (brainstorm → plan → execute)
 
+## Step 1.5: Check for PRD
+
+Before detecting scale, check if a PRD exists:
+
+1. Search for `.context/plans/*-prd.md`
+2. **If found:**
+   a. Read the PRD file
+   b. Find the first phase with status `⬚ Pending` or `⏳ In Progress`
+   c. If no pending phases → announce "All PRD phases are complete!" and stop
+   d. Use that phase's **Scope** as the task description
+   e. Use that phase's **MoSCoW** to suggest scale:
+      - Must Have → MEDIUM or LARGE
+      - Should Have → SMALL or MEDIUM
+      - Could Have → SMALL
+   f. Mark the phase as `⏳ In Progress` in the PRD file
+   g. Announce: "Starting PREVC for Phase N: <name> (from PRD)"
+   h. Continue to Step 2 with the phase scope as task description
+3. **If not found:**
+   a. Continue current flow (no change)
+
+**Tip:** If the user runs `/devflow <description>` and a PRD exists, check if the description matches a PRD phase. If it does, use the PRD phase context. If it doesn't, run as a standalone workflow (not all work needs to be in the PRD).
+
 ## Step 2: Determine Scale
 
 Auto-detect from the task description, or accept explicit `scale:X`:

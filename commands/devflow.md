@@ -14,6 +14,8 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow help                          # Show full help
 /devflow init                          # Initialize DevFlow in this project
 /devflow <description>                 # Auto-detect scale and start workflow
+/devflow prd                           # Generate or update product PRD
+/devflow prd --status                  # Show PRD phase status
 /devflow scale:QUICK <description>     # Explicit scale
 /devflow scale:SMALL <description>
 /devflow scale:MEDIUM <description>
@@ -43,6 +45,8 @@ Display the help text below. Output it **exactly as-is** (formatted for terminal
 COMMANDS
   /devflow help               Show this help
   /devflow init               Initialize DevFlow (or sync if already exists)
+  /devflow prd                Generate or update product PRD
+  /devflow prd --status       Show PRD phase status
   /devflow <desc>             Start workflow (auto-detects scale)
   /devflow-status             Show current phase, progress, and mode
   /devflow-next               Advance to next phase (checks gates)
@@ -142,6 +146,8 @@ EXAMPLES
 QUICK REFERENCE
   I want to...                  Use this
   ─────────────────────────────────────────────────────
+  Define product roadmap        /devflow prd
+  Check roadmap progress        /devflow prd --status
   Start a new feature           /devflow <description>
   Fix a bug                     /devflow scale:QUICK <desc>
   Update project context        /devflow-sync
@@ -160,6 +166,16 @@ QUICK REFERENCE
   DevFlow v0.1.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+### `/devflow prd`
+1. Invoke `devflow:prd-generation` skill
+2. Auto-detects Modo A (new project) vs Modo B (existing codebase)
+3. Generates complete PRD with phased roadmap in `.context/plans/<project>-prd.md`
+
+### `/devflow prd --status`
+1. Read `.context/plans/*-prd.md`
+2. If found: display phase summary with status indicators (✓ ⏳ ⬚)
+3. If not found: suggest running `/devflow prd` first
 
 ### `/devflow init`
 1. Invoke `devflow:project-init` skill
@@ -183,5 +199,7 @@ QUICK REFERENCE
 
 - `help` — display the full help reference
 - `init` — triggers project initialization (devflow:project-init)
+- `prd` — generate or update product PRD (devflow:prd-generation)
+- `prd --status` — display PRD phase status
 - `scale:X` — optional explicit scale (QUICK/SMALL/MEDIUM/LARGE)
 - Everything else is passed as the task description to the PREVC flow orchestrator

@@ -111,12 +111,33 @@ Present a summary:
 workflow-status()  # Final status check
 ```
 
+## Step 5.5: Update PRD (if exists)
+
+After the completion summary, check if this workflow is part of a PRD:
+
+1. Search for `.context/plans/*-prd.md`
+2. **If found:**
+   a. Find the phase marked `⏳ In Progress`
+   b. Update its status to `✓ Completed`
+   c. Fill in the Spec path: `docs/superpowers/specs/YYYY-MM-DD-<phase>-design.md`
+   d. Fill in the Plan path: `docs/superpowers/plans/YYYY-MM-DD-<phase>.md`
+   e. Find the next phase with status `⬚ Pending`
+   f. **If next phase exists:**
+      - Announce: "Phase N (<name>) completed and marked in PRD. Next up: Phase N+1 (<name>). Start planning Phase N+1?"
+      - If user says yes → invoke `devflow:prevc-flow` (which will pick up the next phase via Step 1.5)
+      - If user says no → end workflow
+   g. **If no more phases:**
+      - Announce: "All PRD phases complete! Product roadmap fully delivered."
+3. **If not found:**
+   a. No change (current behavior)
+
 ## Step 6: Gate Check (Workflow Complete)
 
 The Confirmation gate marks the workflow as complete:
 - Branch finalized (merged or ready to merge)
 - Documentation updated
 - Context synced (Full mode)
+- PRD updated (if exists)
 
 **Workflow is now COMPLETE.**
 

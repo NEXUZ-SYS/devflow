@@ -41,6 +41,39 @@ Next gate: all tasks complete + tests passing → V (Validation)
 - **Full mode:** Uses `workflow-status()` MCP tool
 - **Lite/Minimal mode:** Reads from task list tracking
 
+## PRD Status
+
+If `.context/plans/*-prd.md` exists, display PRD phase overview **above** the current workflow status:
+
+```
+PRD: DevFlow Plugin
+  Phase 1: Core Framework          ✓ Completed
+  Phase 2: Superpowers Integration  ✓ Completed
+  Phase 3: Agent Orchestration      ⏳ In Progress ← current
+  Phase 4: Documentation & Polish   ⬚ Pending
+
+Active Phase: 3 of 4
+```
+
+If both PRD and active workflow exist, show both:
+
+```
+PRD: DevFlow Plugin
+  Phase 1: Core Framework          ✓ Completed
+  Phase 2: Superpowers Integration  ✓ Completed
+  Phase 3: Agent Orchestration      ⏳ In Progress ← current
+  Phase 4: Documentation & Polish   ⬚ Pending
+
+Workflow: "Phase 3 — Agent Orchestration" (MEDIUM)
+  P Planning      ✓ Complete
+  R Review        ✓ Complete
+  E Execution     ● In Progress (7/12 tasks)
+  V Validation    ○ Pending
+  C Confirmation  ○ Pending
+```
+
+If `/devflow prd --status` is used, show only the PRD section.
+
 ## No Active Workflow
 
 If no workflow is active, display:
@@ -50,4 +83,5 @@ DevFlow Mode: full | superpowers ✓ | dotcontext MCP ✓
 
 No active workflow. Start one with:
   /devflow <description>
+  /devflow prd              (generate product roadmap)
 ```
