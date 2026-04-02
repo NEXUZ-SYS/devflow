@@ -12,11 +12,14 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 
 - **Workflow PREVC** — 5 fases com gates: Planning → Review → Execution → Validation → Confirmation
 - **Escala adaptativa** — DevFlow detecta a complexidade e ajusta o fluxo automaticamente
-- **14 agentes especialistas** — architect, backend, frontend, security-auditor, test-writer e mais
-- **21 skills** — API design, refactoring, debugging, test generation, security audit...
+- **15 agentes especialistas** — architect, backend, frontend, security-auditor, product-manager e mais
+- **25+ skills** — API design, refactoring, debugging, test generation, security audit, PRD generation...
 - **TDD obrigatório** — RED → GREEN → REFACTOR, sem atalhos
 - **Brainstorming socrático** — 9 etapas de refinamento antes de escrever código
 - **Code review em 2 estágios** — revisão estruturada com anti-racionalização
+- **PRD generation** — `/devflow prd` gera roadmap de produto com o agente product-manager
+- **Checkpoint automático** — `last.json` persiste estado do workflow entre sessões
+- **Git strategy inteligente** — auto-detecta branch-flow, worktree ou trunk-based; proteção de branches
 - **Scaffolding inteligente** — `/devflow init` analisa seu projeto e gera agentes, skills e docs personalizados em `.context/`
 - **3 modos** — Full (MCP), Lite (.context/), Minimal (standalone) — funciona com o que você tiver instalado
 
@@ -157,6 +160,9 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 /devflow scale:MEDIUM add sistema de cache com Redis
 /devflow scale:LARGE migrar de REST para GraphQL
 
+# Gerar PRD (roadmap de produto)
+/devflow prd
+
 # Atualizar contexto do projeto (.context/)
 /devflow-sync
 
@@ -191,6 +197,7 @@ Para ver todos os comandos e capabilities:
 | `/devflow init` | Inicializa DevFlow no projeto (se já existe `.context/`, executa sync) |
 | `/devflow <descrição>` | Inicia workflow (auto-detecta escala) |
 | `/devflow scale:X <desc>` | Inicia com escala explícita (QUICK/SMALL/MEDIUM/LARGE) |
+| `/devflow prd` | Gera PRD (Product Requirements Document) com o agente product-manager |
 | `/devflow-sync` | Atualiza `.context/` com o estado atual do projeto |
 | `/devflow-sync <escopo>` | Atualiza apenas `docs`, `agents` ou `skills` |
 | `/devflow-status` | Mostra fase atual, progresso e modo |
@@ -223,11 +230,12 @@ Para ver todos os comandos e capabilities:
 
 ---
 
-## Agentes (14 especialistas)
+## Agentes (15 especialistas)
 
 | Agente | Papel | Fases |
 |--------|-------|-------|
 | architect | Design de sistema e componentes | P, R |
+| product-manager | Estratégia de produto, PRDs e roadmaps | P |
 | feature-developer | Implementação de features | E |
 | bug-fixer | Correção de bugs | E |
 | code-reviewer | Revisão de qualidade | R, V |
@@ -267,11 +275,12 @@ O modo é detectado automaticamente ao iniciar a sessão. Verifique com `/devflo
 │   (disciplina)   │   (contexto + workflow)   │
 ├──────────────────┼──────────────────────────┤
 │ brainstorming    │ fases PREVC              │
-│ TDD iron law     │ 14 agentes              │
+│ TDD iron law     │ 15 agentes              │
 │ SDD (subagents)  │ análise semântica        │
 │ code review 2x   │ gestão de planos        │
 │ anti-racional.   │ sync multi-tool          │
 │ git worktrees    │ escala adaptativa        │
+│ PRD generation   │ checkpoint (last.json)   │
 └──────────────────┴──────────────────────────┘
 ```
 
@@ -282,8 +291,8 @@ O modo é detectado automaticamente ao iniciar a sessão. Verifique com `/devflo
 ```
 devflow/
 ├── commands/         # /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch
-├── skills/           # 24 skills (PREVC, bridge, on-demand, context-sync)
-├── agents/           # 14 playbooks de agentes (fallback genérico)
+├── skills/           # 25+ skills (PREVC, bridge, on-demand, PRD, context-sync)
+├── agents/           # 15 playbooks de agentes (fallback genérico)
 ├── templates/        # Templates para scaffolding do .context/
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse
 ├── references/       # Mapa de skills + mapeamento de ferramentas

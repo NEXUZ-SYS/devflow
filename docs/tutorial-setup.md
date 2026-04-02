@@ -95,7 +95,7 @@ Neste ponto você tem tudo instalado na máquina. Agora precisa inicializar em c
 ```
 ✅ Claude Code          — runtime
 ✅ superpowers plugin   — disciplina (TDD, brainstorming, code review)
-✅ devflow plugin       — workflow PREVC, agentes, skills
+✅ devflow plugin       — workflow PREVC, 15 agentes, 25+ skills
 ✅ dotcontext CLI       — análise semântica, MCP (opcional)
 ```
 
@@ -303,7 +303,18 @@ O sync é útil após mudanças significativas — novo módulo, mudança de sta
 /devflow-dispatch backend-specialist
 ```
 
-### 4.6 Testar capabilities on-demand
+### 4.6 Testar PRD generation
+
+```
+/devflow prd
+```
+
+O que acontece:
+1. O agente **product-manager** analisa o projeto
+2. Gera um PRD (Product Requirements Document) com visão, objetivos, requisitos e roadmap
+3. Usa um loop PREVC multi-fase para refinar o documento
+
+### 4.7 Testar capabilities on-demand
 
 As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um workflow. Basta pedir em linguagem natural:
 
@@ -325,6 +336,9 @@ As capabilities do DevFlow podem ser usadas a qualquer momento, mesmo fora de um
 
 "Qual a melhor estratégia de branch para essa feature?"
 → DevFlow ativa Git Strategy
+
+"Gere um PRD para o próximo trimestre"
+→ DevFlow ativa PRD Generation + Product Manager
 ```
 
 ---
@@ -508,4 +522,7 @@ claude
 
 ```bash
 /devflow add minha feature incrível
+
+# Gerar roadmap de produto
+/devflow prd
 ```
