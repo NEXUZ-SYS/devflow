@@ -42,6 +42,21 @@ In all modes: raise concerns with user before starting.
 
 ## Step 3: Execution Mode
 
+### Autonomy Check (before execution mode)
+
+If the workflow has `autonomy: assisted` or `autonomy: autonomous`:
+
+1. Verify `.context/workflow/stories.yaml` exists
+2. If exists: **REQUIRED SUB-SKILL:** Invoke `devflow:autonomous-loop`
+3. If not exists: Fall back to standard execution (stories.yaml should have been generated in Planning)
+4. After the autonomous loop completes:
+   - If all stories completed → proceed to Gate Check (Step 4)
+   - If stories were escalated → human resolves, then resume loop or proceed to Gate Check
+
+**Skip the rest of Step 3** when autonomous-loop is invoked — the loop handles agent dispatch, TDD, and progress tracking internally.
+
+For `autonomy: supervised`, continue with the standard execution flow below.
+
 ### Full Mode (dotcontext owns execution)
 
 **Step 3a — Get agent sequence:**
