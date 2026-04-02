@@ -67,12 +67,16 @@ autonomous_context=""
 stories_file="${project_root}/.context/workflow/stories.yaml"
 if [ -f "$stories_file" ]; then
   # Extract key stats from stories.yaml using grep (no yaml parser needed)
-  autonomy_mode=$(grep '^autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/autonomy: *//' | tr -d '"' || echo "")
-  current_autonomy=$(grep 'current_autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*current_autonomy: *//' | tr -d '"' || echo "")
-  total=$(grep 'total:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*total: *//' || echo "0")
-  completed=$(grep 'completed:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*completed: *//' || echo "0")
-  escalated=$(grep 'escalated:' "$stories_file" 2>/dev/null | head -2 | tail -1 | sed 's/.*escalated: *//' || echo "0")
-  feature=$(grep '^feature:' "$stories_file" 2>/dev/null | head -1 | sed 's/feature: *//' | tr -d '"' || echo "")
+  # Sanitize: strip anything outside safe chars to prevent prompt injection
+  sanitize_str() { printf '%s' "$1" | tr -cd 'a-zA-Z0-9 _./:-'; }
+  sanitize_int() { printf '%s' "$1" | tr -cd '0-9'; }
+
+  autonomy_mode=$(sanitize_str "$(grep '^autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/autonomy: *//' | tr -d '"' || echo "")")
+  current_autonomy=$(sanitize_str "$(grep 'current_autonomy:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*current_autonomy: *//' | tr -d '"' || echo "")")
+  total=$(sanitize_int "$(grep 'total:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*total: *//' || echo "0")")
+  completed=$(sanitize_int "$(grep 'completed:' "$stories_file" 2>/dev/null | head -1 | sed 's/.*completed: *//' || echo "0")")
+  escalated=$(sanitize_int "$(grep 'escalated:' "$stories_file" 2>/dev/null | head -2 | tail -1 | sed 's/.*escalated: *//' || echo "0")")
+  feature=$(sanitize_str "$(grep '^feature:' "$stories_file" 2>/dev/null | head -1 | sed 's/feature: *//' | tr -d '"' || echo "")")
 
   # Guard: skip injection if key fields are empty (malformed YAML)
   if [ -n "$autonomy_mode" ] && [ "$autonomy_mode" != "supervised" ] && [ -n "$total" ] && [ "$total" != "0" ]; then

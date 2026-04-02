@@ -99,9 +99,9 @@ After implementation:
 ### Step 4: Evaluate Result
 
 **If all gates pass:**
-1. Commit changes:
+1. Commit changes (stage only files relevant to the story — avoid `git add -A` which may stage unrelated files):
    ```
-   git add -A
+   git add <relevant files>
    git commit -m "feat(<story.id>): <story.title>"
    ```
 2. Update stories.yaml:
