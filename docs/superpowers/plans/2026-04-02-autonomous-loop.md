@@ -132,15 +132,26 @@ Read `.context/workflow/stories.yaml`. Validate:
 
 If validation fails, escalate to human immediately.
 
+### Step 1.5: Max Iteration Guard
+
+Track the total number of story execution attempts in the loop. If the total exceeds a hard ceiling (default: 50 iterations), exit the loop and generate the final report. This prevents infinite loops from stories that flip-flop between `failed` and `in_progress`.
+
 ### Step 2: Story Selection
 
 Select the next story to execute using this priority:
-1. Stories with `status: failed` and `attempts < max_retries_per_story` (retry first)
-2. Stories with `status: pending` (new work)
-3. Among candidates, pick the one with lowest `priority` value
-4. Skip stories whose `blocked_by` contains any story not yet `completed`
+1. Stories with `status: in_progress` (session died mid-execution — treat as retry)
+2. Stories with `status: failed` and `attempts < max_retries_per_story` (retry)
+3. Stories with `status: pending` (new work)
+4. Among candidates, pick the one with lowest `priority` value
+5. Skip stories whose `blocked_by` contains any story not yet `completed`
+6. If `blocked_by` references a non-existent story ID, treat as an error and escalate that story
 
 If no story is selectable (all blocked, escalated, or completed): exit loop.
+
+**Distinguish exit reasons** for the final report:
+- All stories `completed` → "All stories complete"
+- Some stories `escalated`, rest `completed` → "Loop paused, N stories escalated"
+- Remaining stories all `blocked` (circular deps or deps on escalated stories) → "All remaining stories are blocked. Unblock dependencies or re-plan."
 
 ### Step 3: Execute Story
 
@@ -293,8 +304,11 @@ When the loop exits (all stories processed or stopped):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-If all stories completed: announce "All stories complete. Ready for Validation phase."
-If some escalated: announce "Loop paused. <n> stories need attention before Validation."
+Exit message depends on state:
+- All stories `completed` → "All stories complete. Ready for Validation phase."
+- Some `escalated` → "Loop paused. <n> stories need attention before Validation."
+- Remaining all `blocked` → "All remaining stories are blocked. Unblock dependencies or re-plan."
+- Max iteration ceiling reached → "Iteration limit reached. <n>/<total> completed. Review stories.yaml."
 
 ## Mode-Specific Behavior
 
@@ -321,6 +335,7 @@ If some escalated: announce "Loop paused. <n> stories need attention before Vali
 | "Skip security for non-auth stories" | Security scan triggers are story-content-aware. Trust the gate. |
 | "Push after each story" | Never push. Commit locally only. Push happens in Confirmation. |
 | "Decompose a large story mid-loop" | If a story is too large, escalate. Re-planning happens in P phase. |
+| "Run two sessions on the same stories.yaml" | No locking mechanism exists. Two sessions will pick up the same story. Use one session at a time. |
 ```
 
 - [ ] **Step 2: Commit**
@@ -643,7 +658,8 @@ if [ -f "$stories_file" ]; then
   escalated=$(grep 'escalated:' "$stories_file" 2>/dev/null | head -2 | tail -1 | sed 's/.*escalated: *//' || echo "0")
   feature=$(grep '^feature:' "$stories_file" 2>/dev/null | head -1 | sed 's/feature: *//' | tr -d '"' || echo "")
 
-  if [ -n "$autonomy_mode" ] && [ "$autonomy_mode" != "supervised" ]; then
+  # Guard: skip injection if key fields are empty (malformed YAML)
+  if [ -n "$autonomy_mode" ] && [ "$autonomy_mode" != "supervised" ] && [ -n "$total" ] && [ "$total" != "0" ]; then
     active_mode="${current_autonomy:-$autonomy_mode}"
     autonomous_context="\\n**AUTONOMOUS WORKFLOW ACTIVE**\\n"
     autonomous_context+="- Feature: ${feature}\\n"
@@ -709,8 +725,8 @@ Write the following to `scripts/devflow-runner.mjs`:
  */
 
 import { execFile } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, existsSync, statSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { parseArgs } from "node:util";
 
 const { values: args } = parseArgs({
@@ -722,9 +738,9 @@ const { values: args } = parseArgs({
   },
 });
 
-const STORIES_PATH = resolve(args.stories);
-const MAX_ITERATIONS = parseInt(args["max-iterations"], 10);
-const TIMEOUT_MS = parseInt(args.timeout, 10);
+const STORIES_PATH = resolvePath(args.stories);
+const MAX_ITERATIONS = parseInt(args["max-iterations"], 10) || 20;
+const TIMEOUT_MS = parseInt(args.timeout, 10) || 300000;
 const DRY_RUN = args["dry-run"];
 
 function readStories() {
@@ -734,11 +750,21 @@ function readStories() {
   }
   const content = readFileSync(STORIES_PATH, "utf-8");
 
-  // Simple YAML parser for stories (avoids requiring js-yaml dependency)
+  if (statSync(STORIES_PATH).size > 0 && !content.includes("stories:")) {
+    console.error(`Malformed stories.yaml: missing 'stories:' key`);
+    process.exit(1);
+  }
+
+  // Read escalation config
+  const maxRetriesMatch = content.match(/max_retries_per_story:\s*(\d+)/);
+  const maxRetries = maxRetriesMatch ? parseInt(maxRetriesMatch[1], 10) : 2;
+
+  // Simple YAML parser for stories (inline arrays only, no multi-line)
   const stories = [];
   let current = null;
   for (const line of content.split("\n")) {
-    const storyMatch = line.match(/^\s+-\s+id:\s*"?(\S+)"?/);
+    // Match story entry — strip quotes from ID
+    const storyMatch = line.match(/^\s+-\s+id:\s*["']?([^"'\s]+)["']?/);
     if (storyMatch) {
       if (current) stories.push(current);
       current = { id: storyMatch[1] };
@@ -753,23 +779,19 @@ function readStories() {
     }
   }
   if (current) stories.push(current);
-  return stories;
-}
 
-function getNextStory(stories) {
-  // Retry failed stories first, then pending, sorted by priority
-  const retryable = stories.filter(
-    (s) => s.status === "failed" && parseInt(s.attempts || "0", 10) < 2
-  );
-  if (retryable.length > 0) {
-    return retryable.sort(
-      (a, b) => parseInt(a.priority, 10) - parseInt(b.priority, 10)
-    )[0];
+  if (stories.length === 0 && content.length > 100) {
+    console.warn("Warning: stories.yaml appears non-empty but no stories were parsed");
   }
 
-  const pending = stories.filter((s) => {
-    if (s.status !== "pending") return false;
-    // Check blocked_by
+  return { stories, maxRetries };
+}
+
+function getNextStory(stories, maxRetries) {
+  const byPriority = (a, b) =>
+    parseInt(a.priority, 10) - parseInt(b.priority, 10);
+
+  function isUnblocked(s) {
     const blockers = (s.blocked_by || "")
       .replace(/[\[\]]/g, "")
       .split(",")
@@ -779,12 +801,26 @@ function getNextStory(stories) {
       const blocker = stories.find((bs) => bs.id === bid);
       return blocker && blocker.status === "completed";
     });
-  });
+  }
 
-  if (pending.length === 0) return null;
-  return pending.sort(
-    (a, b) => parseInt(a.priority, 10) - parseInt(b.priority, 10)
-  )[0];
+  // 1. Recover stories stuck in_progress (session died)
+  const stuck = stories.filter((s) => s.status === "in_progress");
+  if (stuck.length > 0) return stuck.sort(byPriority)[0];
+
+  // 2. Retry failed stories (within retry limit from config)
+  const retryable = stories.filter(
+    (s) =>
+      s.status === "failed" && parseInt(s.attempts || "0", 10) < maxRetries
+  );
+  if (retryable.length > 0) return retryable.sort(byPriority)[0];
+
+  // 3. Pick next pending story with resolved dependencies
+  const pending = stories.filter(
+    (s) => s.status === "pending" && isUnblocked(s)
+  );
+  if (pending.length > 0) return pending.sort(byPriority)[0];
+
+  return null;
 }
 
 function buildPrompt(story) {
@@ -804,13 +840,17 @@ function buildPrompt(story) {
 }
 
 function spawnClaude(prompt) {
-  return new Promise((resolve, reject) => {
+  return new Promise((res, reject) => {
     const child = execFile(
       "claude",
       ["-p", prompt, "--max-turns", "50"],
       { timeout: TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
+          if (error.code === "ENOENT") {
+            console.error("Error: 'claude' CLI not found on PATH. Install Claude Code first.");
+            process.exit(1);
+          }
           if (error.killed) {
             reject(new Error(`Claude session timed out after ${TIMEOUT_MS}ms`));
           } else {
@@ -818,7 +858,7 @@ function spawnClaude(prompt) {
           }
           return;
         }
-        resolve(stdout);
+        res(stdout);
       }
     );
     child.stdout?.pipe(process.stdout);
@@ -833,9 +873,12 @@ async function main() {
   console.log(`Timeout per story: ${TIMEOUT_MS}ms`);
   console.log("---");
 
+  let lastStoryId = null;
+  let staleCount = 0;
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const stories = readStories();
-    const next = getNextStory(stories);
+    const { stories, maxRetries } = readStories();
+    const next = getNextStory(stories, maxRetries);
 
     if (!next) {
       const completed = stories.filter((s) => s.status === "completed").length;
@@ -862,16 +905,28 @@ async function main() {
     }
 
     // Re-read stories to check if progress was made
-    const updated = readStories();
+    const { stories: updated } = readStories();
     const completedCount = updated.filter(
       (s) => s.status === "completed"
     ).length;
     const totalCount = updated.length;
     console.log(`Progress: ${completedCount}/${totalCount} stories completed`);
+
+    // Stall detection: same story selected N times with no progress
+    if (next.id === lastStoryId) {
+      staleCount++;
+      if (staleCount >= 3) {
+        console.error(`Stall detected: story ${next.id} selected 3 times with no progress. Exiting.`);
+        break;
+      }
+    } else {
+      lastStoryId = next.id;
+      staleCount = 0;
+    }
   }
 
   // Final report
-  const final = readStories();
+  const { stories: final } = readStories();
   console.log("\n━━━ Final Report ━━━");
   for (const s of final) {
     const icon =
