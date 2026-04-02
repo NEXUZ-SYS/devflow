@@ -117,6 +117,10 @@ Control how much human involvement each workflow requires:
 | **assisted** | `/devflow autonomy:assisted <desc>` | Human in P+R+V+C, autonomous E |
 | **autonomous** | `/devflow auto <desc>` | Fully autonomous, escalates on failure |
 
+**For existing projects with PRD:** Use `/devflow auto --from-prd` to convert PRD phases into stories.yaml without brainstorming. Stories are enriched with existing `.context/docs/` (codebase map, project overview, conventions).
+
+**Mid-workflow upgrade:** Run `/devflow autonomy:autonomous` during an active workflow to upgrade. All progress (completed stories, attempts, stats) is preserved — only the execution mode changes.
+
 Autonomy modes feature bidirectional escalation:
 - **Downgrade:** 2 failures on same story → escalate to human (autonomous → assisted)
 - **Upgrade:** 5 consecutive successes → suggest autonomous mode (assisted → autonomous)
@@ -137,7 +141,10 @@ Autonomy modes feature bidirectional escalation:
 | `/devflow-dispatch <role>` | Dispatch a specific agent |
 | `/devflow-sync [scope]` | Update .context/ with current project state (docs/agents/skills) |
 | `/devflow auto [description]` | Start fully autonomous workflow with smart escalation |
+| `/devflow auto --from-prd` | Autonomous from existing PRD (skip brainstorming) |
 | `/devflow autonomy:X [description]` | Start with explicit autonomy (supervised/assisted/autonomous) |
+| `/devflow autonomy:X` (no desc) | Upgrade/downgrade active workflow's autonomy mode |
+| `/devflow-sync workflow` | Validate/scaffold `.context/workflow/` directory |
 
 ## Superpowers Integration
 

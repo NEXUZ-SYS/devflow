@@ -1,0 +1,23 @@
+feature: "All done"
+autonomy: autonomous
+escalation:
+  max_retries_per_story: 2
+stats:
+  total: 2
+  completed: 2
+  current_autonomy: "autonomous"
+stories:
+  - id: "S1"
+    title: "Done one"
+    agent: "backend-specialist"
+    priority: 1
+    status: completed
+    attempts: 1
+    blocked_by: []
+  - id: "S2"
+    title: "Done two"
+    agent: "backend-specialist"
+    priority: 2
+    status: completed
+    attempts: 1
+    blocked_by: [S1]

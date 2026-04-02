@@ -1,0 +1,45 @@
+feature: "CRUD de produtos"
+autonomy: autonomous
+created: "2026-04-02T14:00:00Z"
+escalation:
+  max_retries_per_story: 2
+  max_consecutive_failures: 3
+  security_immediate: true
+  upgrade_after_streak: 5
+stats:
+  total: 4
+  completed: 0
+  failed: 0
+  escalated: 0
+  consecutive_failures: 0
+  current_autonomy: "autonomous"
+stories:
+  - id: "S1"
+    title: "Criar model Product"
+    description: "Model com campos name, price, category"
+    agent: "backend-specialist"
+    priority: 1
+    status: pending
+    attempts: 0
+    blocked_by: []
+  - id: "S2"
+    title: "Endpoint POST /products"
+    agent: "backend-specialist"
+    priority: 2
+    status: pending
+    attempts: 0
+    blocked_by: [S1]
+  - id: "S3"
+    title: "Componente ProductForm"
+    agent: "frontend-specialist"
+    priority: 3
+    status: pending
+    attempts: 0
+    blocked_by: [S1]
+  - id: "S4"
+    title: "Página de listagem"
+    agent: "frontend-specialist"
+    priority: 4
+    status: pending
+    attempts: 0
+    blocked_by: [S2, S3]

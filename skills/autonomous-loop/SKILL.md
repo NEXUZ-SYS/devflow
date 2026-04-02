@@ -82,13 +82,20 @@ Priority chain:
 2. Lite mode: Read `.context/agents/<story.agent>.md`
 3. Minimal: Read bundled `agents/<story.agent>.md`
 
-**3d. Execute with TDD enforced:**
+**3d. Execute with TDD enforced (RED → GREEN → REFACTOR):**
 The agent must follow this sequence:
-1. Write failing test for the story's requirements
-2. Run test — confirm it fails
-3. Implement minimal code to pass
-4. Run full test suite — confirm all pass
-5. Refactor if needed (tests must still pass)
+1. **RED** — Write failing test for the story's requirements
+2. **Run** — Confirm it fails for the right reason (not syntax error)
+3. **GREEN** — Implement minimal code to pass
+4. **Run** — Full test suite passes (all tests, not just new ones)
+5. **REFACTOR** — Clean up if needed (tests must still pass)
+
+**Test types per story:**
+| Story touches... | Required tests |
+|-----------------|---------------|
+| Pure functions, business logic | Unit |
+| API, DB, service boundaries | Unit + Integration |
+| Auth, payments, user flows, CLI | Unit + Integration + E2E |
 
 **3e. Quality gates:**
 After implementation:

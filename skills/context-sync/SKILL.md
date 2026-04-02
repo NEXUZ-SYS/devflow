@@ -37,10 +37,11 @@ O argumento do comando define o escopo:
 
 | Argumento | Escopo | Diretórios |
 |-----------|--------|------------|
-| (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/` |
+| (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/` |
 | `docs` | Apenas docs | `.context/docs/` |
 | `agents` | Apenas agents | `.context/agents/` |
 | `skills` | Apenas skills | `.context/skills/` |
+| `workflow` | Apenas workflow | `.context/workflow/` |
 
 ## Step 3a: Sync via dotcontext MCP (Full Mode)
 
@@ -147,6 +148,33 @@ Para cada skill, atualizar as 4 seções com padrões atuais do projeto.
 ### Erros
 - .context/agents/mobile-specialist.md (fillSingle falhou: ...)
 - ...
+```
+
+## Step 3c: Sync Workflow Directory
+
+Scaffold and validate `.context/workflow/` for autonomous loop readiness.
+
+### When running full sync or `workflow` scope:
+
+1. **Ensure directory exists:** Create `.context/workflow/` if missing
+2. **Check for stories.yaml:**
+   - If exists → validate structure (required fields: `feature`, `autonomy`, `stories`)
+   - If missing → check for PRD or plan to generate from:
+     a. PRD exists (`.context/plans/*-prd.md`) → announce: "PRD found. Run `/devflow auto --from-prd` to generate stories.yaml from it."
+     b. Plan exists (`docs/superpowers/plans/*.md`) → announce: "Plan found. Run `/devflow auto <desc>` to generate stories.yaml from it."
+     c. Neither → announce: "No PRD or plan found. Run `/devflow prd` or `/devflow <desc>` first."
+3. **Validate stories.yaml integrity** (if exists):
+   - All required fields present per `templates/stories-schema.yaml`
+   - No orphaned `blocked_by` references (all IDs exist)
+   - Stats match actual story counts
+   - Report any inconsistencies
+
+### Report for workflow scope:
+```markdown
+### Workflow
+- .context/workflow/ — [created | exists]
+- stories.yaml — [valid | missing | N issues found]
+- Autonomy: [mode] | Stories: [completed]/[total]
 ```
 
 ## Anti-Patterns

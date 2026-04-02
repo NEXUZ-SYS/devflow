@@ -1,0 +1,16 @@
+feature: "Supervised workflow"
+autonomy: supervised
+escalation:
+  max_retries_per_story: 2
+stats:
+  total: 1
+  completed: 0
+  current_autonomy: "supervised"
+stories:
+  - id: "S1"
+    title: "Story one"
+    agent: "backend-specialist"
+    priority: 1
+    status: pending
+    attempts: 0
+    blocked_by: []

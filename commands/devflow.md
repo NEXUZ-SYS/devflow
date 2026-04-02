@@ -24,9 +24,11 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow scale:MEDIUM <description>
 /devflow scale:LARGE <description>
 /devflow auto <description>            # Alias for autonomy:autonomous
+/devflow auto --from-prd               # Autonomous from existing PRD (no brainstorming)
 /devflow autonomy:supervised <desc>    # Human approves each phase (default)
 /devflow autonomy:assisted <desc>      # Human in P+R+V+C, autonomous E
 /devflow autonomy:autonomous <desc>    # Fully autonomous with escalation
+/devflow autonomy:autonomous           # Upgrade active workflow to autonomous
 ```
 
 ## Related Commands
@@ -73,9 +75,11 @@ SCALE
 
 AUTONOMY
   /devflow auto <d>                Fully autonomous with smart escalation
+  /devflow auto --from-prd         Autonomous from existing PRD (skip brainstorming)
   /devflow autonomy:supervised <d> Human approves each phase (default)
   /devflow autonomy:assisted <d>   Human in planning+review, autonomous execution
   /devflow autonomy:autonomous <d> All phases autonomous, escalates on failure
+  /devflow autonomy:autonomous     Upgrade active workflow to autonomous mode
 
 PHASES (PREVC)
   P  Planning       Brainstorming, context enrichment, plan writing
@@ -170,6 +174,16 @@ EXAMPLES
     → Autonomous execution of stories
     → Human reviews Validation and Confirmation
 
+  /devflow auto --from-prd
+    → Reads existing PRD, picks next pending phase
+    → Generates stories.yaml from PRD scope (no brainstorming)
+    → Runs autonomous loop enriched with existing .context/ docs
+
+  /devflow autonomy:autonomous
+    → (during active workflow) Upgrades to autonomous mode
+    → Preserves all progress — only changes execution mode
+    → If stories.yaml missing, generates from existing plan
+
 QUICK REFERENCE
   I want to...                  Use this
   ─────────────────────────────────────────────────────
@@ -185,6 +199,8 @@ QUICK REFERENCE
   List available agents         /devflow-dispatch
   Dispatch a specialist         /devflow-dispatch <role>
   Run fully autonomous           /devflow auto <desc>
+  Autonomous from existing PRD   /devflow auto --from-prd
+  Upgrade workflow to autonomous /devflow autonomy:autonomous
   Run with assisted autonomy     /devflow autonomy:assisted <desc>
   Design an API                 "design the API for X"
   Write tests                   "generate tests for X"
@@ -194,7 +210,7 @@ QUICK REFERENCE
   Break down a big feature      "break down the X feature"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DevFlow v0.6.0 — https://github.com/NEXUZ-SYS/devflow
+  DevFlow v0.7.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -306,4 +322,5 @@ After all steps complete, show a summary table with what was updated and their v
 - `scale:X` — optional explicit scale (QUICK/SMALL/MEDIUM/LARGE)
 - `autonomy:X` — optional autonomy mode (supervised/assisted/autonomous)
 - `auto` — alias for `autonomy:autonomous`
+- `--from-prd` — generate stories.yaml from existing PRD (skip brainstorming)
 - Everything else is passed as the task description to the PREVC flow orchestrator
