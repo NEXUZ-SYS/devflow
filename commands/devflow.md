@@ -185,15 +185,23 @@ Update all DevFlow components in sequence. Run each command via Bash and report 
 claude plugin marketplace update NEXUZ-SYS
 ```
 
-**Step 2 — Update DevFlow plugin:**
+**Step 2 — Update DevFlow plugin (auto-detect scope):**
 ```bash
-claude plugin update devflow@NEXUZ-SYS
+# Try user scope first, fallback to project scope
+claude plugin update devflow@NEXUZ-SYS 2>&1
+# If it fails with "not installed at scope user", retry with --scope project:
+claude plugin update devflow@NEXUZ-SYS --scope project 2>&1
 ```
+Run without `--scope` first. If the output contains "not installed at scope", retry with `--scope project`. Only report the successful result (or both failures if neither works).
 
-**Step 3 — Update superpowers plugin:**
+**Step 3 — Update superpowers plugin (auto-detect scope):**
 ```bash
-claude plugin update superpowers@claude-plugins-official
+# Try user scope first, fallback to project scope
+claude plugin update superpowers@claude-plugins-official 2>&1
+# If it fails with "not installed at scope user", retry with --scope project:
+claude plugin update superpowers@claude-plugins-official --scope project 2>&1
 ```
+Same auto-detect logic as Step 2.
 
 **Step 4 — Update dotcontext (if installed):**
 ```bash
