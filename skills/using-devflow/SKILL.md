@@ -72,6 +72,11 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 |-------|-------------|
 | `devflow:language` | Set conversation language (en-US, pt-BR, es-ES) — all responses switch to selected language |
 
+### Utility Commands
+| Command | Action |
+|---------|--------|
+| `/devflow update` | Update marketplace, DevFlow, superpowers, and dotcontext in sequence |
+
 ### On-Demand Skills (invoke anytime)
 | Skill | When to use |
 |-------|-------------|

@@ -16,6 +16,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow <description>                 # Auto-detect scale and start workflow
 /devflow language                      # Set conversation language (en/pt/es)
 /devflow language <code>               # Set language directly (e.g., pt-BR)
+/devflow update                        # Update DevFlow + superpowers + dotcontext
 /devflow prd                           # Generate or update product PRD
 /devflow prd --status                  # Show PRD phase status
 /devflow scale:QUICK <description>     # Explicit scale
@@ -49,6 +50,7 @@ COMMANDS
   /devflow init               Initialize DevFlow (or sync if already exists)
   /devflow language           Set conversation language (en/pt/es)
   /devflow language <code>    Set language directly (en-US, pt-BR, es-ES)
+  /devflow update             Update marketplace, plugins, and dotcontext
   /devflow prd                Generate or update product PRD
   /devflow prd --status       Show PRD phase status
   /devflow <desc>             Start workflow (auto-detects scale)
@@ -152,6 +154,7 @@ QUICK REFERENCE
   I want to...                  Use this
   ─────────────────────────────────────────────────────
   Change language               /devflow language
+  Update everything             /devflow update
   Define product roadmap        /devflow prd
   Check roadmap progress        /devflow prd --status
   Start a new feature           /devflow <description>
@@ -172,6 +175,51 @@ QUICK REFERENCE
   DevFlow v0.6.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+### `/devflow update`
+
+Update all DevFlow components in sequence. Run each command via Bash and report the result before proceeding to the next:
+
+**Step 1 — Update marketplace registry:**
+```bash
+claude plugin marketplace update NEXUZ-SYS
+```
+
+**Step 2 — Update DevFlow plugin:**
+```bash
+claude plugin update devflow@NEXUZ-SYS
+```
+
+**Step 3 — Update superpowers plugin:**
+```bash
+claude plugin update superpowers@claude-plugins-official
+```
+
+**Step 4 — Update dotcontext (if installed):**
+```bash
+# Only if dotcontext is installed globally
+command -v dotcontext >/dev/null && npm update -g @dotcontext/cli
+```
+
+**Step 5 — Report and ask for restart:**
+
+After all steps complete, show a summary table with what was updated and their versions, then display:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Update complete!
+
+  Please restart Claude Code for changes to take effect:
+    1. Type /exit to close this session
+    2. Run 'claude' again to start a fresh session
+
+  Or press Ctrl+C and restart.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**If any step fails:** Report the error, continue with the remaining steps, and include the failure in the summary. Do NOT stop on the first failure.
+
+**Important:** This command runs shell commands directly. It does NOT invoke any skill.
 
 ### `/devflow language [code]`
 1. Invoke `devflow:language` skill
@@ -215,6 +263,7 @@ QUICK REFERENCE
 - `prd` — generate or update product PRD (devflow:prd-generation)
 - `language` — interactive language selection (devflow:language)
 - `language <code>` — set language directly (en-US, pt-BR, es-ES)
+- `update` — update marketplace, plugins, and dotcontext in sequence
 - `prd --status` — display PRD phase status
 - `scale:X` — optional explicit scale (QUICK/SMALL/MEDIUM/LARGE)
 - Everything else is passed as the task description to the PREVC flow orchestrator

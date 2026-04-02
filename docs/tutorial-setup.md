@@ -1058,27 +1058,38 @@ O sync relê o projeto e atualiza os playbooks com paths, classes e padrões atu
 
 ### 10.2 Atualizar plugins
 
+A forma mais rápida — dentro do Claude Code:
+```
+/devflow update
+```
+
+Isso executa em sequência:
+1. Atualiza o marketplace registry (`NEXUZ-SYS`)
+2. Atualiza o plugin DevFlow
+3. Atualiza o plugin superpowers
+4. Atualiza o dotcontext CLI (se instalado)
+5. Mostra resumo e pede para reiniciar o Claude Code
+
+<details>
+<summary>Atualização manual (se preferir)</summary>
+
 > ⚠️ **Sempre atualize o marketplace antes do plugin.** O Claude Code resolve versões pelo cache local.
 
-**No terminal:**
 ```bash
-# 1. Marketplace primeiro (obrigatório)
 claude plugin marketplace update NEXUZ-SYS
-
-# 2. Plugins
 claude plugin update devflow@NEXUZ-SYS
 claude plugin update superpowers@claude-plugins-official
-
-# 3. Dotcontext
 npm update -g @dotcontext/cli
 ```
 
-**Se a versão não atualizar:**
+Se a versão não atualizar:
 ```bash
 rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
 claude plugin marketplace update NEXUZ-SYS
 claude plugin install devflow@NEXUZ-SYS --scope user
 ```
+
+</details>
 
 **Após atualizar, sincronize o contexto:**
 ```
@@ -1192,6 +1203,7 @@ Normal para projetos grandes — análise semântica pode levar 1-3 min. Projeto
 /devflow scale:LARGE <desc>            # Migração (P → R → E → V → C + checkpoints)
 /devflow language                      # Configurar idioma
 /devflow language pt-BR                # Definir idioma diretamente
+/devflow update                        # Atualizar tudo (marketplace + plugins + dotcontext)
 /devflow prd                           # Gerar roadmap de produto
 /devflow prd --status                  # Ver progresso do PRD
 /devflow-status                        # Fase atual e progresso

@@ -116,6 +116,17 @@ O que acontece:
 
 ## Atualização
 
+A forma mais rápida de atualizar tudo:
+
+```
+/devflow update
+```
+
+Isso atualiza em sequência: marketplace → DevFlow → superpowers → dotcontext. No final, pede para reiniciar o Claude Code.
+
+<details>
+<summary>Atualização manual (se preferir)</summary>
+
 > ⚠️ **Importante:** Antes de atualizar um plugin, atualize o marketplace correspondente. O Claude Code resolve versões a partir do cache local do marketplace — sem essa etapa, ele não detecta a nova versão e mantém a antiga.
 
 No terminal:
@@ -133,23 +144,14 @@ claude plugin update superpowers@claude-plugins-official
 npm update -g @dotcontext/cli
 ```
 
-Ou dentro do Claude Code:
-```
-# 1. Atualizar marketplace primeiro
-/plugin marketplace update NEXUZ-SYS
-
-# 2. Depois atualizar o plugin
-/plugin update devflow@NEXUZ-SYS
-/plugin update superpowers@claude-plugins-official
-```
-
 Se o update não refletir a nova versão, force a reinstalação:
 ```bash
-# Limpar cache antigo e reinstalar
 rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
 claude plugin marketplace update NEXUZ-SYS
 claude plugin install devflow@NEXUZ-SYS --scope user
 ```
+
+</details>
 
 ---
 
@@ -210,6 +212,7 @@ Para ver todos os comandos e capabilities:
 | `/devflow prd --status` | Mostra progresso das fases do PRD |
 | `/devflow language` | Configura o idioma (en-US, pt-BR, es-ES) |
 | `/devflow language <code>` | Define idioma diretamente |
+| `/devflow update` | Atualiza marketplace, plugins e dotcontext de uma vez |
 | `/devflow-sync` | Atualiza `.context/` com o estado atual do projeto |
 | `/devflow-sync <escopo>` | Atualiza apenas `docs`, `agents` ou `skills` |
 | `/devflow-status` | Mostra fase atual, progresso, modo e status do PRD (se existir) |
