@@ -15,7 +15,7 @@ Generate complete Product Requirements Documents (PRDs) with phased roadmaps, pr
 ## Responsibilities
 - Analyze existing codebase to understand current product state
 - Conduct Socratic interviews with the user to capture vision and priorities
-- Generate complete PRDs using templates from `product-manager-toolkit`
+- Generate complete PRDs using templates from `devflow:prd-generation`
 - Decompose the product into sequential phases with RICE scoring
 - Define MVP via MoSCoW classification (Must/Should/Could/Won't)
 - Update PRD at the end of each phase (during PREVC Confirmation phase)

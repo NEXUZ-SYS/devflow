@@ -7,6 +7,8 @@ description: "Use to generate a complete product PRD with phased roadmap — sup
 
 Generate a complete Product Requirements Document with all phases defined upfront. Supports two modes: new projects (Modo A) and existing codebases (Modo B). The PRD lives above the PREVC cycle — each phase becomes a separate PREVC run.
 
+**Language:** All templates, interview questions, and announcements below are written in English as structural references. When executing this skill, use the user's configured language (see `devflow:language`) for ALL output: PRD content, section headers, labels, interview questions, and status announcements. Keep only technical terms (e.g., RICE, MoSCoW, MVP, PREVC) untranslated.
+
 <HARD-GATE>
 Do NOT skip the interview step. Codebase analysis alone cannot capture user intent, priorities, or constraints. The interview is mandatory in both modes.
 </HARD-GATE>
@@ -116,6 +118,19 @@ Cross-reference codebase analysis with interview answers:
 
 ## Step 6: Generate PRD
 
+Choose the template that matches the project scope, then apply it:
+
+| Template | When to Use | Typical Scope |
+|---|---|---|
+| **Standard PRD** | Complex products with multiple phases | 6+ weeks |
+| **One-Page PRD** | Simple features or small products | 2-4 weeks |
+| **Feature Brief** | Exploration / pre-PRD validation | ~1 week |
+| **Agile Epic** | Sprint-based delivery teams | Variable |
+
+Default to **Standard PRD** unless the user requests otherwise or scope is clearly small.
+
+### Template: Standard PRD
+
 Apply the Standard PRD template structure adapted for phased delivery:
 
 ```markdown
@@ -179,6 +194,156 @@ scaffoldVersion: "2.0.0"
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | ... | ... | ... |
+```
+
+### Template: One-Page PRD
+
+For simple features or small products (2-4 weeks scope):
+
+```markdown
+# One-Page PRD: <Feature Name>
+
+**Problem:** [2-3 sentences — what pain exists today]
+**Solution:** [2-3 sentences — what we're building]
+**Target User:** [who benefits]
+**Success Metrics:** [2-3 measurable outcomes]
+
+## Scope
+- **In:** [bullet list of what's included]
+- **Out:** [bullet list of what's explicitly excluded]
+
+## Requirements
+1. [Requirement with acceptance criteria]
+2. [Requirement with acceptance criteria]
+3. ...
+
+## Risks
+- [Risk → mitigation]
+
+## Timeline
+- **Target:** [date or sprint]
+- **Dependencies:** [what must exist first]
+```
+
+### Template: Feature Brief
+
+For exploration / pre-PRD validation (~1 week scope):
+
+```markdown
+# Feature Brief: <Topic>
+
+## Hypothesis
+We believe that [building this feature]
+for [these users]
+will [achieve this outcome].
+We'll know we're right when [measurable metric].
+
+## Problem Evidence
+- [Data point or user quote supporting the problem]
+- [Data point or user quote]
+
+## Proposed Exploration
+- [ ] [Investigation or prototype task]
+- [ ] [Investigation or prototype task]
+
+## Decision Criteria
+After exploration, proceed to full PRD if:
+- [Condition 1]
+- [Condition 2]
+```
+
+### Template: Agile Epic
+
+For sprint-based delivery teams:
+
+```markdown
+# Epic: <Name>
+
+**Goal:** [what this epic achieves]
+**Owner:** [who drives it]
+**Target Sprint(s):** [sprint range]
+
+## User Stories
+- As a [user], I want [capability] so that [benefit]
+- As a [user], I want [capability] so that [benefit]
+
+## Acceptance Criteria
+- [ ] [Testable criterion]
+- [ ] [Testable criterion]
+
+## Dependencies
+- [Upstream dependency]
+
+## Definition of Done
+- [ ] All stories completed
+- [ ] Tests passing
+- [ ] Documentation updated
+```
+
+## Discovery & Metrics Frameworks
+
+Use these frameworks during Steps 4-5 (Interview and Synthesis) to enrich the PRD.
+
+### Hypothesis Template
+
+Use when validating whether a phase or feature is worth building:
+
+```
+We believe that [building this feature]
+for [these users]
+will [achieve this outcome].
+We'll know we're right when [measurable metric].
+```
+
+### Opportunity Solution Tree
+
+Use when mapping multiple solutions to a desired outcome:
+
+```
+Outcome (North Star goal)
+├── Opportunity 1 (user problem)
+│   ├── Solution A
+│   └── Solution B
+└── Opportunity 2 (user problem)
+    ├── Solution C
+    └── Solution D
+```
+
+Each phase in the PRD roadmap should trace back to an opportunity.
+
+### North Star Metric Framework
+
+Use when defining Success Metrics in the PRD:
+
+1. **Identify Core Value:** What's the #1 value delivered to users?
+2. **Make it Measurable:** Quantifiable and trackable
+3. **Ensure It's Actionable:** Teams can directly influence it
+4. **Check Leading Indicator:** Does it predict business success?
+
+### Feature Success Metrics
+
+Use when defining Done Criteria and Success Metrics per phase:
+
+| Metric | Definition | How to Measure |
+|---|---|---|
+| **Adoption** | % of users using the feature | Usage analytics |
+| **Frequency** | Usage per user per time period | Event tracking |
+| **Depth** | % of feature capability used | Feature coverage |
+| **Retention** | Continued usage over time | Cohort analysis |
+| **Satisfaction** | User perception of value | NPS/CSAT/feedback |
+
+### Value vs Effort Matrix
+
+Use alongside RICE when a quick visual prioritization is needed:
+
+```
+         Low Effort    High Effort
+
+High     QUICK WINS    BIG BETS
+Value    [Prioritize]  [Strategic]
+
+Low      FILL-INS      TIME SINKS
+Value    [Maybe]       [Avoid]
 ```
 
 ## Step 7: Decompose Phases
