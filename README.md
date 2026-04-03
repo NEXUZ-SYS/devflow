@@ -103,6 +103,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.8.0** | 2026-04-03 | Hook PostToolUse com commit prompt e finalização de branch automática: pergunta "Quer commitar?" após tasks, "Quer finalizar a branch?" com pipeline completa (README, bump, push, merge), comportamento adaptável por autonomia (supervised/assisted/autonomous), detecção de capacidades do projeto, i18n em 3 idiomas |
 | **0.7.1** | 2026-04-03 | prd-generation self-contained: templates alternativos (One-Page, Feature Brief, Agile Epic), frameworks de discovery e métricas (Hypothesis, OST, North Star, Feature Success Metrics), instrução de idioma para todo output, correção de referência quebrada no agente product-manager |
 | **0.7.0** | 2026-04-02 | Loop autônomo (supervised/assisted/autonomous), TDD HARD-GATE em todos os modos, E2E obrigatório para auth/pagamentos, `--from-prd` para projetos existentes, upgrade de autonomia mid-workflow, context-sync workflow scope, devflow-runner.mjs (safety net), 208 testes |
 | **0.6.3** | 2026-03-31 | `/devflow update` para atualizar tudo de uma vez, auto-detect de scope do plugin |
