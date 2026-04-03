@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # DevFlow PostToolUse hook
-# Injects reminder for LLM to update handoff.md after TaskUpdate or Write events
-# This enables continuous handoff — context is preserved progressively
+# 1. Injects handoff reminder (always)
+# 2. After TaskUpdate(completed): detects uncommitted changes and branch state,
+#    injects commit/finish prompts based on autonomy mode
 
 set -euo pipefail
 
@@ -25,13 +26,124 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
-# --- Build reminder ---
+# --- Read stdin ---
+
+INPUT=$(cat)
+
+TOOL_NAME=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('tool_name', ''))
+" 2>/dev/null || echo "")
+
+TASK_STATUS=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('status', ''))
+" 2>/dev/null || echo "")
+
+# --- Always include handoff reminder ---
 
 reminder="$MSG_HANDOFF_REMINDER"
 
-reminder_escaped=$(escape_for_json "$reminder")
+# --- Check if this is TaskUpdate with status=completed ---
+
+if [ "$TOOL_NAME" = "TaskUpdate" ] && [ "$TASK_STATUS" = "completed" ]; then
+
+  # --- Detect git state ---
+
+  CWD=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('cwd', ''))
+" 2>/dev/null || echo "$PWD")
+
+  GIT_CHANGES=$(git -C "$CWD" diff --name-only 2>/dev/null || echo "")
+  GIT_STAGED=$(git -C "$CWD" diff --cached --name-only 2>/dev/null || echo "")
+  BRANCH=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  HAS_CHANGES=false
+  if [ -n "$GIT_CHANGES" ] || [ -n "$GIT_STAGED" ]; then
+    HAS_CHANGES=true
+  fi
+
+  # --- Detect work branch ---
+
+  IS_WORK_BRANCH=false
+  case "$BRANCH" in
+    feature/*|fix/*|hotfix/*|release/*) IS_WORK_BRANCH=true ;;
+  esac
+
+  # --- Detect autonomy mode ---
+
+  AUTONOMY="supervised"
+  STATUS_FILE="$CWD/.context/workflow/status.yaml"
+  if [ -f "$STATUS_FILE" ]; then
+    detected_autonomy=$(grep -i 'autonomy' "$STATUS_FILE" 2>/dev/null \
+      | sed 's/.*autonomy[[:space:]]*:[[:space:]]*//' \
+      | tr -d '[:space:]"' \
+      | head -1 || echo "")
+    if [ -n "$detected_autonomy" ]; then
+      AUTONOMY="$detected_autonomy"
+    fi
+  fi
+
+  # --- Detect project capabilities ---
+
+  HAS_README=false
+  HAS_BUMP=false
+
+  [ -f "$CWD/README.md" ] && HAS_README=true
+
+  if [ -f "$CWD/scripts/bump-version.sh" ]; then
+    HAS_BUMP=true
+  elif [ -f "$CWD/package.json" ] && grep -q '"version"' "$CWD/package.json" 2>/dev/null; then
+    HAS_BUMP=true
+  fi
+
+  # --- Build conditional instruction ---
+
+  extra_instruction=""
+
+  if [ "$HAS_CHANGES" = "true" ]; then
+    # Scenario 1: uncommitted changes → commit prompt
+    case "$AUTONOMY" in
+      supervised)
+        extra_instruction="$MSG_COMMIT_PROMPT"
+        ;;
+      assisted|autonomous)
+        extra_instruction="$MSG_COMMIT_AUTO"
+        ;;
+    esac
+  elif [ "$IS_WORK_BRANCH" = "true" ]; then
+    # Scenario 2: work branch, all committed → branch finish prompt
+    cap_info="Project capabilities: README=${HAS_README}, BUMP=${HAS_BUMP}"
+
+    case "$AUTONOMY" in
+      supervised)
+        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_SUPERVISED" "branch=${BRANCH}")
+        extra_instruction="${extra_instruction}\n${cap_info}"
+        ;;
+      assisted)
+        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_ASSISTED" "branch=${BRANCH}")
+        extra_instruction="${extra_instruction}\n${cap_info}"
+        ;;
+      autonomous)
+        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_AUTO" "branch=${BRANCH}")
+        extra_instruction="${extra_instruction}\n${cap_info}"
+        ;;
+    esac
+  fi
+
+  if [ -n "$extra_instruction" ]; then
+    reminder="${reminder}\n\n${extra_instruction}"
+  fi
+fi
 
 # --- Output ---
+
+reminder_escaped=$(escape_for_json "$reminder")
 
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PostToolUse",\n    "additionalContext": "%s"\n  }\n}\n' "$reminder_escaped"
