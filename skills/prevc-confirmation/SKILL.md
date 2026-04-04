@@ -11,14 +11,53 @@ Finalizes the development branch, updates documentation, and ensures all tools a
 
 ## Checklist
 
-1. **Finalize branch** — clean history, ready to merge
-2. **Update documentation** — API docs, README, inline docs as needed
-3. **Update project context** — reflect changes in .context/ files
-4. **Sync to tools** — export context to all configured AI tools
-5. **Present completion summary** — what was done, what to do next
-6. **Gate check** — everything finalized = workflow complete
+1. **Version Bump** — detect capabilities, bump version before merge
+2. **Finalize branch** — clean history, ready to merge
+3. **Update documentation** — API docs, README, inline docs as needed
+4. **Update project context** — reflect changes in .context/ files
+5. **Sync to tools** — export context to all configured AI tools
+6. **Present completion summary** — what was done, what to do next
+7. **Gate check** — everything finalized = workflow complete
 
-## Step 1: Finalize Branch
+## Step 1: Version Bump
+
+<HARD-GATE>
+Version bump MUST happen BEFORE branch finalization (merge/PR). This prevents the version bump from being skipped when the merge is executed via any path (skill, hook, or direct Bash command).
+</HARD-GATE>
+
+### Detect Project Capabilities
+
+Check for version bump mechanisms in this order:
+
+1. **`scripts/bump-version.sh`** — if exists, use it (supports patch/minor/major argument)
+2. **`package.json` with `"version"` field** — if exists, bump with `npm version` or manual edit
+3. **README.md version history table** — if exists, add new version entry
+4. **None detected** — skip bump, inform user
+
+### Determine Bump Type
+
+Infer from the workflow context:
+- **patch** — bug fixes, minor improvements (scale QUICK/SMALL)
+- **minor** — new features (scale MEDIUM with new capabilities)
+- **major** — breaking changes (scale LARGE with API changes)
+
+### Execute by Autonomy Mode
+
+- **supervised** — Ask the user: "Que tipo de bump? (patch/minor/major)" with the inferred default. Wait for confirmation before bumping.
+- **assisted** — Announce the inferred bump type, execute automatically. Report what was bumped.
+- **autonomous** — Execute bump silently (patch default unless scale/context suggests otherwise). Report in summary.
+
+### Bump Pipeline
+
+1. Detect capabilities (bump-version.sh, package.json, README)
+2. Determine bump type from scale and context
+3. Execute bump (run script, update files)
+4. Commit bump changes: `chore: bump to vX.Y.Z`
+5. Verify commit succeeded
+
+If bump fails, report the error and continue to Step 2 (do not block branch finalization on bump failure).
+
+## Step 2: Finalize Branch
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:finishing-a-development-branch`
 
@@ -27,7 +66,7 @@ This skill handles:
 - Presenting merge options to the user (merge, squash, rebase)
 - Executing the chosen merge strategy
 
-## Step 2: Update Documentation
+## Step 3: Update Documentation
 
 ### Full Mode
 ```
@@ -51,7 +90,7 @@ Manually review if any docs reference changed code/APIs.
 - [ ] README reflects new capabilities (if user-facing)
 - [ ] Inline comments updated for non-obvious logic changes
 
-## Step 3: Update Project Context
+## Step 4: Update Project Context
 
 ### Full Mode
 ```
@@ -68,7 +107,7 @@ Manually update relevant `.context/docs/` files:
 ### Minimal Mode
 Skip (no `.context/` to update).
 
-## Step 4: Sync to Tools
+## Step 5: Sync to Tools
 
 ### Full Mode
 ```
@@ -83,7 +122,7 @@ Suggest: "Run `dotcontext sync-agents` to export context to all AI tools."
 ### Minimal Mode
 Skip sync.
 
-## Step 5: Completion Summary
+## Step 6: Completion Summary
 
 Present a summary:
 
@@ -111,7 +150,7 @@ Present a summary:
 workflow-status()  # Final status check
 ```
 
-## Step 5.5: Update PRD (if exists)
+## Step 6.5: Update PRD (if exists)
 
 After the completion summary, check if this workflow is part of a PRD:
 
@@ -131,7 +170,7 @@ After the completion summary, check if this workflow is part of a PRD:
 3. **If not found:**
    a. No change (current behavior)
 
-## Step 6: Gate Check (Workflow Complete)
+## Step 7: Gate Check (Workflow Complete)
 
 The Confirmation gate marks the workflow as complete:
 - Branch finalized (merged or ready to merge)
