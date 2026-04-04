@@ -13,10 +13,11 @@ Comprehensive verification that the implementation matches the spec, tests pass,
 
 1. **Run full test suite** — all tests must pass
 2. **Spec compliance check** — implementation matches the approved design
-3. **Test coverage review** — verify adequate coverage for new code
-4. **Security validation** — check for OWASP top 10 and domain-specific risks
-5. **Performance check** — no obvious regressions (if applicable)
-6. **Gate check** — all validations pass = ready to advance
+3. **ADR guardrails compliance** — implementation respects active ADR guardrails
+4. **Test coverage review** — verify adequate coverage for new code
+5. **Security validation** — check for OWASP top 10 and domain-specific risks
+6. **Performance check** — no obvious regressions (if applicable)
+7. **Gate check** — all validations pass = ready to advance
 
 ## Step 1: Run Full Test Suite
 
@@ -46,6 +47,47 @@ The code-reviewer agent performs structured spec compliance.
 
 ### Lite Mode
 Read `.context/agents/code-reviewer.md` and apply its checklist against the spec.
+
+## Step 2.5: ADR Guardrails Compliance
+
+Check if the implementation complies with active ADR guardrails.
+
+### When to run
+Only if `.context/docs/adrs/README.md` exists and has active ADRs.
+
+### Process
+
+1. Read `.context/docs/adrs/README.md` — get list of active ADRs
+2. For each ADR with status `Aprovado`:
+   a. Read the **Guardrails** section
+   b. For each guardrail rule (SEMPRE/NUNCA/QUANDO):
+      - Check if the implementation violates the rule
+      - For code guardrails: scan relevant files for violations
+      - For architecture guardrails: verify structure matches
+   c. For each **Enforcement** item:
+      - Verify if the enforcement mechanism exists (CI check, lint rule, etc.)
+3. Report findings:
+
+```markdown
+### ADR Compliance: PASS/FAIL
+
+| ADR | Guardrails | Violations | Status |
+|-----|-----------|------------|--------|
+| 001 - SOLID Python | 8 | 0 | PASS |
+| 002 - TDD Python | 5 | 1 | FAIL |
+| 003 - AWS Data Lake | 8 | 0 | PASS |
+
+**Violations:**
+- ADR 002, rule "NUNCA usar mocks para banco": found mock in `tests/test_user.py:45`
+```
+
+4. If any violations found: return to Execution phase to fix.
+
+### Full Mode
+```
+agent({ action: "orchestrate", agents: ["code-reviewer"], task: "adr-compliance" })
+```
+The code-reviewer agent performs ADR compliance checking against the guardrails.
 
 ## Step 3: Test Coverage Review
 
@@ -133,6 +175,7 @@ The Validation phase gate requires:
 - Test type adequacy verified (unit + integration + E2E where applicable)
 - TDD ordering verified (test commits precede implementation commits)
 - Spec compliance verified
+- ADR compliance verified (if ADRs active)
 - Security checklist cleared (if applicable)
 - No blocking issues identified
 
@@ -144,6 +187,7 @@ Present validation summary:
 ### Test Types: Unit ✓ | Integration ✓/N/A | E2E ✓/N/A
 ### TDD Ordering: VERIFIED / VIOLATION (list files without test-first)
 ### Spec Compliance: PASS/FAIL
+### ADR Compliance: PASS/N/A (X guardrails checked, Y violations)
 ### Security: PASS/N/A
 ### Performance: PASS/N/A
 
