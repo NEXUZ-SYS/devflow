@@ -39,9 +39,29 @@ Read these files and incorporate into brainstorming:
 - `.context/docs/codebase-map.json` — file structure, dependencies
 - `.context/docs/development-workflow.md` — existing conventions
 - `.context/docs/testing-strategy.md` — testing approach
+- `.context/docs/adrs/README.md` — active ADR guardrails (if exists)
 
 ### Minimal Mode
 Explore project files, docs, and recent git commits directly.
+
+### All Modes — ADR Guardrails Loading
+
+After gathering base context, check for active ADRs:
+
+1. Check if `.context/docs/adrs/README.md` exists
+2. If yes:
+   a. Read the README index to identify active ADRs
+   b. For each ADR with status `Aprovado`, read the **Guardrails** section
+   c. Collect all guardrails as constraints for the brainstorming process
+   d. Announce: "Loaded N guardrails from M active ADRs."
+3. If no: continue without ADR constraints (ADRs are opt-in)
+
+**Important:** Guardrails from ADRs are treated as hard constraints during brainstorming:
+- The brainstorming MUST NOT propose alternatives already rejected in ADRs
+- The design MUST comply with all active guardrails
+- If a guardrail conflicts with the task requirements, flag the conflict to the user instead of silently violating
+
+**Hierarchy:** Project ADRs (`scope: project`) override Organizational ADRs (`scope: organizational`) for the same topic.
 
 ## Step 2: Brainstorming
 
