@@ -64,10 +64,14 @@ Read these files in order (stop when you have enough context):
 5. **Tooling:** `.context/docs/tooling.md`
    - Build tools, linters, formatters, deployment
 
-6. **Agent playbooks** (for domain-specific context):
+6. **ADR Guardrails:** `.context/docs/adrs/README.md`
+   - Active architectural decisions and guardrails
+   - Read README index, then relevant ADRs by stack/category
+
+7. **Agent playbooks** (for domain-specific context):
    - `.context/agents/<relevant-agent>.md`
 
-7. **Skill files** (for task-specific guidance):
+8. **Skill files** (for task-specific guidance):
    - `.context/skills/<relevant-skill>/SKILL.md`
 
 ### Minimal Mode — Direct Exploration
@@ -109,6 +113,9 @@ After gathering context, summarize for the consuming skill:
 
 ### Dependencies
 - [key dependencies relevant to the task]
+
+### Active ADR Guardrails
+- [list of guardrails from relevant ADRs]
 
 ### Recent Activity
 - [recent changes in the area being modified]

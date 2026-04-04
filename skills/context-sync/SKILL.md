@@ -38,7 +38,7 @@ O argumento do comando define o escopo:
 | Argumento | Escopo | Diretórios |
 |-----------|--------|------------|
 | (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/` |
-| `docs` | Apenas docs | `.context/docs/` |
+| `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/docs/adrs/` |
 | `agents` | Apenas agents | `.context/agents/` |
 | `skills` | Apenas skills | `.context/skills/` |
 | `workflow` | Apenas workflow | `.context/workflow/` |
@@ -175,6 +175,30 @@ Scaffold and validate `.context/workflow/` for autonomous loop readiness.
 - .context/workflow/ — [created | exists]
 - stories.yaml — [valid | missing | N issues found]
 - Autonomy: [mode] | Stories: [completed]/[total]
+```
+
+## Step 3d: Sync ADR Index
+
+Update `.context/docs/adrs/README.md` to reflect current ADR state.
+
+### When running full sync or `docs` scope:
+
+1. Check if `.context/docs/adrs/` exists
+2. If yes:
+   a. Scan all `.md` files in `.context/docs/adrs/` (excluding README.md)
+   b. Parse frontmatter of each ADR (name, status, scope, stack, category)
+   c. Count guardrails rules (lines matching `^- (SEMPRE|NUNCA|QUANDO)`)
+   d. Regenerate README.md index table with current data
+   e. Report changes
+3. If no: skip (ADRs are opt-in)
+
+### Report for ADR scope:
+```markdown
+### ADRs
+- .context/docs/adrs/ — [exists | not found]
+- README.md — [regenerated | up-to-date | created]
+- Active ADRs: [count]
+- Total guardrails: [count]
 ```
 
 ## Anti-Patterns
