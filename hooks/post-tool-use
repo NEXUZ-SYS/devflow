@@ -47,6 +47,26 @@ print(ti.get('status', ''))
 
 reminder="$MSG_HANDOFF_REMINDER"
 
+# --- Check if Bash tool is running a merge command ---
+
+if [ "$TOOL_NAME" = "Bash" ]; then
+  BASH_CMD=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('tool_input', {}).get('command', ''))
+" 2>/dev/null || echo "")
+
+  IS_MERGE=false
+  case "$BASH_CMD" in
+    *"gh pr merge"*|*"git merge"*) IS_MERGE=true ;;
+  esac
+
+  if [ "$IS_MERGE" = "true" ]; then
+    bump_warning="BUMP WARNING: Merge detectado via Bash sem garantia de version bump. Antes de finalizar, verifique se o bump de versão foi feito. Se não, execute o bump agora (scripts/bump-version.sh ou atualize README manualmente)."
+    reminder="${reminder}\n\n${bump_warning}"
+  fi
+fi
+
 # --- Check if this is TaskUpdate with status=completed ---
 
 if [ "$TOOL_NAME" = "TaskUpdate" ] && [ "$TASK_STATUS" = "completed" ]; then

@@ -100,6 +100,35 @@ assert_contains "has handoff reminder" "$output" "HANDOFF"
 assert_not_contains "no commit prompt" "$output" "COMMIT"
 assert_not_contains "no branch finish" "$output" "BRANCH FINISH"
 
+# Test 8: Bash tool with gh pr merge → emits bump warning
+echo "Test 8: Bash with gh pr merge emits bump warning"
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
+assert_contains "has handoff reminder" "$output" "HANDOFF"
+assert_contains "has bump warning" "$output" "BUMP"
+
+# Test 9: Bash tool with git merge → emits bump warning
+echo "Test 9: Bash with git merge emits bump warning"
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
+assert_contains "has handoff reminder" "$output" "HANDOFF"
+assert_contains "has bump warning" "$output" "BUMP"
+
+# Test 10: Bash tool with non-merge command → no bump warning
+echo "Test 10: Bash with non-merge command no bump warning"
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
+assert_contains "has handoff reminder" "$output" "HANDOFF"
+assert_not_contains "no bump warning" "$output" "BUMP"
+
+# Test 11: Bash merge output is valid JSON
+echo "Test 11: Bash merge output is valid JSON"
+json_output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 1 --merge"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
+if printf '%s' "$json_output" | python3 -m json.tool > /dev/null 2>&1; then
+  printf '  PASS: valid JSON\n'
+  PASS=$((PASS + 1))
+else
+  printf '  FAIL: invalid JSON output\n'
+  FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
