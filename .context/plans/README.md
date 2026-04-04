@@ -3,7 +3,8 @@
 This directory contains plans for coordinating work across documentation and playbooks.
 
 ## Plan Queue
-1. [Autonomous Loop](./autonomous-loop.md)
+1. [Adr System](./adr-system.md)
+2. [Autonomous Loop](./autonomous-loop.md)
 
 ## How To Create Or Update Plans
 - Run "dotcontext plan <name>" to scaffold a new plan template.
