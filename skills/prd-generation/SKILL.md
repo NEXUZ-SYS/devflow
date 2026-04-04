@@ -23,12 +23,14 @@ You MUST create a task for each of these items and complete them in order:
 2. **Gather context** — invoke `devflow:context-awareness`
 3. **Analyze existing state** (Modo B only) — map what already exists
 4. **Interview user** — Socratic process, one question at a time
-5. **Synthesize** — cross-reference code analysis with interview
-6. **Generate PRD** — apply template, RICE, MoSCoW
-7. **Decompose into phases** — invoke `devflow:feature-breakdown`
-8. **Present for approval** — section by section
-9. **Save PRD** — write to `.context/plans/<project>-prd.md`
-10. **Handoff** — announce readiness for PREVC of first pending phase
+5. **Interview STACK** — collect tech stack information
+6. **Synthesize** — cross-reference code analysis with interview
+7. **Generate PRD** — apply template, RICE, MoSCoW
+8. **Decompose into phases** — invoke `devflow:feature-breakdown`
+9. **Present for approval** — section by section
+10. **Save PRD** — write to `.context/plans/<project>-prd.md`
+11. **Interview ADRs** — recommend and instantiate organizational ADRs
+12. **Handoff** — announce readiness for PREVC of first pending phase
 
 ## Step 1: Detect Mode
 
@@ -96,6 +98,61 @@ Present the "Current State" analysis first, then ask:
 6. "What are the constraints? (time, tech, dependencies)"
 
 Continue with follow-up questions as needed. Stop when you have enough to define all phases.
+
+## Step 4.5: Entrevista STACK
+
+Apos a entrevista do PRD, coletar informacoes sobre a stack tecnica do projeto.
+
+**Perguntas (uma por vez, multipla escolha):**
+
+1. "Quais sao as linguagens principais do projeto?"
+   - (A) Python
+   - (B) TypeScript
+   - (C) Go
+   - (D) Java
+   - (E) Rust
+   - (F) Outra (especificar)
+   - Aceita multiplas respostas.
+
+2. "Qual cloud provider?"
+   - (A) AWS
+   - (B) GCP
+   - (C) Azure
+   - (D) Nenhum / on-premise
+
+3. "Qual padrao de arquitetura?"
+   - (A) Layered (Controller-Service-Repository)
+   - (B) Hexagonal (Ports & Adapters)
+   - (C) Microservices
+   - (D) Monolith modular
+   - (E) Event-Driven
+   - (F) Ainda nao definido
+
+4. "Usa Infrastructure as Code?"
+   - (A) Terraform
+   - (B) AWS CDK
+   - (C) Pulumi
+   - (D) Nenhum
+
+5. "Qual CI/CD?"
+   - (A) GitHub Actions
+   - (B) GitLab CI
+   - (C) Jenkins
+   - (D) Nenhum / outro
+
+Salvar as respostas como secao **Stack** no PRD:
+
+```markdown
+## Stack
+
+| Aspecto | Escolha |
+|---------|---------|
+| Linguagens | Python, TypeScript |
+| Cloud | AWS |
+| Arquitetura | Layered |
+| IaC | Terraform |
+| CI/CD | GitHub Actions |
+```
 
 ## Step 5: Synthesize
 
@@ -373,6 +430,88 @@ Revise sections based on feedback before moving on.
 Save the approved PRD to `.context/plans/<project>-prd.md`.
 
 If `.context/plans/` doesn't exist, create it.
+
+## Step 9.5: Entrevista ADRs
+
+Apos salvar o PRD, oferecer adocao de ADRs organizacionais.
+
+### Pergunta fonte
+
+"Sua equipe ja possui um repositorio padrao de ADRs (Architecture Decision Records)?"
+
+**(A)** Sim, tenho um repositorio
+   → Solicitar URL do repositorio git (ex: `github.com/org/context-adrs-nexuz`)
+   → Clonar/copiar templates do repositorio para `.context/templates/adrs/`
+   → Usar como fonte de templates
+
+**(B)** Nao, quero usar os templates padrao do DevFlow
+   → Verificar se `.context/templates/adrs/` existe
+   → Se nao existe, copiar de `templates/` do DevFlow (kit inicial)
+   → Usar templates locais
+
+**(C)** Nao, quero criar um repositorio de ADRs para meu time (em breve)
+   → Gerar scaffold usando `templates/adr-repo-scaffold/` como base
+   → Perguntar nome do time para o repo: `context-adrs-<team>`
+   → Perguntar se quer publicar no GitHub (`gh repo create`)
+   → Apos criar, usar o scaffold como fonte
+
+**(D)** Nao quero usar ADRs neste projeto
+   → Pular para Step 10 (Handoff)
+
+### Recomendacao
+
+Apos definir a fonte de templates:
+
+1. Ler todos os templates disponiveis em `.context/templates/adrs/`
+2. Cruzar com a Stack do PRD (Step 4.5):
+   - Para cada template, verificar se `stack` do frontmatter corresponde a alguma resposta da stack
+   - Templates com `stack: universal` sao sempre recomendados
+3. Apresentar lista com checkbox:
+   ```
+   Com base no seu PRD (Python + AWS + Terraform), recomendo estas ADRs:
+   ✅ SOLID para Python — principios de codigo
+   ✅ Clean Code para Python — legibilidade
+   ✅ TDD para Python — qualidade obrigatoria
+   ✅ OWASP Top 10 — seguranca baseline
+   ✅ Secrets Management — gestao de segredos
+   ✅ IaC com Terraform — infraestrutura
+   ✅ AWS Data Lake — padroes Lakehouse
+   ⬜ Hexagonal Architecture — nao detectado no PRD
+   ```
+4. Usuario aceita/rejeita cada uma
+
+### Instanciacao
+
+Para cada template aceito:
+1. Copiar para `.context/docs/adrs/` com numeracao sequencial (001, 002, ...)
+2. Gerar `.context/docs/adrs/README.md` com indice:
+   ```markdown
+   # ADRs do Projeto
+
+   Decisoes arquiteturais ativas neste projeto.
+   A IA consulta este indice durante o context gathering do PREVC Planning.
+
+   ## ADRs Ativas
+
+   | # | Titulo | Escopo | Status | Guardrails | Stack |
+   |---|--------|--------|--------|------------|-------|
+   | 001 | SOLID para Python | Organizacional | Aprovado | 8 regras | Python |
+   | ... | ... | ... | ... | ... | ... |
+
+   ## Como a IA usa estas ADRs
+
+   1. No inicio do Planning phase, a IA le este README
+   2. Identifica ADRs relevantes pela stack e categoria
+   3. Le os guardrails das ADRs aplicaveis
+   4. Aplica como restricoes durante brainstorming, design e implementacao
+   5. No Validation phase, verifica compliance com os guardrails
+   ```
+3. Adicionar referencia no PRD:
+   ```markdown
+   ## ADRs Associados
+   - [001 - SOLID para Python](.context/docs/adrs/001-solid-python.md)
+   - [002 - TDD para Python](.context/docs/adrs/002-tdd-python.md)
+   ```
 
 ## Step 10: Handoff
 
