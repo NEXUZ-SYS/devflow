@@ -21,6 +21,7 @@ describe("Skill frontmatter", () => {
     "skills/prevc-execution/SKILL.md",
     "skills/prevc-planning/SKILL.md",
     "skills/using-devflow/SKILL.md",
+    "skills/napkin/SKILL.md",
   ];
 
   for (const skillPath of autonomousLoopSkills) {
