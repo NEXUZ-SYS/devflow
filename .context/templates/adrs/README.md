@@ -12,14 +12,14 @@ Usados pelo `/devflow prd` para recomendar ADRs ao projeto.
 
 ## Templates Disponiveis
 
-| Categoria | Template | Stack | Guardrails |
-|-----------|----------|-------|------------|
-| Principios de Codigo | solid-python | Python | 8 regras |
-| Qualidade & Testes | tdd-python | Python | 5 regras |
-| Qualidade & Testes | code-review | universal | 4 regras |
-| Arquitetura | layered-architecture | universal | 6 regras |
-| Seguranca | owasp-top10 | universal | 10 regras |
-| Infraestrutura | aws-data-lake | AWS | 8 regras |
+| Categoria            | Template             | Stack     | Guardrails |
+|----------------------|----------------------|-----------|------------|
+| Principios de Codigo | solid-python         | Python    | 8 regras   |
+| Qualidade & Testes   | tdd-python           | Python    | 5 regras   |
+| Qualidade & Testes   | code-review          | universal | 4 regras   |
+| Arquitetura          | layered-architecture | universal | 6 regras   |
+| Seguranca            | owasp-top10          | universal | 10 regras  |
+| Infraestrutura       | aws-data-lake        | AWS       | 8 regras   |
 
 ## Fonte
 
