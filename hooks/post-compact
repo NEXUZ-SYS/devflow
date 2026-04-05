@@ -88,6 +88,35 @@ $MSG_REHYDRATION_PLAN_HEADER
 $plan"
   fi
 
+  # Extract napkin instruction
+  napkin_instruction=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$CHECKPOINT'))
+    n = d.get('napkin_instruction', '')
+    if n: print(n)
+except: pass
+" 2>/dev/null || echo "")
+
+  if [ -n "$napkin_instruction" ]; then
+    rehydration="$rehydration
+
+--- Napkin ---
+$napkin_instruction"
+  fi
+
+  # Re-inject napkin content
+  if [ -f ".context/napkin.md" ]; then
+    napkin_content=$(cat ".context/napkin.md" 2>/dev/null || echo "")
+    if [ -n "$napkin_content" ]; then
+      rehydration="$rehydration
+
+<NAPKIN_RUNBOOK>
+$napkin_content
+</NAPKIN_RUNBOOK>"
+    fi
+  fi
+
   # Fallback instructions only if no handoff was captured
   if [ -z "$handoff" ] && [ -z "$plan" ]; then
     rehydration="$rehydration

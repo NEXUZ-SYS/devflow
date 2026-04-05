@@ -53,6 +53,13 @@ if [ -z "$ACTIVE_PLAN" ] && [ -d "$SP_PLANS_DIR" ]; then
   fi
 fi
 
+# --- Napkin curation trigger ---
+
+NAPKIN_INSTRUCTION=""
+if [ -f ".context/napkin.md" ]; then
+  NAPKIN_INSTRUCTION="Before compacting, curate .context/napkin.md: merge duplicates, remove stale items, enforce max 15 per category / 7 per agent section, re-prioritize by importance."
+fi
+
 # --- Escape for JSON ---
 
 escape_for_json() {
@@ -67,6 +74,7 @@ escape_for_json() {
 
 handoff_escaped=$(escape_for_json "$HANDOFF_CONTENT")
 plan_escaped=$(escape_for_json "$ACTIVE_PLAN")
+napkin_instruction_escaped=$(escape_for_json "$NAPKIN_INSTRUCTION")
 
 # --- Write enriched checkpoint ---
 
@@ -79,7 +87,8 @@ cat > "$CHECKPOINT_DIR/last.json" << EOF
     "dirty_files": $DIRTY_FILES
   },
   "handoff": "$handoff_escaped",
-  "active_plan": "$plan_escaped"
+  "active_plan": "$plan_escaped",
+  "napkin_instruction": "$napkin_instruction_escaped"
 }
 EOF
 
