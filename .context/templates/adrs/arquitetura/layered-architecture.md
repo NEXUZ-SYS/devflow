@@ -67,7 +67,7 @@ Adotar arquitetura Controller-Service-Repository como padrao para aplicacoes bac
 ```
 Controller Layer          Service Layer           Repository Layer
   ┌─────────┐             ┌─────────┐             ┌─────────┐
-  │ Parse   │──Request──>│ Validate│──Entity───>│ Query   │
+  │ Parse   │──Request───>│ Validate│───Entity───>│ Query   │
   │ HTTP    │             │ Execute │             │ Persist │
   │ Return  │<──Response──│ Compose │<──Entity────│ Map     │
   └─────────┘             └─────────┘             └─────────┘

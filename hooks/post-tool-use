@@ -67,6 +67,26 @@ print(d.get('tool_input', {}).get('command', ''))
   fi
 fi
 
+# --- Napkin nudge on Bash failures ---
+
+if [ "$TOOL_NAME" = "Bash" ]; then
+  TOOL_RESULT=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+r = d.get('tool_result', {})
+stdout = str(r.get('stdout', ''))
+stderr = str(r.get('stderr', ''))
+if r.get('exit_code', 0) != 0 or stderr:
+    print('error')
+else:
+    print('ok')
+" 2>/dev/null || echo "ok")
+
+  if [ "$TOOL_RESULT" = "error" ] && [ -f ".context/napkin.md" ]; then
+    reminder="${reminder}\n\n💡 Consider logging this in .context/napkin.md if it reveals a recurring pattern."
+  fi
+fi
+
 # --- Check if this is TaskUpdate with status=completed ---
 
 if [ "$TOOL_NAME" = "TaskUpdate" ] && [ "$TASK_STATUS" = "completed" ]; then

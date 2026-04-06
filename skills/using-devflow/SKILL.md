@@ -67,6 +67,7 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:context-awareness` | Enrich any task with project context (codebase map, semantic analysis) |
 | `devflow:parallel-dispatch` | Coordinate parallel execution of independent tasks |
 | `devflow:autonomous-loop` | Story-by-story autonomous execution with specialist agents and escalation |
+| `devflow:napkin` | Persistent learning memory — curated runbook of mistakes, corrections, and patterns. Always active. |
 
 ### Configuration Skills
 | Skill | When to use |

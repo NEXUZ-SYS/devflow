@@ -105,6 +105,47 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
+# --- Detect and inject napkin runbook ---
+
+napkin_context=""
+napkin_file="${project_root}/.context/napkin.md"
+
+if [ -f "$napkin_file" ]; then
+  napkin_content=$(cat "$napkin_file" 2>/dev/null || echo "")
+  if [ -n "$napkin_content" ]; then
+    napkin_escaped=$(escape_for_json "$napkin_content")
+    napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
+  fi
+elif [ -d "${project_root}/.context" ]; then
+  cat > "$napkin_file" << 'NAPKIN_TMPL'
+# Napkin Runbook
+
+## Curation Rules
+- Re-prioritize on every read.
+- Keep recurring, high-value notes only.
+- Max 15 items per category, max 7 per agent section.
+- Each item includes date + "Do instead".
+
+## Execution & Validation
+(empty)
+
+## Shell & Command Reliability
+(empty)
+
+## Domain Behavior Guardrails
+(empty)
+
+## User Directives
+(empty)
+
+## Agent-Specific Notes
+<!-- Sections appear on demand: ### agent-name -->
+NAPKIN_TMPL
+  napkin_content=$(cat "$napkin_file")
+  napkin_escaped=$(escape_for_json "$napkin_content")
+  napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
+fi
+
 using_devflow_escaped=$(escape_for_json "$using_devflow_content")
 
 # --- Build mode context ---
@@ -194,7 +235,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
