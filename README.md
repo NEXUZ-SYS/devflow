@@ -103,6 +103,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.9.5** | 2026-04-05 | Napkin: memória persistente de aprendizado baseada em [blader/napkin v6.0.0](https://github.com/blader/napkin) — skill `devflow:napkin` com runbook curado (.context/napkin.md), injeção no SessionStart, curadoria no PreCompact, re-injeção no PostCompact, nudge em falhas no PostToolUse, categorias híbridas (4 fixas + agent-specific notes), caps 15/7, 103 testes |
 | **0.9.1** | 2026-04-04 | Fix: version bump nunca é pulado na finalização de branch — Step 1 (Version Bump) no prevc-confirmation antes do merge, hook PostToolUse detecta `gh pr merge`/`git merge` via Bash e injeta BUMP WARNING, 240 testes |
 | **0.9.0** | 2026-04-03 | Sistema de ADRs como guardrails para IA: 6 templates organizacionais (SOLID, TDD, Code Review, Layered Architecture, OWASP, AWS Data Lake), entrevista de stack no `/devflow prd`, recomendação e instanciação automática de ADRs, leitura de guardrails no Planning, compliance check no Validation, suporte em context-awareness e context-sync, 252 testes |
 | **0.8.0** | 2026-04-03 | Hook PostToolUse com commit prompt e finalização de branch automática: pergunta "Quer commitar?" após tasks, "Quer finalizar a branch?" com pipeline completa (README, bump, push, merge), comportamento adaptável por autonomia (supervised/assisted/autonomous), detecção de capacidades do projeto, i18n em 3 idiomas |
@@ -123,7 +124,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 ```
 devflow/
 ├── commands/         # /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch
-├── skills/           # 25+ skills (PREVC, bridge, on-demand, PRD, autonomous-loop)
+├── skills/           # 28 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin)
 ├── agents/           # 15 playbooks de agentes
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
