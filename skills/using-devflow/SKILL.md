@@ -73,6 +73,7 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | Skill | When to use |
 |-------|-------------|
 | `devflow:language` | Set conversation language (en-US, pt-BR, es-ES) — all responses switch to selected language |
+| `devflow:config` | Configure git strategy and generate .context/.devflow.yaml |
 
 ### Utility Commands
 | Command | Action |
@@ -135,6 +136,7 @@ Autonomy modes feature bidirectional escalation:
 | `/devflow scale:X [description]` | Start with explicit scale (QUICK/SMALL/MEDIUM/LARGE) |
 | `/devflow language` | Set conversation language interactively |
 | `/devflow language <code>` | Set language directly (en-US, pt-BR, es-ES) |
+| `/devflow config` | Configure git strategy and generate .context/.devflow.yaml |
 | `/devflow prd` | Generate or update product PRD with phased roadmap |
 | `/devflow-status` | Show current phase, progress, and available actions |
 | `/devflow-next` | Attempt to advance to next phase (checks gates) |
@@ -146,6 +148,11 @@ Autonomy modes feature bidirectional escalation:
 | `/devflow autonomy:X [description]` | Start with explicit autonomy (supervised/assisted/autonomous) |
 | `/devflow autonomy:X` (no desc) | Upgrade/downgrade active workflow's autonomy mode |
 | `/devflow-sync workflow` | Validate/scaffold `.context/workflow/` directory |
+
+### `/devflow config`
+1. Invoke `devflow:config` skill
+2. Runs interactive interview with heuristic detection
+3. Generates or overwrites `.context/.devflow.yaml`
 
 ## Superpowers Integration
 

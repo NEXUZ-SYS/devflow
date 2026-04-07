@@ -434,6 +434,15 @@ mkdir -p .context/plans/
 
 Plans are created during PREVC workflows, not during init.
 
+### Git Strategy Configuration
+
+After scaffolding `.context/`, check if `.context/.devflow.yaml` exists:
+
+1. **If NOT exists** → Invoke `devflow:config` skill to run the interactive interview
+2. **If exists** → Skip (preserve existing configuration)
+
+This ensures every project initialized with DevFlow has a git strategy configured.
+
 ## Step 6: Verify Compatibility
 
 After scaffolding, verify:

@@ -26,6 +26,85 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
+# --- Read YAML field helper ---
+
+read_yaml_field() {
+  local file="$1" field="$2"
+  python3 - "$file" "$field" << 'PYEOF'
+import sys
+file_path, field_name = sys.argv[1], sys.argv[2]
+try:
+    import yaml
+    with open(file_path) as f:
+        data = yaml.safe_load(f)
+    git = data.get('git', {})
+    val = git.get(field_name, '')
+    if isinstance(val, list):
+        print(' '.join(str(v) for v in val))
+    elif isinstance(val, bool):
+        print(str(val).lower())
+    elif isinstance(val, dict):
+        import json
+        print(json.dumps(val))
+    else:
+        print(str(val))
+except ImportError:
+    # Fallback: line-by-line parse for simple YAML (no PyYAML).
+    # Handles scalar values and [list] syntax. Does NOT handle nested dicts.
+    import re
+    in_git = False
+    for line in open(file_path):
+        stripped = line.strip()
+        if stripped == 'git:':
+            in_git = True
+            continue
+        if in_git and not line.startswith(' ') and not line.startswith('\t') and stripped:
+            break
+        if in_git and field_name + ':' in stripped:
+            match = re.match(r'\s*' + re.escape(field_name) + r':\s*(.*)', stripped)
+            if match:
+                val = match.group(1).strip()
+                if val.startswith('[') and val.endswith(']'):
+                    val = val[1:-1].replace(',', ' ').replace('"', '').replace("'", '')
+                print(val)
+                break
+    else:
+        # for/else: prints empty when field not found (loop completed without break)
+        print('')
+PYEOF
+}
+
+# --- Parse autoFinish config ---
+# Returns: "disabled" | "all" | JSON object like {"bump":true,"push":false}
+parse_auto_finish() {
+  local config_file="$1"
+  python3 - "$config_file" << 'PYEOF'
+import sys, json
+file_path = sys.argv[1]
+try:
+    import yaml
+    with open(file_path) as f:
+        data = yaml.safe_load(f)
+    git = data.get('git', {})
+    af = git.get('autoFinish')
+    if af is None:
+        print('disabled')
+    elif af is True:
+        print('all')
+    elif af is False:
+        print('disabled')
+    elif isinstance(af, dict):
+        print(json.dumps(af))
+    else:
+        print('disabled')
+except ImportError:
+    # No PyYAML: granular autoFinish unparseable, safe default
+    print('disabled')
+except Exception:
+    print('disabled')
+PYEOF
+}
+
 # --- Read stdin ---
 
 INPUT=$(cat)
@@ -157,21 +236,49 @@ print(d.get('cwd', ''))
         ;;
     esac
   elif [ "$IS_WORK_BRANCH" = "true" ]; then
-    # Scenario 2: work branch, all committed → branch finish prompt
+    # Scenario 2: work branch, all committed → check autoFinish config
     cap_info="Project capabilities: README=${HAS_README}, BUMP=${HAS_BUMP}"
+
+    # Read autoFinish from .devflow.yaml
+    AUTO_FINISH="disabled"
+    DEVFLOW_CONFIG="$CWD/.context/.devflow.yaml"
+    if [ -f "$DEVFLOW_CONFIG" ]; then
+      AUTO_FINISH=$(parse_auto_finish "$DEVFLOW_CONFIG")
+    fi
+
+    # Build autoFinish context for LLM
+    auto_finish_context="autoFinish: ${AUTO_FINISH}"
 
     case "$AUTONOMY" in
       supervised)
-        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_SUPERVISED" "branch=${BRANCH}")
-        extra_instruction="${extra_instruction}\n${cap_info}"
+        if [ "$AUTO_FINISH" = "disabled" ]; then
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_SUPERVISED" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}\nNOTE: autoFinish is DISABLED. Do NOT execute automatic bump/commit/push/merge. Only ask the user and proceed manually for each step they approve."
+        else
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_SUPERVISED" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}"
+        fi
         ;;
       assisted)
-        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_ASSISTED" "branch=${BRANCH}")
-        extra_instruction="${extra_instruction}\n${cap_info}"
+        if [ "$AUTO_FINISH" = "disabled" ]; then
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_ASSISTED" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}\nNOTE: autoFinish is DISABLED. Do NOT execute automatic finalization. Ask the user what they want to do."
+        else
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_PROMPT_ASSISTED" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}"
+        fi
         ;;
       autonomous)
-        extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_AUTO" "branch=${BRANCH}")
-        extra_instruction="${extra_instruction}\n${cap_info}"
+        if [ "$AUTO_FINISH" = "disabled" ]; then
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_SKIPPED" "branch=${BRANCH}")
+        elif [ "$AUTO_FINISH" = "all" ]; then
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_AUTO" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}"
+        else
+          # Granular: pass the JSON so LLM knows which steps to run
+          extra_instruction=$(render_msg "$MSG_BRANCH_FINISH_AUTO" "branch=${BRANCH}")
+          extra_instruction="${extra_instruction}\n${cap_info}\n${auto_finish_context}\nIMPORTANT: Only execute steps that are 'true' in the autoFinish config. Steps not listed or set to 'false' must be SKIPPED."
+        fi
         ;;
     esac
   fi

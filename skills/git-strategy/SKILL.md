@@ -41,69 +41,25 @@ O hook retorna `permissionDecision: "deny"` — o LLM **não consegue** editar s
 | Estratégia | Isolamento | Branches protegidas |
 |---|---|---|
 | **branch-flow** | `git checkout -b <tipo>/<nome>` | Configurável (main, develop, ou ambas) |
-| **worktree** | `git worktree add` | main, master, develop |
+| **worktree** | `git worktree add` | Configurável via .devflow.yaml |
 | **trunk-based** | Nenhum (commits diretos) | Nenhuma |
 
-## Detecção Automática
+## Leitura da Configuração
 
 ```
-1. Ler .context/docs/development-workflow.md → campo gitStrategy
-2. Se não existir, detectar:
-   - Tem scripts/wt-create.sh? → worktree
-   - Tem branch develop? (git branch --list develop) → branch-flow (main + develop)
-   - Só main? → branch-flow (só main)
-   - Nenhuma das anteriores → perguntar ao usuário
-3. Se ambíguo → AskUserQuestion
+1. Ler .context/.devflow.yaml → seção git
+2. Se não existir → BLOQUEAR:
+   "DevFlow não está configurado. Execute /devflow config para definir sua estratégia git."
+   NÃO prosseguir. NÃO fazer detecção por heurísticas.
+3. Se existir → usar campos:
+   - strategy: branch-flow | worktree | trunk-based
+   - protectedBranches: lista de branches protegidas
+   - branchProtection: true/false
+   - prCli: gh | glab | none
 ```
 
-## Configuração Inicial (primeira execução)
-
-Se nenhuma estratégia configurada, perguntar ao usuário:
-
-**Pergunta 1:**
-```
-AskUserQuestion:
-  question: "Qual estratégia git deste projeto?"
-  header: "Git"
-  multiSelect: false
-  options:
-    - label: "Branch Flow (Recomendado)"
-      description: "Branches protegidas + git checkout -b para isolamento"
-    - label: "Worktree"
-      description: "Isolamento total via git worktree add"
-    - label: "Trunk-based"
-      description: "Commits diretos na main, feature flags quando necessário"
-```
-
-**Pergunta 2 (se branch-flow):**
-```
-AskUserQuestion:
-  question: "Quais branches são protegidas?"
-  header: "Protegidas"
-  multiSelect: true
-  options:
-    - label: "main"
-      description: "Branch de produção"
-    - label: "develop"
-      description: "Branch de integração"
-```
-
-**Pergunta 3:**
-```
-AskUserQuestion:
-  question: "Qual CLI para criação de PRs?"
-  header: "CLI"
-  multiSelect: false
-  options:
-    - label: "gh (GitHub)"
-      description: "GitHub CLI para PRs"
-    - label: "glab (GitLab)"
-      description: "GitLab CLI para Merge Requests"
-    - label: "Nenhuma"
-      description: "Criar PRs manualmente pela interface web"
-```
-
-Respostas salvas em `.context/docs/development-workflow.md`.
+**Importante:** Este skill NÃO faz mais detecção automática por heurísticas.
+A detecção foi movida para o skill `devflow:config`, que é executado uma vez no setup.
 
 ## Fluxo (gate bloqueante)
 
@@ -198,14 +154,16 @@ Não aplicar gate quando:
 | branch-flow | `git branch -d <tipo>/<nome>` |
 | trunk-based | Nenhuma |
 
-## PR Creation (usa CLI configurada)
+## PR Creation (usa CLI do .devflow.yaml)
 
 ```
-IF cli == "gh":
+Ler prCli de .context/.devflow.yaml:
+
+IF prCli == "gh":
   gh pr create --title "..." --body "..."
-ELIF cli == "glab":
+ELIF prCli == "glab":
   glab mr create --title "..." --description "..."
-ELIF cli == nenhuma:
+ELIF prCli == "none":
   Instruir usuário a criar manualmente
 ```
 

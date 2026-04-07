@@ -13,6 +13,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 ```
 /devflow help                          # Show full help
 /devflow init                          # Initialize DevFlow in this project
+/devflow config                        # Configure git strategy (.devflow.yaml)
 /devflow <description>                 # Auto-detect scale and start workflow
 /devflow language                      # Set conversation language (en/pt/es)
 /devflow language <code>               # Set language directly (e.g., pt-BR)
@@ -284,6 +285,11 @@ After all steps complete, show a summary table with what was updated and their v
 2. If found: display phase summary with status indicators (✓ ⏳ ⬚)
 3. If not found: suggest running `/devflow prd` first
 
+### `/devflow config`
+1. Invoke `devflow:config` skill
+2. Runs interactive interview with heuristic detection
+3. Generates or overwrites `.context/.devflow.yaml`
+
 ### `/devflow init`
 1. Invoke `devflow:project-init` skill
 2. Se `.context/docs/` já existe → delega para `devflow:context-sync` (atualização)
@@ -314,6 +320,7 @@ After all steps complete, show a summary table with what was updated and their v
 
 - `help` — display the full help reference
 - `init` — triggers project initialization (devflow:project-init)
+- `config` — configure git strategy and generate .context/.devflow.yaml (devflow:config)
 - `prd` — generate or update product PRD (devflow:prd-generation)
 - `language` — interactive language selection (devflow:language)
 - `language <code>` — set language directly (en-US, pt-BR, es-ES)

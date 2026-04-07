@@ -32,19 +32,103 @@ if [ -f "$HANDOFF_FILE" ]; then
   HANDOFF_CONTENT=$(cat "$HANDOFF_FILE" 2>/dev/null || echo "")
 fi
 
-# --- Active plan (newest .md in .context/plans/) ---
+# Auto-generate handoff from git state if handoff.md is empty
+if [ -z "$HANDOFF_CONTENT" ]; then
+  # Detect main branch name
+  MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo "main")
 
-ACTIVE_PLAN=""
-PLANS_DIR=".context/plans"
-if [ -d "$PLANS_DIR" ]; then
-  newest_plan=$(ls -t "$PLANS_DIR"/*.md 2>/dev/null | head -1)
-  if [ -n "$newest_plan" ]; then
-    # Capture first 200 lines to keep snapshot manageable
-    ACTIVE_PLAN=$(head -200 "$newest_plan" 2>/dev/null || echo "")
+  # Recent commits on current branch (since diverging from main)
+  RECENT_COMMITS=""
+  if [ "$BRANCH" != "$MAIN_BRANCH" ] && [ "$BRANCH" != "master" ]; then
+    RECENT_COMMITS=$(git log "${MAIN_BRANCH}..HEAD" --format='- %h %s' -10 2>/dev/null || echo "")
+  fi
+  # Fallback: last 5 commits if no branch-specific commits
+  if [ -z "$RECENT_COMMITS" ]; then
+    RECENT_COMMITS=$(git log --format='- %h %s' -5 2>/dev/null || echo "")
+  fi
+
+  # Read workflow status if available
+  WORKFLOW_SUMMARY=""
+  if [ -f ".context/workflow/status.yaml" ]; then
+    WORKFLOW_SUMMARY=$(head -20 ".context/workflow/status.yaml" 2>/dev/null || echo "")
+  fi
+
+  if [ -n "$RECENT_COMMITS" ] || [ -n "$WORKFLOW_SUMMARY" ]; then
+    AUTO_HANDOFF="## Auto-generated Handoff (handoff.md was empty)"
+    if [ -n "$WORKFLOW_SUMMARY" ]; then
+      AUTO_HANDOFF="${AUTO_HANDOFF}
+### Workflow Status
+\`\`\`yaml
+${WORKFLOW_SUMMARY}
+\`\`\`"
+    fi
+    if [ -n "$RECENT_COMMITS" ]; then
+      AUTO_HANDOFF="${AUTO_HANDOFF}
+### Recent Commits (this branch)
+${RECENT_COMMITS}"
+    fi
+    HANDOFF_CONTENT="$AUTO_HANDOFF"
   fi
 fi
 
-# Also check superpowers plans dir
+# --- Active plan (smart detection: status.yaml → branch match → newest .md) ---
+
+ACTIVE_PLAN=""
+
+# Strategy 1: Read plan reference from workflow status.yaml
+if [ -f ".context/workflow/status.yaml" ]; then
+  PLAN_FILE=$(python3 - ".context/workflow/status.yaml" << 'PYEOF'
+import sys
+file_path = sys.argv[1]
+try:
+    import yaml
+    with open(file_path) as f:
+        data = yaml.safe_load(f) or {}
+    plan = data.get('plan', data.get('planFile', ''))
+    if plan:
+        print(plan)
+except ImportError:
+    import re
+    for line in open(file_path):
+        m = re.match(r'\s*plan(?:File)?:\s*(.+)', line.strip())
+        if m:
+            val = m.group(1).strip().strip('"').strip("'")
+            print(val)
+            break
+except Exception:
+    pass
+PYEOF
+  )
+  if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
+    ACTIVE_PLAN=$(head -200 "$PLAN_FILE" 2>/dev/null || echo "")
+  fi
+fi
+
+# Strategy 2: Match plan file by branch name (feature/foo-bar → *foo-bar*.md)
+if [ -z "$ACTIVE_PLAN" ] && [ "$BRANCH" != "main" ] && [ "$BRANCH" != "master" ]; then
+  FEATURE_NAME="${BRANCH#*/}"
+  for dir in ".context/plans" "docs/superpowers/plans"; do
+    if [ -d "$dir" ]; then
+      matched_plan=$(ls -t "$dir"/*"$FEATURE_NAME"*.md 2>/dev/null | head -1 || true)
+      if [ -n "$matched_plan" ]; then
+        ACTIVE_PLAN=$(head -200 "$matched_plan" 2>/dev/null || echo "")
+        break
+      fi
+    fi
+  done
+fi
+
+# Strategy 3: Fallback to newest .md in plans directories
+if [ -z "$ACTIVE_PLAN" ]; then
+  PLANS_DIR=".context/plans"
+  if [ -d "$PLANS_DIR" ]; then
+    newest_plan=$(ls -t "$PLANS_DIR"/*.md 2>/dev/null | head -1)
+    if [ -n "$newest_plan" ]; then
+      ACTIVE_PLAN=$(head -200 "$newest_plan" 2>/dev/null || echo "")
+    fi
+  fi
+fi
+
 SP_PLANS_DIR="docs/superpowers/plans"
 if [ -z "$ACTIVE_PLAN" ] && [ -d "$SP_PLANS_DIR" ]; then
   newest_plan=$(ls -t "$SP_PLANS_DIR"/*.md 2>/dev/null | head -1)

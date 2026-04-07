@@ -31,40 +31,54 @@ escape_for_json() {
 rehydration="$MSG_REHYDRATION_HEADER"
 
 if [ -f "$CHECKPOINT" ]; then
-  checkpoint_content=$(cat "$CHECKPOINT" 2>/dev/null || echo "{}")
 
-  # Extract handoff directly (most valuable for resumption)
-  handoff=$(python3 -c "
+  # Extract fields safely via sys.argv (no shell interpolation in Python)
+  handoff=$(python3 - "$CHECKPOINT" << 'PYEOF'
 import json, sys
 try:
-    d = json.load(open('$CHECKPOINT'))
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
     h = d.get('handoff', '')
     if h: print(h)
 except: pass
-" 2>/dev/null || echo "")
+PYEOF
+  )
 
-  # Extract git info
-  git_info=$(python3 -c "
+  git_info=$(python3 - "$CHECKPOINT" << 'PYEOF'
 import json, sys
 try:
-    d = json.load(open('$CHECKPOINT'))
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
     g = d.get('git', {})
-    print(f\"Branch: {g.get('branch','?')} | Commit: {g.get('last_commit','?')}\")
+    print(f"Branch: {g.get('branch','?')} | Commit: {g.get('last_commit','?')}")
     dirty = g.get('dirty_files', [])
     if dirty:
-        print(f\"Dirty files: {', '.join(dirty[:10])}\")
+        print(f"Dirty files: {', '.join(dirty[:10])}")
 except: pass
-" 2>/dev/null || echo "")
+PYEOF
+  )
 
-  # Extract plan summary
-  plan=$(python3 -c "
+  plan=$(python3 - "$CHECKPOINT" << 'PYEOF'
 import json, sys
 try:
-    d = json.load(open('$CHECKPOINT'))
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
     p = d.get('active_plan', '')
     if p: print(p[:3000])
 except: pass
-" 2>/dev/null || echo "")
+PYEOF
+  )
+
+  napkin_instruction=$(python3 - "$CHECKPOINT" << 'PYEOF'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    n = d.get('napkin_instruction', '')
+    if n: print(n)
+except: pass
+PYEOF
+  )
 
   # Build context with available data
   if [ -n "$git_info" ]; then
@@ -87,16 +101,6 @@ $handoff"
 $MSG_REHYDRATION_PLAN_HEADER
 $plan"
   fi
-
-  # Extract napkin instruction
-  napkin_instruction=$(python3 -c "
-import json, sys
-try:
-    d = json.load(open('$CHECKPOINT'))
-    n = d.get('napkin_instruction', '')
-    if n: print(n)
-except: pass
-" 2>/dev/null || echo "")
 
   if [ -n "$napkin_instruction" ]; then
     rehydration="$rehydration
