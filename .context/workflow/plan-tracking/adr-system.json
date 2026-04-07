@@ -1,0 +1,30 @@
+{
+  "decisions": [
+    {
+      "title": "ADR em duas camadas: organizacional + projeto",
+      "description": "Templates organizacionais em .context/templates/adrs/ segmentados por stack. ADRs instanciadas em .context/docs/adrs/ por projeto. Formato estendido com Guardrails + Enforcement.",
+      "phase": "P",
+      "alternatives": [
+        "ADR unica guarda-chuva",
+        "ADRs granulares desde o inicio",
+        "Formato Nygard classico sem Guardrails"
+      ],
+      "status": "accepted",
+      "id": "dec-1775262095257",
+      "decidedAt": "2026-04-04T00:21:35.257Z"
+    },
+    {
+      "title": "Integracao via /devflow prd com entrevista de stack",
+      "description": "Apos gerar o PRD, entrevistar stack do usuario, cruzar com templates, recomendar ADRs. Suporte a repo externo de ADRs de times.",
+      "phase": "P",
+      "alternatives": [
+        "ADRs manuais sem integracao",
+        "ADRs no /devflow init",
+        "ADRs como parte do PRD (nao separado)"
+      ],
+      "status": "accepted",
+      "id": "dec-1775262098712",
+      "decidedAt": "2026-04-04T00:21:38.712Z"
+    }
+  ]
+}

@@ -5,6 +5,8 @@
       "args": [
         "-y",
         "@dotcontext/cli@latest",
+        "--lang",
+        "pt-BR",
         "mcp"
       ],
       "env": {}
