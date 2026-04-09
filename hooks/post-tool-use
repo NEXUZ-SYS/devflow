@@ -168,25 +168,24 @@ fi
 
 # --- MemPalace diary on workflow-manage hand-off ---
 
-if [ "$TOOL_NAME" = "Bash" ]; then
-  # Detect if the bash command was a workflow-manage handoff (MCP call)
-  IS_HANDOFF=false
-  case "$BASH_CMD" in
-    *"workflow-manage"*"handoff"*) IS_HANDOFF=true ;;
-  esac
+# Detect workflow-manage MCP tool calls with handoff action
+IS_HANDOFF=false
+case "$TOOL_NAME" in
+  *"workflow-manage"*) IS_HANDOFF=true ;;
+esac
 
-  if [ "$IS_HANDOFF" = "true" ]; then
-    mempalace_available="false"
-    if [ -f ".mcp.json" ] && grep -q "mempalace" ".mcp.json" 2>/dev/null; then
-      mempalace_available="true"
-    elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
-      mempalace_available="true"
-    fi
+if [ "$IS_HANDOFF" = "true" ]; then
+  mempalace_available="false"
+  if [ -f ".mcp.json" ] && grep -q "mempalace" ".mcp.json" 2>/dev/null; then
+    mempalace_available="true"
+  elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+    mempalace_available="true"
+  fi
 
-    if [ "$mempalace_available" = "true" ]; then
-      mp_auto_diary="true"
-      if [ -f ".context/.devflow.yaml" ]; then
-        mp_auto_diary=$(python3 - ".context/.devflow.yaml" << 'PYEOF'
+  if [ "$mempalace_available" = "true" ]; then
+    mp_auto_diary="true"
+    if [ -f ".context/.devflow.yaml" ]; then
+      mp_auto_diary=$(python3 - ".context/.devflow.yaml" << 'PYEOF'
 import sys
 try:
     import yaml
@@ -196,12 +195,11 @@ try:
 except:
     print('true')
 PYEOF
-        )
-      fi
-      if [ "$mp_auto_diary" = "true" ]; then
-        diary_prompt="Agent hand-off detected. Write a diary entry to MemPalace with: agent name, phase, summary of work done, decisions made, artifacts produced, and who the hand-off goes to. Use the project wing and current PREVC phase as room, hall 'agent-diaries'."
-        reminder="${reminder}\n\n${diary_prompt}"
-      fi
+      )
+    fi
+    if [ "$mp_auto_diary" = "true" ]; then
+      diary_prompt="Agent hand-off detected. Write a diary entry to MemPalace with: agent name, phase, summary of work done, decisions made, artifacts produced, and who the hand-off goes to. Use the project wing and current PREVC phase as room, hall 'agent-diaries'."
+      reminder="${reminder}\n\n${diary_prompt}"
     fi
   fi
 fi

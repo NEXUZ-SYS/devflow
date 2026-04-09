@@ -148,48 +148,31 @@ $mempalace_instruction"
   fi
 
   if [ "$mempalace_available" = "true" ]; then
-    mp_wing="auto"
-    mp_budget="500"
     mp_enabled="true"
+    mp_budget="500"
+    mp_wing="auto"
+    mp_auto_recall="true"
     if [ -f ".context/.devflow.yaml" ]; then
-      mp_enabled=$(python3 - ".context/.devflow.yaml" << 'PYEOF'
+      read mp_enabled mp_budget mp_wing mp_auto_recall <<< $(python3 - ".context/.devflow.yaml" << 'PYEOF'
 import sys
 try:
     import yaml
     with open(sys.argv[1]) as f:
         data = yaml.safe_load(f) or {}
-    print(str(data.get('mempalace', {}).get('enabled', True)).lower())
+    mp = data.get('mempalace', {})
+    print(str(mp.get('enabled', True)).lower(),
+          str(mp.get('budget', 500)),
+          str(mp.get('wing', 'auto')),
+          str(mp.get('auto_recall', True)).lower())
 except:
-    print('true')
-PYEOF
-      )
-      mp_budget=$(python3 - ".context/.devflow.yaml" << 'PYEOF'
-import sys
-try:
-    import yaml
-    with open(sys.argv[1]) as f:
-        data = yaml.safe_load(f) or {}
-    print(str(data.get('mempalace', {}).get('budget', 500)))
-except:
-    print('500')
-PYEOF
-      )
-      mp_wing=$(python3 - ".context/.devflow.yaml" << 'PYEOF'
-import sys
-try:
-    import yaml
-    with open(sys.argv[1]) as f:
-        data = yaml.safe_load(f) or {}
-    print(str(data.get('mempalace', {}).get('wing', 'auto')))
-except:
-    print('auto')
+    print('true 500 auto true')
 PYEOF
       )
     fi
     if [ "$mp_wing" = "auto" ]; then
       mp_wing=$(basename "$PWD")
     fi
-    if [ "$mp_enabled" = "true" ]; then
+    if [ "$mp_enabled" = "true" ] && [ "$mp_auto_recall" = "true" ]; then
       rehydration="$rehydration
 
 --- MemPalace ---

@@ -227,16 +227,18 @@ AskUserQuestion:
 **Se sim (instalar):**
 1. Detectar instalador: `command -v pipx` → usar pipx, senão pip
 2. Instalar: `pipx install mempalace` ou `pip install mempalace`
-3. Configurar MCP: adicionar entry ao `.mcp.json`:
+3. Configurar MCP: adicionar entry ao `.mcp.json` dentro de `mcpServers`:
    ```json
    {
-     "mempalace": {
-       "command": "python",
-       "args": ["-m", "mempalace.mcp_server"]
+     "mcpServers": {
+       "mempalace": {
+         "command": "python",
+         "args": ["-m", "mempalace.mcp_server"]
+       }
      }
    }
    ```
-   Se `.mcp.json` já existe, merge a entry. Se não existe, criar com a entry.
+   Se `.mcp.json` já existe, merge a entry dentro de `mcpServers`. Se não existe, criar com a estrutura completa.
 4. Inicializar palace: `mempalace init ~/.mempalace/palace`
 5. Seguir para P7 e P8
 

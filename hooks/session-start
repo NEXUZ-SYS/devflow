@@ -162,43 +162,23 @@ if [ "$mempalace_available" = "true" ]; then
   mp_enabled="true"
   mp_budget="500"
   mp_wing="auto"
+  mp_auto_recall="true"
   devflow_config="${project_root}/.context/.devflow.yaml"
 
   if [ -f "$devflow_config" ]; then
-    mp_enabled=$(python3 - "$devflow_config" << 'PYEOF'
+    read mp_enabled mp_budget mp_wing mp_auto_recall <<< $(python3 - "$devflow_config" << 'PYEOF'
 import sys
 try:
     import yaml
     with open(sys.argv[1]) as f:
         data = yaml.safe_load(f) or {}
     mp = data.get('mempalace', {})
-    print(str(mp.get('enabled', True)).lower())
+    print(str(mp.get('enabled', True)).lower(),
+          str(mp.get('budget', 500)),
+          str(mp.get('wing', 'auto')),
+          str(mp.get('auto_recall', True)).lower())
 except:
-    print('true')
-PYEOF
-    )
-    mp_budget=$(python3 - "$devflow_config" << 'PYEOF'
-import sys
-try:
-    import yaml
-    with open(sys.argv[1]) as f:
-        data = yaml.safe_load(f) or {}
-    mp = data.get('mempalace', {})
-    print(str(mp.get('budget', 500)))
-except:
-    print('500')
-PYEOF
-    )
-    mp_wing=$(python3 - "$devflow_config" << 'PYEOF'
-import sys
-try:
-    import yaml
-    with open(sys.argv[1]) as f:
-        data = yaml.safe_load(f) or {}
-    mp = data.get('mempalace', {})
-    print(str(mp.get('wing', 'auto')))
-except:
-    print('auto')
+    print('true 500 auto true')
 PYEOF
     )
   fi
@@ -208,7 +188,7 @@ PYEOF
     mp_wing=$(basename "$project_root")
   fi
 
-  if [ "$mp_enabled" = "true" ]; then
+  if [ "$mp_enabled" = "true" ] && [ "$mp_auto_recall" = "true" ]; then
     mempalace_recall_instruction="At session start, call the mempalace MCP tool to search for relevant memories. Use wing '${mp_wing}' and limit results to approximately ${mp_budget} tokens (roughly $((mp_budget * 4 / 3)) words). Search based on the current branch name and any active workflow description. Inject results as context for the session."
     mp_escaped=$(escape_for_json "$mempalace_recall_instruction")
     mempalace_context="\\n<MEMPALACE_CONTEXT>\\nMemPalace integration active. Wing: ${mp_wing}. Budget: ${mp_budget} tokens.\\n${mp_escaped}\\n</MEMPALACE_CONTEXT>\\n"
