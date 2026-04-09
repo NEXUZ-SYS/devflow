@@ -46,6 +46,14 @@ elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "dotcontext" "${HOME}/.
   mode="full"
 fi
 
+# Check mempalace MCP: look for mempalace in .mcp.json or global mcp config
+mempalace_available="false"
+if [ -f "${project_root}/.mcp.json" ] && grep -q "mempalace" "${project_root}/.mcp.json" 2>/dev/null; then
+  mempalace_available="true"
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  mempalace_available="true"
+fi
+
 # Check dotcontext CLI: global install or npx available
 if [ "$mode" != "full" ]; then
   if command -v dotcontext >/dev/null 2>&1; then
@@ -146,6 +154,67 @@ NAPKIN_TMPL
   napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
 fi
 
+# --- MemPalace auto-recall ---
+
+mempalace_context=""
+if [ "$mempalace_available" = "true" ]; then
+  # Read mempalace config from .devflow.yaml
+  mp_enabled="true"
+  mp_budget="500"
+  mp_wing="auto"
+  devflow_config="${project_root}/.context/.devflow.yaml"
+
+  if [ -f "$devflow_config" ]; then
+    mp_enabled=$(python3 - "$devflow_config" << 'PYEOF'
+import sys
+try:
+    import yaml
+    with open(sys.argv[1]) as f:
+        data = yaml.safe_load(f) or {}
+    mp = data.get('mempalace', {})
+    print(str(mp.get('enabled', True)).lower())
+except:
+    print('true')
+PYEOF
+    )
+    mp_budget=$(python3 - "$devflow_config" << 'PYEOF'
+import sys
+try:
+    import yaml
+    with open(sys.argv[1]) as f:
+        data = yaml.safe_load(f) or {}
+    mp = data.get('mempalace', {})
+    print(str(mp.get('budget', 500)))
+except:
+    print('500')
+PYEOF
+    )
+    mp_wing=$(python3 - "$devflow_config" << 'PYEOF'
+import sys
+try:
+    import yaml
+    with open(sys.argv[1]) as f:
+        data = yaml.safe_load(f) or {}
+    mp = data.get('mempalace', {})
+    print(str(mp.get('wing', 'auto')))
+except:
+    print('auto')
+PYEOF
+    )
+  fi
+
+  # Resolve wing name
+  if [ "$mp_wing" = "auto" ]; then
+    mp_wing=$(basename "$project_root")
+  fi
+
+  if [ "$mp_enabled" = "true" ]; then
+    mempalace_recall_instruction="At session start, call the mempalace MCP tool to search for relevant memories. Use wing '${mp_wing}' and limit results to approximately ${mp_budget} tokens (roughly $((mp_budget * 4 / 3)) words). Search based on the current branch name and any active workflow description. Inject results as context for the session."
+    mp_escaped=$(escape_for_json "$mempalace_recall_instruction")
+    mempalace_context="\\n<MEMPALACE_CONTEXT>\\nMemPalace integration active. Wing: ${mp_wing}. Budget: ${mp_budget} tokens.\\n${mp_escaped}\\n</MEMPALACE_CONTEXT>\\n"
+  fi
+fi
+
 using_devflow_escaped=$(escape_for_json "$using_devflow_content")
 
 # --- Build mode context ---
@@ -155,6 +224,7 @@ mode_context+="- superpowers: ${superpowers_available}\\n"
 mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
 mode_context+="- dotcontext CLI: ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
+mode_context+="- mempalace: ${mempalace_available}\\n"
 
 # --- Mode status announcement (i18n) ---
 
@@ -235,7 +305,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
