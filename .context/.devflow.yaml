@@ -8,3 +8,11 @@ git:
   prCli: gh
   branchProtection: true
   autoFinish: true
+
+mempalace:
+  enabled: true
+  palace: ~/.mempalace/palace
+  wing: auto
+  budget: 500
+  auto_diary: true
+  auto_recall: true
