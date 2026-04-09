@@ -43,6 +43,25 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 
 ## Behavior
 
+### Argument Routing (MANDATORY — read this FIRST)
+
+Parse the first argument and route to the matching section below. Do NOT treat known arguments as task descriptions.
+
+| First argument | Route to | Invokes skill? |
+|----------------|----------|----------------|
+| `help` | Print help text below | No |
+| `init` | `/devflow init` section | Yes → `devflow:project-init` |
+| `config` | `/devflow config` section | Yes → `devflow:config` |
+| `update` | `/devflow update` section | **No** — runs bash commands directly |
+| `language` | `/devflow language` section | Yes → `devflow:language` |
+| `prd` | `/devflow prd` section | Yes → `devflow:prd-generation` |
+| `auto` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
+| `autonomy:*` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
+| `scale:*` | `/devflow [description]` section | Yes → `devflow:prevc-flow` |
+| anything else | `/devflow [description]` section | Yes → `devflow:prevc-flow` |
+
+**Critical:** `update` is NOT a task description. It MUST route to the `/devflow update` section and execute shell commands directly. Never invoke `context-sync` or any other skill for `update`.
+
 ### `/devflow help`
 Display the help text below. Output it **exactly as-is** (formatted for terminal). Do not invoke any other skill — just print the help and stop.
 
