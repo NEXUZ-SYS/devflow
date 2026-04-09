@@ -1,41 +1,42 @@
 project:
-  name: "autonomous-loop"
-  scale: LARGE
-  started: "2026-04-02T19:38:54.794Z"
-  current_phase: C
+  name: "mempalace-integration"
+  scale: MEDIUM
+  started: "2026-04-09T00:39:52.050Z"
+  current_phase: V
 
 phases:
   P:
     status: filled
-    started_at: "2026-04-02T19:38:54.794Z"
-    completed_at: "2026-04-02T20:16:38.054Z"
+    started_at: "2026-04-09T00:39:52.050Z"
+    completed_at: "2026-04-09T01:43:45.145Z"
   R:
     status: filled
-    started_at: "2026-04-02T20:16:38.341Z"
-    completed_at: "2026-04-02T20:20:41.513Z"
+    started_at: "2026-04-09T01:43:45.416Z"
+    completed_at: "2026-04-09T01:44:02.643Z"
   E:
     status: filled
-    started_at: "2026-04-02T20:20:41.514Z"
-    completed_at: "2026-04-02T20:25:31.419Z"
+    started_at: "2026-04-09T01:44:02.644Z"
+    completed_at: "2026-04-09T01:44:07.899Z"
   V:
-    status: filled
-    started_at: "2026-04-02T20:25:31.425Z"
-    completed_at: "2026-04-02T20:28:07.732Z"
-  C:
     status: completed
-    started_at: "2026-04-02T20:28:07.733Z"
-    completed_at: "2026-04-02T20:28:50.065Z"
+    started_at: "2026-04-09T01:44:07.899Z"
+    completed_at: "2026-04-09T01:45:45.273Z"
     outputs:
-      - path: "https://github.com/NEXUZ-SYS/devflow/pull/6"
+      - path: "hooks/session-start"
         status: filled
+      - path: "hooks/post-compact"
+        status: filled
+  C:
+    status: skipped
+    reason: "Not required for scale MEDIUM"
 
 execution:
   history:
-    - timestamp: "2026-04-02T20:28:50.065Z"
-      phase: C
+    - timestamp: "2026-04-09T01:45:45.273Z"
+      phase: V
       action: completed
-  last_activity: "2026-04-02T20:28:50.065Z"
-  resume_context: "Fase C (Confirmação) concluída"
+  last_activity: "2026-04-09T01:45:45.273Z"
+  resume_context: "Fase V (Validação) concluída"
 
 approval:
   plan_created: true
