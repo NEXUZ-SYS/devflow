@@ -151,7 +151,8 @@ You MUST create a task for each of these items and complete them in order:
 4. **Fill gaps** — add any agents/skills/docs that dotcontext didn't generate
 5. **Scaffold plans directory** — empty, ready for PREVC plans
 6. **Verify compatibility** — all frontmatter matches dotcontext v2 format
-7. **Enable Lite/Full mode** — `.context/` now exists, DevFlow auto-detects
+7. **Configure MemPalace** — detect and optionally set up MemPalace integration (via devflow:config)
+8. **Enable Lite/Full mode** — `.context/` now exists, DevFlow auto-detects
 
 ## Step 1: Detect Available Tools
 
@@ -440,6 +441,8 @@ After scaffolding `.context/`, check if `.context/.devflow.yaml` exists:
 
 1. **If NOT exists** → Invoke `devflow:config` skill to run the interactive interview
 2. **If exists** → Skip (preserve existing configuration)
+
+The config skill interview includes both git strategy (P1-P5) and MemPalace integration (P6-P8, conditional on MCP availability). Both are handled in a single interview flow.
 
 This ensures every project initialized with DevFlow has a git strategy configured.
 

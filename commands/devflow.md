@@ -67,6 +67,7 @@ COMMANDS
   /devflow-dispatch <role>    Dispatch a specific specialist agent
   /devflow-sync               Update .context/ with current project state
   /devflow-sync <scope>       Update only docs, agents, or skills
+  /devflow-recall <query>   Search MemPalace for project memories
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -114,6 +115,7 @@ ON-DEMAND CAPABILITIES (used automatically or via natural language)
   TDD                     "implement with TDD"
   Debugging               "debug the memory leak in worker"
   Code Review             "review my implementation"
+  Memory Recall             "what did we decide about X?"
 
 OPERATING MODES
   Full      dotcontext MCP + superpowers (agent orchestration, semantic analysis)
@@ -209,6 +211,7 @@ QUICK REFERENCE
   Check security                "audit X for vulnerabilities"
   Debug a tricky issue          "debug the X issue"
   Break down a big feature      "break down the X feature"
+  Search project memories      /devflow-recall <query>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   DevFlow v0.7.0 — https://github.com/NEXUZ-SYS/devflow

@@ -60,6 +60,7 @@ Complete index of all skills across DevFlow, superpowers, and dotcontext. Each s
 | security-audit | devflow | `devflow:security-audit` | R, V | Minimal | OWASP-based security assessment |
 | test-generation | devflow | `devflow:test-generation` | E, V | Minimal | Test design, coverage strategy, and generation |
 | parallel-dispatch | devflow | `devflow:parallel-dispatch` | E | Minimal | Coordinate parallel agent execution |
+| memory-recall | devflow | `devflow:memory-recall` | any | Full | On-demand MemPalace search for project memories and agent diaries |
 | skill-creation | devflow | `devflow:skill-creation` | any | Minimal | Create new devflow skills with TDD methodology |
 | prd-generation | devflow | `devflow:prd-generation` | P | Minimal | Generate Product Requirements Documents with product-manager agent |
 
@@ -142,5 +143,6 @@ User runs /devflow "add caching layer"
 | Create a new skill | `devflow:skill-creation` |
 | Generate a PRD / product roadmap | `devflow:prd-generation` or `/devflow prd` |
 | Check git strategy / branch safety | `devflow:git-strategy` |
+| Search project memories | `devflow:memory-recall` or `/devflow-recall` |
 | Debug a tricky issue | `superpowers:systematic-debugging` + `devflow:bug-investigation` |
 | Break down a big feature | `devflow:feature-breakdown` |

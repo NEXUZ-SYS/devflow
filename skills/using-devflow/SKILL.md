@@ -95,6 +95,7 @@ The current mode is injected by the SessionStart hook. All skills adapt their be
 | `devflow:security-audit` | OWASP-based security assessment |
 | `devflow:test-generation` | Designing test suites, generating test cases, reviewing coverage |
 | `devflow:skill-creation` | Creating new DevFlow skills with TDD-for-docs methodology |
+| `devflow:memory-recall` | Searching MemPalace for project memories, agent diaries, and historical decisions |
 
 For the complete skills map across all three systems, see `references/skills-map.md`.
 
@@ -148,6 +149,7 @@ Autonomy modes feature bidirectional escalation:
 | `/devflow autonomy:X [description]` | Start with explicit autonomy (supervised/assisted/autonomous) |
 | `/devflow autonomy:X` (no desc) | Upgrade/downgrade active workflow's autonomy mode |
 | `/devflow-sync workflow` | Validate/scaffold `.context/workflow/` directory |
+| `/devflow-recall <query>` | Search MemPalace for project memories |
 
 ### `/devflow config`
 1. Invoke `devflow:config` skill
