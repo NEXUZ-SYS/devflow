@@ -270,21 +270,47 @@ Same auto-detect logic as Step 2.
 command -v dotcontext >/dev/null && npm update -g @dotcontext/cli
 ```
 
-**Step 5 — Report and ask for restart:**
+**Step 5 — Report update results:**
 
-After all steps complete, show a summary table with what was updated and their versions, then display:
+After all steps complete, show a summary table with what was updated and their versions.
+
+**Step 6 — Post-update: detect and show next steps:**
+
+Read the post-update guide at `references/post-update-guide.md` (relative to the DevFlow plugin root, i.e. `$CLAUDE_PLUGIN_ROOT/references/post-update-guide.md`). For each feature listed in the guide, run its detection command in the **current project directory** to check if it's already configured.
+
+Then show a consolidated "Next Steps" section with only the features that are **NOT yet configured**, using this format:
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Update complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✅ Update complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Please restart Claude Code for changes to take effect:
+  📋 Features already configured:
+    ✓ <feature name>
+    ✓ <feature name>
+
+  🔧 Available features (not yet configured):
+
+    ▸ <Feature Name> — <one-line description>
+      To activate: <command(s)>
+
+    ▸ <Feature Name> — <one-line description>
+      To activate: <command(s)>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Restart Claude Code for changes to take effect:
     1. Type /exit to close this session
     2. Run 'claude' again to start a fresh session
-
   Or press Ctrl+C and restart.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+**Rules for Step 6:**
+- If ALL features are already configured, show only the "Features already configured" section and skip the "Available features" section
+- If NO features are configured, skip the "Features already configured" section
+- Show activation commands exactly as written in the guide — never abbreviate or omit steps
+- Use the user's configured language (from `.devflow-language`) for the section headers and descriptions
+- Read the guide file from the plugin directory, NOT from the project directory
 
 **If any step fails:** Report the error, continue with the remaining steps, and include the failure in the summary. Do NOT stop on the first failure.
 

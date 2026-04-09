@@ -44,3 +44,11 @@ MSG_BRANCH_FINISH_PROMPT_SUPERVISED="BRANCH FINISH: Estás en la branch de traba
 MSG_BRANCH_FINISH_PROMPT_ASSISTED="BRANCH FINISH: Estás en la branch de trabajo '{branch}'. Todos los cambios están commiteados. Pregunta al usuario via AskUserQuestion:\nPregunta: \"¿Quieres finalizar la branch?\"\nOpciones: \"Sí, finalizar\" / \"No, seguir trabajando\"\nSi Sí → ejecuta la pipeline de finalización automáticamente. La secuencia es OBLIGATORIA — NUNCA saltes pasos o ejecutes fuera de orden:\n  1. Actualiza README si es necesario (reporta cambios)\n  2. Bump de versión (patch default)\n  3. Commit de los cambios finales\n  4. Push al remoto\n  5. Merge en la branch base\n  6. Limpieza de la branch\n  7. Reporta resumen completo.\nNO hagas merge (step 5) sin completar steps 1-4 primero."
 MSG_BRANCH_FINISH_SKIPPED="BRANCH FINISH SKIPPED: autoFinish está desactivado en .context/.devflow.yaml. La branch '{branch}' tiene todos los cambios commiteados pero la finalización automática está desactivada. Informa al usuario que la branch está lista para finalización manual."
 MSG_BRANCH_FINISH_AUTO="BRANCH FINISH AUTO: Estás en la branch de trabajo '{branch}'. Todos los cambios están commiteados. Ejecuta la pipeline de finalización automáticamente. La secuencia es OBLIGATORIA — NUNCA saltes pasos o ejecutes fuera de orden:\n  1. Actualiza README si es necesario (reporta cambios)\n  2. Bump de versión (patch default)\n  3. Commit de los cambios finales\n  4. Push al remoto\n  5. Merge en la branch base\n  6. Limpieza de la branch\n  7. Reporta resumen completo.\nNO hagas merge (step 5) sin completar steps 1-4 primero. En caso de fallo (test roto, merge conflict, push rechazado): PARA y escala al usuario."
+
+# --- Post Update ---
+MSG_UPDATE_COMPLETE="✅ Update completo!"
+MSG_UPDATE_FEATURES_CONFIGURED="📋 Features ya configuradas:"
+MSG_UPDATE_FEATURES_AVAILABLE="🔧 Features disponibles (no configuradas):"
+MSG_UPDATE_TO_ACTIVATE="Para activar:"
+MSG_UPDATE_RESTART="Reinicia Claude Code para aplicar los cambios:\n  1. Escribe /exit para cerrar esta sesión\n  2. Ejecuta 'claude' de nuevo para iniciar una nueva sesión\n  O presiona Ctrl+C y reinicia."
+MSG_UPDATE_ALL_CONFIGURED="Todas las features ya están configuradas en este proyecto. Ninguna acción adicional necesaria."
