@@ -103,6 +103,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.1** | 2026-04-09 | Fix: `/devflow update` despachava para `context-sync` em vez de rodar comandos de plugin — adicionada tabela de routing explícita no command skill |
 | **0.10.0** | 2026-04-09 | Integração mempalace: memória semântica persistente para agentes — skill `devflow:memory-recall`, comando `/devflow-recall`, agente memory-specialist, auto-recall no SessionStart (detecta MCP mempalace), diary flush/rehydration nos hooks PreCompact/PostCompact, diary de handoff no PostToolUse, entrevista de config mempalace no `/devflow init`, sanitização de segurança em valores YAML, referências em skills-map e docs |
 | **0.9.5** | 2026-04-05 | Napkin: memória persistente de aprendizado baseada em [blader/napkin v6.0.0](https://github.com/blader/napkin) — skill `devflow:napkin` com runbook curado (.context/napkin.md), injeção no SessionStart, curadoria no PreCompact, re-injeção no PostCompact, nudge em falhas no PostToolUse, categorias híbridas (4 fixas + agent-specific notes), caps 15/7, 103 testes |
 | **0.9.1** | 2026-04-04 | Fix: version bump nunca é pulado na finalização de branch — Step 1 (Version Bump) no prevc-confirmation antes do merge, hook PostToolUse detecta `gh pr merge`/`git merge` via Bash e injeta BUMP WARNING, 240 testes |
