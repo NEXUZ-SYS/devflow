@@ -150,6 +150,96 @@ AskUserQuestion:
       description: "Merge/PR automático na branch base"
 ```
 
+**P6: MemPalace** (condicional — só aparece se MCP detectado ou se usuário quer configurar)
+
+Primeiro, detectar disponibilidade:
+```bash
+# Check mempalace MCP
+HAS_MEMPALACE=false
+if [ -f ".mcp.json" ] && grep -q "mempalace" ".mcp.json" 2>/dev/null; then
+  HAS_MEMPALACE=true
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  HAS_MEMPALACE=true
+fi
+
+# Check mempalace package
+HAS_MEMPALACE_PKG=false
+pip show mempalace >/dev/null 2>&1 && HAS_MEMPALACE_PKG=true
+pipx list 2>/dev/null | grep -q mempalace && HAS_MEMPALACE_PKG=true
+```
+
+**Se `HAS_MEMPALACE=true`:**
+```
+AskUserQuestion:
+  question: "MemPalace detectado. Habilitar integração de memória?"
+  header: "MemPalace Integration"
+  multiSelect: false
+  options:
+    - label: "Sim (Recomendado)"
+      description: "Memória semântica persistente entre sessões"
+    - label: "Não"
+      description: "Desativar integração MemPalace"
+```
+
+**Se sim, P7: Palace path**
+```
+AskUserQuestion:
+  question: "Caminho do palace?"
+  header: "Palace Path"
+  multiSelect: false
+  options:
+    - label: "~/.mempalace/palace (Global — Recomendado)"
+      description: "Um palace compartilhado, cada projeto é uma wing"
+    - label: "Personalizar"
+      description: "Informar um caminho customizado"
+```
+
+**Se sim, P8: Token budget**
+```
+AskUserQuestion:
+  question: "Budget de tokens para auto-recall?"
+  header: "Auto-recall Budget"
+  multiSelect: false
+  options:
+    - label: "500 tokens (Recomendado)"
+      description: "Contexto compacto injetado automaticamente"
+    - label: "250 tokens"
+      description: "Mínimo — apenas memórias mais relevantes"
+    - label: "1000 tokens"
+      description: "Contexto rico — usa mais do context window"
+    - label: "Desativar auto-recall"
+      description: "Apenas busca manual via /devflow-recall"
+```
+
+**Se `HAS_MEMPALACE=false`:**
+```
+AskUserQuestion:
+  question: "MemPalace não detectado. Deseja configurar memória semântica?"
+  header: "MemPalace Setup"
+  multiSelect: false
+  options:
+    - label: "Sim, instalar e configurar agora"
+      description: "Instala mempalace e configura MCP automaticamente"
+    - label: "Não, pular"
+      description: "Continuar sem MemPalace"
+```
+
+**Se sim (instalar):**
+1. Detectar instalador: `command -v pipx` → usar pipx, senão pip
+2. Instalar: `pipx install mempalace` ou `pip install mempalace`
+3. Configurar MCP: adicionar entry ao `.mcp.json`:
+   ```json
+   {
+     "mempalace": {
+       "command": "python",
+       "args": ["-m", "mempalace.mcp_server"]
+     }
+   }
+   ```
+   Se `.mcp.json` já existe, merge a entry. Se não existe, criar com a entry.
+4. Inicializar palace: `mempalace init ~/.mempalace/palace`
+5. Seguir para P7 e P8
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -173,6 +263,24 @@ git:
 - Se autoFinish = "Sim, tudo": incluir `autoFinish: true`
 - Se autoFinish = "Personalizar": incluir como objeto com as chaves selecionadas em `true`, as não selecionadas em `false`
 
+**Regras de geração para mempalace:**
+- Se mempalace desativado ou pulado: **não incluir** a seção `mempalace:` (ausência = desativado)
+- Se habilitado com defaults: incluir seção mínima:
+  ```yaml
+  mempalace:
+    enabled: true
+  ```
+- Se habilitado com customizações:
+  ```yaml
+  mempalace:
+    enabled: true
+    palace: <caminho personalizado>  # só se diferente do default
+    budget: <valor>                  # só se diferente de 500
+    auto_recall: false               # só se desativado
+  ```
+- `wing: auto` é o default — só incluir se o usuário informar um nome customizado
+- `auto_diary: true` é o default — só incluir se desativado
+
 ### 4. Confirmar e informar
 
 Após gerar o arquivo, mostrar ao usuário:
@@ -185,6 +293,7 @@ Após gerar o arquivo, mostrar ao usuário:
   CLI de PR: gh
   Proteção de branch: ativada
   Auto-finish: desativado
+  MemPalace: ativado (global, 500 tokens)    ← novo (só se configurado)
 
 Para reconfigurar: /devflow config
 ```
