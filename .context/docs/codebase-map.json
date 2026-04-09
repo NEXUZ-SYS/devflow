@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "generated": "2026-04-02",
+  "generated": "2026-04-08",
   "stack": {
     "languages": ["markdown", "bash", "json"],
     "frameworks": ["claude-code-plugins", "superpowers", "dotcontext"],
@@ -9,15 +9,15 @@
   },
   "structure": {
     "directories": {
-      "commands/": "5 slash command definitions (/devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch)",
-      "skills/": "25 skill directories with SKILL.md files — PREVC phases, bridge skills, and on-demand capabilities",
-      "agents/": "15 specialist agent playbooks (architect, backend, frontend, security, etc.)",
+      "commands/": "6 slash command definitions (/devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch, /devflow-recall)",
+      "skills/": "32 skill directories with SKILL.md files — PREVC phases, bridge skills, and on-demand capabilities",
+      "agents/": "16 specialist agent playbooks (architect, backend, frontend, security, memory, etc.)",
       "templates/": "Scaffold templates for generating project-specific agents, skills, and docs",
       "hooks/": "7 lifecycle hooks (session-start, pre/post-compact, pre/post-tool-use, hooks.json)",
       "references/": "Skills map index and tool compatibility matrix across IDEs",
       "scripts/": "Version bump and pre-commit validation scripts",
       "docs/": "Additional documentation (tutorial, AI workflow docs)",
-      ".claude-plugin/": "Plugin manifest (v0.5.0) and marketplace registration",
+      ".claude-plugin/": "Plugin manifest (v0.10.0) and marketplace registration",
       ".cursor-plugin/": "Cursor IDE plugin manifest",
       ".context/": "Per-project generated context (agents, skills, docs, plans, workflow checkpoints)"
     }

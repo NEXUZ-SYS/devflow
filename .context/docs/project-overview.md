@@ -3,7 +3,7 @@ type: doc
 name: project-overview
 description: High-level overview of DevFlow, a unified development workflow plugin that bridges superpowers and dotcontext
 category: overview
-generated: 2026-04-02
+generated: 2026-04-08
 status: filled
 scaffoldVersion: "2.0.0"
 ---
@@ -12,13 +12,13 @@ scaffoldVersion: "2.0.0"
 
 DevFlow is a plugin system and workflow orchestrator for Claude Code (and compatible IDEs: Cursor, Codex, Gemini CLI). It bridges two foundational systems — **superpowers** (discipline: TDD, brainstorming, code review, SDD) and **dotcontext** (agent orchestration, project context management) — into a cohesive **PREVC workflow** (Planning → Review → Execution → Validation → Confirmation).
 
-The plugin provides 25 skills, 15 specialist agent playbooks, 5 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation.
+The plugin provides 32 skills, 16 specialist agent playbooks, 6 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation. Optional MemPalace integration adds persistent semantic memory across sessions.
 
 ## Codebase Reference
 
 - **Repository**: https://github.com/NEXUZ-SYS/devflow
 - **License**: MIT (NEXUZ-SYS 2026)
-- **Version**: 0.5.0
+- **Version**: 0.10.0
 
 ## Quick Facts
 
@@ -28,9 +28,9 @@ The plugin provides 25 skills, 15 specialist agent playbooks, 5 CLI commands, an
 | Primary language | Markdown (skills/agents/docs) + Bash (hooks) + JSON (config) |
 | Runtime deps | Node.js 20+, Git 2.x+, Claude Code |
 | Plugin deps | superpowers (required), dotcontext (optional for Full mode) |
-| Skills | 25 (PREVC phases + bridge + on-demand) |
-| Agents | 15 specialist playbooks |
-| Commands | 5 (`/devflow`, `/devflow-sync`, `/devflow-status`, `/devflow-next`, `/devflow-dispatch`) |
+| Skills | 32 (PREVC phases + bridge + on-demand) |
+| Agents | 16 specialist playbooks |
+| Commands | 6 (`/devflow`, `/devflow-sync`, `/devflow-status`, `/devflow-next`, `/devflow-dispatch`, `/devflow-recall`) |
 
 ## Entry Points
 

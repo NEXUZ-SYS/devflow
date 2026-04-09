@@ -38,9 +38,9 @@ Design and maintain the architectural integrity of DevFlow as a plugin system. E
 
 ## Repository Starting Points
 
-- `skills/` — 25 skill directories
-- `agents/` — 15 agent playbooks
-- `commands/` — 5 command definitions
+- `skills/` — 32 skill directories
+- `agents/` — 16 agent playbooks
+- `commands/` — 6 command definitions
 - `hooks/` — 7 lifecycle hooks
 - `templates/` — Scaffold templates
 

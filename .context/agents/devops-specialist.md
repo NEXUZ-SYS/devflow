@@ -43,7 +43,7 @@ Manage DevFlow's distribution pipeline: version bumping, marketplace publishing,
 
 ## Key Files
 
-- `.claude-plugin/plugin.json` — v0.5.0 metadata
+- `.claude-plugin/plugin.json` — v0.10.0 metadata
 - `.claude-plugin/marketplace.json` — NEXUZ-SYS marketplace entry
 - `scripts/bump-version.sh` — Version bump logic
 - `.mcp.json` — dotcontext MCP server config
@@ -54,7 +54,7 @@ DevFlow is distributed as a Claude Code plugin via the marketplace system. It ha
 
 ## Key Symbols for This Agent
 
-- Plugin version: 0.5.0 (current)
+- Plugin version: 0.10.0 (current)
 - Marketplace: NEXUZ-SYS/devflow
 - MCP server: dotcontext (npx @dotcontext/cli mcp)
 
