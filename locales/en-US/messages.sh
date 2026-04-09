@@ -44,3 +44,11 @@ MSG_BRANCH_FINISH_PROMPT_SUPERVISED="BRANCH FINISH: You are on work branch '{bra
 MSG_BRANCH_FINISH_PROMPT_ASSISTED="BRANCH FINISH: You are on work branch '{branch}'. All changes are committed. Ask the user via AskUserQuestion:\nQuestion: \"Do you want to finalize the branch?\"\nOptions: \"Yes, finalize\" / \"No, keep working\"\nIf Yes → execute full finalization pipeline automatically. The sequence is MANDATORY — NEVER skip steps or execute out of order:\n  1. Update README if needed (report changes)\n  2. Bump version (patch default)\n  3. Commit final changes\n  4. Push to remote\n  5. Merge into base branch\n  6. Cleanup branch\n  7. Report complete summary.\nDo NOT merge (step 5) without completing steps 1-4 first."
 MSG_BRANCH_FINISH_SKIPPED="BRANCH FINISH SKIPPED: autoFinish is disabled in .context/.devflow.yaml. Branch '{branch}' has all changes committed but automatic finalization is turned off. Inform the user that the branch is ready for manual finalization."
 MSG_BRANCH_FINISH_AUTO="BRANCH FINISH AUTO: You are on work branch '{branch}'. All changes are committed. Execute full finalization pipeline automatically. The sequence is MANDATORY — NEVER skip steps or execute out of order:\n  1. Update README if needed (report changes)\n  2. Bump version (patch default)\n  3. Commit final changes\n  4. Push to remote\n  5. Merge into base branch\n  6. Cleanup branch\n  7. Report complete summary.\nDo NOT merge (step 5) without completing steps 1-4 first. On any failure (test failure, merge conflict, push rejected): STOP and escalate to user."
+
+# --- Post Update ---
+MSG_UPDATE_COMPLETE="✅ Update complete!"
+MSG_UPDATE_FEATURES_CONFIGURED="📋 Features already configured:"
+MSG_UPDATE_FEATURES_AVAILABLE="🔧 Available features (not yet configured):"
+MSG_UPDATE_TO_ACTIVATE="To activate:"
+MSG_UPDATE_RESTART="Restart Claude Code for changes to take effect:\n  1. Type /exit to close this session\n  2. Run 'claude' again to start a fresh session\n  Or press Ctrl+C and restart."
+MSG_UPDATE_ALL_CONFIGURED="All features are already configured in this project. No additional action needed."

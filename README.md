@@ -103,6 +103,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.3** | 2026-04-09 | `/devflow update` agora mostra próximos passos de configuração após atualizar — detecta features não configuradas (MemPalace, dotcontext, Language, Git Strategy, etc.) e exibe comandos exatos de ativação, i18n em 3 idiomas |
 | **0.10.2** | 2026-04-09 | Fix: pipeline de finalização de branch agora é explicitamente obrigatória e sequencial — mensagens de hook reforçam que NUNCA se deve pular etapas ou fazer merge antes de completar README/bump (3 idiomas) |
 | **0.10.1** | 2026-04-09 | Fix: `/devflow update` despachava para `context-sync` em vez de rodar comandos de plugin — adicionada tabela de routing explícita no command skill |
 | **0.10.0** | 2026-04-09 | Integração mempalace: memória semântica persistente para agentes — skill `devflow:memory-recall`, comando `/devflow-recall`, agente memory-specialist, auto-recall no SessionStart (detecta MCP mempalace), diary flush/rehydration nos hooks PreCompact/PostCompact, diary de handoff no PostToolUse, entrevista de config mempalace no `/devflow init`, sanitização de segurança em valores YAML, referências em skills-map e docs |
