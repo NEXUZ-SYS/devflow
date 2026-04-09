@@ -183,6 +183,10 @@ PYEOF
     )
   fi
 
+  # Sanitize config values from YAML
+  mp_budget=$(printf '%s' "$mp_budget" | tr -cd '0-9'); mp_budget=${mp_budget:-500}
+  mp_wing=$(printf '%s' "$mp_wing" | tr -cd 'a-zA-Z0-9._-'); mp_wing=${mp_wing:-auto}
+
   # Resolve wing name
   if [ "$mp_wing" = "auto" ]; then
     mp_wing=$(basename "$project_root")
