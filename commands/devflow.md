@@ -73,7 +73,7 @@ Display the help text below. Output it **exactly as-is** (formatted for terminal
 
 COMMANDS
   /devflow help               Show this help
-  /devflow init               Initialize DevFlow (or sync if already exists)
+  /devflow init               Initialize DevFlow (language first, then scaffold)
   /devflow language           Set conversation language (en/pt/es)
   /devflow language <code>    Set language directly (en-US, pt-BR, es-ES)
   /devflow update             Update marketplace, plugins, and dotcontext
@@ -156,7 +156,9 @@ SETUP (one-time, no terminal)
 
 EXAMPLES
   /devflow init
-    → Scans project, scaffolds .context/ with agents, skills, and docs
+    → First: selects language (interactive menu if no .devflow-language)
+    → Then: installs dotcontext with --lang in the selected language
+    → Then: scaffolds .context/ with agents, skills, and docs in the selected language
     → If .context/ already exists, runs sync to update existing content
 
   /devflow-sync
@@ -340,10 +342,14 @@ Then show a consolidated "Next Steps" section with only the features that are **
 
 ### `/devflow init`
 1. Invoke `devflow:project-init` skill
-2. Se `.context/docs/` já existe → delega para `devflow:context-sync` (atualização)
-3. Se não existe → scaffolds `.context/` com agents, skills, e docs do zero
-4. Output é 100% dotcontext-compatible
-5. Enables Lite mode automatically
+2. **Primeiro passo (bloqueante):** seleção de idioma — se `.devflow-language` não existe, apresentar menu e aguardar escolha
+3. Propagar idioma ao dotcontext (`--lang` no `.mcp.json`) ANTES de qualquer instalação ou scaffold
+4. Se `.context/docs/` já existe → delega para `devflow:context-sync` (atualização)
+5. Se não existe → scaffolds `.context/` com agents, skills, e docs do zero — **todo conteúdo no idioma selecionado**
+6. Instalar plugins (dotcontext) já configurados no idioma correto
+7. Output é 100% dotcontext-compatible
+8. Enables Lite mode automatically
+9. **Todas as interações subsequentes seguem o idioma escolhido**
 
 ### `/devflow-sync [scope]`
 1. Invoke `devflow:context-sync` skill

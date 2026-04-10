@@ -23,9 +23,21 @@ Para atualizar docs existentes, o usuário deve usar `/devflow-sync`.
 
 **Announce at start:** "I'm using the devflow:project-init skill to initialize this project."
 
-## Step 0: Language Selection
+## Step 0: Language Selection (BLOQUEANTE — nada acontece antes disto)
 
-Before any initialization, check if a language preference already exists:
+<HARD-GATE>
+A seleção de idioma é o PRIMEIRO passo absoluto da inicialização. Nenhum scaffold, instalação, ou scan pode acontecer antes do idioma estar definido. O idioma determina:
+1. Em qual língua o dotcontext será instalado/configurado (`--lang`)
+2. Em qual língua TODO o conteúdo gerado será escrito (docs, agents, skills)
+3. Em qual língua TODAS as interações subsequentes acontecerão (mensagens, relatórios, perguntas)
+
+Fluxo:
+1. Verificar se `.devflow-language` (projeto) ou `~/.devflow-language` (global) existe
+2. **SIM** → Usar o idioma existente, confirmar ao usuário, e PROSSEGUIR no idioma
+3. **NÃO** → Mostrar menu de seleção, AGUARDAR escolha, salvar, e ENTÃO prosseguir
+</HARD-GATE>
+
+### Verificar preferência existente
 
 ```bash
 # Check project-level
@@ -35,7 +47,9 @@ cat .devflow-language 2>/dev/null
 cat ~/.devflow-language 2>/dev/null
 ```
 
-**If NO preference exists**, present the language selection menu FIRST:
+### Se NÃO existe preferência — mostrar menu interativo
+
+Apresentar o menu via AskUserQuestion e AGUARDAR a resposta do usuário antes de qualquer próximo passo:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -49,19 +63,41 @@ cat ~/.devflow-language 2>/dev/null
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-After the user selects, save the preference:
+Após a seleção, salvar imediatamente:
 ```bash
 echo "<language-code>" > .devflow-language
 ```
 
-**Propagate to dotcontext:** If `.mcp.json` exists with a dotcontext server entry, update its args to include `--lang <dotcontext-locale>`:
+### Propagação imediata do idioma ao dotcontext
+
+Após definir o idioma, propagar para o dotcontext **ANTES de qualquer instalação ou uso do MCP**.
+
+Se `.mcp.json` já existe com entry dotcontext, atualizar args com `--lang <locale>`:
 - `en-US` → `--lang en`
 - `pt-BR` → `--lang pt-BR`
 - `es-ES` → `--lang es`
 
-**Then continue all subsequent messages and interactions in the selected language.**
+Se `.mcp.json` ainda não existe (será criado no Tier 2), a propagação acontece imediatamente após `dotcontext mcp:install` — veja Step 3b-1.
 
-If a preference already exists, skip this step and use the existing language.
+### Regra de idioma para todo o restante da inicialização
+
+<EXTREMELY-IMPORTANT>
+A partir deste ponto, TODAS as interações, conteúdo gerado, mensagens, relatórios, e perguntas DEVEM ser no idioma selecionado pelo usuário. Isso inclui:
+- Conteúdo dos arquivos `.context/docs/` (project-overview, development-workflow, testing-strategy)
+- Conteúdo dos arquivos `.context/agents/` (Mission, Responsibilities, Best Practices, etc.)
+- Conteúdo dos arquivos `.context/skills/` (When to Use, Instructions, Examples, Guidelines)
+- Mensagens de progresso e relatório final
+- Qualquer pergunta feita ao usuário durante o processo
+- Frontmatter `description` fields
+
+Os ÚNICOS elementos que permanecem em inglês são:
+- Nomes técnicos de campos YAML (type, name, status, scaffoldVersion)
+- Nomes de arquivos e diretórios (.context/, agents/, skills/)
+- Headings das seções de agents/skills (Mission, Responsibilities, etc.) — por compatibilidade dotcontext
+- Nomes de ferramentas e comandos
+</EXTREMELY-IMPORTANT>
+
+Se preferência já existe, confirmar brevemente o idioma detectado e prosseguir.
 
 ## Initialization Strategy
 
@@ -210,7 +246,7 @@ Then proceed to Step 4 (fill gaps).
 
 ## Step 3b: Tier 2 — Install dotcontext MCP + use
 
-### Step 3b-1: Install MCP server (non-interactive)
+### Step 3b-1: Install MCP server (non-interactive) + propagar idioma
 ```bash
 # Ensure dotcontext is globally available (npx can't run subcommands with ":" on npm 11+)
 command -v dotcontext >/dev/null || npm install -g @dotcontext/cli
@@ -229,6 +265,45 @@ This writes `.mcp.json` to the project root with the dotcontext MCP server confi
   }
 }
 ```
+
+**IMEDIATAMENTE após `mcp:install`**, propagar o idioma selecionado no Step 0 para o `.mcp.json` recém-criado. Usar o mesmo script Python do skill `devflow:language` para inserir `--lang <locale>` antes do subcomando `mcp` nos args:
+
+```python
+import json
+
+mcp_path = ".mcp.json"
+with open(mcp_path) as f:
+    config = json.load(f)
+
+if "dotcontext" in config.get("mcpServers", {}):
+    args = config["mcpServers"]["dotcontext"]["args"]
+    # Remove existing --lang/-l flags
+    new_args = []
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("--lang", "-l"):
+            skip_next = True
+            continue
+        new_args.append(arg)
+    # Add --lang before "mcp" subcommand
+    mcp_idx = new_args.index("mcp") if "mcp" in new_args else len(new_args)
+    new_args.insert(mcp_idx, DOTCONTEXT_LOCALE)  # en, pt-BR, or es
+    new_args.insert(mcp_idx, "--lang")
+    config["mcpServers"]["dotcontext"]["args"] = new_args
+
+    with open(mcp_path, "w") as f:
+        json.dump(config, f, indent=2)
+```
+
+**Mapeamento de locales** (DevFlow → dotcontext):
+- `en-US` → `en`
+- `pt-BR` → `pt-BR`
+- `es-ES` → `es`
+
+Isso garante que o dotcontext MCP já inicia no idioma correto, e todo conteúdo gerado por `context({ action: "fill" })` será no idioma selecionado pelo usuário.
 
 ### Step 3b-2: Scaffold, fill, and reinforce via MCP
 Once the MCP server is registered, use the same flow as Tier 1:
@@ -252,6 +327,8 @@ Proceed to Step 4 (fill gaps).
 
 No dotcontext available. DevFlow scans the project and generates `.context/` manually.
 Follow Steps 3c-1 through 3c-4 below.
+
+**Regra de idioma (Tier 3):** Como não há dotcontext para gerar conteúdo, o LLM é responsável por escrever TODO o conteúdo dos docs, agents, e skills no idioma selecionado no Step 0. Isso inclui descrições, instruções, exemplos, e qualquer texto livre nos arquivos gerados.
 
 ## Step 3c-1: Scan the Project (Tier 3 only)
 
