@@ -103,6 +103,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.4** | 2026-04-10 | Fix: seleção de idioma agora é gate bloqueante no `/devflow init` — idioma definido ANTES de qualquer scaffold/instalação, dotcontext instalado com `--lang` no idioma correto, todo conteúdo gerado no idioma do usuário |
 | **0.10.3** | 2026-04-09 | `/devflow update` agora mostra próximos passos de configuração após atualizar — detecta features não configuradas (MemPalace, dotcontext, Language, Git Strategy, etc.) e exibe comandos exatos de ativação, i18n em 3 idiomas |
 | **0.10.2** | 2026-04-09 | Fix: pipeline de finalização de branch agora é explicitamente obrigatória e sequencial — mensagens de hook reforçam que NUNCA se deve pular etapas ou fazer merge antes de completar README/bump (3 idiomas) |
 | **0.10.1** | 2026-04-09 | Fix: `/devflow update` despachava para `context-sync` em vez de rodar comandos de plugin — adicionada tabela de routing explícita no command skill |
