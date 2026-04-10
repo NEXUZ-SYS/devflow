@@ -11,15 +11,60 @@ Finalizes the development branch, updates documentation, and ensures all tools a
 
 ## Checklist
 
-1. **Version Bump** — detect capabilities, bump version before merge
-2. **Finalize branch** — clean history, ready to merge
-3. **Update documentation** — API docs, README, inline docs as needed
-4. **Update project context** — reflect changes in .context/ files
-5. **Sync to tools** — export context to all configured AI tools
-6. **Present completion summary** — what was done, what to do next
-7. **Gate check** — everything finalized = workflow complete
+A pipeline de finalização é SEQUENCIAL e OBRIGATÓRIA. Cada step deve ser completado antes do próximo. A ordem é alinhada com os hook messages (locales) e NUNCA deve ser alterada:
 
-## Step 1: Version Bump
+1. **README Update** — atualizar histórico de versões e capabilities no README
+2. **Version Bump** — detect capabilities, bump version
+3. **Commit final** — commit das mudanças do README + bump
+4. **Finalize branch** — push, merge, cleanup
+5. **Update documentation** — API docs, inline docs (exceto README, já feito)
+6. **Update project context** — reflect changes in .context/ files
+7. **Sync to tools** — export context to all configured AI tools
+8. **Present completion summary** — what was done, what to do next
+9. **Gate check** — everything finalized = workflow complete
+
+## Step 1: README Update
+
+<HARD-GATE>
+A atualização do README DEVE acontecer ANTES do version bump e ANTES do merge/PR. Esta é a PRIMEIRA etapa da pipeline de finalização — NUNCA pule ou reordene.
+
+Se `README.md` não existe no projeto, pular este step e ir para Step 2.
+Se existe, este step é OBRIGATÓRIO.
+</HARD-GATE>
+
+### Detectar necessidade de atualização
+
+```bash
+# Analisar o que mudou na branch
+git diff main...HEAD --stat
+```
+
+Atualizar o README se houve mudanças em:
+- `skills/`, `agents/`, `commands/`, `hooks/`, `templates/` — atualizar contagens ou listagens
+- Arquivos de versão (`plugin.json`, `package.json`, `Cargo.toml`) — nova versão gerada no Step 2
+- Novas features, skills, ou capabilities — adicionar ao README
+- Bug fixes relevantes para o usuário — adicionar ao histórico de versões
+
+### Atualizar histórico de versões
+
+Se o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), adicionar uma nova entrada com:
+- **Versão:** será preenchida após o bump (Step 2), mas a linha já deve ser preparada
+- **Data:** data de hoje
+- **Destaques:** resumo conciso das mudanças da branch (1-2 frases)
+
+**Fluxo correto:** Como a versão final só é conhecida após o bump (Step 2), o fluxo é:
+1. Step 1: Preparar as mudanças do README (capabilities, contagens, etc.)
+2. Step 2: Executar o bump (que gera a versão final)
+3. Step 1b: Adicionar a entrada no histórico de versões do README com a versão do bump
+4. Step 3: Commit tudo junto (README + bump)
+
+### Execute by Autonomy Mode
+
+- **supervised** — Mostrar diff do que será atualizado, perguntar ao usuário antes de aplicar
+- **assisted** — Atualizar automaticamente, reportar mudanças feitas
+- **autonomous** — Atualizar silenciosamente, incluir no resumo final
+
+## Step 2: Version Bump
 
 <HARD-GATE>
 Version bump MUST happen BEFORE branch finalization (merge/PR). This prevents the version bump from being skipped when the merge is executed via any path (skill, hook, or direct Bash command).
@@ -31,8 +76,7 @@ Check for version bump mechanisms in this order:
 
 1. **`scripts/bump-version.sh`** — if exists, use it (supports patch/minor/major argument)
 2. **`package.json` with `"version"` field** — if exists, bump with `npm version` or manual edit
-3. **README.md version history table** — if exists, add new version entry
-4. **None detected** — skip bump, inform user
+3. **None detected** — skip bump, inform user
 
 ### Determine Bump Type
 
@@ -49,15 +93,27 @@ Infer from the workflow context:
 
 ### Bump Pipeline
 
-1. Detect capabilities (bump-version.sh, package.json, README)
+1. Detect capabilities (bump-version.sh, package.json)
 2. Determine bump type from scale and context
 3. Execute bump (run script, update files)
-4. Commit bump changes: `chore: bump to vX.Y.Z`
-5. Verify commit succeeded
+4. **Retornar ao Step 1b** — adicionar entrada no histórico de versões do README com a versão bumped
+5. Commit ALL changes together (README + bump): `chore: bump to vX.Y.Z`
+6. Verify commit succeeded
 
-If bump fails, report the error and continue to Step 2 (do not block branch finalization on bump failure).
+If bump fails, report the error and continue to Step 3 (do not block branch finalization on bump failure).
 
-## Step 2: Finalize Branch
+## Step 3: Commit Final
+
+Commit das mudanças do README + bump juntas:
+
+```bash
+git add README.md <bump-files>
+git commit -m "chore: bump to vX.Y.Z"
+```
+
+Se o pre-commit hook faz auto-bump (como neste projeto), o commit pode já incluir os arquivos de versão automaticamente. Nesse caso, o README deve estar staged ANTES do commit para ser incluído.
+
+## Step 4: Finalize Branch
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:finishing-a-development-branch`
 
@@ -66,7 +122,11 @@ This skill handles:
 - Presenting merge options to the user (merge, squash, rebase)
 - Executing the chosen merge strategy
 
-## Step 3: Update Documentation
+**IMPORTANTE:** Quando o skill `finishing-a-development-branch` for invocado, os Steps 1-3 (README, bump, commit) já DEVEM estar completos. O skill só deve tratar de push/merge/cleanup — nunca de README ou bump.
+
+## Step 5: Update Documentation
+
+Atualizar docs restantes (API docs, inline docs). O README já foi atualizado no Step 1, portanto NÃO repetir aqui.
 
 ### Full Mode
 ```
@@ -77,7 +137,6 @@ The documentation-writer agent identifies what docs need updating based on the c
 ### Lite Mode
 Read `.context/agents/documentation-writer.md` and apply its workflow:
 - Check if API docs need updating
-- Check if README needs updating
 - Check if architecture docs are still accurate
 
 ### Minimal Mode
@@ -87,10 +146,9 @@ Manually review if any docs reference changed code/APIs.
 - [ ] New public APIs documented
 - [ ] Changed APIs have updated docs
 - [ ] Removed APIs are removed from docs
-- [ ] README reflects new capabilities (if user-facing)
 - [ ] Inline comments updated for non-obvious logic changes
 
-## Step 4: Update Project Context
+## Step 6: Update Project Context
 
 ### Full Mode
 ```
@@ -107,7 +165,7 @@ Manually update relevant `.context/docs/` files:
 ### Minimal Mode
 Skip (no `.context/` to update).
 
-## Step 5: Sync to Tools
+## Step 7: Sync to Tools
 
 ### Full Mode
 ```
@@ -122,7 +180,7 @@ Suggest: "Run `dotcontext sync-agents` to export context to all AI tools."
 ### Minimal Mode
 Skip sync.
 
-## Step 6: Completion Summary
+## Step 8: Completion Summary
 
 Present a summary:
 
@@ -150,7 +208,7 @@ Present a summary:
 workflow-status()  # Final status check
 ```
 
-## Step 6.5: Update PRD (if exists)
+## Step 8.5: Update PRD (if exists)
 
 After the completion summary, check if this workflow is part of a PRD:
 
@@ -170,9 +228,11 @@ After the completion summary, check if this workflow is part of a PRD:
 3. **If not found:**
    a. No change (current behavior)
 
-## Step 7: Gate Check (Workflow Complete)
+## Step 9: Gate Check (Workflow Complete)
 
 The Confirmation gate marks the workflow as complete:
+- README updated (if exists)
+- Version bumped
 - Branch finalized (merged or ready to merge)
 - Documentation updated
 - Context synced (Full mode)
@@ -184,6 +244,9 @@ The Confirmation gate marks the workflow as complete:
 
 | Thought | Reality |
 |---------|---------|
+| "README pode esperar" | NÃO. README é Step 1. Sem README atualizado, não há bump nem merge. |
+| "Vou fazer o merge primeiro e atualizar o README depois" | NUNCA. A ordem é README → Bump → Commit → Merge. Sem exceções. |
+| "O bump já inclui o README" | NÃO. O bump atualiza versão em arquivos de config. O README é responsabilidade do Step 1. |
 | "Docs can wait" | No. Stale docs cost more than the 5 minutes to update them now. |
 | "Context sync is optional" | In Full mode, it's what keeps all your AI tools aligned. Do it. |
 | "The PR description is enough" | PR descriptions are ephemeral. Project docs are permanent. |
