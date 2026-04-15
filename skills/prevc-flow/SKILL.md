@@ -9,6 +9,8 @@ The main entry point for all development work. Routes tasks through the appropri
 
 <HARD-GATE>
 Do NOT skip phases. Do NOT advance past a gate without meeting its requirements. The scale determines which phases run, and gates determine when you can advance.
+
+Do NOT do phase work at the orchestrator level — the orchestrator ONLY detects mode/scale/autonomy and invokes phase skills. Asking clarifying questions, writing specs, proposing designs, or any planning work is the job of `devflow:prevc-planning`, which internally invokes `superpowers:brainstorming`. If you catch yourself asking "what should we build?" at this level, STOP and invoke the Planning phase skill immediately.
 </HARD-GATE>
 
 **Announce at start:** "I'm using the devflow:prevc-flow skill to orchestrate this workflow."
@@ -103,6 +105,8 @@ Phase C (Confirmation) — [ ] pending (skip if QUICK/SMALL)
 
 ## Step 4: Execute Phases
 
+**Invoke the phase skill immediately.** Do not gather extra requirements, do not ask clarifying questions, do not start brainstorming yourself. The phase skill handles all of that internally — including invoking `superpowers:brainstorming` during Planning.
+
 For each active phase, invoke the corresponding skill:
 
 | Phase | Skill to invoke | Gate to advance |
@@ -187,6 +191,8 @@ Triggered by: `/devflow autonomy:autonomous` during an active workflow, or natur
 | "Review is overkill for this" | Then it's SMALL scale. Don't skip R, use the right scale. |
 | "Tests pass, skip Validation" | Validation includes security, performance, and edge cases. |
 | "I'll document later" | Confirmation phase exists precisely because "later" never comes. |
+| "I'll just ask one quick question before invoking Planning" | That's Planning. Invoke `devflow:prevc-planning`. |
+| "I'll do the brainstorming here to save a skill hop" | No. The orchestrator never brainstorms. Invoke `devflow:prevc-planning`. |
 
 ## Context Enrichment
 
