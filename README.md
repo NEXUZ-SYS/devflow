@@ -105,6 +105,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.8** | 2026-04-15 | Fix: `prevc-confirmation` agora tem Step 0 (WIP pre-check) como HARD-GATE — antes da pipeline de finalização, checa mudanças descommitadas fora do escopo da branch para evitar sweep acidental de WIP alheio no commit final |
 | **0.10.7** | 2026-04-15 | Fix: MemPalace padronizado como pacote Python nativo (`pipx install mempalace`) — `/devflow update` agora atualiza MemPalace via pipx/pip (com detecção de npm legado e aviso), `post-update-guide` e `tutorial-setup` corrigidos, MCP config usa `python -m mempalace.mcp_server` |
 | **0.10.6** | 2026-04-15 | Fix: `prevc-flow` agora tem HARD-GATE proibindo trabalho de planejamento no nível do orquestrador — Step 4 reforça delegação imediata para `devflow:prevc-planning` (que invoca `superpowers:brainstorming`), anti-patterns adicionados contra perguntas clarificadoras no orquestrador |
 | **0.10.5** | 2026-04-10 | Fix: README update agora é Step 1 obrigatório na pipeline de finalização (prevc-confirmation) — alinhado com hook messages, HARD-GATE antes do bump e merge, anti-patterns reforçados, pipeline 9 steps sequenciais |
