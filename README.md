@@ -14,8 +14,10 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Loop autônomo** — execução story-by-story com contexto fresco, escalação automática e retry inteligente
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
-- **15 agentes especialistas** — architect, product-manager, backend, frontend, security-auditor e mais
-- **25+ skills** — API design, refactoring, debugging, test generation, security audit, PRD generation...
+- **16 agentes especialistas** — architect, product-manager, backend, frontend, security-auditor, memory-specialist e mais
+- **32 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, memory-recall...
+- **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
+- **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
 - **Escala adaptativa** — auto-detecta complexidade e ajusta o fluxo (QUICK/SMALL/MEDIUM/LARGE)
 - **PRD generation** — entrevista socrática, RICE scoring, roadmap faseado
 - **Suporte a projetos existentes** — `--from-prd` converte PRD em stories.yaml, upgrade de autonomia mid-workflow
@@ -103,6 +105,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.6** | 2026-04-15 | Fix: `prevc-flow` agora tem HARD-GATE proibindo trabalho de planejamento no nível do orquestrador — Step 4 reforça delegação imediata para `devflow:prevc-planning` (que invoca `superpowers:brainstorming`), anti-patterns adicionados contra perguntas clarificadoras no orquestrador |
 | **0.10.5** | 2026-04-10 | Fix: README update agora é Step 1 obrigatório na pipeline de finalização (prevc-confirmation) — alinhado com hook messages, HARD-GATE antes do bump e merge, anti-patterns reforçados, pipeline 9 steps sequenciais |
 | **0.10.4** | 2026-04-10 | Fix: seleção de idioma agora é gate bloqueante no `/devflow init` — idioma definido ANTES de qualquer scaffold/instalação, dotcontext instalado com `--lang` no idioma correto, todo conteúdo gerado no idioma do usuário |
 | **0.10.3** | 2026-04-09 | `/devflow update` agora mostra próximos passos de configuração após atualizar — detecta features não configuradas (MemPalace, dotcontext, Language, Git Strategy, etc.) e exibe comandos exatos de ativação, i18n em 3 idiomas |
@@ -129,9 +132,9 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 ```
 devflow/
-├── commands/         # /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch
-├── skills/           # 28 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin)
-├── agents/           # 15 playbooks de agentes
+├── commands/         # 6 commands: /devflow, /devflow-sync, /devflow-status, /devflow-next, /devflow-dispatch, /devflow-recall
+├── skills/           # 32 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
+├── agents/           # 16 playbooks de agentes (inclui memory-specialist)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n
