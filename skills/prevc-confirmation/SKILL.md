@@ -13,6 +13,7 @@ Finalizes the development branch, updates documentation, and ensures all tools a
 
 A pipeline de finalização é SEQUENCIAL e OBRIGATÓRIA. Cada step deve ser completado antes do próximo. A ordem é alinhada com os hook messages (locales) e NUNCA deve ser alterada:
 
+0. **WIP pre-check** — garantir que não há mudanças descommitadas de escopos não relacionados
 1. **README Update** — atualizar histórico de versões e capabilities no README
 2. **Version Bump** — detect capabilities, bump version
 3. **Commit final** — commit das mudanças do README + bump
@@ -22,6 +23,31 @@ A pipeline de finalização é SEQUENCIAL e OBRIGATÓRIA. Cada step deve ser com
 7. **Sync to tools** — export context to all configured AI tools
 8. **Present completion summary** — what was done, what to do next
 9. **Gate check** — everything finalized = workflow complete
+
+## Step 0: WIP Pre-check
+
+<HARD-GATE>
+Antes de qualquer edição da pipeline de finalização, RODAR `git status` e inspecionar mudanças descommitadas que **NÃO pertencem ao escopo da branch atual**.
+
+**Por quê:** `git add` em arquivos que já tinham modificações prévias (WIP solto no working dir) sweeps essas mudanças no commit de finalização, misturando escopos. Isso:
+- Suja o histórico (commit de fix contém feature alheia)
+- Impede code review focado
+- Pode conflitar com branches paralelas que trabalham no mesmo arquivo
+- Promove conteúdo work-in-progress para main sem revisão apropriada
+
+**Verificação obrigatória:**
+```bash
+git status --short
+git diff --stat  # arquivos modificados não-stageados
+```
+
+**Se encontrar mudanças fora do escopo:**
+1. Listar os arquivos "suspeitos" para o usuário (não relacionados à branch atual)
+2. Perguntar: **commit em branch própria** / **stash** / **descartar** / **incluir deliberadamente**
+3. Só prosseguir com a pipeline depois da decisão
+
+**Anti-pattern:** usar `git add -A` ou `git add <file>` num arquivo que já estava `M` antes da sua sessão. Sempre confira o que está staging com `git diff --cached` antes de commitar.
+</HARD-GATE>
 
 ## Step 1: README Update
 
