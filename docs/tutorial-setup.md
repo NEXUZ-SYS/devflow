@@ -12,7 +12,8 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [2.2 Instalar superpowers](#22-instalar-superpowers)
   - [2.3 Instalar DevFlow](#23-instalar-devflow)
   - [2.4 Instalar dotcontext (opcional)](#24-instalar-dotcontext-opcional)
-  - [2.5 Verificar instalação](#25-verificar-instalação)
+  - [2.5 Instalar MemPalace (opcional)](#25-instalar-mempalace-opcional)
+  - [2.6 Verificar instalação](#26-verificar-instalação)
 - [3. Inicializar em um projeto](#3-inicializar-em-um-projeto)
   - [3.1 Projeto novo](#31-projeto-novo)
   - [3.2 Projeto existente](#32-projeto-existente)
@@ -29,6 +30,10 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [4.6 TDD obrigatório (HARD-GATE)](#46-tdd-obrigatório-hard-gate)
   - [4.7 Git strategy (branch protection)](#47-git-strategy-branch-protection)
   - [4.8 Persistência entre sessões](#48-persistência-entre-sessões)
+  - [4.9 Napkin — memória de aprendizado](#49-napkin--memória-de-aprendizado)
+  - [4.10 ADRs — guardrails organizacionais](#410-adrs--guardrails-organizacionais)
+  - [4.11 MemPalace — memória semântica persistente](#411-mempalace--memória-semântica-persistente)
+  - [4.12 PostToolUse — commit e finish-branch automáticos](#412-posttooluse--commit-e-finish-branch-automáticos)
 - [5. Fluxo completo: do PRD ao merge](#5-fluxo-completo-do-prd-ao-merge)
   - [5.1 Gerar o PRD (roadmap de produto)](#51-gerar-o-prd-roadmap-de-produto)
   - [5.2 Iniciar a primeira fase do PRD](#52-iniciar-a-primeira-fase-do-prd)
@@ -142,7 +147,42 @@ dotcontext --version
 
 > **Nunca use `npx` para subcomandos do dotcontext com `:` (ex: `mcp:install`).** O npm 11+ interpreta o `:` como separador de script. Sempre use o binário global.
 
-### 2.5 Verificar instalação
+### 2.5 Instalar MemPalace (opcional)
+
+MemPalace habilita **memória semântica persistente entre sessões** — os agentes conseguem recuperar decisões passadas, convenções, bugs já investigados, evitando retrabalho.
+
+**Instalar (canônico — pacote Python via pipx):**
+```bash
+pipx install mempalace
+# ou, sem pipx: pip install --user mempalace
+mempalace mcp:install claude --local
+```
+
+> ⚠️ Não use `npm install -g @mempalace/cli` — o pacote npm é legado e está desatualizado. MemPalace é projeto Python nativo.
+
+**Ou via MCP direto no projeto** (recomendado — respeita escopo por projeto):
+```bash
+cd meu-projeto
+mempalace mcp:install claude --local
+```
+
+**O que ativa:**
+- Skill `devflow:memory-recall` — busca na memória persistente
+- Comando `/devflow-recall <query>` — consulta rápida de memórias
+- Agente `memory-specialist` — curador/consultor da memória
+- Auto-recall no SessionStart (injeta memórias relevantes)
+- Diary flush no PreCompact / rehydration no PostCompact
+- Entrevista de config mempalace no `/devflow init`
+
+**Verificar ativação:**
+```bash
+cat .mcp.json | grep mempalace
+# Deve aparecer a entry; se sim, /devflow-status mostra "MemPalace: true"
+```
+
+> **MemPalace vs Napkin:** Napkin é local (`.context/napkin.md`, curado manualmente), MemPalace é semântico (vector DB, busca por similaridade). Use ambos — Napkin para runbooks curados, MemPalace para histórico automático.
+
+### 2.6 Verificar instalação
 
 ```bash
 cat ~/.claude/plugins/installed_plugins.json | grep -E "devflow|superpowers"
@@ -152,8 +192,9 @@ Resultado esperado:
 ```
 ✅ Claude Code          — runtime
 ✅ superpowers plugin   — disciplina (TDD, brainstorming, code review)
-✅ devflow plugin       — workflow PREVC, 15 agentes, 25+ skills
-✅ dotcontext CLI       — análise semântica, MCP (opcional)
+✅ devflow plugin       — workflow PREVC, 16 agentes, 32 skills
+✅ dotcontext CLI       — análise semântica, MCP (opcional — habilita Full Mode)
+✅ mempalace CLI        — memória semântica persistente (opcional)
 ```
 
 ---
@@ -173,12 +214,14 @@ Dentro do Claude Code:
 ```
 
 O DevFlow vai:
-1. **Perguntar o idioma** (se ainda não configurado) — en-US, pt-BR ou es-ES
+1. **Perguntar o idioma — gate bloqueante** (desde v0.10.4): nada acontece antes da escolha. O idioma selecionado é propagado ao dotcontext via `--lang` e todo conteúdo gerado (docs, agents, skills) fica no idioma escolhido.
 2. Escanear o projeto (stack, estrutura, padrões)
-3. Instalar o MCP server do dotcontext (se disponível)
-4. Scaffoldar `.context/` com agentes, skills e docs personalizados
-5. Perguntar sua estratégia git (branch-flow, worktree ou trunk-based)
-6. Detectar o modo (Full/Lite/Minimal)
+3. **Entrevista de stack + ADR recommendation** (desde v0.9.0): o DevFlow pergunta sobre convenções (TDD, layered architecture, OWASP) e instancia ADRs relevantes em `.context/adrs/`
+4. Instalar o MCP server do dotcontext (se disponível, já com `--lang`)
+5. **Entrevista de config mempalace** (se instalado): pergunta se quer habilitar memória persistente
+6. Scaffoldar `.context/` com agentes, skills e docs personalizados
+7. Perguntar sua estratégia git (branch-flow, worktree ou trunk-based)
+8. Detectar o modo (Full/Lite/Minimal)
 
 ### 3.2 Projeto existente
 
@@ -393,7 +436,7 @@ O progresso é preservado — stories já completadas mantêm o status.
 
 ### 4.5 Agentes especialistas
 
-O DevFlow tem **15 agentes**, cada um com um papel definido:
+O DevFlow tem **16 agentes**, cada um com um papel definido:
 
 | Agente | O que faz | Quando é chamado |
 |--------|-----------|------------------|
@@ -412,6 +455,7 @@ O DevFlow tem **15 agentes**, cada um com um papel definido:
 | **database-specialist** | Schema, migrations reversíveis, queries, indexes | Execution |
 | **devops-specialist** | CI/CD, infraestrutura como código, deploy, monitoring | Execution, Confirmation |
 | **mobile-specialist** | iOS/Android, offline, bateria, guidelines de plataforma | Execution |
+| **memory-specialist** | Curador/consultor da memória semântica (MemPalace) — recall, diary, handoff | SessionStart, PreCompact, on-demand |
 
 Os agentes são despachados **automaticamente** durante o workflow ou **manualmente** via `/devflow-dispatch`.
 
@@ -491,6 +535,126 @@ O DevFlow mantém estado automaticamente:
 | **Durante o trabalho** | Handoff notes atualizado a cada avanço | `.context/workflow/.checkpoint/handoff.md` |
 
 Isso significa que conversas longas não perdem contexto — quando o Claude compacta, o DevFlow restaura de onde parou.
+
+### 4.9 Napkin — memória de aprendizado
+
+**Desde v0.9.5.** Inspirado em [blader/napkin](https://github.com/blader/napkin), o Napkin é um runbook curado em `.context/napkin.md` que acumula aprendizados entre sessões.
+
+**Como funciona:**
+| Hook | Ação |
+|------|------|
+| **SessionStart** | Injeta `.context/napkin.md` no contexto — Claude já começa a sessão sabendo das lições passadas |
+| **PreCompact** | Cura entradas (mantém as mais úteis, descarta ruído) antes da compactação |
+| **PostCompact** | Re-injeta o napkin atualizado após a compactação |
+| **PostToolUse** | Nudge em falhas repetidas — sugere adicionar ao napkin |
+
+**Estrutura híbrida** (4 categorias fixas + notas por agente):
+- `Convenções` — padrões confirmados do projeto (caps 15 entries)
+- `Armadilhas` — bugs recorrentes, anti-patterns (caps 15)
+- `Decisões` — trade-offs adotados (caps 15)
+- `Lições` — retrospectivas (caps 15)
+- `Agent-specific notes` — notas por agente (caps 7/agente)
+
+**Adicionar manualmente:**
+```
+/napkin "Convenção: sempre usar UUID v7 em novas tabelas (ordem temporal)"
+```
+
+**Editar:** o arquivo é texto puro em `.context/napkin.md` — edite diretamente quando quiser.
+
+### 4.10 ADRs — guardrails organizacionais
+
+**Desde v0.9.0.** ADRs (Architecture Decision Records) são usados como **guardrails para IA** — regras que o DevFlow lê no Planning e valida no Validation.
+
+**6 templates organizacionais** instanciáveis:
+
+| Template | O que enforça | Quando usar |
+|----------|--------------|-------------|
+| `SOLID` | Single Responsibility, Open/Closed, Liskov, ISP, DIP | Projetos OO |
+| `TDD` | RED→GREEN→REFACTOR obrigatório | Todos |
+| `Code Review` | Severidade BLOCK/WARN/NOTE, 2 aprovações | Times 3+ |
+| `Layered Architecture` | Separação controller/service/repository | APIs |
+| `OWASP Top 10` | Checks de segurança em Review/Validation | Auth/pagamentos |
+| `AWS Data Lake` | S3 + Glue + Athena patterns | Data engineering |
+
+**Como são instanciados:**
+- `/devflow init` entrevista sobre stack e recomenda ADRs
+- `/devflow prd` pergunta sobre convenções organizacionais
+- Resposta "sim" → ADR é copiado para `.context/adrs/NNNN-nome.md`
+
+**Onde são usados:**
+- **Planning (P)** — `devflow:context-awareness` lê ADRs e injeta no contexto do brainstorming
+- **Validation (V)** — compliance check verifica se o código segue cada ADR ativo
+- **`/devflow-sync`** — re-sincroniza ADRs com estado atual do projeto
+
+### 4.11 MemPalace — memória semântica persistente
+
+**Desde v0.10.0.** Se você instalou MemPalace ([§2.5](#25-instalar-mempalace-opcional)), o DevFlow adiciona uma camada de memória semântica (vector DB) que persiste entre sessões.
+
+**Comandos:**
+```
+/devflow-recall <query>        # Busca semântica nas memórias
+/devflow-recall auth decisions # Ex: recupera todas decisões sobre auth
+```
+
+**Auto-recall (SessionStart):**
+- Hook detecta MCP mempalace disponível
+- Busca memórias relevantes à branch/último handoff
+- Injeta no contexto — Claude já começa a sessão com memória relevante
+
+**Diary flush / rehydration:**
+- **PreCompact** — agente memory-specialist faz flush do diário de sessão → MemPalace
+- **PostCompact** — memórias relevantes são rehidratadas
+- **PostToolUse** — diário de handoff atualizado a cada task completada
+
+**Agente memory-specialist:**
+- Curador da memória — decide o que indexar (decisões, bugs, convenções)
+- Consultor — agentes consultam antes de decidir (ex: "como resolvemos X antes?")
+- Invocável via `/devflow-dispatch memory-specialist`
+
+**Security:** valores YAML sanitizados (sem secrets em memória), config encriptada em repouso quando possível.
+
+### 4.12 PostToolUse — commit e finish-branch automáticos
+
+**Desde v0.8.0.** O hook PostToolUse detecta quando você termina um bloco de trabalho e pergunta proativamente:
+
+**Após um task group completo:**
+```
+✓ Tarefa concluída: add Google OAuth provider
+
+Quer commitar agora? [Sim/Não/Editar mensagem]
+```
+
+**Após a última task do plano:**
+```
+✓ Todas as 10 tarefas concluídas.
+
+Quer finalizar a branch? [Sim/Não]
+→ Se Sim, executa a pipeline obrigatória (ordem sequencial — não pula steps):
+    1. Atualizar README.md (Step 1 obrigatório desde v0.10.5)
+    2. Version bump (Step obrigatório desde v0.9.1)
+    3. Commit
+    4. Push
+    5. Merge
+    6. Cleanup
+```
+
+**Comportamento por autonomia:**
+| Modo | Commit prompt | Finish-branch prompt |
+|------|--------------|---------------------|
+| supervised | Pergunta sempre | Pergunta sempre |
+| assisted | Pergunta em P+R+V+C, commita automático em E | Pergunta sempre |
+| autonomous | Commita automático | Pergunta apenas em falha/conclusão |
+
+**Detecção de capacidades:**
+- Se há `gh` instalado e autenticado → sugere abrir PR
+- Se branch está `main`/`develop` → pula commit (hook de branch protection bloqueia antes)
+- Se há `package.json` com `version` → sugere bump via `scripts/bump-version.sh`
+
+**Anti-patterns bloqueados** (v0.10.2):
+- Merge antes de completar README update
+- Bump antes de commit da implementação
+- Push sem commit de version bump
 
 ---
 
@@ -850,13 +1014,39 @@ Resultados da auditoria de segurança:
 
 ### 5.7 C — Confirmation
 
-**Finalização:**
+**Finalização — pipeline obrigatória sequencial** (desde v0.10.2/v0.10.5). A ordem é HARD-GATE: nenhum step pode ser pulado, merge nunca antes de README+bump.
 
 ```
 Fase: C (Confirmation)
+
+Pipeline obrigatória:
+  Step 1: README.md update         ← obrigatório (v0.10.5)
+  Step 2: Version bump              ← obrigatório (v0.9.1)
+  Step 3: Commit (docs + bump)
+  Step 4: Atualização do PRD (se existe)
+  Step 5: Docs técnicos (.context/)
+  Step 6: Push
+  Step 7: Create PR (se gh configurado)
+  Step 8: Merge (após approval)
+  Step 9: Cleanup branch local
 ```
 
-**1. Limpeza da branch:**
+**1. README.md update (Step 1 — obrigatório):**
+```
+→ Adicionando entrada no Histórico de Versões
+→ Atualizando contadores (skills, agentes, testes) se mudaram
+→ Atualizando seção Destaques se há feature nova
+```
+
+**2. Version bump (Step 2 — obrigatório):**
+```
+→ Detectando tipo de mudança (feat/fix/chore)
+→ bump: 0.10.5 → 0.10.6 (patch) ou 0.11.0 (minor)
+→ scripts/bump-version.sh atualiza: plugin.json, .claude-plugin/marketplace.json, cursor-plugin
+→ Verificando consistência com scripts/pre-commit-version-check.sh
+```
+
+**3. Limpeza da branch:**
 ```
 → Squash commits? Merge commits? (baseado na convenção do projeto)
 → Rebasing feature/auth-complete em main...
@@ -876,13 +1066,13 @@ Fase: C (Confirmation)
 → codebase-map.json regenerado
 ```
 
-**4. Criação de PR (se gh/glab configurado):**
+**6. Criação de PR (se gh/glab configurado):**
 ```
 → PR #42 criado: "feat(auth): complete OAuth + 2FA system"
 → Descrição inclui: checklist de conformidade, cobertura de testes, resultados da auditoria de segurança
 ```
 
-**5. Atualização do PRD:**
+**7. Atualização do PRD:**
 ```
 → Fase 1 (Autenticação) marcada como ✓ Concluída
 → Fase 2 (Pagamentos) é a próxima fase pendente
@@ -1220,6 +1410,8 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 | `/devflow-sync workflow` | Valida e sincroniza `.context/workflow/` | Validar stories.yaml, detectar referências órfãs |
 | `/devflow prd --status` | Mostra progresso das fases do PRD | Para acompanhar roadmap |
 | `/devflow language` | Configura idioma (en-US, pt-BR, es-ES) | Para mudar idioma das interações |
+| `/devflow update` | Atualiza marketplace + plugins + dotcontext + mostra próximos passos | Manutenção semanal |
+| `/devflow-recall <query>` | Busca semântica na memória (MemPalace) | Recuperar decisões passadas |
 | `/devflow help` | Referência completa de comandos | Quando esquecer algo |
 
 **Exemplos de navegação durante um workflow:**
@@ -1329,6 +1521,7 @@ C (Confirmation):
 /devflow-dispatch database-specialist
 /devflow-dispatch devops-specialist
 /devflow-dispatch mobile-specialist
+/devflow-dispatch memory-specialist
 ```
 
 ---
@@ -1364,10 +1557,15 @@ A forma mais rápida — dentro do Claude Code:
 
 Isso executa em sequência:
 1. Atualiza o marketplace registry (`NEXUZ-SYS`)
-2. Atualiza o plugin DevFlow
-3. Atualiza o plugin superpowers
-4. Atualiza o dotcontext CLI (se instalado)
-5. Mostra resumo e pede para reiniciar o Claude Code
+2. Atualiza o plugin DevFlow (auto-detect de scope user/project)
+3. Atualiza o plugin superpowers (auto-detect de scope)
+4. Atualiza o dotcontext CLI (se instalado globalmente)
+5. **Detecta features não configuradas e mostra próximos passos** (desde v0.10.3):
+   - MemPalace não instalado? → mostra comando de ativação
+   - Idioma não definido? → sugere `/devflow language`
+   - Git strategy não configurada? → sugere `/devflow config`
+   - `.context/` desatualizado? → sugere `/devflow-sync`
+6. Mostra resumo e pede para reiniciar o Claude Code
 
 <details>
 <summary>Atualização manual (se preferir)</summary>
@@ -1502,6 +1700,58 @@ cat .context/workflow/stories.yaml
 
 Isso pode acontecer se a sessão Claude morreu durante a execução. O loop autônomo trata `in_progress` como prioridade máxima — na próxima iteração, a story será retomada automaticamente.
 
+### `/devflow update` caiu no fallback "descrição de tarefa"
+
+Acontece quando o plugin instalado é **anterior à v0.10.1** (quando o routing explícito foi adicionado). Sintoma: `/devflow update` invoca `context-sync` em vez de rodar os comandos de plugin update.
+
+```bash
+# Atualize manualmente uma vez para ter a versão com routing correto:
+claude plugin marketplace update NEXUZ-SYS
+claude plugin update devflow@NEXUZ-SYS --scope user
+# Ou project se instalado por projeto:
+claude plugin update devflow@NEXUZ-SYS --scope project
+
+# Depois /devflow update funciona nativamente.
+```
+
+### Múltiplas versões antigas em cache consumindo espaço
+
+```bash
+ls ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
+# Ex: 0.4.0/ 0.7.0/ 0.8.5/ 0.10.0/ 0.10.3/ ...
+
+# Manualmente: remova versões que nenhum projeto referencia mais
+# (confira em ~/.claude/plugins/installed_plugins.json antes)
+rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/0.4.0
+```
+
+### MemPalace instalado mas `/devflow-recall` não funciona
+
+```bash
+# 1. Verifique o .mcp.json do projeto
+cat .mcp.json | grep mempalace
+
+# 2. Se ausente, reinstale por projeto:
+cd meu-projeto
+mempalace mcp:install claude --local
+
+# 3. Reinicie o Claude Code (MCPs carregam no SessionStart)
+exit
+claude
+
+# 4. Verifique
+/devflow-status   # Deve mostrar "MemPalace: true"
+```
+
+### ADRs não aparecem em `.context/adrs/`
+
+ADRs só são instanciados se você responder "sim" na entrevista do `/devflow init` ou `/devflow prd`. Para instanciar depois:
+
+```bash
+/devflow-sync adrs
+# Re-executa a entrevista de guardrails sem refazer o scaffold completo
+```
+
 ---
 
 ## 14. Referência rápida
@@ -1531,6 +1781,8 @@ Isso pode acontecer se a sessão Claude morreu durante a execução. O loop aut�
 /devflow-sync                          # Atualizar .context/
 /devflow-sync docs|agents|skills       # Atualizar parcial
 /devflow-sync workflow                 # Validar workflow e stories.yaml
+/devflow-recall <query>                # Busca semântica na memória (MemPalace)
+/napkin "<aprendizado>"                # Adicionar ao runbook de aprendizado
 ```
 
 ### Instalação (copie e cole)
@@ -1541,6 +1793,7 @@ claude plugin install superpowers@claude-plugins-official --scope user
 claude plugin marketplace add NEXUZ-SYS/devflow
 claude plugin install devflow@NEXUZ-SYS --scope user
 npm install -g @dotcontext/cli          # opcional, habilita Full Mode
+pipx install mempalace                  # opcional, habilita memória semântica (Python nativo)
 
 # Em cada projeto
 cd meu-projeto && claude

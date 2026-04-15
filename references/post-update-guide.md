@@ -17,12 +17,14 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
 ```
 
 **Se NÃO configurado:**
-1. Instalar: `npm install -g @anthropic/mempalace-mcp`
+1. Instalar (canônico — pacote Python via pipx): `pipx install mempalace`
+   - Fallback sem pipx: `pip install --user mempalace`
+   - **Não use `npm`** — o pacote npm antigo (`@mempalace/cli`, `mempalace`) está obsoleto e desatualizado.
 2. Adicionar ao `.mcp.json`:
    ```json
    "mempalace": {
-     "command": "mempalace-mcp",
-     "args": ["--palace", "~/.mempalace/palace"]
+     "command": "python",
+     "args": ["-m", "mempalace.mcp_server"]
    }
    ```
 3. Reiniciar sessão do Claude Code

@@ -272,6 +272,24 @@ Same auto-detect logic as Step 2.
 command -v dotcontext >/dev/null && npm update -g @dotcontext/cli
 ```
 
+**Step 4b — Update MemPalace (if installed):**
+
+MemPalace is distributed as a Python package. Prefer `pipx` (canonical); fallback to `pip`. If a legacy npm install exists, warn the user to remove it.
+```bash
+# Prefer pipx (canonical install path)
+if pipx list 2>/dev/null | grep -q "package mempalace"; then
+  pipx upgrade mempalace
+elif pip show mempalace >/dev/null 2>&1; then
+  pip install --user -U mempalace
+fi
+
+# Detect legacy npm install and warn (do NOT auto-update it — it is deprecated)
+if npm list -g mempalace >/dev/null 2>&1 || npm list -g @mempalace/cli >/dev/null 2>&1; then
+  echo "⚠️  Legacy npm MemPalace install detected. Remove it with: npm uninstall -g mempalace @mempalace/cli"
+  echo "    Then install the canonical Python package: pipx install mempalace"
+fi
+```
+
 **Step 5 — Report update results:**
 
 After all steps complete, show a summary table with what was updated and their versions.
