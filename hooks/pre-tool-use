@@ -218,6 +218,21 @@ if [ "$IS_PROTECTED" = "false" ]; then
   exit 0
 fi
 
+# --- ASK: on protected branch, editing confirmable paths (memory/napkin) ---
+# Non-project files: auto-memory (outside the repo) and curated napkin (inside .context/).
+# Emit permissionDecision=ask so Claude Code prompts the user per edit.
+
+if [ -n "$FILE_PATH" ]; then
+  case "$FILE_PATH" in
+    */.claude/projects/*/memory/*|*/.context/napkin.md)
+      ask_reason=$(render_msg "$MSG_ASK_HEADER" "file_path=${FILE_PATH}" "branch=${BRANCH}")
+      REASON_ESCAPED=$(escape_for_json "$ask_reason")
+      printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "ask",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
+      exit 0
+      ;;
+  esac
+fi
+
 # --- BLOCK: on protected branch, editing project source code ---
 
 blocked_header=$(render_msg "$MSG_BLOCKED_HEADER" "branch=${BRANCH}")

@@ -29,6 +29,12 @@ O hook retorna `permissionDecision: "deny"` — o LLM **não consegue** editar s
 - `docs/specs/*` — design specs
 - Arquivos do plugin DevFlow (`$CLAUDE_PLUGIN_ROOT/*`)
 
+**Exceções — arquivos permitidos sob confirmação (hook emite `permissionDecision: ask`):**
+- `~/.claude/projects/*/memory/*` — auto-memory do Claude Code (metadados, fora do projeto)
+- `.context/napkin.md` — memória curada do projeto
+
+Esses arquivos não são código do projeto, mas o Claude Code prompta o usuário a cada edit para confirmar — evita alterações silenciosas em memória/curadoria sem ciência do usuário.
+
 **Exceções — branches não protegidas (hook não bloqueia):**
 - Branches de trabalho (`feature/*`, `fix/*`, `hotfix/*`, `release/*`)
 - Estratégia trunk-based configurada

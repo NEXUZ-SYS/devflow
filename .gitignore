@@ -10,3 +10,7 @@ Thumbs.db
 .claude/settings.local.json
 .claude/projects/
 .history/
+
+# DevFlow runtime artifacts (auto-generated)
+.context/cache/
+.context/harness/
