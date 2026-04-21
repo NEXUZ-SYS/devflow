@@ -105,6 +105,7 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **0.10.9** | 2026-04-21 | Fix: branch protection hook agora permite Edit/Write sob confirmação em auto-memory (`~/.claude/projects/*/memory/*`) e napkin (`.context/napkin.md`) em branches protegidas — emite `permissionDecision: "ask"` para arquivos não-projeto, evita bloqueio desnecessário em ajustes de memória/curadoria sem abrir brecha em código-fonte, i18n em 3 idiomas, skill `git-strategy` documenta a exceção, 13 testes novos |
 | **0.10.8** | 2026-04-15 | Fix: `prevc-confirmation` agora tem Step 0 (WIP pre-check) como HARD-GATE — antes da pipeline de finalização, checa mudanças descommitadas fora do escopo da branch para evitar sweep acidental de WIP alheio no commit final |
 | **0.10.7** | 2026-04-15 | Fix: MemPalace padronizado como pacote Python nativo (`pipx install mempalace`) — `/devflow update` agora atualiza MemPalace via pipx/pip (com detecção de npm legado e aviso), `post-update-guide` e `tutorial-setup` corrigidos, MCP config usa `python -m mempalace.mcp_server` |
 | **0.10.6** | 2026-04-15 | Fix: `prevc-flow` agora tem HARD-GATE proibindo trabalho de planejamento no nível do orquestrador — Step 4 reforça delegação imediata para `devflow:prevc-planning` (que invoca `superpowers:brainstorming`), anti-patterns adicionados contra perguntas clarificadoras no orquestrador |

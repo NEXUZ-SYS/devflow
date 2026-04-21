@@ -33,6 +33,7 @@ MSG_BLOCKED_ACTION="AÇÃO AUTOMÁTICA OBRIGATÓRIA:\nInvoque o skill devflow:gi
 MSG_BLOCKED_FILE="Arquivo bloqueado: {file_path}"
 MSG_BLOCKED_NOTE="NOTA: Arquivos em .context/ (workflow, checkpoints, plans, docs, agents, skills) e docs/superpowers/ são permitidos em qualquer branch."
 MSG_NO_CONFIG="DevFlow não está configurado para este projeto. Execute /devflow config para definir sua estratégia git antes de editar arquivos.\nIsso é necessário para o DevFlow saber quais branches proteger e como gerenciar seu workflow."
+MSG_ASK_HEADER="CONFIRMAÇÃO: Edit/Write em '{file_path}' na branch protegida '{branch}'. Arquivo não-projeto (auto-memory / napkin) — confirme se deseja aplicar a alteração."
 
 # --- Post Tool Use (Handoff Reminder) ---
 MSG_HANDOFF_REMINDER="HANDOFF UPDATE: Atualize .context/workflow/.checkpoint/handoff.md com o estado atual:\n\n\\\`\\\`\\\`markdown\n## Current Task\n<o que está sendo feito agora>\n\n## Decisions\n- <decisões tomadas nesta sessão>\n\n## Next Steps\n- <próximo passo imediato>\n\n## Blockers\n- <bloqueios encontrados, se houver>\n\\\`\\\`\\\`\n\nMantenha conciso. Este arquivo é lido pelo PreCompact antes da compactação."
