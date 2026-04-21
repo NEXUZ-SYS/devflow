@@ -36,7 +36,7 @@ MSG_NO_CONFIG="DevFlow não está configurado para este projeto. Execute /devflo
 MSG_ASK_HEADER="CONFIRMAÇÃO: Edit/Write em '{file_path}' na branch protegida '{branch}'. Arquivo não-projeto (auto-memory / napkin) — confirme se deseja aplicar a alteração."
 
 # --- Post Tool Use (Handoff Reminder) ---
-MSG_HANDOFF_REMINDER="HANDOFF UPDATE: Atualize .context/workflow/.checkpoint/handoff.md com o estado atual:\n\n\\\`\\\`\\\`markdown\n## Current Task\n<o que está sendo feito agora>\n\n## Decisions\n- <decisões tomadas nesta sessão>\n\n## Next Steps\n- <próximo passo imediato>\n\n## Blockers\n- <bloqueios encontrados, se houver>\n\\\`\\\`\\\`\n\nMantenha conciso. Este arquivo é lido pelo PreCompact antes da compactação."
+MSG_HANDOFF_REMINDER="HANDOFF UPDATE: Atualize .context/workflow/.checkpoint/handoff.md com o estado atual:\n\n\\\`\\\`\\\`markdown\n## Current Task\n<o que está sendo feito agora>\n\n## Decisions\n- <decisões tomadas nesta sessão>\n\n## Next Steps\n- <próximo passo imediato>\n\n## Blockers\n- <bloqueios encontrados, se houver>\n\\\`\\\`\\\`\n\nMantenha conciso. O PreCompact captura este arquivo automaticamente e o PostCompact o recupera após a compactação — não é necessário interromper o trabalho ou o /compact para atualizá-lo; mantenha-o em dia conforme você avança."
 
 # --- Post Tool Use (Commit & Branch Finish) ---
 MSG_COMMIT_PROMPT="COMMIT PROMPT: Há mudanças não commitadas após completar uma task. Pergunte ao usuário via AskUserQuestion:\nPergunta: \"Quer realizar o commit das mudanças atuais?\"\nOpções: \"Sim, commitar agora\" / \"Não, continuar trabalhando\"\nSe Sim → gere mensagem convencional (invoque skill devflow:commit-message para formato), faça stage dos arquivos relevantes e commite."
