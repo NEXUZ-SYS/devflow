@@ -44,22 +44,27 @@ Read these files and incorporate into brainstorming:
 ### Minimal Mode
 Explore project files, docs, and recent git commits directly.
 
-### All Modes — ADR Guardrails Loading
+### All Modes — ADR Guardrails Loading (filtered by task)
 
 After gathering base context, check for active ADRs:
 
-1. Check if `.context/docs/adrs/README.md` exists
-2. If yes:
-   a. Read the README index to identify active ADRs
-   b. For each ADR with status `Aprovado`, read the **Guardrails** section
-   c. Collect all guardrails as constraints for the brainstorming process
-   d. Announce: "Loaded N guardrails from M active ADRs."
-3. If no: continue without ADR constraints (ADRs are opt-in)
+1. Check if `.context/docs/adrs/README.md` exists. If not, continue without ADR constraints (ADRs are opt-in).
 
-**Important:** Guardrails from ADRs are treated as hard constraints during brainstorming:
+2. If yes, **invoke `devflow:adr-filter`** passing the current task description. That skill:
+   - Reads the README index
+   - Resolves the project stacks (from task mentions or filesystem detection with precaution fallback)
+   - Selects only the ADRs relevant to the task (by stack + semantic alignment)
+   - Loads `## Guardrails` sections of the selected ADRs
+   - Emits a focused `<ADR_GUARDRAILS filtered="true">` block
+
+3. Collect the filtered guardrails as constraints for the brainstorming process. Announce: "Loaded N guardrails from M of K active ADRs (filtered for this task)."
+
+**Important:** Guardrails from selected ADRs are treated as hard constraints during brainstorming:
 - The brainstorming MUST NOT propose alternatives already rejected in ADRs
 - The design MUST comply with all active guardrails
 - If a guardrail conflicts with the task requirements, flag the conflict to the user instead of silently violating
+
+**Fallback:** If `devflow:adr-filter` is unavailable (e.g., installation incomplete), fall back to loading **all** ADRs with `status: Aprovado` — correctness over optimization.
 
 **Hierarchy:** Project ADRs (`scope: project`) override Organizational ADRs (`scope: organizational`) for the same topic.
 
