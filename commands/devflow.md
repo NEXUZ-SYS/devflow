@@ -290,6 +290,18 @@ if npm list -g mempalace >/dev/null 2>&1 || npm list -g @mempalace/cli >/dev/nul
 fi
 ```
 
+**Step 4c — Update external skills (if installed):**
+
+External skills (sourced from upstream GitHub repos) are refreshed by downloading the raw files over the existing local copy. Only runs if the skill directory exists locally — updates never auto-install new skills. A fetch failure is silent (warning only) and does not stop the pipeline. Writes are atomic (all-or-nothing per skill).
+
+```bash
+# Napkin (blader/napkin — runbook skill)
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/update-external-skill.sh" \
+  napkin \
+  "https://raw.githubusercontent.com/blader/napkin/main" \
+  SKILL.md README.md LICENSE
+```
+
 **Step 5 — Report update results:**
 
 After all steps complete, show a summary table with what was updated and their versions.
