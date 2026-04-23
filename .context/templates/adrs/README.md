@@ -21,6 +21,10 @@ Usados pelo `/devflow prd` para recomendar ADRs ao projeto.
 | Seguranca            | owasp-top10          | universal | 10 regras  |
 | Infraestrutura       | aws-data-lake        | AWS       | 8 regras   |
 
+## Template em Branco
+
+`TEMPLATE-ADR.md` na raiz desta pasta — arquivo em branco com todas as secoes e placeholders. Use como ponto de partida ao criar uma nova ADR manualmente ou em ferramentas externas (ex: claude.ai).
+
 ## Fonte
 
 - **Local:** Kit inicial do DevFlow
