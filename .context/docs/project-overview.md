@@ -3,7 +3,7 @@ type: doc
 name: project-overview
 description: High-level overview of DevFlow, a unified development workflow plugin that bridges superpowers and dotcontext
 category: overview
-generated: 2026-04-08
+generated: 2026-04-14
 status: filled
 scaffoldVersion: "2.0.0"
 ---
@@ -18,7 +18,7 @@ The plugin provides 32 skills, 16 specialist agent playbooks, 6 CLI commands, an
 
 - **Repository**: https://github.com/NEXUZ-SYS/devflow
 - **License**: MIT (NEXUZ-SYS 2026)
-- **Version**: 0.10.0
+- **Version**: 0.10.5
 
 ## Quick Facts
 
@@ -53,9 +53,9 @@ DevFlow exports no runtime code. It provides:
 
 ```
 devflow/
-├── commands/           — 5 slash command definitions (/devflow, /devflow-sync, etc.)
-├── skills/             — 25 skill directories, each with SKILL.md
-├── agents/             — 15 specialist agent playbooks (architect, backend, security, etc.)
+├── commands/           — 6 slash command definitions (/devflow, /devflow-sync, etc.)
+├── skills/             — 32 skill directories, each with SKILL.md
+├── agents/             — 16 specialist agent playbooks (architect, backend, security, memory, etc.)
 ├── templates/          — Scaffold templates for agents, skills, and docs
 ├── hooks/              — 7 lifecycle hooks (session-start, pre/post-compact, pre/post-tool-use)
 ├── references/         — Skills map + tool compatibility matrix

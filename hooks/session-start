@@ -154,6 +154,42 @@ NAPKIN_TMPL
   napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
 fi
 
+# --- Detect and inject ADR guardrails ---
+
+adr_context=""
+adr_dir="${project_root}/.context/docs/adrs"
+
+if [ -f "${adr_dir}/README.md" ]; then
+  adr_count=0
+  adr_guardrails_content=""
+
+  # Iterate ADR files in sorted order, skipping README
+  while IFS= read -r adr_file; do
+    [ -f "$adr_file" ] || continue
+
+    # Read status from frontmatter
+    adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
+    [ "$adr_status" = "Aprovado" ] || continue
+
+    adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
+    adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
+
+    # Extract "## Guardrails" section: from the heading to the next "## " heading
+    guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
+
+    if [ -n "$guardrails" ]; then
+      adr_count=$((adr_count + 1))
+      adr_guardrails_content+=$'\n### '"${adr_name}"' (stack: '"${adr_stack}"')'$'\n'"${guardrails}"$'\n'
+    fi
+  done < <(find "$adr_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort)
+
+  if [ "$adr_count" -gt 0 ]; then
+    adr_header="Loaded ${adr_count} active ADR(s). These are HARD CONSTRAINTS — apply during brainstorming, design, and implementation. Do not propose alternatives already rejected in ADRs."
+    adr_escaped=$(escape_for_json "${adr_header}${adr_guardrails_content}")
+    adr_context="\\n<ADR_GUARDRAILS>\\n${adr_escaped}\\n</ADR_GUARDRAILS>\\n"
+  fi
+fi
+
 # --- MemPalace auto-recall ---
 
 mempalace_context=""
@@ -289,7 +325,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 

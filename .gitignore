@@ -14,3 +14,4 @@ Thumbs.db
 # DevFlow runtime artifacts (auto-generated)
 .context/cache/
 .context/harness/
+.context/workflow/.checkpoint/*
