@@ -481,6 +481,7 @@ Cada fixture tem header `# EXPECTED:` com classificação por check para asserts
 | B4 | ADR como first-class do PRD (gera ADR de arquitetura na Fase 0) | Após ≥3 projetos usarem fluxo PRD + ADR juntos |
 | B5 | Pre-commit hook opcional rodando `adr-audit.mjs` | Demanda de feedback antes do gate V |
 | B6 | MemPalace para ADRs (`/devflow-recall` semântico) | MemPalace estável; ≥10 ADRs ativas |
+| B7 | Suite D — subagent E2E harness para `devflow:adr-builder` | ≥3 incidents reais que harness teria pego; ou skill estável v1+ com volume de uso justificando custo de CI (~$0.10/run, ~60-90s, ~1-2k tokens) |
 
 ## 12. Resumo executivo
 
