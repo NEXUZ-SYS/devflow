@@ -8,19 +8,33 @@ const KEY_RE = /^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/;
 const DENYLIST_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function parse(content) {
-  if (!content.startsWith('---')) {
+  // Skip leading HTML comments (e.g. <!-- EXPECTED: ... --> on test fixtures) and blank lines
+  const lines = content.split('\n');
+  let startIdx = 0;
+  while (startIdx < lines.length) {
+    const ln = lines[startIdx].trim();
+    if (ln === '' || ln.startsWith('<!--')) {
+      // Skip until comment closes
+      if (ln.startsWith('<!--') && !ln.includes('-->')) {
+        while (startIdx < lines.length && !lines[startIdx].includes('-->')) startIdx++;
+      }
+      startIdx++;
+      continue;
+    }
+    break;
+  }
+  if (startIdx >= lines.length || !DELIMITER_RE.test(lines[startIdx])) {
     throw new Error('frontmatter delimiter missing at start');
   }
-  const lines = content.split('\n');
   let endIdx = -1;
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = startIdx + 1; i < lines.length; i++) {
     if (DELIMITER_RE.test(lines[i])) { endIdx = i; break; }
   }
   if (endIdx === -1) throw new Error('frontmatter delimiter missing at end');
 
   const fm = Object.create(null);
   const order = [];
-  for (const line of lines.slice(1, endIdx)) {
+  for (const line of lines.slice(startIdx + 1, endIdx)) {
     const trimmed = line.trim();
     if (trimmed === '' || trimmed.startsWith('#')) continue;
     const m = trimmed.match(KEY_RE);

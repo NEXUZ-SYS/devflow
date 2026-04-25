@@ -28,9 +28,9 @@ function runAudit(file, ...flags) {
   );
 }
 
-const fixtures = readdirSync(FIX_DIR)
-  .filter((f) => f.match(/^(valid|invalid)-\d+-.*\.md$/))
-  .filter((f) => !f.includes('cycle')); // 05-cycle is single-file, OK; multi-file cycle would need dir variant
+const fixtures = readdirSync(FIX_DIR).filter((f) =>
+  f.match(/^(valid|invalid|9\d{2})-.*\.md$/),
+);
 
 for (const f of fixtures) {
   test(`audit fixture: ${f}`, () => {
