@@ -246,9 +246,13 @@ node scripts/adr-audit.mjs <file> [--format=json|pretty] [--enforce-gate] [--app
 - 1 — FIX-INTERVIEW presente, ou `--enforce-gate` ativo com FIX-AUTO sem `--apply-fix-auto`
 - 2 — erro de parsing/IO
 
-**Concurrent safety:** `adr-update-index.mjs` usa **advisory lock via `flock`** sobre `.context/docs/adrs/.lock` para evitar colisão de `--next-number` em workflows paralelos. Lock é best-effort (Linux/macOS); em Windows-WSL, fallback para arquivo-token com retry exponencial.
+**Concurrent safety:** `adr-update-index.mjs` usa **advisory lock via Node `open(.lock, 'wx')`** (exclusivo no FS, não literal `flock(2)`) sobre `.context/docs/adrs/.lock`. O conteúdo do lock inclui `{pid, ts}` para liveness recovery: ao encontrar lock existente, lê conteúdo, checa `process.kill(pid, 0)` (processo ainda vivo?) ou `Date.now() - ts > 30000` (expirou?). Se stale, `unlink` e retry. Isso evita lock órfão de processo SIGKILL'd. Cross-platform (Linux/macOS/Windows-WSL) via Node stdlib only.
+
+**Path safety:** flag `--project=<path>` é resolvida via `path.resolve()` e validada contra `process.cwd()` — paths que escapam do diretório de trabalho são rejeitados (mitigação de path traversal).
 
 **Worktree-safe diff:** Step 2.5 sempre usa `git diff $(git merge-base HEAD main)...HEAD` (não `HEAD..main`) para corretamente lidar com worktrees, branches divergentes, e pulls intermediários.
+
+**Shell-safe execution:** todas as chamadas a comandos externos (`git mv`, etc.) usam `execFileSync('cmd', [arg1, arg2])` com argv array, **nunca** `execSync(\`cmd ${var}\`)` com interpolação de string. Isso bypassa o shell e elimina vetor de command injection via filenames maliciosos.
 
 ### 6.3 Check 12 — Consistência de grafo
 
@@ -333,6 +337,7 @@ Define exatamente o que `--apply-fix-auto` modifica em cada check. Sem isso, FIX
 **Comportamento global:**
 - `--apply-fix-auto` aplica todas as ações da coluna 2 sequencialmente, depois re-roda os 12 checks. Se ainda houver FIX-AUTO (caso raro de regra que cria nova violação), repete até convergir ou max 3 iterações.
 - `--no-fix-auto` (modo migração) força todos os FIX-AUTO acima a virarem FIX-INTERVIEW, exigindo confirmação humana.
+- **Gate de status `Aprovado`:** se a ADR sob auditoria tem `status: Aprovado`, FIX-AUTO é **automaticamente desabilitado** (mesmo sem flag `--no-fix-auto`). Modificação silenciosa de ADR aprovada altera histórico do time — sempre exige confirmação humana via fluxo EVOLVE. Esta proteção complementa P12 (que protege a migração one-shot) cobrindo o uso normal de `/devflow adr:audit --apply-fix-auto`.
 - Aplicação de FIX-AUTO sempre gera diff visível ao usuário antes de commitar (no contexto da V phase, vai num commit separado: `fix(adr): auto-corrections from audit`).
 
 ### 6.8 Parser de frontmatter — `scripts/lib/adr-frontmatter.mjs`

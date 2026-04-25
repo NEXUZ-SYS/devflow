@@ -116,6 +116,39 @@ phases:
 - `git` CLI 2.x+ disponível (universal).
 - Linux/macOS primário; Windows-WSL via fallbacks específicos onde aplicável (lock).
 
+## Library Architecture & Import Graph
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  scripts/lib/                                                    │
+│  ├── adr-frontmatter.mjs    (zero deps internas — base)         │
+│  ├── adr-semver.mjs         (zero deps — bumpSemver, compare)   │
+│  └── adr-graph.mjs          (depende de: adr-frontmatter)       │
+│                                                                  │
+│  scripts/                                                        │
+│  ├── adr-audit.mjs          (depende de: frontmatter + graph)   │
+│  ├── adr-update-index.mjs   (depende de: frontmatter + semver)  │
+│  ├── adr-evolve.mjs         (depende de: frontmatter + semver +  │
+│  │                                       update-index via fork) │
+│  └── adr-migrate-v1-to-v2.mjs (depende de: frontmatter — Fase 3)│
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation order (dependency-respecting):**
+1. `adr-frontmatter.mjs` (Task 1.3) — foundation, zero deps
+2. `adr-semver.mjs` (Task 1.4) — extracted from prior plan as standalone (resolve C5)
+3. `adr-graph.mjs` (Task 1.5) — needs frontmatter
+4. `adr-audit.mjs` (Task 1.11) — needs frontmatter + graph
+5. `adr-update-index.mjs` (Task 1.13) — needs frontmatter + semver
+6. `adr-evolve.mjs` (Task 2.2) — needs frontmatter + semver + forks update-index
+7. `adr-migrate-v1-to-v2.mjs` (Task 3.4) — needs frontmatter
+
+**Cross-component contracts:**
+- All libs are stdlib-only (P10) — no `package.json` introduced
+- All `execSync` calls are **forbidden**; use `execFileSync('cmd', [args])` with argv array (S1 mitigation)
+- Parser uses `Object.create(null)` for frontmatter object + denylist `__proto__/constructor/prototype` (S2 mitigation)
+- All paths via `--project=` are validated via `path.resolve()` + `startsWith(process.cwd())` (S6 mitigation)
+
 ---
 
 ## Working Phases
@@ -166,7 +199,7 @@ Verify: `files` array (if present) covers `skills/**` and `commands/**` and `scr
 
 **Tests:** unit. Test types declared: parsing primitives.
 
-- [ ] **Step 1: Write test scaffold**
+- [ ] **Step 1: Write test scaffold (includes S2 prototype pollution test fixture)**
 
 ```javascript
 // tests/validation/test-adr-frontmatter.mjs
@@ -176,6 +209,17 @@ import { readFileSync } from 'node:fs';
 import { parse, stringify } from '../../scripts/lib/adr-frontmatter.mjs';
 
 const fixtures = (name) => readFileSync(`./tests/validation/fixtures/frontmatter/${name}.md`, 'utf-8');
+
+// S2 — prototype pollution attempt must throw, not pollute Object.prototype
+test('reject __proto__ key (S2)', () => {
+  assert.throws(() => parse(fixtures('11-proto-attack')), /forbidden key/);
+  // Verify Object.prototype was NOT polluted
+  assert.equal({}.polluted, undefined);
+});
+
+test('reject constructor key (S2)', () => {
+  assert.throws(() => parse(fixtures('12-constructor-attack')), /forbidden key/);
+});
 
 test('parse: minimal valid frontmatter', () => {
   const { frontmatter, body } = parse(fixtures('01-minimal'));
@@ -235,7 +279,25 @@ test('stringify: empty list rendered as []', () => {
 });
 ```
 
-- [ ] **Step 2: Create 10 fixtures**
+- [ ] **Step 2: Create 12 fixtures (10 valid + 2 attack — S2)**
+
+`fixtures/frontmatter/11-proto-attack.md`:
+```markdown
+---
+type: adr
+__proto__: [polluted]
+---
+# Attack
+```
+
+`fixtures/frontmatter/12-constructor-attack.md`:
+```markdown
+---
+type: adr
+constructor: malicious
+---
+# Attack
+```
 
 `fixtures/frontmatter/01-minimal.md`:
 ```markdown
@@ -283,11 +345,13 @@ git commit -m "test(adrs): add failing tests for frontmatter parser"
 - Create: `scripts/lib/adr-frontmatter.mjs`
 - Test: `tests/validation/test-adr-frontmatter.mjs`
 
-- [ ] **Step 1: Write parser implementation**
+- [ ] **Step 1: Write parser implementation (with S2 prototype pollution mitigation)**
 
 ```javascript
 // scripts/lib/adr-frontmatter.mjs
 const DELIMITER = /^---\s*$/m;
+// S2 — denylist for prototype pollution attacks
+const DENYLIST_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function parse(content) {
   if (!content.startsWith('---')) {
@@ -300,12 +364,16 @@ export function parse(content) {
   }
   if (endIdx === -1) throw new Error('frontmatter delimiter missing at end');
 
-  const fm = {};
+  // S2 — Object.create(null) avoids prototype chain entirely
+  const fm = Object.create(null);
   for (const line of lines.slice(1, endIdx)) {
     if (line.trim().startsWith('#') || line.trim() === '') continue;
     const m = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
     if (!m) continue;
     const [, key, rawVal] = m;
+    if (DENYLIST_KEYS.has(key)) {
+      throw new Error(`forbidden key in frontmatter: ${key}`);
+    }
     fm[key] = parseValue(rawVal.trim());
   }
   const body = lines.slice(endIdx + 1).join('\n');
@@ -363,7 +431,77 @@ git commit -m "feat(adrs): implement minimal YAML frontmatter parser (zero deps)
 
 ---
 
-#### Task 1.4: Write failing tests for `adr-graph`
+#### Task 1.4 (NEW — C5): Implement `adr-semver.mjs` (TDD)
+
+**Files:**
+- Create: `scripts/lib/adr-semver.mjs`
+- Create: `tests/validation/test-adr-semver.mjs`
+
+**Tests:** unit. Resolve C5 — extract semver helpers used by both `adr-update-index.mjs` and `adr-evolve.mjs` to single source of truth.
+
+- [ ] **Step 1: Write failing test**
+
+```javascript
+// tests/validation/test-adr-semver.mjs
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { bumpSemver, compareSemver, parseSemver } from '../../scripts/lib/adr-semver.mjs';
+
+test('bump patch', () => assert.equal(bumpSemver('1.0.0', 'patch'), '1.0.1'));
+test('bump minor resets patch', () => assert.equal(bumpSemver('1.2.3', 'minor'), '1.3.0'));
+test('bump major resets minor and patch', () => assert.equal(bumpSemver('2.4.7', 'major'), '3.0.0'));
+test('compare equal', () => assert.equal(compareSemver('1.0.0', '1.0.0'), 0));
+test('compare lesser', () => assert.ok(compareSemver('1.0.0', '1.0.1') < 0));
+test('compare greater', () => assert.ok(compareSemver('2.0.0', '1.99.99') > 0));
+test('parse decomposes', () => assert.deepEqual(parseSemver('1.2.3'), { major: 1, minor: 2, patch: 3 }));
+test('reject invalid input', () => assert.throws(() => bumpSemver('abc', 'patch')));
+```
+
+- [ ] **Step 2: RED**
+
+```bash
+node --test tests/validation/test-adr-semver.mjs
+```
+
+- [ ] **Step 3: Implement**
+
+```javascript
+// scripts/lib/adr-semver.mjs
+const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+
+export function parseSemver(v) {
+  const m = v.match(SEMVER_RE);
+  if (!m) throw new Error(`invalid semver: ${v}`);
+  return { major: +m[1], minor: +m[2], patch: +m[3] };
+}
+
+export function bumpSemver(v, kind) {
+  const { major, minor, patch } = parseSemver(v);
+  if (kind === 'patch') return `${major}.${minor}.${patch + 1}`;
+  if (kind === 'minor') return `${major}.${minor + 1}.0`;
+  if (kind === 'major') return `${major + 1}.0.0`;
+  throw new Error(`unknown bump kind: ${kind}`);
+}
+
+export function compareSemver(a, b) {
+  const pa = parseSemver(a); const pb = parseSemver(b);
+  if (pa.major !== pb.major) return pa.major - pb.major;
+  if (pa.minor !== pb.minor) return pa.minor - pb.minor;
+  return pa.patch - pb.patch;
+}
+```
+
+- [ ] **Step 4: GREEN + commit**
+
+```bash
+node --test tests/validation/test-adr-semver.mjs
+git add scripts/lib/adr-semver.mjs tests/validation/test-adr-semver.mjs
+git commit -m "feat(adrs): add adr-semver lib (extracted helper for C5)"
+```
+
+---
+
+#### Task 1.5: Write failing tests for `adr-graph`
 
 **Files:**
 - Create: `tests/validation/test-adr-graph.mjs`
@@ -436,7 +574,7 @@ git commit -m "test(adrs): add failing tests for adr-graph validator"
 
 ---
 
-#### Task 1.5: Implement `adr-graph.mjs`
+#### Task 1.6: Implement `adr-graph.mjs`
 
 **Files:**
 - Create: `scripts/lib/adr-graph.mjs`
@@ -529,7 +667,7 @@ git commit -m "feat(adrs): implement adr-graph validator (Check 12 backbone)"
 
 ---
 
-#### Task 1.6: Port TEMPLATE-ADR.md from bundle
+#### Task 1.7: Port TEMPLATE-ADR.md from bundle
 
 **Files:**
 - Create: `skills/adr-builder/assets/TEMPLATE-ADR.md`
@@ -560,7 +698,7 @@ git commit -m "feat(adrs): port canonical TEMPLATE-ADR.md from bundle (v2.1.0)"
 
 ---
 
-#### Task 1.7: Port references/ from bundle
+#### Task 1.8: Port references/ from bundle
 
 **Files (5):**
 - Create: `skills/adr-builder/references/briefing-guiado.md`
@@ -599,7 +737,7 @@ git commit -m "feat(adrs): port references/ from bundle (degraded saida-distribu
 
 ---
 
-#### Task 1.8: Port assets seeds (patterns-catalog + context.yaml)
+#### Task 1.9: Port assets seeds (patterns-catalog + context.yaml)
 
 **Files (2 in 2 locations):**
 - Create: `skills/adr-builder/assets/patterns-catalog.md` (seed in bundle)
@@ -622,7 +760,7 @@ git commit -m "feat(adrs): port patterns-catalog and context.yaml as seeds"
 
 ---
 
-#### Task 1.9: Create 9 audit fixtures (Suite A)
+#### Task 1.10: Create 9 audit fixtures (Suite A)
 
 **Files:**
 - Create: `tests/validation/fixtures/adr/valid-01-zod-validation.md`
@@ -681,7 +819,7 @@ git commit -m "test(adrs): create 9 audit fixtures with EXPECTED classifications
 
 ---
 
-#### Task 1.10: Write failing tests for `adr-audit` (Suite A)
+#### Task 1.11: Write failing tests for `adr-audit` (Suite A)
 
 **Files:**
 - Create: `tests/validation/test-adr-audit.mjs`
@@ -751,7 +889,7 @@ git commit -m "test(adrs): add failing audit test suite (Suite A)"
 
 ---
 
-#### Task 1.11: Implement `adr-audit.mjs` with all 12 checks
+#### Task 1.12: Implement `adr-audit.mjs` (Check 1 + skeleton; remaining checks split into 1.12a–1.12k — addresses C1)
 
 **Files:**
 - Create: `scripts/adr-audit.mjs`
@@ -822,16 +960,27 @@ function check1(fm) {
 }
 ```
 
-- [ ] **Step 3-13: Implement Checks 2-12**
+- [ ] **Steps 3a–3k: Implement Checks 2-12 — one TDD cycle per check (resolves C1)**
 
-For each check (2 through 12), follow the same pattern: function takes `(frontmatter, body, file)`, returns `{ id, name, status: PASS|FIX-AUTO|FIX-INTERVIEW, diagnosis, autoActions? }`. Reference §6.7 of the spec for the FIX-AUTO action by check (verbatim).
+Each check is its own bite-sized cycle. Per check: write failing fixture-driven test → run RED → implement check function → run GREEN → commit. Function signature: `(frontmatter, body, file) => { id, name, status: PASS|FIX-AUTO|FIX-INTERVIEW, diagnosis, autoActions? }`. Reference §6.7 of the spec for the FIX-AUTO action by check (verbatim).
 
-Important details per check:
-- **Check 7** (Relacionamentos section): regex `/^##\s+(Relacionamentos|Relationships|Related ADRs)/m` on body. FIX-AUTO migrates URL lines to Evidências, deletes section.
-- **Check 9** (Density): count lines via `body.split('\n').length` + 13 (frontmatter avg). Detect "tabular exception" via `(matchAll(/^\|.*\|$/gm).length / totalLines >= 0.6)`.
-- **Check 12** (Graph): call `validateGraph(dirname(file))`, fail with FIX-INTERVIEW if any error.
+| Sub-step | Check | Key detail |
+|---|---|---|
+| 3a | Check 2 — Título/voz | Always FIX-INTERVIEW; regex detects question marks, passive voice |
+| 3b | Check 3 — Foco em stack | Reads `context.yaml` from `.context/templates/adrs/`; FIX-INTERVIEW when product/vertical names found |
+| 3c | Check 4 — Alternativas | FIX-AUTO marks `✓` if inferable from "escolhida"/"adotamos"; else FIX-INTERVIEW |
+| 3d | Check 5 — Guardrails | FIX-AUTO reformats prefix to SEMPRE/NUNCA/QUANDO when verb-imperative detected; FIX-INTERVIEW for vague |
+| 3e | Check 6 — Enforcement | FIX-AUTO reformats checkboxes to GFM `- [ ]`; FIX-INTERVIEW for "code review" sem critério |
+| 3f | Check 7 — Sem Relacionamentos | regex `/^##\s+(Relacionamentos|Relationships|Related ADRs)/m`; FIX-AUTO migrates URLs to Evidências, deletes section |
+| 3g | Check 8 — Evidências oficiais | regex matches medium.com/dev.to/blog/stackoverflow.com/youtube.com; always FIX-INTERVIEW |
+| 3h | Check 9 — Densidade | `body.split('\n').length + 13`; tabular exception via `(matchAll(/^\|.*\|$/gm).length / totalLines >= 0.6)`; FIX-AUTO for forbidden phrases |
+| 3i | Check 10 — Código minimal | count code blocks + lines per block; >25 lines or >1 block → FIX-INTERVIEW |
+| 3j | Check 11 — Padrões catalogados | reads `patterns-catalog.md` from `.context/templates/adrs/`; conservative — always FIX-INTERVIEW |
+| 3k | Check 12 — Grafo | calls `validateGraph(dirname(file))` from `adr-graph.mjs`; always FIX-INTERVIEW on issues |
 
-- [ ] **Step 14: Wire up — runAudit aggregates all 12**
+Each sub-step gets its own commit: `feat(adr-audit): implement Check N — <short name>`. 11 commits total in this task.
+
+- [ ] **Step 14: Wire up — runAudit aggregates all 12 (with S3 gate for Aprovado)**
 
 ```javascript
 async function runAudit(file, content, flags) {
@@ -839,12 +988,19 @@ async function runAudit(file, content, flags) {
   let checks = [check1(frontmatter), check2(frontmatter, body), /* ... */ check12Async(file, frontmatter)];
   checks = await Promise.all(checks); // some are async (graph)
 
-  if (flags.noFixAuto) {
-    // Demote FIX-AUTO to FIX-INTERVIEW
-    checks = checks.map(c => c.status === 'FIX-AUTO' ? { ...c, status: 'FIX-INTERVIEW' } : c);
+  // S3 — Aprovado ADRs auto-demote FIX-AUTO to FIX-INTERVIEW (silent edits forbidden on approved history).
+  // This is independent of --no-fix-auto: even without the flag, status=Aprovado triggers the gate.
+  const isApproved = frontmatter.status === 'Aprovado';
+
+  if (flags.noFixAuto || isApproved) {
+    checks = checks.map(c => c.status === 'FIX-AUTO' ? {
+      ...c,
+      status: 'FIX-INTERVIEW',
+      diagnosis: c.diagnosis + (isApproved ? ' [demoted: ADR Aprovada exige confirmação humana]' : '')
+    } : c);
   }
 
-  if (flags.applyFixAuto && !flags.noFixAuto) {
+  if (flags.applyFixAuto && !flags.noFixAuto && !isApproved) {
     const fixed = await applyAutoFixes(file, frontmatter, body, checks);
     if (fixed) {
       // Re-run audit on fixed content (max 3 iterations)
@@ -857,8 +1013,21 @@ async function runAudit(file, content, flags) {
     fix_auto: checks.filter(c => c.status === 'FIX-AUTO').length,
     fix_interview: checks.filter(c => c.status === 'FIX-INTERVIEW').length,
   };
-  return { file, summary, checks, gate_passed: summary.fix_interview === 0 };
+  return { file, summary, checks, gate_passed: summary.fix_interview === 0, status_gate: isApproved ? 'Aprovado-protected' : null };
 }
+```
+
+- [ ] **Step 15: Add S3 fixture test**
+
+`tests/validation/fixtures/adr/valid-aprovado-with-fix-auto.md` — ADR with `status: Aprovado` that would normally trigger FIX-AUTO (e.g. missing `version` field). Test asserts that running `--apply-fix-auto` does NOT modify the file (status gate kicks in).
+
+```javascript
+test('S3: Aprovado status blocks --apply-fix-auto silently modifying file', () => {
+  const before = readFileSync(`${FIXTURES_DIR}valid-aprovado-with-fix-auto.md`, 'utf-8');
+  execSync(`node scripts/adr-audit.mjs ${FIXTURES_DIR}valid-aprovado-with-fix-auto.md --apply-fix-auto`);
+  const after = readFileSync(`${FIXTURES_DIR}valid-aprovado-with-fix-auto.md`, 'utf-8');
+  assert.equal(before, after, 'Aprovado ADR must not be modified by --apply-fix-auto');
+});
 ```
 
 - [ ] **Step 15: Run Suite A, expect GREEN**
@@ -878,7 +1047,7 @@ git commit -m "feat(adrs): implement adr-audit lib with 12 checks (Suite A green
 
 ---
 
-#### Task 1.12: Write failing tests for `adr-update-index` (Suite B)
+#### Task 1.13: Write failing tests for `adr-update-index` (Suite B)
 
 **Files:**
 - Create: `tests/validation/test-adr-index.mjs`
@@ -966,22 +1135,29 @@ git commit -m "test(adrs): add failing tests for adr-update-index (Suite B)"
 
 ---
 
-#### Task 1.13: Implement `adr-update-index.mjs` with concurrent lock
+#### Task 1.14: Implement `adr-update-index.mjs` with liveness-aware advisory lock + path safety
 
 **Files:**
 - Create: `scripts/adr-update-index.mjs`
 
-- [ ] **Step 1: Write implementation**
+- [ ] **Step 1: Write implementation (with S4 lock recovery + S6 path traversal mitigation)**
 
 ```javascript
 // scripts/adr-update-index.mjs
-import { readdir, readFile, writeFile, open } from 'node:fs/promises';
-import { join, basename, extname } from 'node:path';
-import { execSync } from 'node:child_process';
+import { readdir, readFile, writeFile, open, unlink } from 'node:fs/promises';
+import { resolve, join, basename, extname } from 'node:path';
 import { parse } from './lib/adr-frontmatter.mjs';
+import { compareSemver } from './lib/adr-semver.mjs';
 
 const args = process.argv.slice(2);
-const project = args.find(a => a.startsWith('--project='))?.slice(10) || '.';
+const rawProject = args.find(a => a.startsWith('--project='))?.slice(10) || '.';
+
+// S6 — path traversal mitigation
+const project = resolve(rawProject);
+if (!project.startsWith(process.cwd())) {
+  console.error(`--project must resolve within cwd (got: ${project})`);
+  process.exit(2);
+}
 const adrsDir = join(project, '.context/docs/adrs/');
 
 const subcommands = {
@@ -995,21 +1171,47 @@ const handler = subcommands[sub.split('=')[0]] || subcommands.default;
 
 await withLock(adrsDir, () => handler(adrsDir, args));
 
-async function withLock(dir, fn) {
+// S4 — liveness-aware advisory lock with stale recovery
+const LOCK_EXPIRY_MS = 30000;
+
+async function withLock(dir, fn, retries = 3) {
   const lockFile = join(dir, '.lock');
   let handle;
-  try {
-    handle = await open(lockFile, 'wx'); // exclusive create
-    await fn();
-  } catch (err) {
-    if (err.code === 'EEXIST') {
-      // Wait + retry once (Linux/macOS); fallback for Windows
-      await new Promise(r => setTimeout(r, 100));
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
       handle = await open(lockFile, 'wx');
-      await fn();
-    } else throw err;
-  } finally {
-    if (handle) { await handle.close(); await import('node:fs/promises').then(m => m.unlink(lockFile)); }
+      // Write {pid, ts} for liveness check by future processes
+      await handle.writeFile(JSON.stringify({ pid: process.pid, ts: Date.now() }));
+      try {
+        await fn();
+      } finally {
+        await handle.close();
+        await unlink(lockFile).catch(() => {});
+      }
+      return;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      // Lock exists — check if stale
+      const stale = await isLockStale(lockFile);
+      if (stale) {
+        await unlink(lockFile).catch(() => {});
+        continue; // retry immediately after clearing stale lock
+      }
+      await new Promise(r => setTimeout(r, 100 * (attempt + 1))); // exponential-ish backoff
+    }
+  }
+  throw new Error(`Could not acquire lock on ${lockFile} after ${retries} retries`);
+}
+
+async function isLockStale(lockFile) {
+  try {
+    const content = await readFile(lockFile, 'utf-8');
+    const { pid, ts } = JSON.parse(content);
+    if (Date.now() - ts > LOCK_EXPIRY_MS) return true;
+    // process.kill(pid, 0) throws if process is dead
+    try { process.kill(pid, 0); return false; } catch { return true; }
+  } catch {
+    return true; // unreadable lock = stale
   }
 }
 
@@ -1063,11 +1265,7 @@ function countGuardrails(body) {
 
 function formatList(arr) { if (!arr || arr.length === 0) return '—'; return arr.join(', '); }
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-function compareSemver(a, b) {
-  const pa = a.split('.').map(Number); const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) { if (pa[i] !== pb[i]) return pa[i] - pb[i]; }
-  return 0;
-}
+// compareSemver imported from ./lib/adr-semver.mjs (Task 1.4 — C5)
 
 async function loadAdrs(dir) {
   const files = (await readdir(dir)).filter(f => f.match(/^\d{3}-.*\.md$/) && f !== 'README.md');
@@ -1096,7 +1294,7 @@ git commit -m "feat(adrs): implement adr-update-index with advisory lock (Suite 
 
 ---
 
-#### Task 1.14: Phase 1 Acceptance — run all 3 suites
+#### Task 1.15: Phase 1 Acceptance — run all 4 suites + parser smoke against real legacy ADRs
 
 - [ ] **Step 1: Run Suites A+B+C**
 
@@ -1186,14 +1384,15 @@ git commit -m "test(adrs): add failing tests for adr-evolve patch flow"
 **Files:**
 - Create: `scripts/adr-evolve.mjs`
 
-- [ ] **Step 1: Write CLI scaffold + patch handler**
+- [ ] **Step 1: Write CLI scaffold + patch handler (with S1 execFileSync + S5 atomic write-then-rename)**
 
 ```javascript
 // scripts/adr-evolve.mjs
-import { readFile, writeFile, rename } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
-import { dirname, basename, join } from 'node:path';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
 import { parse, stringify } from './lib/adr-frontmatter.mjs';
+import { bumpSemver } from './lib/adr-semver.mjs';
 
 const args = process.argv.slice(2);
 const file = args.find(a => !a.startsWith('--'));
@@ -1214,20 +1413,25 @@ async function handlePatch(file, opts) {
 
   const newFile = renameToVersion(file, newVersion);
   if (opts.apply) {
-    execSync(`git mv "${file}" "${newFile}"`);
-    await writeFile(newFile, stringify(frontmatter, body));
-    execSync(`node scripts/adr-update-index.mjs --project=${dirname(dirname(dirname(file)))}`);
+    // S5 — atomic write-then-rename: write new content first, then git mv (which now reflects update).
+    // If writeFile fails, original file untouched. If git mv fails, we delete the temp content.
+    const newContent = stringify(frontmatter, body);
+    await writeFile(file, newContent); // overwrite content first (still under old name)
+    try {
+      // S1 — execFileSync with argv array, no shell interpolation
+      execFileSync('git', ['mv', file, newFile], { stdio: 'inherit' });
+    } catch (err) {
+      // Rollback: restore original content
+      await writeFile(file, content);
+      throw new Error(`git mv failed; rolled back: ${err.message}`);
+    }
+    // S1 — same fix for downstream call
+    execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${resolve(dirname(dirname(dirname(file))))}`], { stdio: 'inherit' });
   }
   console.log(JSON.stringify({ kind: 'patch', from: file, to: newFile, version: newVersion }));
 }
 
-function bumpSemver(v, kind) {
-  const [maj, min, pat] = v.split('.').map(Number);
-  if (kind === 'patch') return `${maj}.${min}.${pat + 1}`;
-  if (kind === 'minor') return `${maj}.${min + 1}.0`;
-  if (kind === 'major') return `${maj + 1}.0.0`;
-  throw new Error(`Unknown bump: ${kind}`);
-}
+// bumpSemver imported from ./lib/adr-semver.mjs (Task 1.4 — C5)
 
 function renameToVersion(file, version) {
   return file.replace(/-v\d+\.\d+\.\d+\.md$/, `-v${version}.md`);
@@ -1245,21 +1449,228 @@ git commit -m "feat(adrs): implement adr-evolve patch flow"
 
 ---
 
-#### Task 2.3-2.8: Implement minor/major/refine flows
+> **Parallelism note (A5):** Tasks 2.3, 2.5, 2.7 (failing tests for minor/major/refine) and Tasks 2.4, 2.6, 2.8 (implementations) are independent — handlers in `adr-evolve.mjs` are isolated functions sharing only `adr-frontmatter` and `adr-semver`. Three workers can develop them in parallel after Task 2.2 establishes the pattern.
 
-For each kind (minor, major, refine), follow the pattern of Task 2.1/2.2:
-1. Write failing test (assertions per spec §5.3)
-2. RED
-3. Implement handler in `adr-evolve.mjs`
-4. GREEN
-5. Commit
+---
 
-**Key differences:**
-- **Minor** (Task 2.3-2.4): `git mv` rename to `vX.(Y+1).0`, status `Aprovado → Proposto`.
-- **Major** (Task 2.5-2.6): create new file `vX+1.0.0` from interactive interview (placeholder content for tests; real interview happens in Phase 2 SKILL.md), set `supersedes: [<old-slug>]`. Edit old file in place: `status: Aprovado → Substituido`. Old filename does NOT change.
-- **Refine** (Task 2.7-2.8): create new file with new sequential number, set `refines: [<parent-slug>]`. Parent untouched.
+#### Task 2.3: Write failing test for evolve `minor` flow
 
-Each task: Write failing test → RED → Implement → GREEN → Commit.
+**Files:**
+- Modify: `tests/validation/test-adr-evolve.mjs` (append)
+
+- [ ] **Step 1: Write test asserting minor bump renames file + status `Aprovado → Proposto`**
+
+```javascript
+test('minor: bump version and revert status to Proposto', () => {
+  execSync(`rm -rf ${PROJ} && cp -r tests/validation/fixtures/adr-project ${PROJ}`);
+  const before = `${PROJ}.context/docs/adrs/001-zod-validation-v1.0.0.md`;
+  const after = `${PROJ}.context/docs/adrs/001-zod-validation-v1.1.0.md`;
+
+  execSync(`node scripts/adr-evolve.mjs ${before} --kind=minor --apply --diff="add new guardrail"`,
+           { stdio: 'inherit' });
+
+  assert.ok(!existsSync(before));
+  assert.ok(existsSync(after));
+  const content = readFileSync(after, 'utf-8');
+  assert.match(content, /version: 1\.1\.0/);
+  assert.match(content, /status: Proposto/); // minor reverts to Proposto
+});
+```
+
+- [ ] **Step 2: RED + commit**
+
+```bash
+node --test tests/validation/test-adr-evolve.mjs
+git add tests/validation/test-adr-evolve.mjs
+git commit -m "test(adrs): add failing test for adr-evolve minor flow"
+```
+
+---
+
+#### Task 2.4: Implement evolve `minor` handler
+
+**Files:**
+- Modify: `scripts/adr-evolve.mjs` (append)
+
+- [ ] **Step 1: Add `handleMinor` function**
+
+```javascript
+async function handleMinor(file, opts) {
+  const content = await readFile(file, 'utf-8');
+  const { frontmatter, body } = parse(content);
+  const newVersion = bumpSemver(frontmatter.version, 'minor');
+  frontmatter.version = newVersion;
+  frontmatter.status = 'Proposto'; // minor requires re-approval
+  const newFile = renameToVersion(file, newVersion);
+
+  if (opts.apply) {
+    const newContent = stringify(frontmatter, body);
+    await writeFile(file, newContent);
+    try {
+      execFileSync('git', ['mv', file, newFile], { stdio: 'inherit' });
+    } catch (err) {
+      await writeFile(file, content);
+      throw new Error(`git mv failed; rolled back: ${err.message}`);
+    }
+    execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${resolve(dirname(dirname(dirname(file))))}`], { stdio: 'inherit' });
+  }
+  console.log(JSON.stringify({ kind: 'minor', from: file, to: newFile, version: newVersion }));
+}
+```
+
+- [ ] **Step 2: GREEN + commit**
+
+```bash
+node --test tests/validation/test-adr-evolve.mjs
+git add scripts/adr-evolve.mjs
+git commit -m "feat(adrs): implement adr-evolve minor flow"
+```
+
+---
+
+#### Task 2.5: Write failing test for evolve `major` flow
+
+**Files:**
+- Modify: `tests/validation/test-adr-evolve.mjs` (append)
+
+- [ ] **Step 1: Write test asserting major creates NEW file with `supersedes` + old becomes `Substituido`**
+
+```javascript
+test('major: create new file with supersedes, mark old as Substituido', () => {
+  execSync(`rm -rf ${PROJ} && cp -r tests/validation/fixtures/adr-project ${PROJ}`);
+  const oldFile = `${PROJ}.context/docs/adrs/001-zod-validation-v1.0.0.md`;
+  const newFile = `${PROJ}.context/docs/adrs/001-zod-validation-v2.0.0.md`;
+
+  execSync(`node scripts/adr-evolve.mjs ${oldFile} --kind=major --apply --new-content=tests/fixtures/major-replacement.md`,
+           { stdio: 'inherit' });
+
+  // Old file STILL exists with same name (not renamed) but status changed
+  assert.ok(existsSync(oldFile));
+  const oldContent = readFileSync(oldFile, 'utf-8');
+  assert.match(oldContent, /status: Substituido/);
+
+  // New file exists with v2.0.0 + supersedes pointing to old slug-without-ext
+  assert.ok(existsSync(newFile));
+  const newContent = readFileSync(newFile, 'utf-8');
+  assert.match(newContent, /version: 2\.0\.0/);
+  assert.match(newContent, /supersedes: \[001-zod-validation-v1\.0\.0\]/);
+  assert.match(newContent, /status: Proposto/);
+});
+```
+
+- [ ] **Step 2: RED + commit**
+
+---
+
+#### Task 2.6: Implement evolve `major` handler
+
+**Files:**
+- Modify: `scripts/adr-evolve.mjs`
+
+- [ ] **Step 1: Add `handleMajor` (creates new file + edits old)**
+
+```javascript
+async function handleMajor(file, opts) {
+  const content = await readFile(file, 'utf-8');
+  const { frontmatter: oldFm, body: oldBody } = parse(content);
+  const oldSlug = basename(file, '.md');
+
+  // New ADR — start fresh template + supersedes ref to old (Opção Y: filename sem extensão)
+  const newFile = renameToVersion(file, '2.0.0').replace(/v1\.\d+\.\d+/, 'v2.0.0');
+  const newFm = Object.create(null);
+  Object.assign(newFm, {
+    type: 'adr', name: oldFm.name, description: '<a definir — major bump>',
+    scope: oldFm.scope, stack: oldFm.stack, category: oldFm.category,
+    status: 'Proposto', version: '2.0.0', created: new Date().toISOString().slice(0, 10),
+    supersedes: [oldSlug], refines: [], protocol_contract: null, decision_kind: 'firm',
+  });
+
+  // Pull replacement body from --new-content if provided, else use template stub
+  const newBody = opts.diff ? opts.diff : '# ADR — <a definir>\n\n## Contexto\n\n<a definir>\n';
+
+  // Old ADR — mark Substituido, do NOT rename
+  oldFm.status = 'Substituido';
+  const updatedOldContent = stringify(oldFm, oldBody);
+
+  if (opts.apply) {
+    await writeFile(newFile, stringify(newFm, newBody));
+    await writeFile(file, updatedOldContent);
+    execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${resolve(dirname(dirname(dirname(file))))}`], { stdio: 'inherit' });
+  }
+  console.log(JSON.stringify({ kind: 'major', new: newFile, supersedes: oldSlug }));
+}
+```
+
+- [ ] **Step 2: GREEN + commit**
+
+---
+
+#### Task 2.7: Write failing test for evolve `refine` flow
+
+**Files:**
+- Modify: `tests/validation/test-adr-evolve.mjs`
+
+- [ ] **Step 1: Write test asserting refine creates NEW ADR with new sequential number, parent untouched**
+
+```javascript
+test('refine: new ADR with refines, parent unchanged', () => {
+  execSync(`rm -rf ${PROJ} && cp -r tests/validation/fixtures/adr-project ${PROJ}`);
+  const parent = `${PROJ}.context/docs/adrs/001-zod-validation-v1.0.0.md`;
+  const parentBefore = readFileSync(parent, 'utf-8');
+
+  execSync(`node scripts/adr-evolve.mjs ${parent} --kind=refine --slug=zod-coverage-slo --apply`);
+
+  // Parent untouched
+  assert.equal(readFileSync(parent, 'utf-8'), parentBefore);
+
+  // New file created with next sequential number
+  const newFiles = readdirSync(`${PROJ}.context/docs/adrs/`).filter(f => f.includes('zod-coverage-slo'));
+  assert.equal(newFiles.length, 1);
+  assert.match(newFiles[0], /^\d{3}-zod-coverage-slo-v1\.0\.0\.md$/);
+  const content = readFileSync(`${PROJ}.context/docs/adrs/${newFiles[0]}`, 'utf-8');
+  assert.match(content, /refines: \[001-zod-validation-v1\.0\.0\]/);
+});
+```
+
+- [ ] **Step 2: RED + commit**
+
+---
+
+#### Task 2.8: Implement evolve `refine` handler
+
+- [ ] **Step 1: Add `handleRefine` (creates new ADR via update-index `--next-number`)**
+
+```javascript
+async function handleRefine(file, opts) {
+  const parentSlug = basename(file, '.md');
+  const dir = dirname(file);
+  const projectRoot = resolve(dirname(dirname(dirname(file))));
+
+  // S1 — argv array
+  const nextNumOutput = execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${projectRoot}`, '--next-number'], { encoding: 'utf-8' });
+  const num = nextNumOutput.trim();
+
+  const slug = opts.diff || 'a-definir-refine';
+  const newFile = join(dir, `${num}-${slug}-v1.0.0.md`);
+
+  const newFm = Object.create(null);
+  Object.assign(newFm, {
+    type: 'adr', name: slug, description: '<a definir — refine>',
+    scope: 'project', stack: 'universal', category: 'arquitetura',
+    status: 'Proposto', version: '1.0.0', created: new Date().toISOString().slice(0, 10),
+    supersedes: [], refines: [parentSlug], protocol_contract: null, decision_kind: 'firm',
+  });
+  const newBody = '# ADR — <a definir>\n\n## Contexto\n\n<a definir>\n';
+
+  if (opts.apply) {
+    await writeFile(newFile, stringify(newFm, newBody));
+    execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${projectRoot}`], { stdio: 'inherit' });
+  }
+  console.log(JSON.stringify({ kind: 'refine', new: newFile, refines: parentSlug }));
+}
+```
+
+- [ ] **Step 2: GREEN + commit**
 
 ---
 
@@ -1328,25 +1739,102 @@ git commit -m "test(adrs): verify concurrent --next-number under lock"
 
 ---
 
-#### Task 2.11: Author `skills/adr-builder/SKILL.md`
+#### Task 2.11a (was 2.11 step 1 — split per C3): Author `SKILL.md` frontmatter + structure
 
 **Files:**
-- Create: `skills/adr-builder/SKILL.md`
-- Reference: `/tmp/adr-builder-extract/adr-builder/SKILL.md` (port + adapt)
-- Reference: `docs/superpowers/specs/2026-04-24-adr-system-v2-design.md` §5
+- Create: `skills/adr-builder/SKILL.md` (initial — frontmatter + section stubs)
 
-- [ ] **Step 1: Write SKILL.md (DevFlow-adapted)**
+- [ ] **Step 1: Write frontmatter + global structure**
 
-Port from bundle SKILL.md but:
-- Replace `ask_user_input_v0` → DevFlow conversational pattern (prosa or AskUserQuestion).
-- Replace `/home/claude/adr-build/staged/` → `.context/docs/adrs/.draft/` (or skip entirely; spec §4.1 confirms direct write).
-- Drop Step 6 distribution A/C (only B applies in DevFlow).
-- Drop Step 7 packaging (no .zip).
+```markdown
+---
+name: adr-builder
+description: Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs)...
+---
+
+# ADR Builder — DevFlow Edition
+
+## Step 0 — Detect mode (create | audit | evolve)
+[stub]
+
+## CREATE mode (Steps 1-5)
+[stub — filled in 2.11b]
+
+## AUDIT mode (Steps A1-A4)
+[stub — filled in 2.11c]
+
+## EVOLVE mode (Steps E1-E5)
+[stub — filled in 2.11d]
+
+## Hard rules (12)
+[port from bundle — verbatim]
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add skills/adr-builder/SKILL.md
+git commit -m "feat(adrs): scaffold SKILL.md with frontmatter and section stubs"
+```
+
+---
+
+#### Task 2.11b: Author `SKILL.md` CREATE mode section
+
+**Files:**
+- Modify: `skills/adr-builder/SKILL.md` (replace CREATE stub with full section)
+- Reference: `/tmp/adr-builder-extract/adr-builder/SKILL.md` Steps 1-5
+- Reference: `skills/adr-builder/references/briefing-guiado.md` + `extracao-livre.md`
+
+- [ ] **Step 1: Author CREATE Steps 1-5**
+
+Port + adapt from bundle:
+- Replace `ask_user_input_v0` → DevFlow conversational pattern (prosa or AskUserQuestion)
+- Drop staging at `/home/claude/adr-build/` — DevFlow writes direct to `.context/docs/adrs/`
 - Add seed copy logic on first invocation: if `.context/templates/adrs/patterns-catalog.md` doesn't exist, copy from `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/patterns-catalog.md`. Same for `context.yaml`.
-- Add Step E0-E4 for EVOLVE mode (calls `adr-evolve.mjs`).
-- Frontmatter: `name: adr-builder`, `description: ...` (port from bundle).
+- Drop Step 6 distribution A/C; only Option B (write to `.context/docs/adrs/`) applies in DevFlow.
+- Drop Step 7 packaging (no .zip).
 
-(Estimated 600-700 lines of SKILL.md content.)
+- [ ] **Step 2: Commit**
+
+```bash
+git commit -m "feat(adrs): SKILL.md CREATE mode section (Steps 1-5)"
+```
+
+---
+
+#### Task 2.11c: Author `SKILL.md` AUDIT mode section
+
+**Files:**
+- Modify: `skills/adr-builder/SKILL.md` (replace AUDIT stub)
+- Reference: bundle Steps A1-A4 + `references/auditoria.md`
+
+- [ ] **Step 1: Author AUDIT Steps A1-A4**
+
+Adapt: AUDIT delegates to `adr-audit.mjs` lib for deterministic check classification (don't replicate check logic in skill prose). Skill flows: load file → invoke lib → present report → branch on user choice (just-show / fix-auto-only / full interview).
+
+- [ ] **Step 2: Commit**
+
+```bash
+git commit -m "feat(adrs): SKILL.md AUDIT mode section (Steps A1-A4 + lib delegation)"
+```
+
+---
+
+#### Task 2.11d: Author `SKILL.md` EVOLVE mode section
+
+**Files:**
+- Modify: `skills/adr-builder/SKILL.md` (replace EVOLVE stub)
+- Reference: spec §5.3
+
+- [ ] **Step 1: Author EVOLVE Steps E1-E5**
+
+Steps:
+- E1: Load target ADR + classify change type (patch | minor | major | refine) via `ask_user_question`
+- E2: Type-specific interview
+- E3: Generate plan summary
+- E4: Invoke `adr-evolve.mjs --kind=<type> --apply`
+- E5: Hand off to V phase (PREVC SMALL gate via prevc-validation Step 2.5)
 
 - [ ] **Step 2: Manual smoke check**
 
@@ -1358,8 +1846,7 @@ ls skills/adr-builder/
 - [ ] **Step 3: Commit**
 
 ```bash
-git add skills/adr-builder/SKILL.md
-git commit -m "feat(adrs): author skills/adr-builder/SKILL.md (CREATE/AUDIT/EVOLVE)"
+git commit -m "feat(adrs): SKILL.md EVOLVE mode section (Steps E1-E5)"
 ```
 
 ---
@@ -1545,8 +2032,8 @@ test('grep finds zero stale references', () => {
 
 ```javascript
 // scripts/adr-migrate-v1-to-v2.mjs
-import { readFile, writeFile, rename } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
+import { readFile, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';  // S1 — argv array, no shell interpolation
 import { parse, stringify } from './lib/adr-frontmatter.mjs';
 
 const file = process.argv[2];
@@ -1578,8 +2065,14 @@ if (!dryRun) {
     console.error('Migration requires explicit --confirmed flag (P12: ADRs aprovadas exigem revisão humana)');
     process.exit(1);
   }
-  execSync(`git mv "${file}" "${newFile}"`);
-  await writeFile(newFile, stringify(frontmatter, newBody));
+  // S5 — write-then-rename atomic pattern (same as adr-evolve.mjs Task 2.2)
+  await writeFile(file, stringify(frontmatter, newBody));
+  try {
+    execFileSync('git', ['mv', file, newFile], { stdio: 'inherit' });  // S1 — argv array
+  } catch (err) {
+    await writeFile(file, content);
+    throw new Error(`git mv failed; rolled back: ${err.message}`);
+  }
   console.log('Migration applied.');
 } else {
   console.log('Dry-run only.');
@@ -1732,13 +2225,61 @@ git commit -m "feat(prevc-planning): add Step 5.6 ADR opportunity check (LLM-ins
 
 ---
 
-#### Task 4.2: Test Step 5.6 with synthetic workflow
+#### Task 4.2: Automated integration test for Step 5.6 (resolves C4)
 
-- [ ] **Step 1: Write integration test (manual)**
+**Files:**
+- Create: `tests/validation/test-prevc-planning-step5.6.mjs`
 
-Run `/devflow scale:MEDIUM "Adicionar cache Redis"` (synthetic). Verify Step 5.6 detects the 4 signals during brainstorming and offers `/devflow adr:new`.
+**Tests:** integration. Asserts the SKILL.md text contains the required heuristic structure (4 signals, opt-out flag, offer template). Until subagent harness from Suite D is reused, validate via doc-test pattern: parse SKILL.md, assert presence of named sub-steps and opt-out keyword.
 
-- [ ] **Step 2: No commit (smoke only) — record observation**
+- [ ] **Step 1: Write failing test**
+
+```javascript
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const SKILL = readFileSync('./skills/prevc-planning/SKILL.md', 'utf-8');
+
+test('Step 5.6 exists between Step 5 and Step 6', () => {
+  const idx5 = SKILL.indexOf('## Step 5');
+  const idx55 = SKILL.indexOf('## Step 5.6');
+  const idx6 = SKILL.indexOf('## Step 6');
+  assert.ok(idx5 < idx55 && idx55 < idx6, 'Step 5.6 must sit between Step 5 and Step 6');
+});
+
+test('Step 5.6 declares 4 signals', () => {
+  const section = extractSection(SKILL, '## Step 5.6');
+  for (const sig of ['Escolha entre alternativas', 'stack/arquitetura', 'guardrails', 'Não-trivial']) {
+    assert.match(section, new RegExp(sig));
+  }
+});
+
+test('Step 5.6 declares opt-out skip_adr_offer', () => {
+  const section = extractSection(SKILL, '## Step 5.6');
+  assert.match(section, /skip_adr_offer/);
+});
+
+test('Step 5.6 mechanism is LLM-instruction (P11), not regex/lib', () => {
+  const section = extractSection(SKILL, '## Step 5.6');
+  assert.match(section, /instru[çc][ãa]o/i);
+  assert.doesNotMatch(section, /regex|lib auxiliar/i);
+});
+
+function extractSection(text, heading) {
+  const start = text.indexOf(heading);
+  const next = text.indexOf('## ', start + heading.length);
+  return text.slice(start, next === -1 ? text.length : next);
+}
+```
+
+- [ ] **Step 2: RED → modify SKILL.md (Task 4.1) → GREEN**
+
+- [ ] **Step 3: Commit**
+
+```bash
+git commit -m "test(prevc-planning): verify Step 5.6 structure (4 signals + opt-out)"
+```
 
 ---
 
@@ -1760,17 +2301,66 @@ git commit -m "feat(prevc-validation): add Step 2.5 ADR Compliance Check (matrix
 
 ---
 
-#### Task 4.4: Test Step 2.5 with synthetic touched ADR
+#### Task 4.4: Automated integration test for Step 2.5 (resolves C4)
 
-- [ ] **Step 1: Manual integration test**
+**Files:**
+- Create: `tests/validation/test-prevc-validation-step2.5.mjs`
 
-Create branch `test/adr-touch`, modify a Proposto ADR with a vague guardrail, run `/devflow-next` to V phase. Verify Step 2.5 catches FIX-INTERVIEW and blocks gate.
+**Tests:** integration. Bash-driven scenario test: prepare git scratch repo with various ADR states, run the gate command sequence (as a Step 2.5 implementation would), assert correct exit codes.
 
-- [ ] **Step 2: Verify skip on untouched ADR**
+- [ ] **Step 1: Write failing test**
 
-Branch with no ADR changes → Step 2.5 skips silently.
+```javascript
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execSync, execFileSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 
-- [ ] **Step 3: No commit (smoke)**
+const SCRATCH = '/tmp/test-step2.5-scratch';
+
+function setupScratch() {
+  rmSync(SCRATCH, { recursive: true, force: true });
+  mkdirSync(`${SCRATCH}/.context/docs/adrs/`, { recursive: true });
+  execFileSync('git', ['init', SCRATCH], { stdio: 'ignore' });
+  execFileSync('git', ['-C', SCRATCH, 'commit', '--allow-empty', '-m', 'init'], { stdio: 'ignore' });
+}
+
+test('Step 2.5 skips when no ADRs touched', () => {
+  setupScratch();
+  // No diff in adrs/ — Step 2.5 should skip
+  const diff = execSync(`git -C ${SCRATCH} diff --name-only HEAD -- '.context/docs/adrs/*.md'`).toString();
+  assert.equal(diff, ''); // empty diff → skip path
+});
+
+test('Step 2.5 blocks gate when Proposto ADR has FIX-INTERVIEW', () => {
+  setupScratch();
+  copyFileSync('./tests/validation/fixtures/adr/invalid-01-vague-guardrail.md',
+               `${SCRATCH}/.context/docs/adrs/001-vague-v1.0.0.md`);
+  // Run audit with --enforce-gate; should exit 1
+  let exitCode = 0;
+  try {
+    execFileSync('node', ['scripts/adr-audit.mjs', `${SCRATCH}/.context/docs/adrs/001-vague-v1.0.0.md`, '--enforce-gate'], { stdio: 'pipe' });
+  } catch (err) { exitCode = err.status; }
+  assert.equal(exitCode, 1);
+});
+
+test('Step 2.5 SKILL.md has matrix-by-status table', () => {
+  const skill = readFileSync('./skills/prevc-validation/SKILL.md', 'utf-8');
+  assert.match(skill, /## Step 2\.5/);
+  for (const status of ['Proposto', 'Aprovado', 'Substituido', 'Descontinuado']) {
+    assert.match(skill, new RegExp(`\\b${status}\\b`));
+  }
+  assert.match(skill, /git merge-base HEAD main/); // worktree-safe diff
+});
+```
+
+- [ ] **Step 2: RED → modify SKILL.md (Task 4.3) → GREEN**
+
+- [ ] **Step 3: Commit**
+
+```bash
+git commit -m "test(prevc-validation): verify Step 2.5 gate semantics + matrix-by-status"
+```
 
 ---
 
@@ -1803,33 +2393,73 @@ git commit -m "feat(adr-filter): support v2 schema (14 cols) + Kind filter with 
 
 ---
 
-#### Task 4.6: Test adr-filter with new schema
+#### Task 4.6: Automated integration test for adr-filter v2 (resolves C4 + A2)
 
-- [ ] **Step 1: Run adr-filter against migrated ADRs**
+**Files:**
+- Create: `tests/validation/test-adr-filter-v2.mjs`
+- Create: `tests/validation/fixtures/adr-filter-v2/` — **dedicated fixture** (resolves A2: doesn't depend on Phase 3 migration of 001/002)
 
-Mock task: "TDD em Python para nova feature". Expected output: `<ADR_GUARDRAILS filtered="true">` block including 001-tdd-python with `[firm]` tag.
+**Tests:** integration. Self-contained fixture set with v2 schema READMEs + ADRs in different status/kind combinations.
 
-- [ ] **Step 2: Test status filtering**
+- [ ] **Step 1: Create dedicated fixture (A2)**
 
-Add a temporary ADR with `status: Substituido` to fixture. Verify adr-filter rejects.
+Build `tests/validation/fixtures/adr-filter-v2/.context/docs/adrs/` with:
+- `001-firm-v1.0.0.md` — Aprovado, kind: firm
+- `002-experimental-v1.0.0.md` — Aprovado, kind: reversible
+- `003-superseded-v1.0.0.md` — Substituido (must be rejected by filter)
+- `README.md` — generated via `adr-update-index.mjs` against this fixture
 
-- [ ] **Step 3: No commit (smoke)**
+- [ ] **Step 2: Write failing test**
+
+```javascript
+test('adr-filter parses 14-column schema', () => {
+  // SKILL.md must reference Versão, Categoria, Kind, Refines, Supersedes, Contrato, Criada
+  const skill = readFileSync('./skills/adr-filter/SKILL.md', 'utf-8');
+  for (const col of ['Versão', 'Categoria', 'Kind', 'Refines', 'Supersedes', 'Contrato', 'Criada']) {
+    assert.match(skill, new RegExp(col));
+  }
+});
+
+test('adr-filter Step 4d emits Kind tags', () => {
+  const skill = readFileSync('./skills/adr-filter/SKILL.md', 'utf-8');
+  assert.match(skill, /\[firm\]|firm.*sem tag/);
+  assert.match(skill, /\[gated\]/);
+  assert.match(skill, /\[experimental\]/);
+});
+
+test('adr-filter rejects Substituido status', () => {
+  const skill = readFileSync('./skills/adr-filter/SKILL.md', 'utf-8');
+  assert.match(skill, /Substituido.*reject|status.*Substituido/);
+});
+```
+
+- [ ] **Step 3: RED → modify SKILL.md (Task 4.5) → GREEN**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git commit -m "test(adr-filter): verify v2 schema parsing + Kind tags + status filter"
+```
 
 ---
 
 #### Task 4.7: Regression — run all existing test suites
+
+> **Dependency barrier (A1):** Task 4.7 explicitly requires Phase 3 (migration of 001/002) to be merged first. Reason: regression suite includes `tests/validation/test-adr-migration.mjs` which asserts the migration completed. Running 4.7 before Phase 3 commits will fail — the suite is not standalone. **Workflow:** Phase 4 tasks 4.1-4.6 can run in parallel with Phase 3, but 4.7 must wait for Phase 3 done.
 
 ```bash
 node --test tests/validation/*.mjs
 ```
 
 Verify no regression in:
-- prevc-planning existing tests
-- prevc-validation existing tests
-- adr-filter existing tests (if any)
+- prevc-planning existing tests + new test-prevc-planning-step5.6.mjs (Task 4.2)
+- prevc-validation existing tests + new test-prevc-validation-step2.5.mjs (Task 4.4)
+- adr-filter new tests test-adr-filter-v2.mjs (Task 4.6)
+- All Phase 1 suites (audit, index, graph, frontmatter, semver)
+- Phase 3 migration suite
 
 ```bash
-git commit --allow-empty -m "chore(adrs): Phase 4 complete — Step 5.6, Step 2.5, adr-filter integrated"
+git commit --allow-empty -m "chore(adrs): Phase 4 complete — Step 5.6, Step 2.5, adr-filter integrated, all suites green"
 ```
 
 ---
@@ -1920,6 +2550,71 @@ git commit -m "docs(context): document Step 2.5 and /devflow adr:* in developmen
 
 ---
 
+#### Task 5.6.5 (NEW — A4): Smoke test plugin packaging in fresh install
+
+**Files:**
+- Create: `tests/validation/test-plugin-packaging.sh`
+
+**Tests:** integration. Risk §10 "plugin packaging dropa assets/" needs verification beyond reading `plugin.json`.
+
+- [ ] **Step 1: Write smoke script**
+
+```bash
+#!/usr/bin/env bash
+# tests/validation/test-plugin-packaging.sh
+set -euo pipefail
+
+SCRATCH=$(mktemp -d)
+trap "rm -rf $SCRATCH" EXIT
+
+# Simulate fresh install by copying plugin (excluding .git, node_modules, etc.)
+rsync -a --exclude='.git' --exclude='node_modules' --exclude='tests' \
+  /home/walterfrey/Documentos/code/devflow/ "$SCRATCH/devflow/"
+
+# Verify critical paths survived
+for path in \
+  "skills/adr-builder/SKILL.md" \
+  "skills/adr-builder/assets/TEMPLATE-ADR.md" \
+  "skills/adr-builder/assets/patterns-catalog.md" \
+  "skills/adr-builder/assets/context.yaml" \
+  "skills/adr-builder/references/briefing-guiado.md" \
+  "skills/adr-builder/references/extracao-livre.md" \
+  "skills/adr-builder/references/auditoria.md" \
+  "skills/adr-builder/references/checklist-qualidade.md" \
+  "skills/adr-builder/references/saida-distribuicao.md" \
+  "scripts/adr-audit.mjs" \
+  "scripts/adr-update-index.mjs" \
+  "scripts/adr-evolve.mjs" \
+  "scripts/lib/adr-frontmatter.mjs" \
+  "scripts/lib/adr-graph.mjs" \
+  "scripts/lib/adr-semver.mjs" \
+  "commands/devflow-adr.md"
+do
+  if [ ! -f "$SCRATCH/devflow/$path" ]; then
+    echo "FAIL: missing $path in fresh install"
+    exit 1
+  fi
+done
+
+echo "OK: all required paths present in fresh install"
+```
+
+- [ ] **Step 2: Run + verify**
+
+```bash
+bash tests/validation/test-plugin-packaging.sh
+# Expected: OK: all required paths present
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/validation/test-plugin-packaging.sh
+git commit -m "test(plugin): smoke fresh-install assertion for adr-builder bundle (resolves A4)"
+```
+
+---
+
 #### Task 5.7: Self-audit all existing ADRs
 
 ```bash
@@ -1991,21 +2686,53 @@ git commit --allow-empty -m "chore(adrs): Phase 5 complete — Suite D green, ve
 
 ## Test-First Ordering Validation (HARD-GATE Step 5.5)
 
-| Phase | Task group | First step is "Write failing test"? | Test types declared? |
-|---|---|---|---|
-| 1 | 1.2 frontmatter | ✓ (Step 1: Write test scaffold) | unit |
-| 1 | 1.4 graph | ✓ | unit |
-| 1 | 1.10 audit | ✓ | integration (lê fixtures) |
-| 1 | 1.12 index | ✓ | integration (filesystem) |
-| 2 | 2.1 evolve patch | ✓ | integration (git mv) |
-| 2 | 2.3 evolve minor | ✓ | integration |
-| 2 | 2.5 evolve major | ✓ | integration |
-| 2 | 2.7 evolve refine | ✓ | integration |
-| 2 | 2.9 audit no-fix-auto | ✓ | unit |
-| 2 | 2.10 lock | ✓ | integration (concurrent) |
-| 3 | 3.3 migration | ✓ | integration (filesystem + git) |
-| 4 | 4.2, 4.4, 4.6 | smoke (manual) | integration |
-| 4 | 4.7 regression | ✓ | all existing |
-| 5 | 5.2 Suite D | ✓ | E2E (subagent) |
+> Updated after R-phase fixes (C7): includes Task 1.4 (semver), expanded Tasks 1.12 sub-steps and 2.3-2.8 variants, automated tests in Phase 4 (4.2/4.4/4.6 now integration not smoke), Task 5.6.5 (packaging smoke), Task 2.11 split into 2.11a-d.
 
-All task groups that produce code have failing-test-first ordering. ✅
+| Phase | Task group | First step is "Write failing test"? | Test types | Notes |
+|---|---|---|---|---|
+| 1 | 1.2 frontmatter | ✓ | unit (incl. S2 prototype pollution) | 12 fixtures (10 valid + 2 attack) |
+| 1 | 1.4 semver (NEW C5) | ✓ | unit | extracted lib |
+| 1 | 1.5 graph | ✓ | unit | 6 graph fixtures |
+| 1 | 1.11 audit (Suite A) | ✓ | integration (fixtures) | 9 ADR fixtures + EXPECTED blocks |
+| 1 | 1.12 audit impl Checks 1-12 | ✓ each sub-step | unit per check | 12 commits, S3 gate test in Step 15 |
+| 1 | 1.13 index (Suite B) | ✓ | integration (filesystem) | includes lock concurrency |
+| 1 | 1.14 index impl | ✓ | unit (lock recovery, path safety) | S4 + S6 fixtures |
+| 2 | 2.1 evolve patch | ✓ | integration (git mv) | S1 + S5 in impl |
+| 2 | 2.3 evolve minor | ✓ | integration | parallelizable with 2.5/2.7 |
+| 2 | 2.5 evolve major | ✓ | integration | 2 files manipulated atomically |
+| 2 | 2.7 evolve refine | ✓ | integration | new sequential number |
+| 2 | 2.9 audit no-fix-auto | ✓ | unit | covered in 1.12 step 14 |
+| 2 | 2.10 lock concurrency | ✓ | integration (5 parallel procs) | |
+| 2 | 2.11a/b/c/d SKILL.md | doc-test (4.2/4.4/4.6 verify) | doc-presence | split per C3 |
+| 2 | 2.12 dispatcher | manual (skills auto-discovered) | smoke | |
+| 3 | 3.3 migration suite | ✓ | integration (filesystem + git) | grep zero stale refs |
+| 3 | 3.4 migration script | follows 3.3 RED | integration | --no-fix-auto + execFileSync |
+| 4 | 4.2 Step 5.6 (was smoke → automated) | ✓ | integration (doc-test) | resolves C4 |
+| 4 | 4.4 Step 2.5 (was smoke → automated) | ✓ | integration (scratch repo) | resolves C4 |
+| 4 | 4.6 adr-filter (was smoke → automated) | ✓ | integration (dedicated fixture) | resolves C4 + A2 |
+| 4 | 4.7 regression | ✓ all suites | all existing + new | barrier on Phase 3 (A1) |
+| 5 | 5.1 harness | doc-design first; tests added inline | infra | net-new, cost amortized |
+| 5 | 5.2 Suite D | ✓ | E2E (subagent) | triggered, ~60-90s |
+| 5 | 5.6.5 packaging (NEW A4) | ✓ | integration (rsync to scratch) | smoke fresh-install |
+
+All task groups that produce code (or specifications consumed deterministically) have failing-test-first ordering. ✅
+
+**R-phase fix coverage:**
+- S1 (command injection) → applied in Tasks 2.2, 2.4, 2.6, 2.8, 3.4, 1.14 (all `execFileSync` with argv)
+- S2 (prototype pollution) → applied in Task 1.3 (Object.create(null) + denylist + 2 attack fixtures)
+- S3 (FIX-AUTO gate Aprovado) → applied in Task 1.12 step 14 + step 15 fixture test
+- S4 (lock recovery) → applied in Task 1.14 (pid/ts liveness)
+- S5 (atomic write-rename) → applied in Tasks 2.2, 2.4, 2.6, 3.4
+- S6 (path traversal) → applied in Task 1.14 (path.resolve + cwd guard)
+- C1 (1.11 → 1.12 with sub-steps) → resolved
+- C2 (2.3-2.8 expanded) → resolved
+- C3 (2.11 → 2.11a/b/c/d) → resolved
+- C4 (4.2/4.4/4.6 automated) → resolved
+- C5 (adr-semver lib extracted as Task 1.4) → resolved
+- C6 (lock terminology reconciled) → spec §6.2 + Task 1.14 both use `open(.lock, 'wx')` with liveness recovery
+- C7 (this table updated) → resolved
+- A1 (Task 4.7 dependency barrier on Phase 3) → resolved
+- A2 (adr-filter dedicated fixture in 4.6) → resolved
+- A3 (library architecture diagram added at top of plan) → resolved
+- A4 (Task 5.6.5 packaging smoke) → resolved
+- A5 (parallelism note before Tasks 2.3/2.5/2.7) → resolved
