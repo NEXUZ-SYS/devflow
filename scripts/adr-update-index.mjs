@@ -166,9 +166,17 @@ function renderReadme(adrs) {
 }
 
 function countGuardrails(body) {
-  const m = body.match(/^##\s+Guardrails\s*\n([\s\S]+?)(?=\n##|$)/m);
-  if (!m) return 0;
-  return m[1].split('\n').filter((l) => /^[-*]\s+(SEMPRE|NUNCA|QUANDO)/.test(l.trim())).length;
+  // Line-based scan — the regex-with-lookahead approach is unreliable here because
+  // /m flag makes $ match end-of-line, terminating the multi-line capture early.
+  const lines = body.split('\n');
+  const startIdx = lines.findIndex((l) => /^##\s+Guardrails\b/.test(l));
+  if (startIdx === -1) return 0;
+  let endIdx = lines.findIndex((l, i) => i > startIdx && /^##\s/.test(l));
+  if (endIdx === -1) endIdx = lines.length;
+  return lines
+    .slice(startIdx + 1, endIdx)
+    .filter((l) => /^[-*]\s+(SEMPRE|NUNCA|QUANDO)/.test(l.trim()))
+    .length;
 }
 
 function formatList(arr) {

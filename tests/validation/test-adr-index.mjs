@@ -25,6 +25,21 @@ function runIndex(project, ...flags) {
   }).trim();
 }
 
+test('countGuardrails returns total bullets, not just first line (regression)', () => {
+  const tmp = setupTmpProject();
+  execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${tmp}`]);
+  const readme = readFileSync(join(tmp, '.context/docs/adrs/README.md'), 'utf-8');
+  // valid-01 fixture has 3 guardrails (SEMPRE+NUNCA+QUANDO format).
+  // Count column should reflect that, not 1.
+  const lines = readme.split('\n').filter((l) => l.startsWith('| 001'));
+  if (lines.length === 1) {
+    const cells = lines[0].split('|').map((c) => c.trim());
+    const guardrailsCol = cells[cells.length - 3]; // second-to-last data col before Arquivo
+    assert.ok(parseInt(guardrailsCol, 10) >= 2, `guardrails count should be >=2 for valid-01, got: ${guardrailsCol}`);
+  }
+  rmSync(tmp, { recursive: true });
+});
+
 test('regenerates README with 14 columns', () => {
   const tmp = setupTmpProject();
   runIndex(tmp);
