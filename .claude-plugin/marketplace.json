@@ -8,7 +8,7 @@
     {
       "name": "devflow",
       "description": "Unified development workflow — bridges superpowers (discipline/TDD) with dotcontext (agents/PREVC/context)",
-      "version": "0.12.5",
+      "version": "0.12.6",
       "source": "./",
       "author": {
         "name": "NEXUZ-SYS"

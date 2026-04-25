@@ -22,7 +22,13 @@ Seleciona as ADRs relevantes a uma task específica em vez de dumpar todas as ap
 
 ### Step 1 — Ler o índice
 
-Leia `.context/docs/adrs/README.md`. Extraia a tabela com: número, título, stack, categoria, status, descrição. Filtre apenas as com `status: Aprovado`.
+Leia `.context/docs/adrs/README.md`. Extraia a tabela com:
+- **v2 schema (14 cols)** — número, título, **versão**, categoria, stack, escopo, status, **kind**, contrato, refines, supersedes, criada, guardrails (count), arquivo
+- **v1 schema (legacy)** — número, título, escopo, status, guardrails, stack, arquivo
+
+O parser deve identificar v1 ou v2 pelos nomes das colunas no header. Filtros 4a-4d aplicam só ao v2 schema (Kind filter inexiste em v1).
+
+Filtre as com `status: Aprovado` ou `Proposto` (Step 4c). `Substituido`/`Descontinuado` sempre rejeitadas.
 
 Se o README não tiver a tabela no formato esperado, caia para o comportamento antigo (carregar todas as ADRs aprovadas) e avise o usuário que o índice está mal formado.
 
@@ -62,6 +68,17 @@ Para cada ADR aprovada, aplicar em ordem:
 - Em dúvida, **incluir** — falso positivo é preferível a falso negativo
 - Só rejeite se for claramente off-topic (ex: ADR de patterns de UI quando task é sobre pipeline de dados backend)
 
+**4c. Filtro de status (v2 schema — adr-system-v2):**
+- `status: Aprovado` → passa sem tag
+- `status: Proposto` → passa com tag `[proposto]` (sinaliza não-aprovada)
+- `status: Substituido` → **rejeita sempre** (histórico, Hard Rule #12)
+- `status: Descontinuado` → **rejeita sempre**
+
+**4d. Filtro de kind (v2 schema — código novo, não só parsing):**
+- `decision_kind: firm` → passa sem tag
+- `decision_kind: gated` → passa com tag `[gated]` (decisão com portão de revisão futura)
+- `decision_kind: reversible` → passa com tag `[experimental]` (experimento, sinaliza maturidade)
+
 ### Step 5 — Carregar guardrails
 
 Para cada ADR que passou em Step 4, abra `.context/docs/adrs/<nn>-<slug>.md` e extraia a seção `## Guardrails` (SEMPRE/NUNCA/QUANDO).
@@ -75,13 +92,22 @@ Formato de saída (mesma tag `<ADR_GUARDRAILS>` do hook, com `filtered="true"` p
 Loaded N of M active ADR(s), filtered for task: "<descrição curta da task>".
 Signals: stacks=[...], topics=[...]. Detection=[filesystem|task-mentioned|precaution].
 
-### <adr-name> (stack: <stack>)
+### <adr-name> [firm] (stack: <stack>)
 <guardrails>
 
-### <adr-name> (stack: <stack>)
+### <adr-name> [experimental] (stack: <stack>)
+<guardrails>
+
+### <adr-name> [proposto] (stack: <stack>)
 <guardrails>
 </ADR_GUARDRAILS>
 ```
+
+**Tags emitidas no nome da ADR (v2 schema):**
+- `[firm]` — decisão sólida (default; pode ser omitida visualmente se preferir)
+- `[gated]` — decisão com gate de revisão futura definido
+- `[experimental]` — experimento explícito (`reversible`); LLM deve tratar como recomendação, não obrigação
+- `[proposto]` — ainda não aprovada formalmente; aplicar com cautela
 
 Se M = N (nenhuma foi filtrada), diga explicitamente: `"Nenhuma ADR foi filtrada — todas aplicam a esta task."` Isso evita impressão de que o filtro quebrou.
 
