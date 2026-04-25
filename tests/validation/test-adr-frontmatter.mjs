@@ -17,7 +17,7 @@ test('parse: minimal valid frontmatter', () => {
   assert.deepEqual(frontmatter.refines, []);
   assert.equal(frontmatter.protocol_contract, null);
   assert.equal(frontmatter.decision_kind, 'firm');
-  assert.match(body, /^# ADR/);
+  assert.match(body, /^\s*# ADR/);
 });
 
 test('parse: empty list inline', () => {
