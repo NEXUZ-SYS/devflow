@@ -1,3 +1,17 @@
+<!-- EXPECTED:
+1: PASS
+2: PASS
+3: PASS
+4: PASS
+5: FIX-INTERVIEW
+6: PASS
+7: PASS
+8: PASS
+9: PASS
+10: PASS
+11: PASS
+12: PASS
+-->
 ---
 type: adr
 name: logging-strategy
