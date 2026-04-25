@@ -4,10 +4,12 @@ name: adr-system-v2-design
 description: Design spec — evolução do sistema de ADR do DevFlow para o padrão v2.1.0, com nova skill devflow:adr-builder e integração ativa em prevc-planning, prevc-validation e adr-filter
 status: approved
 created: 2026-04-24
+revised: 2026-04-24
 supersedes: 2026-04-03-adr-system-design.md
 scale: MEDIUM
 autonomy: supervised
 mode: Full
+revision_notes: "Architect review aplicada — adicionadas tabela FIX-AUTO completa, decisão zero-deps cross-project, mecanismo executor do Step 5.6, ajustes em §4, §6, §7, §9, §10."
 ---
 
 # ADR System v2 — Design Spec
@@ -43,6 +45,9 @@ mode: Full
 | P7 | Matriz por arquivo (plugin canonical vs projeto substituível) | Q-final-1 |
 | P8 | Steps 5.5–7 do pacote enxugados; comando bidirecional `adr:bundle` em plan futuro | Q-final-2 |
 | P9 | Schema do README com 14 colunas (opção 3) | Q schema |
+| P10 | Libs Node usam **zero deps externas** (stdlib-only) — DevFlow é meta-tooling cross-project (Node/Python/Go/Java); injetar deps no projeto cliente não é aceitável. Parser de YAML frontmatter é próprio mínimo (~80 linhas, em `scripts/lib/adr-frontmatter.mjs`). | Architect review — Gap 2 |
+| P11 | Mecanismo do Step 5.6 (`prevc-planning`) é **instrução LLM** no SKILL.md (não regex, não lib auxiliar). LLM avalia os 4 sinais durante o brainstorming, brittleness mitigada pelo opt-out persistente `skip_adr_offer`. | Architect review — Gap 3 |
+| P12 | Migração one-shot (Fase 3) **desabilita FIX-AUTO** — usa só FIX-INTERVIEW. Garante revisão humana em ADRs aprovadas, mitiga risco de corrupção. | Architect review — Gap 1 |
 
 ## 4. Arquitetura
 
@@ -55,9 +60,10 @@ mode: Full
 | 3 | Lib `adr-evolve` | `scripts/adr-evolve.mjs` | Orquestra transição patch/minor/major/refine — git mv ou novo arquivo + bump frontmatter + status. |
 | 4 | Lib `adr-update-index` | `scripts/adr-update-index.mjs` | Regenera `.context/docs/adrs/README.md` a partir do frontmatter de cada arquivo. |
 | 5 | Comando dispatcher | `commands/devflow-adr.md` | Recebe `/devflow adr:<new\|audit\|evolve>` e dispatcha para a skill. |
-| 6 | Modificação `prevc-planning` | `skills/prevc-planning/SKILL.md` | Adicionar Step 5.6 — ADR opportunity check (heurística 4-sinais opt-in). |
-| 7 | Modificação `prevc-validation` | `skills/prevc-validation/SKILL.md` | Adicionar Step 2.5 — ADR Compliance Check (matriz por status). |
-| 8 | Modificação `adr-filter` | `skills/adr-filter/SKILL.md` | Adaptar parser para schema 14-colunas; tags `[firm]`/`[gated]`/`[experimental]`. |
+| 6 | Script migração one-shot | `scripts/adr-migrate-v1-to-v2.mjs` | Migra ADRs do template v1 (DevFlow original) para v2.1.0. Artefato descartável após Fase 3. |
+| 7 | Modificação `prevc-planning` | `skills/prevc-planning/SKILL.md` | Adicionar Step 5.6 — ADR opportunity check (instrução LLM com 4 sinais; opt-in). |
+| 8 | Modificação `prevc-validation` | `skills/prevc-validation/SKILL.md` | Adicionar Step 2.5 — ADR Compliance Check (matriz por status). |
+| 9 | Modificação `adr-filter` | `skills/adr-filter/SKILL.md` | Adaptar parser para schema 14-colunas; **filtro novo por `Kind`** (código novo, não só parsing); tags `[firm]`/`[gated]`/`[experimental]`. |
 
 ### 4.2 Matriz por arquivo (origem → destino)
 
@@ -73,6 +79,7 @@ mode: Full
 | `references/saida-distribuicao.md` | bundle anexo | descartar (Steps A/C virarão `adr:bundle` futuro) | N/A |
 | `tests/audit-fixtures/*` | bundle anexo | `tests/validation/fixtures/adr/` | N/A |
 | `tests/smoke.sh` | bundle anexo | descartar (substituído por suítes Node) | N/A |
+| `docs/adr-builder.skill` (ZIP) | upload original do usuário | Extraído na Fase 1 para portar conteúdo; **deletado após Fase 1** (não é source of truth pós-port — bundle vive em `skills/adr-builder/`) | N/A |
 | `.context/templates/adrs/TEMPLATE-ADR.md` | DevFlow v1 atual | **remover** (template agora vive no bundle) | N/A |
 | `001-tdd-python.md`, `002-code-review.md` | DevFlow atual | renomear + migrar formato (ver §7) | N/A |
 
@@ -105,6 +112,22 @@ Workflows que chegam em V phase:
 Fora do fluxo V:
   • /devflow adr:audit  → inline (sem workflow, sem gate)
 ```
+
+### 4.4 Cross-project compatibility (decisão arquitetural)
+
+DevFlow é **meta-tooling cross-project** — o mesmo plugin é instalado em projetos Python, Go, Java, Node sem package.json, ou Node com toolchain pesada. Logo, as 4 libs novas têm **restrições rígidas de portabilidade**:
+
+| Restrição | Implicação |
+|---|---|
+| **Zero deps externas (npm)** | Toda lib usa apenas Node 20+ stdlib. Nada de `import yaml from 'js-yaml'`. |
+| **Sem package.json no DevFlow** | Plugin não introduz `package.json`; libs são `.mjs` standalone executáveis via `node scripts/X.mjs`. |
+| **Sem assumir toolchain do projeto** | Não invocar `npm`, `yarn`, `pip`, `cargo`. Tudo via Node nativo + `git` CLI (universal). |
+| **Cross-platform** | Path handling via `node:path`, não strings hardcoded. Linux/macOS/Windows-WSL. |
+| **Output máquina-legível** | Lib emite JSON em stdout (consumível por bash, GitHub Actions, CI de qualquer stack). |
+
+**Parser de YAML frontmatter** (`scripts/lib/adr-frontmatter.mjs`): implementação própria mínima cobrindo o subset usado pelo template ADR (chave-valor escalar, listas inline `[]`, listas de uma linha `[a, b]`, strings quoted/unquoted, null, datas YYYY-MM-DD). Estima-se ~80 linhas. Testada exaustivamente via fixtures (Suite A inclui edge cases de parsing).
+
+**Trade-off explícito:** projetos cliente que adotam DevFlow ganham auditoria de ADR sem ter que instalar nada além do plugin DevFlow. Custo: o plugin mantém ~80 linhas de código de parsing que poderiam ser delegadas a uma lib madura. Aceitável dado o domínio limitado.
 
 ## 5. Modos da skill
 
@@ -197,8 +220,13 @@ Fora do fluxo V:
 ### 6.2 Lib `adr-audit.mjs` — interface
 
 ```bash
-node scripts/adr-audit.mjs <file> [--format=json|pretty] [--enforce-gate]
+node scripts/adr-audit.mjs <file> [--format=json|pretty] [--enforce-gate] [--apply-fix-auto] [--no-fix-auto]
 ```
+
+**Flags:**
+- `--enforce-gate` — exit 1 se houver FIX-INTERVIEW não resolvido (modo CI / V phase).
+- `--apply-fix-auto` — aplica as correções FIX-AUTO no arquivo (escreve em disco).
+- `--no-fix-auto` — desabilita FIX-AUTO inteiro, classificação degrada para FIX-INTERVIEW (modo migração).
 
 **Output JSON:**
 ```json
@@ -206,7 +234,7 @@ node scripts/adr-audit.mjs <file> [--format=json|pretty] [--enforce-gate]
   "file": "...",
   "summary": { "pass": 8, "fix_auto": 3, "fix_interview": 1 },
   "checks": [
-    { "id": 1, "name": "Frontmatter estrutural", "status": "PASS|FIX-AUTO|FIX-INTERVIEW", "diagnosis": "..." },
+    { "id": 1, "name": "Frontmatter estrutural", "status": "PASS|FIX-AUTO|FIX-INTERVIEW", "diagnosis": "...", "auto_action": "..." },
     ...
   ],
   "gate_passed": true|false
@@ -214,9 +242,13 @@ node scripts/adr-audit.mjs <file> [--format=json|pretty] [--enforce-gate]
 ```
 
 **Exit codes:**
-- 0 — todos PASS ou apenas FIX-AUTO (sem `--enforce-gate`) ou todos auto-resolvidos (`--enforce-gate` aplicou correções)
-- 1 — FIX-INTERVIEW presente
+- 0 — todos PASS ou apenas FIX-AUTO (sem `--enforce-gate`) ou todos auto-resolvidos (`--enforce-gate --apply-fix-auto` aplicou correções)
+- 1 — FIX-INTERVIEW presente, ou `--enforce-gate` ativo com FIX-AUTO sem `--apply-fix-auto`
 - 2 — erro de parsing/IO
+
+**Concurrent safety:** `adr-update-index.mjs` usa **advisory lock via `flock`** sobre `.context/docs/adrs/.lock` para evitar colisão de `--next-number` em workflows paralelos. Lock é best-effort (Linux/macOS); em Windows-WSL, fallback para arquivo-token com retry exponencial.
+
+**Worktree-safe diff:** Step 2.5 sempre usa `git diff $(git merge-base HEAD main)...HEAD` (não `HEAD..main`) para corretamente lidar com worktrees, branches divergentes, e pulls intermediários.
 
 ### 6.3 Check 12 — Consistência de grafo
 
@@ -235,14 +267,21 @@ Novo check da lib. Sempre `FIX-INTERVIEW` quando incoerente (nunca auto-corrige 
 
 Posição no fluxo: entre Step 5 (Present design) e Step 6 (Write design doc).
 
-**Heurística 4-sinais (todos devem bater):**
+**Mecanismo executor:** instrução em linguagem natural no `SKILL.md` de `prevc-planning`, avaliada pelo Claude durante o brainstorming (P11). Não é regex, não é lib auxiliar. O LLM já está no contexto do design proposto — classificar "isso é decisão arquitetural?" é tarefa natural sem custo extra.
 
-| Sinal | Detector |
+**Brittleness mitigada por:**
+1. **4 sinais simultâneos** — só ativa quando os 4 batem (alta especificidade, baixa fadiga).
+2. **Opt-out persistente** — usuário pode dizer "não oferecer mais neste workflow" → workflow metadata recebe `skip_adr_offer: true`, Step 5.6 skipa em invocações subsequentes.
+3. **Texto de oferta declarativo** — sempre cita a frase exata do spec que disparou os 4 sinais (transparência sobre por que está perguntando).
+
+**Heurística 4-sinais (LLM avalia todos simultaneamente):**
+
+| Sinal | Como o LLM detecta |
 |---|---|
-| Escolha entre alternativas | "escolhemos", "optamos", "em vez de", "versus" + ≥2 opções |
-| Afeta stack/arquitetura | Menciona framework, biblioteca, padrão, protocolo, ferramenta |
-| Implica guardrails | Contém regras "sempre/nunca" ou cria restrições recorrentes |
-| Não-trivial | Task não é bugfix/rename/typo |
+| Escolha entre alternativas | Spec contém ≥2 opções discutidas com tradeoffs ("X vs Y", "em vez de", "considerei A mas optei por B") |
+| Afeta stack/arquitetura | Spec menciona framework, biblioteca, padrão, protocolo, ferramenta de infra, layer de stack |
+| Implica guardrails | Decisão cria regras de uso recorrentes ("sempre usar X", "evitar Y", contratos de chamada) |
+| Não-trivial | Task não é bugfix, rename, typo, ou refactor cosmético |
 
 **Resposta do usuário:** (a) rodar `adr:new --mode=prefilled` com pré-preenchimento; (b) seguir sem ADR; (c) skip permanente neste workflow.
 
@@ -264,13 +303,73 @@ Já formalizado em §4.3. Matriz por status:
 
 **Step 4 (filtros):**
 - 4c (status): `Aprovado` passa, `Proposto` passa com tag `[proposto]`, `Substituido`/`Descontinuado` rejeita.
-- 4d (kind): `firm` sem tag, `gated` com tag `[gated]`, `reversible` com tag `[experimental]`.
+- 4d (kind): `firm` sem tag, `gated` com tag `[gated]`, `reversible` com tag `[experimental]`. **⚠ Código novo, não só parsing** — adicionar dimensão de filtro (`Kind`) à lógica do `adr-filter`, não apenas reler colunas.
 
 **Step 6 (output):**
 ```
 ### tdd-python [firm] (stack: python)
 SEMPRE escrever o teste antes da implementação...
 ```
+
+### 6.7 Tabela FIX-AUTO action por check
+
+Define exatamente o que `--apply-fix-auto` modifica em cada check. Sem isso, FIX-AUTO seria vapor e o gate da V phase incalculável.
+
+| Check | FIX-AUTO action (concreta) | FIX-INTERVIEW (escapa para humano) |
+|---|---|---|
+| 1 Frontmatter | Adicionar campos faltantes com defaults: `type: adr`, `version: 0.1.0`, `supersedes: []`, `refines: []`, `protocol_contract: null`, `decision_kind: firm`, `created: <hoje>`. Reverter `status: Aprovado → Proposto` em ADR nova. Corrigir `decision_kind` inválido para `firm`. | `scope` ou `category` inválido; `category: protocol-contracts` com `protocol_contract: null` |
+| 2 Título/voz | — (sempre FIX-INTERVIEW) | Título genérico/pergunta; voz passiva; múltiplas decisões no mesmo título |
+| 3 Foco stack | — (sempre FIX-INTERVIEW) | Menções a produto/vertical de negócio (consulta `context.yaml`) |
+| 4 Alternativas | Marcar escolhida com ✓ se inferível por keyword ("escolhida", "adotamos", última posição) | <2 alternativas; tradeoff ausente |
+| 5 Guardrails | Reformatar bullets concretos para começar com `SEMPRE`/`NUNCA`/`QUANDO…ENTÃO` (parser detecta verbo imperativo + reescreve prefixo) | <2 guardrails; vagueza ("seguir boas práticas", "ter cuidado", "considerar") |
+| 6 Enforcement | Reformatar checkboxes para `- [ ]` GFM | <1 mecanismo; "code review" sem critério; ferramenta sem nome |
+| 7 Relacionamentos | Detectar seção `## Relacionamentos` / `## Relationships` / `## Related ADRs`. Migrar URLs (linhas com `http`) para `## Evidências / Anexos`. Migrar slugs (linhas tipo "ADR X") para `supersedes` ou `refines` **apenas se inequívoco** (palavra-chave "substitui" → supersedes; "refina"/"detalha" → refines); caso contrário descartar. Deletar a seção inteira. | — |
+| 8 Evidências | — (sempre FIX-INTERVIEW) | Link para Medium, dev.to, blog, Stack Overflow, YouTube |
+| 9 Densidade | grep + delete frases proibidas: "isto significa que", "em outras palavras", "ou seja,", "basicamente", "de forma mais simples". Delete linhas que definem conceitos básicos (SRP, RBAC, idempotência) — heurística: linha começa com "X é" ou "X significa". | <80 linhas; >180 linhas (ou >120 sem exceção tabular); densidade tutorial pervasiva |
+| 10 Código minimal | — (sempre FIX-INTERVIEW) | Bloco >25 linhas; múltiplos blocos de código |
+| 11 Padrões catalogados | — (sempre FIX-INTERVIEW, conservador por design) | Padrão paráfrase sem nomear (consulta `patterns-catalog.md`) |
+| 12 Grafo | — (nunca auto-corrige grafo) | `supersedes`/`refines` apontando para arquivo inexistente; auto-referência; loop; `supersedes` para ADR `Proposto` |
+
+**Comportamento global:**
+- `--apply-fix-auto` aplica todas as ações da coluna 2 sequencialmente, depois re-roda os 12 checks. Se ainda houver FIX-AUTO (caso raro de regra que cria nova violação), repete até convergir ou max 3 iterações.
+- `--no-fix-auto` (modo migração) força todos os FIX-AUTO acima a virarem FIX-INTERVIEW, exigindo confirmação humana.
+- Aplicação de FIX-AUTO sempre gera diff visível ao usuário antes de commitar (no contexto da V phase, vai num commit separado: `fix(adr): auto-corrections from audit`).
+
+### 6.8 Parser de frontmatter — `scripts/lib/adr-frontmatter.mjs`
+
+Parser próprio mínimo, zero deps externas (P10).
+
+**Subset de YAML suportado:**
+- Chave-valor escalar: `key: value`
+- Strings quoted: `key: "value with spaces"`, `key: 'value'`
+- Strings não-quoted: `key: value`
+- Listas inline vazias: `key: []`
+- Listas inline single-line: `key: [a, b, c]`
+- Null: `key: null` ou `key: ~`
+- Boolean: `key: true` / `key: false`
+- Datas ISO: `key: 2026-04-24`
+- Comentários: `# comentário` (ignorados)
+- Frontmatter delimitado por `---` no topo do arquivo
+
+**Não suportado (intencionalmente):**
+- Listas multi-linha indentadas (não aparecem no template ADR)
+- Maps aninhados (não aparecem no template)
+- Anchors (`&`, `*`)
+- Multi-line strings (`|`, `>`)
+
+**Interface:**
+```js
+import { parse, stringify } from './adr-frontmatter.mjs';
+
+const { frontmatter, body } = parse(fileContent);
+// frontmatter: { type: 'adr', version: '1.0.0', supersedes: [], ... }
+// body: '# ADR — TDD para Python\n\n...'
+
+const newContent = stringify(updatedFrontmatter, body);
+// Preserva ordem dos campos quando possível, formata listas inline.
+```
+
+**Cobertura de teste:** Suite A inclui ≥10 fixtures de parsing edge cases — frontmatter sem `---` final, valores vazios, escapes em strings, datas inválidas, etc.
 
 ## 7. Migração das ADRs existentes
 
@@ -291,9 +390,10 @@ SEMPRE escrever o teste antes da implementação...
 
 | # | Ação |
 |---|---|
-| 1 | Escrever `tests/validation/test-adr-migration.mjs` com asserts: filenames novos existem, antigos não; frontmatters com 5 campos novos; sem `## Relacionamentos`; pytest URL em Evidências |
+| 0 | **Grep blast radius** — `rg -l "001-tdd-python\|002-code-review" --type=md` para listar todos os arquivos que referenciam os filenames antigos (incluindo `MEMORY.md`, docs, outros skills). Atualizar cada referência **antes** do rename para evitar links quebrados. |
+| 1 | Escrever `tests/validation/test-adr-migration.mjs` com asserts: filenames novos existem, antigos não; frontmatters com 5 campos novos; sem `## Relacionamentos`; pytest URL em Evidências; **zero referências stale via grep**. |
 | 2 | RED |
-| 3 | Aplicar via `scripts/adr-migrate-v1-to-v2.mjs` (one-shot) |
+| 3 | Aplicar via `scripts/adr-migrate-v1-to-v2.mjs` (one-shot). **Migração roda com `--no-fix-auto`** (P12) — todas as transformações são FIX-INTERVIEW e exigem confirmação humana antes de aplicar. Garante que ADRs aprovadas não sofrem alteração silenciosa. |
 | 4 | GREEN |
 | 5 | Regenerar README via `adr-update-index.mjs` |
 | 6 | `adr-audit.mjs` em ambas → 12/12 PASS |
@@ -341,24 +441,30 @@ Cada fixture tem header `# EXPECTED:` com classificação por check para asserts
 
 | Fase | Escopo | Agents | DoD | % do plan |
 |---|---|---|---|---|
-| 1 | Lib + fixtures + ports do bundle (sem SKILL.md) | backend-specialist, test-writer, documentation-writer | Suites A+B+C 100% verdes | ~40% |
-| 2 | SKILL.md + dispatcher + adr-evolve.mjs | documentation-writer, architect-specialist, backend-specialist | `/devflow adr:new` cria ADR válida; `/devflow adr:audit` retorna relatório | ~25% |
-| 3 | Migração 001/002 (one-shot) | refactoring-specialist, test-writer | Ambas em v1.0.0 com frontmatter v2.1.0; 12/12 PASS | ~10% |
-| 4 | Integração ativa (Step 5.6, Step 2.5, adr-filter) | architect-specialist, documentation-writer, code-reviewer | Workflow sintético com decisão arquitetural → Step 5.6 oferece ADR → V phase audita | ~15% |
-| 5 | Suite D (E2E) + supersede do plan antigo + docs + version bump | test-writer, documentation-writer, code-reviewer | Suite D verde; PR pronto | ~10% |
+| 1 | Parser frontmatter + 4 libs + fixtures + extração do bundle ZIP + ports dos `references/` | backend-specialist, test-writer, documentation-writer | Suites A+B+C 100% verdes; bundle ZIP deletado | ~50% |
+| 2 | SKILL.md + dispatcher + `adr-evolve.mjs` + lock concorrente em `adr-update-index.mjs` | documentation-writer, architect-specialist, backend-specialist | `/devflow adr:new` cria ADR válida; `/devflow adr:audit` retorna relatório; locks testados | ~22% |
+| 3 | Migração 001/002 (one-shot, `--no-fix-auto`, com grep step prévio) | refactoring-specialist, test-writer | Ambas em v1.0.0 com frontmatter v2.1.0; 12/12 PASS; zero referências stale | ~10% |
+| 4 | Integração ativa (Step 5.6 LLM-instrução, Step 2.5 matriz, adr-filter parser+filtro Kind) | architect-specialist, documentation-writer, code-reviewer | Workflow sintético com decisão arquitetural → Step 5.6 oferece ADR → V phase audita | ~13% |
+| 5 | **Harness Suite D** (subagent E2E novo) + Suite D verde + supersede do plan antigo + docs + version bump | test-writer, documentation-writer, code-reviewer | Suite D verde; harness reusable para outros skills; PR pronto | ~15% |
 
 **Paralelismo:** Fase 3 e Fase 4 podem rodar em paralelo após Fase 2.
+
+**Recalibração vs versão original do spec:** Fase 1 (40% → 50%) absorve parser frontmatter + extração do ZIP que não estavam dimensionadas. Fase 5 (10% → 15%) reflete que harness de subagent E2E é infra net-new no DevFlow (nenhum suite atual usa subagent). Fases 2/3/4 ajustadas proporcionalmente.
 
 ## 10. Riscos e mitigações
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| Suite D consome muito token | Média | Médio | Trigger seletivo (só PRs que tocam skill/lib); throttling |
-| FIX-AUTO da migração corrompe ADRs aprovadas | Baixa | Alto | TDD da migração (Suite específica); aplicação one-shot revertível via git |
-| Schema 14-colunas quebra adr-filter atual | Baixa | Médio | Parser usa nome de coluna; teste de regressão na Fase 4 |
-| Step 5.6 vira fadiga (oferece ADR demais) | Média | Baixo | Heurística 4-sinais é restritiva; opt-out persistente por workflow |
-| Lib Node introduz dep nova no DevFlow | Baixa | Baixo | DevFlow já tem `scripts/*.sh` e CI é bash-based; .mjs roda em Node 20+ que já é dep |
-| Hard Rule #4 (template imutável) entra em conflito com customização de projeto | Média | Médio | Template fica no bundle; projetos customizam `patterns-catalog.md` e `context.yaml` (substituíveis) |
+| Suite D consome muito token | Média | Médio | Trigger seletivo (só PRs que tocam skill/lib); throttling; harness reusable amortiza custo entre futuros skills E2E |
+| FIX-AUTO da migração corrompe ADRs aprovadas | **Baixa (mitigada)** | Alto | Migração roda com `--no-fix-auto` (P12) — todas as transformações exigem confirmação humana. Grep blast radius pré-rename evita links quebrados. |
+| Schema 14-colunas quebra adr-filter | Baixa | Médio | Parser usa nome de coluna (não índice); filtro novo por `Kind` é código adicional testado na Fase 4 |
+| Step 5.6 vira fadiga (oferece ADR demais) | Média | Baixo | 4 sinais simultâneos (alta especificidade); opt-out persistente `skip_adr_offer` por workflow; LLM avalia (não regex frágil) |
+| Lib Node introduz dep nova no DevFlow | Baixa | Baixo | Node 20+ já é dep; precedente: `scripts/devflow-runner.mjs`, `scripts/runner-lib.mjs`, `tests/validation/*.mjs`, `tests/runner/*.mjs` |
+| Hard Rule #4 (template imutável) conflita com customização de projeto | Média | Médio | Template fica no bundle (imutável); projetos customizam `patterns-catalog.md` e `context.yaml` (substituíveis) |
+| **Colisão concorrente de `--next-number`** entre workflows paralelos | Baixa | Médio | Advisory lock via `flock` em `.context/docs/adrs/.lock`; fallback file-token no Windows-WSL; teste explícito na Suite B |
+| **Plugin packaging dropa `assets/` ou `references/`** ao distribuir via marketplace | Baixa | **Alto** | Auditar `plugin.json` na Fase 1: confirmar `files` array (ou ausência implicando "tudo entra") cobre `skills/adr-builder/{assets,references}/`. Smoke test em projeto fresh-installed |
+| **Toolchain Node ausente em projeto cliente** (Python/Go puros) | Baixa | Médio | Node 20+ é dep declarada do plugin DevFlow; documentação aponta isso. Libs são `.mjs` standalone (P10 — zero deps externas) |
+| **Parser próprio quebra em frontmatter inesperado** | Média | Baixo | Cobertura exaustiva de fixtures de parsing (Suite A — ≥10 edge cases); fail-loud com mensagem de erro específica em vez de silently truncar |
 
 ## 11. Plans futuros (fora de escopo)
 
@@ -379,17 +485,21 @@ Cada fixture tem header `# EXPECTED:` com classificação por check para asserts
 | Scale | MEDIUM |
 | Autonomy | supervised |
 | Mode DevFlow | Full |
-| Fases | 5 |
-| Componentes novos | 5 |
+| Fases | 5 (1=50%, 2=22%, 3=10%, 4=13%, 5=15%) |
+| Componentes novos | 6 (skill + 4 libs + dispatcher + script de migração one-shot) |
 | Skills modificados | 3 |
-| Suites de teste | 4 (A, B, C determinísticas; D triggered) |
-| Fixtures | 9 |
-| ADRs migradas | 2 (001, 002) |
+| Premissas validadas | 12 (P1-P12) |
+| Suites de teste | 4 (A, B, C determinísticas, ≥1s; D triggered, ~60-90s) |
+| Fixtures | ≥10 (9 ADRs + edge cases de parsing) |
+| ADRs migradas | 2 (001, 002) — modo `--no-fix-auto` |
 | Plans futuros registrados | 6 (B1-B6) |
-| Risco principal mitigado | Custo da Suite D |
+| Riscos catalogados | 10 |
+| Cross-project compatibility | P10 (zero deps externas, Node stdlib only, Linux/macOS/Windows-WSL) |
 
 ---
 
 ## Aprovação
 
-Spec aprovado em entrevista de brainstorming (24/04/2026). Próximo passo: `superpowers:writing-plans` para gerar o plano de implementação bite-sized.
+Spec aprovado em entrevista de brainstorming (24/04/2026). Revisão técnica do `devflow:architect` aplicada na mesma data — 3 gaps bloqueantes fechados (P10, P11, P12), 7 ajustes menores incorporados, 4 riscos novos catalogados.
+
+Próximo passo: `superpowers:writing-plans` para gerar o plano de implementação bite-sized.
