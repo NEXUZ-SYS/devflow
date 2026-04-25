@@ -3,15 +3,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, existsSync, copyFileSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FIX_PROJ = './tests/validation/fixtures/adr-project/';
+const TEST_TMP_ROOT = './tests/validation/tmp/';
 
 function setupTmpProject() {
-  const tmp = mkdtempSync(join(tmpdir(), 'adr-idx-'));
+  mkdirSync(TEST_TMP_ROOT, { recursive: true });
+  const tmp = mkdtempSync(join(TEST_TMP_ROOT, 'adr-idx-'));
   mkdirSync(join(tmp, '.context/docs/adrs'), { recursive: true });
   for (const f of ['001-zod-validation-v1.0.0.md', '002-rfc7807-errors-v1.0.0.md', '003-feature-flags-v1.0.0.md']) {
     copyFileSync(join(FIX_PROJ, '.context/docs/adrs', f), join(tmp, '.context/docs/adrs', f));
