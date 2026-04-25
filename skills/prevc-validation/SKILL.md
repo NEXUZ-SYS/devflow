@@ -89,6 +89,69 @@ agent({ action: "orchestrate", agents: ["code-reviewer"], task: "adr-compliance"
 ```
 The code-reviewer agent performs ADR compliance checking against the guardrails.
 
+## Step 2.6: ADR Audit Gate (touched ADRs only)
+
+Spec ref: `docs/superpowers/specs/2026-04-24-adr-system-v2-design.md` §6.5.
+
+Audits ADRs that were **touched in this workflow** (via `git diff`) using the deterministic `adr-audit.mjs` lib. Differs from Step 2.5 which checks the implementation **against** ADR guardrails — this step checks the ADR documents **themselves** for structural integrity (12 checks).
+
+### Trigger
+
+```bash
+# Worktree-safe diff base — works with branches, worktrees, intermediate pulls
+touched_adrs=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/docs/adrs/*.md')
+```
+
+If `touched_adrs` is empty → skip this step entirely. The block runs only when the workflow modified or created ADR files.
+
+### Matrix by status (per spec §4.3)
+
+For each touched ADR, apply per-status logic:
+
+| Status before (on main) | Action |
+|---|---|
+| New file (added in this workflow) | `node scripts/adr-audit.mjs <file> --enforce-gate` — block on FIX-INTERVIEW |
+| `Proposto` (existed and edited) | `node scripts/adr-audit.mjs <file> --enforce-gate` |
+| `Aprovado` (edited in this workflow) | First check `version` field was bumped in this branch (semver). Then audit. Block if version unchanged. |
+| `Aprovado → Substituido` (major evolve) | Validate via `adr-graph.mjs`: a sibling new ADR in this commit must have `supersedes: [<old-slug>]`. |
+| `Substituido` / `Descontinuado` | Skip — historical, immutable. |
+
+### Gate behavior
+
+- **FIX-INTERVIEW** in any touched ADR → V phase **BLOCKED**. Present report to user. User decides: fix manually (e.g., via `/devflow adr:evolve`), or revert workflow.
+- **FIX-AUTO** → applied silently if `--apply-fix-auto` was passed at plan-time, else recorded as warning. For Aprovado ADRs, S3 mitigation auto-demotes FIX-AUTO to FIX-INTERVIEW (as documented in `adr-audit.mjs`).
+- **All PASS** → Step 2.6 passes. V phase continues to Step 3 (test coverage review).
+
+### Pseudocode (Bash)
+
+```bash
+touched=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/docs/adrs/*.md')
+if [ -z "$touched" ]; then
+  echo "Step 2.6: nenhuma ADR tocada — skip"
+  exit 0
+fi
+
+for adr in $touched; do
+  status_now=$(grep '^status:' "$adr" | head -1 | awk '{print $2}')
+  case $status_now in
+    Substituido|Descontinuado) echo "skip: $adr (status histórico)"; continue ;;
+    Aprovado)
+      version_diff=$(git diff $(git merge-base HEAD main)...HEAD "$adr" | grep '^+version:' || true)
+      [[ -z "$version_diff" ]] && { echo "FAIL: ADR $adr Aprovada editada sem bump de version"; exit 1; }
+      ;;
+  esac
+  node scripts/adr-audit.mjs "$adr" --enforce-gate || exit 1
+done
+echo "Step 2.6: all touched ADRs passed gate"
+```
+
+### Why two ADR steps?
+
+- **Step 2.5** — code complies with ADR rules (semantic check)
+- **Step 2.6** — ADRs themselves are well-formed (structural check via deterministic lib)
+
+Both run independently; both must pass.
+
 ## Step 3: Test Coverage Review
 
 ### Full Mode
