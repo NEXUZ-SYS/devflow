@@ -8,6 +8,11 @@ stack: universal
 category: qualidade-testes
 status: Aprovado
 created: 2026-04-22
+version: 1.0.0
+supersedes: []
+refines: []
+protocol_contract: null
+decision_kind: firm
 ---
 
 # ADR 002 — Code Review
@@ -52,12 +57,6 @@ Checklist obrigatorio de code review aplicavel a qualquer stack.
 - [ ] Gate PREVC: Review phase usa este checklist
 - [ ] CI check: scan para TODO/FIXME sem issue link
 - [ ] CI check: scan para patterns de secrets (regex)
-
-## Relacionamentos
-
-| Tipo | Referencia |
-|------|------------|
-| ADRs relacionadas | 001-tdd-python |
 
 ## Evidencias / Anexos
 

@@ -74,11 +74,25 @@ function parseValue(v) {
 
 export function stringify(frontmatter, body) {
   const lines = ['---'];
-  // Preserve insertion order if present; otherwise iterate own keys
-  const keys = frontmatter.__order__ ?? Object.keys(frontmatter);
+  // Preserve insertion order if present, then append any new keys not yet ordered.
+  const orderedKeys = frontmatter.__order__ ?? [];
+  const ownKeys = Object.keys(frontmatter);
+  const seen = new Set();
+  const keys = [];
+  for (const k of orderedKeys) {
+    if (k in frontmatter && !seen.has(k)) {
+      keys.push(k);
+      seen.add(k);
+    }
+  }
+  for (const k of ownKeys) {
+    if (!seen.has(k)) {
+      keys.push(k);
+      seen.add(k);
+    }
+  }
   for (const k of keys) {
     if (DENYLIST_KEYS.has(k)) continue;
-    if (!(k in frontmatter)) continue;
     lines.push(`${k}: ${formatValue(frontmatter[k])}`);
   }
   lines.push('---');
