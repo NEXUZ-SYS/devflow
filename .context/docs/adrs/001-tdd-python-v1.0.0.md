@@ -8,6 +8,11 @@ stack: python
 category: qualidade-testes
 status: Aprovado
 created: 2026-04-22
+version: 1.0.0
+supersedes: []
+refines: []
+protocol_contract: null
+decision_kind: firm
 ---
 
 # ADR 001 — TDD para Python
@@ -55,14 +60,9 @@ TDD obrigatorio: RED-GREEN-REFACTOR para toda funcionalidade nova, usando pytest
 - [ ] Code review: testes verificam comportamento, nao implementacao
 - [ ] Gate PREVC: TDD ordering verificado no Validation phase
 
-## Relacionamentos
-
-| Tipo | Referencia |
-|------|------------|
-| Docs externos | https://docs.pytest.org/ |
-| ADRs relacionadas | 002-code-review |
-
 ## Evidencias / Anexos
+
+**Fontes oficiais:** [docs.pytest.org](https://docs.pytest.org/)
 
 Ciclo RED-GREEN-REFACTOR:
 

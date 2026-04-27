@@ -1,5 +1,7 @@
 ---
-status: filled
+status: superseded
+superseded_by: adr-system-v2
+superseded_on: 2026-04-25
 generated: 2026-04-03
 agents:
   - type: "documentation-writer"

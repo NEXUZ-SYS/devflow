@@ -1,0 +1,35 @@
+# context.yaml
+#
+# Parametrização de termos e URLs específicos do contexto organizacional.
+# Este arquivo é SUBSTITUÍVEL — cada organização que adota a skill edita
+# seus próprios valores abaixo sem precisar forkar o restante da skill.
+#
+# Consumido pela skill em dois pontos:
+#   - Check 3 do modo AUDIT (references/auditoria.md) — listas product_names e business_verticals
+#   - Step 6 opções A e C do modo CREATE (references/saida-distribuicao.md) — devflow_url
+#
+# Os valores default abaixo são exemplos concretos de uma organização real.
+# Ao adotar a skill, substitua pelos seus próprios produtos, verticais e URLs.
+
+# Nomes de produtos internos que NÃO devem aparecer em ADR (Check 3).
+# ADR fala de stack e arquitetura; menção a produto é sinal de que o raciocínio
+# está misturado com domínio de negócio.
+product_names:
+  - NXZ ERP
+  - NXZ Go
+  - NXZ KDS
+  - NXZ Delivery
+
+# Verticais de mercado que NÃO devem aparecer em ADR (Check 3).
+# Uma ADR bem escrita deve ser reutilizável por outra organização com a mesma
+# stack — se menciona vertical, perdeu essa portabilidade.
+business_verticals:
+  - food service
+  - restaurantes
+  - varejo
+  - franqueados
+
+# URL do repositório DevFlow (Step 6, opções A e C).
+# Usada no IMPORT.md da opção A e no README.md da opção C para apontar ao
+# fluxo de import padrão.
+devflow_url: https://github.com/NEXUZ-SYS/devflow

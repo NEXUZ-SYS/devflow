@@ -85,9 +85,20 @@ devflow/
 5. Run `/devflow init` in your project to scaffold `.context/`
 6. Start a workflow: `/devflow <task description>`
 
+## ADR System v2
+
+Since v0.13.0, DevFlow ships an ADR (Architecture Decision Records) subsystem (template v2.1.0):
+
+- **Skill `devflow:adr-builder`** — 3 modes: CREATE (guided/free/prefilled), AUDIT (12 deterministic checks), EVOLVE (patch/minor/major/refine).
+- **Lib Node (zero deps, stdlib only)** — `scripts/adr-audit.mjs`, `adr-update-index.mjs`, `adr-evolve.mjs`, plus `lib/adr-frontmatter.mjs`, `adr-graph.mjs`, `adr-semver.mjs`. Cross-project compatible — no `package.json` introduced.
+- **Active integration** — `prevc-planning` Step 3.5 detects architectural decisions and offers ADR creation; `prevc-validation` Step 2.6 audits touched ADRs via gate; `adr-filter` reads v2 schema (14-column README) and emits Kind tags.
+- **Filename convention** — `NNN-<slug>-v<major>.<minor>.<patch>.md` (semver in filename; rename on patch/minor; new file on major with `supersedes`).
+- **Commands** — `/devflow adr:new`, `/devflow adr:audit`, `/devflow adr:evolve`. See `skills/adr-builder/SKILL.md` for details.
+
 ## Next Steps
 
 - Use `/devflow <description>` to start a PREVC workflow
 - Use `/devflow prd` to generate a product roadmap
+- Use `/devflow adr:new` to register an architectural decision
 - Use `/devflow-dispatch` to see available specialist agents
 - Use `/devflow-sync` to update `.context/` after significant changes

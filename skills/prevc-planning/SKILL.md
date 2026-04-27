@@ -104,6 +104,43 @@ Read `.context/agents/architect-specialist.md` and apply its review checklist ma
 ### Minimal Mode
 Skip enrichment — spec stands as-is from brainstorming.
 
+## Step 3.5: ADR opportunity check (Step 5.6 of plan adr-system-v2)
+
+After the spec is enriched and BEFORE writing the implementation plan, evaluate whether the design contains an architectural decision that should be registered as an ADR.
+
+**Mechanism:** instrução em linguagem natural — você (LLM) avalia os 4 sinais simultaneamente. Não é regex, não é lib. P11 do plan adr-system-v2.
+
+**Os 4 sinais (todos devem bater para ativar):**
+
+| Sinal | Como detectar |
+|---|---|
+| **Escolha entre alternativas** | Spec contém ≥2 opções discutidas com tradeoffs ("X vs Y", "em vez de", "considerei A mas optei por B") |
+| **Afeta stack/arquitetura** | Spec menciona framework, biblioteca, padrão, protocolo, ferramenta de infra, layer de stack |
+| **Implica guardrails** | Decisão cria regras de uso recorrentes ("sempre usar X", "evitar Y", contratos de chamada) |
+| **Não-trivial** | Task não é bugfix, rename, typo, ou refactor cosmético |
+
+Se `sinais_presentes < 4 de 4` → pula este step, segue para Step 4. Alta especificidade evita fadiga.
+
+**Quando os 4 sinais batem, oferecer:**
+
+> Detectei uma decisão arquitetural no design proposto:
+>   "<frase-chave do spec, ex: Adotar Zod como validador único entre frontend e backend>"
+>
+> Quer registrar como ADR antes de escrever o plan?
+> - **(a) Sim**, rodar `/devflow adr:new --mode=prefilled` com pré-preenchimento deste design
+> - **(b) Não**, seguir direto para o plan (decisão fica só no spec)
+> - **(c) Não oferecer novamente neste workflow** (`skip_adr_offer=true`)
+
+**Comportamento por escolha:**
+- **(a)** — suspende o fluxo de prevc-planning. Spawna workflow filho `/devflow adr:new --mode=prefilled` com o design atual como briefing. Quando workflow-filho conclui (V phase passa, ADR commitada), controle volta para Step 4 com ADR criada disponível em `.context/docs/adrs/`. Plan a ser escrito pode referenciá-la.
+- **(b)** — segue direto para Step 4. Nada muda.
+- **(c)** — escreve `skip_adr_offer: true` no workflow metadata. Step 3.5 não roda novamente neste workflow. Default permanece ativo em workflows futuros.
+
+**Brittleness mitigada por:**
+1. 4 sinais simultâneos — alta especificidade, baixa fadiga
+2. Opt-out persistente — usuário pode pular permanentemente neste workflow
+3. Texto de oferta declarativo — sempre cita a frase exata do spec que disparou os 4 sinais (transparência)
+
 ## Step 4: Write Plan
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:writing-plans`
