@@ -141,14 +141,79 @@ Se o pre-commit hook faz auto-bump (como neste projeto), o commit pode já inclu
 
 ## Step 4: Finalize Branch
 
+<HARD-GATE>
+**ANTES** de invocar qualquer sub-skill de finalização, **SEMPRE consultar `.context/.devflow.yaml`** e respeitar a configuração declarada. Config é decisão tomada do projeto, não sugestão a re-confirmar.
+
+```bash
+# Se .context/.devflow.yaml existe
+AUTO_FINISH=$(grep -E "^\s*autoFinish:" .context/.devflow.yaml | head -1 | awk -F: '{print $2}' | xargs)
+PR_CLI=$(grep -E "^\s*prCli:" .context/.devflow.yaml | head -1 | awk -F: '{print $2}' | xargs)
+```
+
+**Decisão de execução baseada em `autoFinish`:**
+
+| Valor de `autoFinish` | Comportamento |
+|---|---|
+| `true` (ou granular com `merge: true`) | **EXECUTAR DIRETO** — não invocar `superpowers:finishing-a-development-branch`, não apresentar menu de 4 opções. Anunciar a ação e fazer merge automaticamente. |
+| `false` | Invocar `superpowers:finishing-a-development-branch` para apresentar opções ao usuário. |
+| Ausente / config sem campo | Comportamento padrão (apresentar opções). |
+
+**Não pergunte ao usuário "qual estratégia" se config já decidiu.** O usuário já configurou — re-perguntar é fricção e ignora a intenção declarada.
+</HARD-GATE>
+
+### Quando `autoFinish: true` — execução direta
+
+Detectar se há PR aberto + escolher caminho:
+
+```bash
+# Detectar PR aberto para a branch atual (se prCli=gh)
+BRANCH=$(git branch --show-current)
+PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null)
+```
+
+**Caminho A — PR existe + `prCli: gh`:**
+```bash
+gh pr merge "$PR_NUMBER" --squash --delete-branch
+git checkout main && git pull
+git branch -d "$BRANCH" 2>/dev/null || true   # já pode ter sumido após delete-branch
+```
+- `--squash` é o default razoável. Se a config tiver `mergeStrategy: merge|rebase|squash`, respeitar.
+- `--delete-branch` limpa remote.
+- `git pull` sincroniza local.
+- `git branch -d` final limpa local (no-op se já sumiu).
+
+**Caminho B — Sem PR + push local possível (sem branchProtection server):**
+```bash
+git checkout main
+git pull origin main
+git merge --no-ff "$BRANCH"
+git push origin main
+git branch -d "$BRANCH"
+git push origin --delete "$BRANCH" 2>/dev/null || true
+```
+
+**Caminho C — Sem PR + main protegida server-side:**
+- Push da branch e abrir PR via `gh pr create` — depois rodar Caminho A.
+- Alternativa: usar `gh pr merge --admin` se o usuário tem permissão.
+
+**Anunciar antes de executar:**
+> "`autoFinish: true` detectado em `.context/.devflow.yaml`. Executando merge automático via `gh pr merge #<N> --squash --delete-branch`."
+
+**NÃO** apresentar menu, **NÃO** invocar `superpowers:finishing-a-development-branch`, **NÃO** pedir confirmação adicional.
+
+### Quando `autoFinish` é `false` ou ausente
+
 **REQUIRED SUB-SKILL:** Invoke `superpowers:finishing-a-development-branch`
 
-This skill handles:
-- Verifying all tests pass one final time
-- Presenting merge options to the user (merge, squash, rebase)
-- Executing the chosen merge strategy
+A sub-skill apresenta opções ao usuário (merge local / push+PR / keep / discard) e executa a escolha.
 
 **IMPORTANTE:** Quando o skill `finishing-a-development-branch` for invocado, os Steps 1-3 (README, bump, commit) já DEVEM estar completos. O skill só deve tratar de push/merge/cleanup — nunca de README ou bump.
+
+### Por que esse gate existe
+
+**Incidente 2026-04-25** (workflow `adr-system-v2`): finalização foi invocada via `superpowers:finishing-a-development-branch` que apresentou 4 opções, mesmo com `autoFinish: true` declarado em `.devflow.yaml`. O usuário corrigiu apontando que config decidida não deve ser re-perguntada. Este gate previne recorrência.
+
+**Princípio:** config explícita do projeto manda sobre prompt LLM. Se o time configurou autoFinish, isso reflete intenção deliberada — re-perguntar é ignorar essa intenção.
 
 ## Step 5: Update Documentation
 
