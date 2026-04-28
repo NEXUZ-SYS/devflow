@@ -110,8 +110,8 @@ For each touched ADR, apply per-status logic:
 
 | Status before (on main) | Action |
 |---|---|
-| New file (added in this workflow) | `node scripts/adr-audit.mjs <file> --enforce-gate` — block on FIX-INTERVIEW |
-| `Proposto` (existed and edited) | `node scripts/adr-audit.mjs <file> --enforce-gate` |
+| New file (added in this workflow) | `node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs <file> --enforce-gate` — block on FIX-INTERVIEW |
+| `Proposto` (existed and edited) | `node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs <file> --enforce-gate` |
 | `Aprovado` (edited in this workflow) | First check `version` field was bumped in this branch (semver). Then audit. Block if version unchanged. |
 | `Aprovado → Substituido` (major evolve) | Validate via `adr-graph.mjs`: a sibling new ADR in this commit must have `supersedes: [<old-slug>]`. |
 | `Substituido` / `Descontinuado` | Skip — historical, immutable. |
@@ -140,7 +140,7 @@ for adr in $touched; do
       [[ -z "$version_diff" ]] && { echo "FAIL: ADR $adr Aprovada editada sem bump de version"; exit 1; }
       ;;
   esac
-  node scripts/adr-audit.mjs "$adr" --enforce-gate || exit 1
+  node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs "$adr" --enforce-gate || exit 1
 done
 echo "Step 2.6: all touched ADRs passed gate"
 ```

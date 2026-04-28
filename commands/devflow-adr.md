@@ -27,7 +27,7 @@ Targets accept any of:
 - `001-tdd-python-v1.0.0` — exact filename
 - `<path>` — direct path or glob
 
-Resolution via `node scripts/adr-update-index.mjs --resolve=<query>`.
+Resolution via `node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs --resolve=<query>`.
 
 ## Behavior
 
