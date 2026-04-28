@@ -34,11 +34,20 @@ Detect in cascade — do not ask if the signal is clear:
 
 ## Common preflight (all modes)
 
+<HARD-GATE>
+**Path & script invocation rules — NON-NEGOTIABLE:**
+1. ADR files **MUST** be saved to `.context/docs/adrs/` (relative to the user's project root). NEVER `adrs/`, `docs/adrs/`, `.context/adrs/`, or anywhere else.
+2. ADR scripts (`adr-update-index.mjs`, `adr-audit.mjs`, `adr-evolve.mjs`) live in the **DevFlow plugin install**, NOT in the user's project. ALWAYS invoke them via `node ${CLAUDE_PLUGIN_ROOT}/scripts/<script>.mjs`. NEVER use the bare relative `node scripts/<script>.mjs` — it will fail silently in user projects.
+3. The script's `--project=<path>` flag (default `.`) tells the script which project's `.context/docs/adrs/` to operate on. The script reads/writes there, not in the plugin location.
+
+If `${CLAUDE_PLUGIN_ROOT}` is not set in your environment (rare), resolve it via `claude plugin path devflow@NEXUZ-SYS` or instruct the user to reinstall the plugin. Do NOT fall back to bare `scripts/...` — that bug is what this gate exists to prevent.
+</HARD-GATE>
+
 Before any of the modes, verify project setup:
 
 1. **Seed copy** — if `.context/templates/adrs/patterns-catalog.md` doesn't exist, copy from `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/patterns-catalog.md`. Same for `context.yaml`. This makes them substituable per project.
 2. **Verify `.context/docs/adrs/` exists** — create directory if missing; first ADR uses `001-` prefix.
-3. **Verify libs available** — `scripts/adr-audit.mjs`, `scripts/adr-update-index.mjs`, `scripts/adr-evolve.mjs`. If missing, the plugin install is broken; ask the user to reinstall DevFlow.
+3. **Verify libs available** — `${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs`. If missing, the plugin install is broken; ask the user to reinstall DevFlow.
 
 ---
 
@@ -74,7 +83,7 @@ If user resists, explain: *"ADR sem alternativas é receita; ADR sem guardrails 
 ### Step 3 — Resolve next number
 
 ```bash
-node scripts/adr-update-index.mjs --next-number
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs --next-number
 ```
 Returns 3-digit zero-padded number (e.g. `004`). Filename will be `${num}-${slug}-v1.0.0.md`.
 
@@ -103,20 +112,20 @@ Mentally run through `references/checklist-qualidade.md`. Fix anything that fail
 
 ### Step 5b — Write file + regenerate index
 
-Write the file to `.context/docs/adrs/${num}-${slug}-v1.0.0.md`. Then:
+Write the file to `.context/docs/adrs/${num}-${slug}-v1.0.0.md` (in the user's project root, NEVER elsewhere). Then **mandatorily** regenerate the index:
 
 ```bash
-node scripts/adr-update-index.mjs
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs
 ```
 
-Regenerates `README.md` with 14 columns including the new entry.
+Regenerates `.context/docs/adrs/README.md` with 14 columns including the new entry. **Skipping this step is a bug** — the README index goes stale and the AI loses the ability to discover the new ADR during PREVC Planning context gathering. If the command fails, surface the error to the user immediately; do NOT proceed to commit.
 
 ### Step 5c — Run audit gate
 
 Verify the new file passes the 12 checks:
 
 ```bash
-node scripts/adr-audit.mjs .context/docs/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/docs/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
 ```
 
 If FIX-INTERVIEW: present gaps to user, choose whether to fix or commit-as-is.
@@ -132,13 +141,13 @@ If 12/12 PASS: commit with message `feat(adr): add ${num}-${slug}-v1.0.0 — <t�
 Accept `<file>`, prefix (e.g. `001`), or slug. Resolve to canonical filename:
 
 ```bash
-node scripts/adr-update-index.mjs --resolve=<query>
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs --resolve=<query>
 ```
 
 ### Step A2 — Run audit lib
 
 ```bash
-node scripts/adr-audit.mjs <resolved-file> --format=json
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs <resolved-file> --format=json
 ```
 
 Parse output JSON. Capture: `summary` (pass/fix_auto/fix_interview counts), `checks` array, `status_gate` (if Aprovado-protected).
@@ -190,26 +199,26 @@ Classify the change:
 
 ```bash
 # patch
-node scripts/adr-evolve.mjs <file> --kind=patch --apply
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs <file> --kind=patch --apply
 
 # minor
-node scripts/adr-evolve.mjs <file> --kind=minor --apply
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs <file> --kind=minor --apply
 
 # major
-node scripts/adr-evolve.mjs <file> --kind=major --apply
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs <file> --kind=major --apply
 
 # refine
-node scripts/adr-evolve.mjs <file> --kind=refine --slug=<new-slug> --apply
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs <file> --kind=refine --slug=<new-slug> --apply
 ```
 
-Lib handles: version bump (via adr-semver), file rename or new file creation, status changes, atomic write-then-rename (S5), index regeneration.
+Lib handles: version bump (via adr-semver), file rename or new file creation, status changes, atomic write-then-rename (S5), index regeneration (calls `adr-update-index.mjs` internally — also via `${CLAUDE_PLUGIN_ROOT}`).
 
 ### Step E4 — Validate via gate
 
 Lib calls `adr-update-index.mjs` automatically. Then run audit on touched files:
 
 ```bash
-node scripts/adr-audit.mjs <touched-file> --enforce-gate
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs <touched-file> --enforce-gate
 ```
 
 For major: audit BOTH files (new and old-with-Substituido). For refine: audit only new file. For patch/minor: audit the renamed file.
