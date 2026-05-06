@@ -263,11 +263,11 @@ describe("Skill integration for ADR system", () => {
   });
 
   describe("skills/context-awareness/SKILL.md", () => {
-    it('should reference ".context/docs/adrs"', () => {
+    it('should reference canonical ".context/adrs" path', () => {
       const content = read("skills/context-awareness/SKILL.md");
       assert.ok(
-        content.includes(".context/docs/adrs"),
-        'context-awareness must reference ".context/docs/adrs"'
+        content.includes(".context/adrs"),
+        'context-awareness must reference canonical ".context/adrs/" (legacy ".context/docs/adrs/" supported via dual-read until v1.2)'
       );
     });
   });
