@@ -5,10 +5,11 @@
 // Spec ref: docs/superpowers/specs/2026-04-24-adr-system-v2-design.md §6.2, §6.3, §6.7
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, basename, join } from 'node:path';
+import { dirname, basename, join, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { parse, stringify } from './lib/adr-frontmatter.mjs';
 import { validateGraph } from './lib/adr-graph.mjs';
+import { resolveAdrPath } from './lib/path-resolver.mjs';
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith('--'));
@@ -23,6 +24,28 @@ if (!file) {
   console.error('Usage: adr-audit.mjs <file> [flags]');
   process.exit(2);
 }
+
+// Semana 0 dual-read: emit LEGACY_PATH_DETECTED if file lives in legacy path
+// AND project hasn't migrated to .context/adrs/ yet. Warning only — not blocking.
+function detectLegacyPath(filePath) {
+  const absFile = resolve(filePath);
+  let dir = dirname(absFile);
+  for (let i = 0; i < 10 && dir !== '/' && dir !== '.'; i++) {
+    if (existsSync(join(dir, '.context'))) {
+      const info = resolveAdrPath(dir);
+      const inLegacy = absFile.includes('/.context/docs/adrs/');
+      if (inLegacy && info.isLegacy) {
+        console.error(
+          `[devflow] LEGACY_PATH_DETECTED: ADRs found in .context/docs/adrs/. ` +
+          `Migrate to .context/adrs/ before v1.2 — see ADR-001 (path migration).`
+        );
+      }
+      return;
+    }
+    dir = dirname(dir);
+  }
+}
+detectLegacyPath(file);
 
 try {
   const content = await readFile(file, 'utf-8');
