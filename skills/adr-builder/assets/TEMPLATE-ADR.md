@@ -13,6 +13,10 @@ supersedes: []          # lista de slugs de ADRs substituídas (metadado estrutu
 refines: []             # ADR-pai que esta refina (ex: SLO refina arquitetura). Metadado de navegação humana — ver Hard Rule #12
 protocol_contract: null # nome do contrato + versão quando category=protocol-contracts (ex: "PosV1"); null caso contrário
 decision_kind: firm     # firm | gated | reversible. "gated" marca portão de revisão futura; "reversible" marca experimento
+# OPCIONAL (v1.0+) — Y-statement curto (≤ 240 chars). Quando presente, session-start
+# usa este campo no <ADR_GUARDRAILS> Stage-1 disclosure ao invés do título nu.
+# Recomendado para ADRs em status Aprovado quando o índice tem >5 ADRs.
+summary: ""
 ---
 
 # ADR — <Título Curto da Decisão>
@@ -35,6 +39,18 @@ Total do documento: 80-120 linhas (~100 ideal). Jamais explique conceitos técni
 
 <!-- 4-6 linhas. Frases curtas. Stack + camada + dor. Sem parágrafos expositivos. -->
 <Dor técnica específica desta stack nesta camada. Keywords > prosa.>
+
+## Drivers (opcional — omitir se ≤2 forças)
+
+<!--
+OPCIONAL (v1.0+). Materializar apenas em decisões com 4+ forças concorrentes
+(latência + custo + segurança + manutenção, por exemplo). Cabe nas 80–120 linhas
+se bullets ≤8 palavras. Audit emite warning se a seção existir com <3 bullets.
+-->
+
+- <força técnica 1>
+- <força técnica 2>
+- <força técnica 3>
 
 ## Decisão
 

@@ -1,6 +1,6 @@
 ---
 name: adr-builder
-description: "Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs). Trigger words: 'crie/criar ADR', 'gerar ADR', 'registrar decisão', 'audita ADR', 'revisa ADR', 'evolve ADR', 'patch/minor/major na ADR', 'substituir ADR'. Also trigger when the user just made an architectural decision (framework, library, pattern, auth strategy, testing approach, protocol contract) that needs recording. Three modes: CREATE (new ADR via guided/free/prefilled briefing), AUDIT (12 deterministic checks via adr-audit.mjs lib), EVOLVE (patch/minor/major/refine transition with version bump). Skill writes directly to .context/docs/adrs/ — no zip packaging."
+description: "Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs). Trigger words: 'crie/criar ADR', 'gerar ADR', 'registrar decisão', 'audita ADR', 'revisa ADR', 'evolve ADR', 'patch/minor/major na ADR', 'substituir ADR'. Also trigger when the user just made an architectural decision (framework, library, pattern, auth strategy, testing approach, protocol contract) that needs recording. Three modes: CREATE (new ADR via guided/free/prefilled briefing), AUDIT (12 deterministic checks via adr-audit.mjs lib), EVOLVE (patch/minor/major/refine transition with version bump). Skill writes directly to .context/adrs/ (canonical since v1.0; legacy .context/docs/adrs/ read-only via dual-read until v1.2) — no zip packaging."
 ---
 
 # ADR Builder — DevFlow Edition
@@ -36,9 +36,9 @@ Detect in cascade — do not ask if the signal is clear:
 
 <HARD-GATE>
 **Path & script invocation rules — NON-NEGOTIABLE:**
-1. ADR files **MUST** be saved to `.context/docs/adrs/` (relative to the user's project root). NEVER `adrs/`, `docs/adrs/`, `.context/adrs/`, or anywhere else.
+1. ADR files **MUST** be saved to `.context/adrs/` (relative to the user's project root, canonical since v1.0). NEVER `adrs/` (no `.context/` prefix), `docs/adrs/` (no `.context/` prefix), or `.context/docs/adrs/` (legacy — removed in v1.2; existing legacy ADRs are read-only via dual-read in v1.0.x/v1.1.x).
 2. ADR scripts (`adr-update-index.mjs`, `adr-audit.mjs`, `adr-evolve.mjs`) live in the **DevFlow plugin install**, NOT in the user's project. ALWAYS invoke them via `node ${CLAUDE_PLUGIN_ROOT}/scripts/<script>.mjs`. NEVER use the bare relative `node scripts/<script>.mjs` — it will fail silently in user projects.
-3. The script's `--project=<path>` flag (default `.`) tells the script which project's `.context/docs/adrs/` to operate on. The script reads/writes there, not in the plugin location.
+3. The script's `--project=<path>` flag (default `.`) tells the script which project's `.context/adrs/` to operate on. The script reads/writes there, not in the plugin location.
 
 If `${CLAUDE_PLUGIN_ROOT}` is not set in your environment (rare), resolve it via `claude plugin path devflow@NEXUZ-SYS` or instruct the user to reinstall the plugin. Do NOT fall back to bare `scripts/...` — that bug is what this gate exists to prevent.
 </HARD-GATE>
@@ -46,7 +46,7 @@ If `${CLAUDE_PLUGIN_ROOT}` is not set in your environment (rare), resolve it via
 Before any of the modes, verify project setup:
 
 1. **Seed copy** — if `.context/templates/adrs/patterns-catalog.md` doesn't exist, copy from `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/patterns-catalog.md`. Same for `context.yaml`. This makes them substituable per project.
-2. **Verify `.context/docs/adrs/` exists** — create directory if missing; first ADR uses `001-` prefix.
+2. **Verify `.context/adrs/` exists** — create directory if missing; first ADR uses `001-` prefix.
 3. **Verify libs available** — `${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs`. If missing, the plugin install is broken; ask the user to reinstall DevFlow.
 
 ---
@@ -112,20 +112,20 @@ Mentally run through `references/checklist-qualidade.md`. Fix anything that fail
 
 ### Step 5b — Write file + regenerate index
 
-Write the file to `.context/docs/adrs/${num}-${slug}-v1.0.0.md` (in the user's project root, NEVER elsewhere). Then **mandatorily** regenerate the index:
+Write the file to `.context/adrs/${num}-${slug}-v1.0.0.md` (in the user's project root, NEVER elsewhere). Then **mandatorily** regenerate the index:
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs
 ```
 
-Regenerates `.context/docs/adrs/README.md` with 14 columns including the new entry. **Skipping this step is a bug** — the README index goes stale and the AI loses the ability to discover the new ADR during PREVC Planning context gathering. If the command fails, surface the error to the user immediately; do NOT proceed to commit.
+Regenerates `.context/adrs/README.md` with 14 columns including the new entry. **Skipping this step is a bug** — the README index goes stale and the AI loses the ability to discover the new ADR during PREVC Planning context gathering. If the command fails, surface the error to the user immediately; do NOT proceed to commit.
 
 ### Step 5c — Run audit gate
 
 Verify the new file passes the 12 checks:
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/docs/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
 ```
 
 If FIX-INTERVIEW: present gaps to user, choose whether to fix or commit-as-is.
@@ -226,7 +226,7 @@ For major: audit BOTH files (new and old-with-Substituido). For refine: audit on
 ### Step E5 — Commit + close workflow
 
 ```bash
-git add .context/docs/adrs/
+git add .context/adrs/
 git commit -m "<type>(adr): <kind> <old-slug> → <new-slug-or-version> — <descrição>"
 ```
 
@@ -255,7 +255,7 @@ EVOLVE always runs as PREVC SMALL (P → E → V), so the V phase Step 2.5 picks
 - `references/extracao-livre.md` — free CREATE extraction rules
 - `references/auditoria.md` — AUDIT 11 checks (Check 12 added by adr-graph.mjs)
 - `references/checklist-qualidade.md` — pre-delivery self-review
-- `references/saida-distribuicao.md` — DevFlow-adapted output (writes to `.context/docs/adrs/`, no zip)
+- `references/saida-distribuicao.md` — DevFlow-adapted output (writes to `.context/adrs/`, no zip)
 
 ## Asset files
 
