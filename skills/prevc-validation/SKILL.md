@@ -53,11 +53,11 @@ Read `.context/agents/code-reviewer.md` and apply its checklist against the spec
 Check if the implementation complies with active ADR guardrails.
 
 ### When to run
-Only if `.context/docs/adrs/README.md` exists and has active ADRs.
+Only if `.context/adrs/README.md` exists (canonical since v1.0) OR `.context/docs/adrs/README.md` exists (legacy, dual-read until v1.2). Both have active ADRs.
 
 ### Process
 
-1. Read `.context/docs/adrs/README.md` — get list of active ADRs
+1. Read `.context/adrs/README.md` (or fallback to `.context/docs/adrs/README.md` legacy) — get list of active ADRs
 2. For each ADR with status `Aprovado`:
    a. Read the **Guardrails** section
    b. For each guardrail rule (SEMPRE/NUNCA/QUANDO):
@@ -98,8 +98,9 @@ Audits ADRs that were **touched in this workflow** (via `git diff`) using the de
 ### Trigger
 
 ```bash
-# Worktree-safe diff base — works with branches, worktrees, intermediate pulls
-touched_adrs=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/docs/adrs/*.md')
+# Worktree-safe diff base — works with branches, worktrees, intermediate pulls.
+# Includes legacy .context/docs/adrs/ for dual-read support until v1.2.
+touched_adrs=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/adrs/*.md' '.context/docs/adrs/*.md')
 ```
 
 If `touched_adrs` is empty → skip this step entirely. The block runs only when the workflow modified or created ADR files.
@@ -125,7 +126,8 @@ For each touched ADR, apply per-status logic:
 ### Pseudocode (Bash)
 
 ```bash
-touched=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/docs/adrs/*.md')
+# Diff includes legacy .context/docs/adrs/ for dual-read until v1.2
+touched=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/adrs/*.md' '.context/docs/adrs/*.md')
 if [ -z "$touched" ]; then
   echo "Step 2.6: nenhuma ADR tocada — skip"
   exit 0
