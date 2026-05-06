@@ -154,34 +154,59 @@ NAPKIN_TMPL
   napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
 fi
 
-# --- Detect and inject ADR guardrails ---
+# --- Detect and inject ADR guardrails (Semana 0 dual-read) ---
+#
+# Canonical path: .context/adrs/ (v1.0+)
+# Legacy path:    .context/docs/adrs/ (deprecated, removed in v1.2)
+# Both are scanned during transition. If only legacy contributes ADRs, emit
+# LEGACY_PATH_DETECTED warning to stderr (per N6).
 
 adr_context=""
-adr_dir="${project_root}/.context/docs/adrs"
+adr_dir_new="${project_root}/.context/adrs"
+adr_dir_legacy="${project_root}/.context/docs/adrs"
 
-if [ -f "${adr_dir}/README.md" ]; then
+# Build list of existing ADR directories (canonical first)
+adr_dirs=()
+[ -d "$adr_dir_new" ] && adr_dirs+=("$adr_dir_new")
+[ -d "$adr_dir_legacy" ] && adr_dirs+=("$adr_dir_legacy")
+
+if [ "${#adr_dirs[@]}" -gt 0 ]; then
   adr_count=0
+  legacy_contributed=0
   adr_guardrails_content=""
 
-  # Iterate ADR files in sorted order, skipping README
-  while IFS= read -r adr_file; do
-    [ -f "$adr_file" ] || continue
+  # Track seen filenames so canonical wins on conflict (legacy is shadowed)
+  declare -A seen_files
 
-    # Read status from frontmatter
-    adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
-    [ "$adr_status" = "Aprovado" ] || continue
+  for d in "${adr_dirs[@]}"; do
+    while IFS= read -r adr_file; do
+      [ -f "$adr_file" ] || continue
+      fn=$(basename "$adr_file")
+      [ -n "${seen_files[$fn]:-}" ] && continue
+      seen_files[$fn]=1
 
-    adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
-    adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      [ "$adr_status" = "Aprovado" ] || continue
 
-    # Extract "## Guardrails" section: from the heading to the next "## " heading
-    guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
+      adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
 
-    if [ -n "$guardrails" ]; then
-      adr_count=$((adr_count + 1))
-      adr_guardrails_content+=$'\n### '"${adr_name}"' (stack: '"${adr_stack}"')'$'\n'"${guardrails}"$'\n'
-    fi
-  done < <(find "$adr_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort)
+      guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
+
+      if [ -n "$guardrails" ]; then
+        adr_count=$((adr_count + 1))
+        if [ "$d" = "$adr_dir_legacy" ]; then
+          legacy_contributed=1
+        fi
+        adr_guardrails_content+=$'\n### '"${adr_name}"' (stack: '"${adr_stack}"')'$'\n'"${guardrails}"$'\n'
+      fi
+    done < <(find "$d" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort)
+  done
+
+  # N6: emit warning when legacy path contributed AND canonical doesn't exist
+  if [ "$legacy_contributed" = "1" ] && [ ! -d "$adr_dir_new" ]; then
+    echo "[devflow] WARN: ADRs loaded from legacy path .context/docs/adrs/ — migrate to .context/adrs/ before v1.2 (see ADR-001)." >&2
+  fi
 
   if [ "$adr_count" -gt 0 ]; then
     adr_header="Loaded ${adr_count} active ADR(s). These are HARD CONSTRAINTS — apply during brainstorming, design, and implementation. Do not propose alternatives already rejected in ADRs."
