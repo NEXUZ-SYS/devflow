@@ -65,86 +65,79 @@ function indentOf(line) {
   return m ? m[1].length : 0;
 }
 
-function parseYamlSubset(yaml) {
-  const lines = yaml.split(/\r?\n/);
+// Recursive parser: parseBlock(lines, startIdx, baseIndent) returns
+// [parsed, nextIdx] where parsed is the map at indent=baseIndent+, and
+// nextIdx is the line after the block ends. Supports arbitrary nesting
+// of maps and lists.
+function parseBlock(lines, startIdx, baseIndent) {
   const data = {};
-  let i = 0;
+  let i = startIdx;
 
   while (i < lines.length) {
     const line = lines[i];
-    // Skip blank lines and comments
     if (line.trim() === "" || /^\s*#/.test(line)) {
       i++;
       continue;
     }
 
     const indent = indentOf(line);
-    if (indent !== 0) {
-      // Only top-level keys handled at this scope
-      i++;
-      continue;
-    }
+    if (indent < baseIndent) break;       // dedent — end of this block
+    if (indent > baseIndent) { i++; continue; }  // skip mis-indented (shouldn't happen)
 
-    const m = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-    if (!m) {
-      i++;
-      continue;
-    }
+    const m = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    if (!m) { i++; continue; }
     const key = m[1];
     const rawValue = m[2];
 
-    if (rawValue === "") {
-      // Either a block list or a nested map — peek next line
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() === "") j++;
-      if (j >= lines.length) {
-        data[key] = null;
-        i = j;
-        continue;
-      }
-      const nextIndent = indentOf(lines[j]);
-      if (nextIndent === 0) {
-        // No nesting; treat as null
-        data[key] = null;
-        i++;
-        continue;
-      }
-      // Detect block list vs nested map
-      const isList = /^\s*-\s/.test(lines[j]);
-      if (isList) {
-        const arr = [];
-        while (j < lines.length) {
-          const ln = lines[j];
-          if (ln.trim() === "" || /^\s*#/.test(ln)) { j++; continue; }
-          if (indentOf(ln) < nextIndent) break;
-          const lm = ln.match(/^\s*-\s+(.*)$/);
-          if (!lm) break;
-          arr.push(parseScalar(lm[1]));
-          j++;
-        }
-        data[key] = arr;
-        i = j;
-      } else {
-        // One-level nested map
-        const sub = {};
-        while (j < lines.length) {
-          const ln = lines[j];
-          if (ln.trim() === "" || /^\s*#/.test(ln)) { j++; continue; }
-          if (indentOf(ln) < nextIndent) break;
-          const sm = ln.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-          if (!sm) break;
-          sub[sm[1]] = parseScalar(sm[2]);
-          j++;
-        }
-        data[key] = sub;
-        i = j;
-      }
-    } else {
+    if (rawValue !== "") {
       data[key] = parseScalar(rawValue);
       i++;
+      continue;
+    }
+
+    // Empty value — peek next non-blank line
+    let j = i + 1;
+    while (j < lines.length && (lines[j].trim() === "" || /^\s*#/.test(lines[j]))) j++;
+    if (j >= lines.length) {
+      data[key] = null;
+      i = j;
+      continue;
+    }
+    const childIndent = indentOf(lines[j]);
+    if (childIndent <= baseIndent) {
+      data[key] = null;
+      i++;
+      continue;
+    }
+
+    // Detect block list vs nested map
+    const isList = /^\s*-\s/.test(lines[j]);
+    if (isList) {
+      const arr = [];
+      while (j < lines.length) {
+        const ln = lines[j];
+        if (ln.trim() === "" || /^\s*#/.test(ln)) { j++; continue; }
+        if (indentOf(ln) < childIndent) break;
+        const lm = ln.match(/^\s*-\s+(.*)$/);
+        if (!lm) break;
+        arr.push(parseScalar(lm[1]));
+        j++;
+      }
+      data[key] = arr;
+      i = j;
+    } else {
+      // Nested map — recurse
+      const [sub, nextI] = parseBlock(lines, j, childIndent);
+      data[key] = sub;
+      i = nextI;
     }
   }
+  return [data, i];
+}
 
+function parseYamlSubset(yaml) {
+  const lines = yaml.split(/\r?\n/);
+  const [data] = parseBlock(lines, 0, 0);
   return data;
 }
 
