@@ -28,6 +28,15 @@ function unquote(s) {
   return s;
 }
 
+function parseInlineArray(v) {
+  // v is "[item1, item2, ...]" — strip brackets, split on commas, unquote each
+  const inner = v.slice(1, -1).trim();
+  if (inner === "") return [];
+  // Naive split by comma — sufficient for ADR/standard frontmatter use cases
+  // (no nested arrays, no quoted commas in standards).
+  return inner.split(",").map(s => unquote(s.trim()));
+}
+
 function parseScalar(raw) {
   const v = raw.trim();
   if (v === "") return "";
@@ -36,6 +45,7 @@ function parseScalar(raw) {
   if (v === "false") return false;
   if (v === "[]") return [];
   if (v === "{}") return {};
+  if (v.startsWith("[") && v.endsWith("]")) return parseInlineArray(v);
   // Detect YAML reference (*name) used as value — reject
   if (/^\*[A-Za-z_]/.test(v)) {
     throw new Error(`YAML reference (*) not supported in devflow subset: ${raw}`);
