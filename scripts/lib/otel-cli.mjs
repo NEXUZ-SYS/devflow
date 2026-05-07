@@ -9,7 +9,7 @@
 // Per SI-1: never invoked via 'node -e' with interpolation; always
 // invoked as a separate file with stdin JSON envelope.
 
-import { loadObservabilityConfig, validateObservabilityConfig, createSpan, redactAttribute } from "./otel.mjs";
+import { loadObservabilityConfig, validateObservabilityConfig, createSpan, redactAttribute, initOtel } from "./otel.mjs";
 
 const MAX_STDIN_BYTES = 1024 * 1024;
 let raw = "";
@@ -36,9 +36,12 @@ process.stdin.on("end", async () => {
   }
 
   try {
+    // MEDIUM #1 fix: await SDK init so first-span isn't silently dropped
+    // (one-shot CLI can afford the latency; hooks are async fire-and-forget).
+    await initOtel(cfg);
     const span = createSpan(cfg, payload.event || "devflow.hook");
     if (span.noop) {
-      // SDK not yet ready or deps missing — silent skip
+      // Deps missing OR init failed — silent skip
       process.exit(0);
     }
     const attrs = {};

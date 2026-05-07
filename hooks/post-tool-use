@@ -364,8 +364,7 @@ fi
 
 OTEL_DIR="${CWD:-$PWD}"
 if [ -f "${OTEL_DIR}/.context/observability.yaml" ]; then
-  printf '{"event":"devflow.tool_use","attributes":{"gen_ai.tool.call.id":"%s","devflow.tool.name":"%s"}}' \
-    "$TOOL_NAME" "$TOOL_NAME" \
+  printf '{"event":"devflow.tool_use","attributes":{"gen_ai.tool.name":"%s"}}' "$TOOL_NAME" \
     | (cd "${OTEL_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
 fi
 

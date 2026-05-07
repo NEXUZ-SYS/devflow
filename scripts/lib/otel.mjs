@@ -53,15 +53,56 @@ export function loadObservabilityConfig(projectRoot) {
   };
 }
 
+// HIGH fix from Semana 4 audit: apply SI-3 SSRF parity to exporter.endpoint
+// (same denylist as permissions-evaluator callback URL). Operator-controlled
+// outbound URL — fat-fingering 169.254.169.254 must not silently exfiltrate
+// spans. Localhost is allowed (common dev pattern: Jaeger/Phoenix on :4318).
+function validateExporterEndpoint(url) {
+  const errs = [];
+  if (typeof url !== "string" || url.length === 0) {
+    errs.push(`enabled:true requires exporter.endpoint (string)`);
+    return errs;
+  }
+  if (!/^https?:\/\//.test(url)) {
+    errs.push(`exporter.endpoint must use http:// or https:// scheme: '${url}'`);
+    return errs;
+  }
+  // SI-3 denylist (cloud metadata, RFC1918 except localhost, link-local, ULA, IPv6 metadata)
+  const badPatterns = [
+    /^https?:\/\/169\.254\./,                     // 169.254.0.0/16
+    /^https?:\/\/\[fd00:ec2::254\]/,
+    /^https?:\/\/metadata\./,
+    /^https?:\/\/instance-data\.ec2\.internal/,
+    /^https?:\/\/(10|0)\./,                        // 10/8 + 0/8 (NOT 127 — localhost dev allowed)
+    /^https?:\/\/192\.168\./,
+    /^https?:\/\/172\.(1[6-9]|2[0-9]|3[01])\./,
+    /^https?:\/\/\[(::1|fe[89ab]|fc|fd)/i,         // IPv6 link-local + ULA
+  ];
+  for (const re of badPatterns) {
+    if (re.test(url)) {
+      errs.push(`exporter.endpoint '${url}' rejected (SI-3 cloud metadata, RFC1918, or link-local)`);
+      break;
+    }
+  }
+  // Trailing-dot bypass
+  try {
+    const u = new URL(url);
+    if (u.hostname.endsWith(".")) {
+      errs.push(`exporter.endpoint '${url}' rejected (SI-3 trailing-dot hostname bypass)`);
+    }
+  } catch {
+    errs.push(`exporter.endpoint '${url}' is not a valid URL`);
+  }
+  return errs;
+}
+
 export function validateObservabilityConfig(cfg) {
   const errors = [];
   if (cfg.spec && cfg.spec !== "devflow-observability/v0") {
     errors.push(`spec must be 'devflow-observability/v0', got '${cfg.spec}'`);
   }
   if (cfg.enabled === true) {
-    if (!cfg.exporter?.endpoint || typeof cfg.exporter.endpoint !== "string") {
-      errors.push(`enabled:true requires exporter.endpoint (string)`);
-    }
+    errors.push(...validateExporterEndpoint(cfg.exporter?.endpoint));
   }
   return errors;
 }
@@ -97,6 +138,14 @@ async function ensureSdkInitialized(cfg) {
     );
     return null;
   }
+}
+
+// Awaitable initializer for callers that can pay the SDK-load latency
+// (e.g., one-shot CLIs like otel-cli.mjs). Returns the tracer or null.
+// MEDIUM #1 fix from Semana 4 audit: prevents first-N-spans-dropped bug
+// when caller awaits before createSpan.
+export async function initOtel(cfg) {
+  return ensureSdkInitialized(cfg);
 }
 
 // Returns a span object. When disabled OR deps missing, returns a no-op

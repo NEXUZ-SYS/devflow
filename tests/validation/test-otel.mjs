@@ -95,6 +95,55 @@ test("validateObservabilityConfig: accepts enabled:false (no endpoint required)"
   assert.deepEqual(errors, []);
 });
 
+// HIGH fix (Semana 4 audit): SSRF parity on exporter.endpoint
+test("validateObservabilityConfig: rejects endpoint pointing at cloud metadata", () => {
+  const errors = validateObservabilityConfig({
+    spec: "devflow-observability/v0",
+    enabled: true,
+    exporter: { type: "otlp", endpoint: "http://169.254.169.254:4318" },
+  });
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /metadata|denied|RFC1918|link-local/i);
+});
+
+test("validateObservabilityConfig: rejects endpoint on RFC1918 (10/8)", () => {
+  const errors = validateObservabilityConfig({
+    spec: "devflow-observability/v0",
+    enabled: true,
+    exporter: { type: "otlp", endpoint: "http://10.0.0.42:4318" },
+  });
+  assert.ok(errors.length > 0);
+});
+
+test("validateObservabilityConfig: rejects endpoint without http(s) scheme", () => {
+  const errors = validateObservabilityConfig({
+    spec: "devflow-observability/v0",
+    enabled: true,
+    exporter: { type: "otlp", endpoint: "file:///tmp/spans" },
+  });
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /scheme/i);
+});
+
+test("validateObservabilityConfig: allows http://localhost (dev pattern)", () => {
+  const errors = validateObservabilityConfig({
+    spec: "devflow-observability/v0",
+    enabled: true,
+    exporter: { type: "otlp", endpoint: "http://localhost:4318" },
+  });
+  assert.deepEqual(errors, []);
+});
+
+test("validateObservabilityConfig: rejects trailing-dot hostname bypass", () => {
+  const errors = validateObservabilityConfig({
+    spec: "devflow-observability/v0",
+    enabled: true,
+    exporter: { type: "otlp", endpoint: "https://otlp.example.com.:443" },
+  });
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /trailing-dot|denied/i);
+});
+
 // ─── Span creation ─────────────────────────────────────────────────────────
 
 test("createSpan: returns no-op span when enabled:false", () => {

@@ -79,7 +79,7 @@ DevFlow v0.13.x não tem observabilidade padronizada — logs ficam em `actions.
 - SEMPRE manter `enabled: false` como default no template
 - SEMPRE manter `gen_ai.prompt` e `gen_ai.completion` em `attributes.redact[]` por default
 - SEMPRE injetar `devflow.repro.token` em todo span quando enabled
-- SEMPRE redact PII (emails, IPs, números longos) quando `redactPii: true`, mesmo se content capture habilitada
+- SEMPRE redact best-effort PII (emails, IPv4, sequências numéricas ≥9 dígitos) quando `redactPii: true` E content capture habilitada — NÃO é PCI/PHI-grade scrubbing; operadores em ambientes regulados DEVEM usar scrubber externo (e.g., Datadog Sensitive Data Scanner) e/ou manter `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` desabilitada
 - NUNCA carregar OTel SDK quando `enabled: false` (lazy-load gate)
 - NUNCA logar token API ou OAuth credentials mesmo com content capture
 - QUANDO `callback.url` em `permissions.yaml` é configurado, ENTÃO span deve registrar `devflow.permission.callback_invoked` para audit trail

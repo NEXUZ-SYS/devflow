@@ -5,6 +5,94 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — Semana 4 (Observability OTel) cumulative
+
+> Mini-V/C entry per checkpoint policy. Security audit returned
+> **PROCEED-WITH-CONSTRAINTS** (1 HIGH + 2 MEDIUM + 2 LOW); **all 5 items
+> fixed inline before merge**. Final semana of Gap 1-4 work — release path
+> (F.0a Aprovado batch + F.1-F.5) opens after this checkpoint.
+
+### Added (Gap 4 — Observability OTel)
+
+- **ADR-005** (`observability-otel-genai`, Proposto, audit 12/12 PASS):
+  decision_kind `gated` (privacy + cost). 4 Drivers (standardization,
+  replay, observability-before-enforcement, vendor-neutrality). Status
+  flips to Aprovado in F.0a.
+- **`.context/observability.yaml`** template:
+  - `enabled: false` (default; opt-in)
+  - 6 `gen_ai.*` + 12 `devflow.*` extension attributes captured
+  - `gen_ai.prompt`/`gen_ai.completion` redacted by default
+  - `contentCapture.envVar: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`,
+    `redactPii: true`
+- **`scripts/lib/otel.mjs`**:
+  - `loadObservabilityConfig` / `validateObservabilityConfig` (now applies
+    SI-3 to `exporter.endpoint` per HIGH audit fix — same denylist as
+    `permissions-evaluator` callback URL)
+  - `createSpan(cfg, name)` — no-op when disabled (zero overhead, no SDK
+    loaded); lazy-loads `@opentelemetry/sdk-node` + `exporter-trace-otlp-http`
+    on first use when enabled. OTel deps are the SINGLE exception to no-deps
+    policy.
+  - `initOtel(cfg)` — awaitable initializer (MEDIUM #1 fix: prevents
+    first-N-spans-dropped in one-shot CLIs)
+  - `redactAttribute` — drops attribute by name OR scrubs PII (email/IPv4/
+    long digits) when `redactPii: true`
+  - `isContentCaptureEnabled` — gated by env var
+- **`scripts/lib/repro-token.mjs`**:
+  - `computeReproToken({ model, params, lockHash, toolDefinitionsHash })`:
+    sha256 of canonical JSON (key-order-independent)
+  - `hashToolDefinitions(tools)`: sorts by name (or full canonical JSON
+    when name absent — LOW fix, prevents anonymous-tool collision)
+- **`scripts/lib/otel-cli.mjs`**: stdin emitter for hook invocation. Awaits
+  `initOtel` before emitting span (MEDIUM #1 fix). SI-1 compliant. 1MB cap.
+- **Hook integrations** (all guarded by `if [ -f .context/observability.yaml ]`):
+  - `hooks/session-start`: emits `devflow.session_start` span at end
+  - `hooks/pre-tool-use`: emits `devflow.permission.deny` span before exit
+    on deny (uses `gen_ai.tool.name` per OTel GenAI semconv — LOW fix)
+  - `hooks/post-tool-use`: emits `devflow.tool_use` span at end of every
+    tool call
+
+### Security fixes (inline, from Semana 4 audit)
+
+- **HIGH** — SSRF parity gap on `exporter.endpoint`. Operator-supplied OTLP
+  endpoint had only "is non-empty string" check; `permissions-evaluator`
+  callback already enforces SI-3 denylist. **Fixed**:
+  `validateObservabilityConfig` now rejects metadata IPs (169.254.0.0/16,
+  fd00:ec2::254, metadata.* hostnames, instance-data.ec2.internal),
+  RFC1918 (10/8, 172.16-31/12, 192.168/16), 0/8, IPv6 link-local
+  (fe80::/10) and ULA (fc00::/7), and trailing-dot bypass. Allows
+  `http://localhost` (dev pattern: Jaeger/Phoenix on :4318). 5 regression
+  tests added.
+- **MEDIUM #1** — first-N spans silently dropped due to fire-and-forget
+  `ensureSdkInitialized`. **Fixed (path c)**: added `initOtel(cfg)`
+  awaitable wrapper; `otel-cli.mjs` awaits it before `createSpan`. Hooks
+  invoke the CLI as one-shot, so the latency is acceptable.
+- **MEDIUM #2** — PII patterns miss IPv6, formatted credit cards, JWT/AWS
+  keys, formatted phones. **Fixed (path b)**: ADR-005 guardrail wording
+  downgraded to "best-effort PII scrubbing" with explicit guidance for
+  PCI/PHI environments to use external scrubbers (Datadog Sensitive Data
+  Scanner) and/or keep content capture disabled.
+- **LOW** — `gen_ai.tool.call.id` set to tool name (broke OTel GenAI
+  semconv correlation in Langfuse/Phoenix). **Fixed**: renamed to
+  `gen_ai.tool.name` in both `pre-tool-use` and `post-tool-use` hooks.
+- **LOW** — `hashToolDefinitions` collision when multiple tools lack
+  `name`. **Fixed**: fallback to full canonical JSON as sort key.
+
+### Tests
+
+- 53 tests post-Semana 3 → **55 tests** post-Semana 4 (+2 test files: 17
+  cases for otel.mjs incl. 5 SSRF regressions + 8 cases for repro-token.mjs).
+  All passing. SI-1 still PASS (no `node -e` interpolation).
+
+### Known limitations (tracked, not blocking)
+
+- LOW: PII scrubbing is best-effort (regex-based). Production PCI/PHI
+  workflows require external scrubber. Documented in ADR-005 + observability.yaml.
+- LOW: `OTLPTraceExporter` without explicit auth headers — operators
+  needing auth (e.g., Datadog API key) must add `headers` to
+  `exporter` config; v1.1 will support this directly.
+
+---
+
 ## [Unreleased] — Semana 3 (Permissions) cumulative
 
 > Mini-V/C entry per checkpoint policy (option B). Security audit returned

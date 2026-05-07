@@ -97,7 +97,7 @@ print(json.dumps(prefixed)[1:-1])
       printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
       # OTel: emit deny span before exiting (4.3)
       if [ -f "${PERMS_DIR}/.context/observability.yaml" ]; then
-        printf '{"event":"devflow.permission.deny","attributes":{"devflow.permission.decision":"deny","gen_ai.tool.call.id":"%s"}}' "$TOOL_NAME" \
+        printf '{"event":"devflow.permission.deny","attributes":{"devflow.permission.decision":"deny","gen_ai.tool.name":"%s"}}' "$TOOL_NAME" \
           | (cd "${PERMS_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
       fi
       exit 0

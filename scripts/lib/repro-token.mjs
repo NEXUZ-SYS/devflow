@@ -41,11 +41,15 @@ export function computeReproToken({ model = "", params = {}, lockHash = "", tool
 
 export function hashToolDefinitions(tools) {
   if (!Array.isArray(tools)) return sha256Hex("[]");
-  // Sort by name so list order doesn't affect hash. Deep-canonicalize each
-  // tool's spec.
+  // Sort by name (or full canonical JSON when name absent — LOW fix from
+  // Semana 4 audit: prevents collision when multiple anonymous tools exist).
   const sorted = [...tools]
     .filter(t => t && typeof t === "object")
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
-    .map(canonicalize);
+    .map(canonicalize)
+    .sort((a, b) => {
+      const ka = a.name ? String(a.name) : JSON.stringify(a);
+      const kb = b.name ? String(b.name) : JSON.stringify(b);
+      return ka.localeCompare(kb);
+    });
   return sha256Hex(JSON.stringify(sorted));
 }
