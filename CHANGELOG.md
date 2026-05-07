@@ -5,7 +5,113 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — Semana 4 (Observability OTel) cumulative
+## [1.0.0] — 2026-05-06
+
+**First stable release of the DevFlow context layer foundation.**
+v0.x → v1.0 marks the harness as production-ready across 5 supported
+platforms (Claude Code, Cursor, Codex, Gemini CLI, OpenCode).
+
+This release ships the full Gap 1-4 work tracked in
+`.context/plans/context-layer-v2.md` (48 task groups, 215+ steps, 5 weeks
+of design + execution under PREVC supervised mode):
+
+### Headline changes
+
+- **Semana 0** — ADR canonical path migrated `.context/docs/adrs/` →
+  `.context/adrs/` with dual-read transitional support (removed in v1.2)
+- **Gap 1 — Standards** (`.context/standards/`): triple-layer (Markdown +
+  LLM-readable frontmatter + executable linter sandboxed via SI-4)
+- **Gap 2 — Stacks** (`.context/stacks/`): artisanal pipeline
+  (`docs-mcp-server` CLI + `md2llm`) replaces SaaS dependency on Context7
+- **Gap 3 — Permissions** (`.context/permissions.yaml`): vendor-neutral
+  deny-first grammar (deny → allow → mode → callback)
+- **Gap 4 — Observability** (`.context/observability.yaml`): OTel GenAI
+  semconv + `devflow.*` extension namespace, opt-in default
+
+### Security invariants (SI-1 through SI-7)
+
+Every component built in this release is tied to one or more cross-cutting
+security invariants enforced by tests:
+
+- **SI-1**: No `node -e` with interpolated user-controlled strings (regression
+  test grep)
+- **SI-2**: External commands always via `execFile`, never shell
+- **SI-3**: URL allowlist (cloud metadata, RFC1918, link-local IPv4/IPv6,
+  ULA, trailing-dot bypass) — applied to scrape URLs, callback URLs, OTel
+  exporter endpoints
+- **SI-4**: Linter execution sandboxed (path normalization + allowlist +
+  realpath + `execFile node` + 5s timeout)
+- **SI-5**: Glob subset (`**`/`*`/`?`/`{a,b}` only) — schema validators
+  reject negation/extglob at load time
+- **SI-6**: Scraped content sanitization (strips role markers + ignore-
+  instructions phrases + sha256 canary fence)
+- **SI-7**: Hook sequencing (X.2 before 0.5; deny-first ordering)
+
+### 5 ADRs (all Aprovado)
+
+| ADR | Topic | Decision kind |
+|---|---|---|
+| 001 | ADR path migration to .context/adrs/ | firm |
+| 002 | Standards triple-layer | firm |
+| 003 | Stack docs artisanal pipeline | firm |
+| 004 | Permissions vendor-neutral | firm |
+| 005 | Observability OTel GenAI | gated |
+
+### Dependency policy
+
+DevFlow stays **dependency-free** at runtime. Six in-house primitives
+under `scripts/lib/` (glob, frontmatter, token-estimate, url-validator,
+sanitize-snippet, path-resolver) replace `micromatch` / `gray-matter` /
+`tiktoken`. The OpenTelemetry SDK is the **single exception** —
+lazy-loaded only when `observability.enabled: true`. `docs-mcp-server`
+and `md2llm` are invoked via `npx -y` (not bundled).
+
+### Test summary
+
+- 28 baseline tests on `main` → **55 tests** on `feat/context-layer-v2`
+  (+27 new test files; 1 smoke gated by `RUN_SMOKE=1`)
+- 4 audit rounds (architect + code-reviewer + security-auditor) with
+  14 review findings + 8 security findings — **all blocking items fixed
+  inline** (1 CRITICAL + 4 HIGH + 6 MEDIUM)
+
+### Known limitations (deferred to v1.1+)
+
+- **Token budget enforcement (Gate 5)** — observability only in v1.0;
+  enforcement awaits 2-3 sprints of telemetry data
+- **Performance validation in self-repo** — devflow is a bridge plugin
+  without application frameworks. Full V.4 perf benchmarks deferred to
+  pilot project test fixture (`tests/fixtures/project-simulation/`,
+  scaffolded but not populated to 50-ADR scale here)
+- **PII scrubbing** is best-effort regex (emails, IPv4, long digits).
+  PCI/PHI workflows must use external scrubbers (Datadog Sensitive Data
+  Scanner) and/or keep `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`
+  disabled
+- **OTLP exporter auth headers** — operators needing Datadog API keys etc.
+  must set them via env vars in v1.0; first-class support in v1.1
+- **`allow.tool: ["mcp__dotcontext__*"]` wildcards** — trusts MCP namespace;
+  malicious user-installed MCP plugins could match. Lower impact (user-
+  initiated install) but tracked for v1.1 docs
+- **`parseInlineArray`** comma split breaks on `["a,b", "c"]` — real ADR/
+  manifest patterns don't use quoted commas; v1.1 will switch to
+  state-machine split
+
+### Migration recipe (for projects on v0.13.x)
+
+ADRs in legacy `.context/docs/adrs/`:
+
+```bash
+git mv .context/docs/adrs .context/adrs
+grep -rln 'docs/adrs/' .context/ | xargs sed -i 's|docs/adrs/|adrs/|g'
+node scripts/adr-update-index.mjs
+git commit -m "chore(adr): migrate path from docs/adrs to adrs (devflow v1.0)"
+```
+
+Dual-read keeps v0.13.x projects working until v1.2 — migration is
+opt-in until then.
+
+---
+
+## [1.0.0 development] — Semana 4 (Observability OTel) cumulative
 
 > Mini-V/C entry per checkpoint policy. Security audit returned
 > **PROCEED-WITH-CONSTRAINTS** (1 HIGH + 2 MEDIUM + 2 LOW); **all 5 items
@@ -93,7 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased] — Semana 3 (Permissions) cumulative
+## [1.0.0 development] — Semana 3 (Permissions) cumulative
 
 > Mini-V/C entry per checkpoint policy (option B). Security audit returned
 > **PROCEED-WITH-CONSTRAINTS** with 2 HIGH + 2 MEDIUM + 3 LOW; **all 4
@@ -169,7 +275,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased] — Semana 2 (Stacks) cumulative
+## [1.0.0 development] — Semana 2 (Stacks) cumulative
 
 > Mini-V/C entry per checkpoint policy (option B). Security audit by
 > `devflow:security-auditor` returned REVISE with 1 CRITICAL + 1 HIGH +
@@ -260,7 +366,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased] — Semana 1 (Standards) cumulative since 1.0.0-rc1
+## [1.0.0 development] — Semana 1 (Standards) cumulative since 1.0.0-rc1
 
 > Mini-V/C entry per checkpoint policy (option B). Final 1.0.0 release ships
 > after all 4 Gaps + V/C task groups complete. Security audit by
