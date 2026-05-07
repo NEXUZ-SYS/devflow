@@ -33,7 +33,68 @@ d = json.load(sys.stdin)
 print(d.get('cwd', ''))
 " 2>/dev/null || echo "")
 
-# --- Only act on Edit and Write ---
+# --- Permissions evaluator (Task 3.2, SI compliance — runs FIRST) ---
+# Loads .context/permissions.yaml and evaluates deny → allow → mode → callback.
+# A 'deny' decision exits the hook immediately with permissionDecision=deny;
+# 'allow' continues to existing branch protection (defense-in-depth);
+# 'prompt' falls through to the legacy logic (no behavior change for users
+# who haven't configured permissions.yaml — empty config returns 'prompt').
+
+if [ -f "${PWD}/.context/permissions.yaml" ]; then
+  EVENT_PATH=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('file_path') or ti.get('file') or ti.get('path') or '')
+" 2>/dev/null || echo "")
+
+  EVENT_CMD=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('command', ''))
+" 2>/dev/null || echo "")
+
+  PERM_INPUT=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+ev = {
+    'tool': d.get('tool_name', ''),
+    'path': ti.get('file_path') or ti.get('file') or ti.get('path') or None,
+    'command': ti.get('command', '') or None,
+}
+print(json.dumps(ev))
+" 2>/dev/null || echo "{}")
+
+  PERM_OUT=$(printf '%s' "$PERM_INPUT" | node "${PLUGIN_ROOT}/scripts/lib/permissions-cli.mjs" 2>/dev/null || echo "")
+
+  if [ -n "$PERM_OUT" ]; then
+    PERM_DECISION=$(printf '%s' "$PERM_OUT" | python3 -c "
+import json, sys
+try: print(json.load(sys.stdin).get('decision', ''))
+except: print('')
+" 2>/dev/null || echo "")
+
+    if [ "$PERM_DECISION" = "deny" ]; then
+      # Inline JSON escape (escape_for_json is defined later in the script)
+      REASON_ESCAPED=$(printf '%s' "$PERM_OUT" | python3 -c "
+import json, sys
+try:
+    reason = json.load(sys.stdin).get('reason', 'permissions.yaml denied')
+except:
+    reason = 'permissions.yaml denied'
+prefixed = f'[devflow permissions.yaml] {reason}'
+# JSON-escape into a string-safe form (drops the surrounding quotes)
+print(json.dumps(prefixed)[1:-1])
+" 2>/dev/null || echo "permissions.yaml denied")
+      printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
+      exit 0
+    fi
+  fi
+fi
+
+# --- Only act on Edit and Write (legacy branch-protection logic) ---
 
 if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
   exit 0
