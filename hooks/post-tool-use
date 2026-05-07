@@ -126,6 +126,29 @@ print(ti.get('status', ''))
 
 reminder="$MSG_HANDOFF_REMINDER"
 
+# --- Standards linter integration (Task 1.3, SI-4 sandboxed) ---
+# Run applicable standards' linters when an Edit/Write event occurred.
+# Linters are validated and executed via scripts/lib/run-linter.mjs (SI-4 enforced).
+# Per SI-1, do NOT use 'node -e' with interpolated paths — use execFile-style.
+
+if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+  EDITED_PATH=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('file_path') or ti.get('path') or '')
+" 2>/dev/null || echo "")
+
+  if [ -n "$EDITED_PATH" ] && [ -d "${PWD}/.context/standards" ]; then
+    # Pass event as JSON via stdin; node script reads + runs linters.
+    LINTER_OUTPUT=$(printf '{"tool":"%s","path":%s}' "$TOOL_NAME" "$(printf '%s' "$EDITED_PATH" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')" \
+      | node "${PLUGIN_ROOT}/scripts/lib/run-linter-cli.mjs" 2>/dev/null || echo "")
+    if [ -n "$LINTER_OUTPUT" ]; then
+      reminder="${reminder}\n\n${LINTER_OUTPUT}"
+    fi
+  fi
+fi
+
 # --- Check if Bash tool is running a merge command ---
 
 if [ "$TOOL_NAME" = "Bash" ]; then
