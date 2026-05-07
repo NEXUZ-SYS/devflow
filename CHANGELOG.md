@@ -5,6 +5,30 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — 2026-05-07
+
+### Hotfix added pre-merge: ADR ↔ standards/stacks chain integration
+
+User pushback during PR review: the 5 new artifact types (standards, stacks, etc.) existed but `adr-builder` did not surface them as follow-up actions after CREATE. Worse, naive "offer to create" would duplicate when N+1 ADRs touched the same domain. Resolved with a **dedup-aware graph integration**:
+
+- **`scripts/lib/adr-chain.mjs`** — new lib with 3 lookup functions:
+  - `findRelatedStandards(adr, projectRoot)` — Jaccard token match + stack-glob boost; returns top-3 candidates with scores OR `wouldCreate: <derived-id>` when no match. Already-linked standards (this ADR's slug already in `relatedAdrs`) are excluded so reruns are idempotent.
+  - `extractStackMentions(adr)` — regex extracts `<lib>@<version>` (incl. `@scope/name@x.y.z`) only when `category: arquitetura`. Reuses `isSafeLibrary` check from input-resolver (rejects path-traversal-shaped names).
+  - `findStackMatches(mentions, projectRoot)` — categorizes each mention vs `manifest.yaml`: `linked` (exact version match), `drift` (different version), `new` (absent), `skipped` (skipDocs:true).
+  - `findStandardsLinkingAdr(adrSlug, projectRoot)` — inverse lookup for audit Check #13.
+
+- **`scripts/adr-chain-suggest.mjs`** — CLI emitter, JSON or text format. Used by SKILL.md Step 5d.
+
+- **`skills/adr-builder/SKILL.md` Step 5d** — dedup-aware chain offer post-CREATE: presents grouped options for standards (link existing / create new / pick from candidates) and stacks (link existing / refresh different version / scrape new). All opt-in — pular tudo é válido.
+
+- **`scripts/adr-audit.mjs` Check #13** — soft warning ("Cobertura por Standard") when an Aprovado ADR has a `## Guardrails` section but no standard references it via `relatedAdrs`. Never blocks the gate — surfaces the "ADR rule never operationalized as runtime linter" gap visibly without forcing fixes.
+
+- **17 unit tests** for `adr-chain.mjs` + 1 fixture-tolerance fix in `test-adr-audit.mjs` (skips Check #13 in fixtures that pre-date the addition).
+
+Total tests: **56 PASS / 0 FAIL** (was 55 before hotfix).
+
+---
+
 ## [1.0.0] — 2026-05-06
 
 **First stable release of the DevFlow context layer foundation.**

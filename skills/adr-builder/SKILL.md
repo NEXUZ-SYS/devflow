@@ -122,7 +122,7 @@ Regenerates `.context/adrs/README.md` with 14 columns including the new entry. *
 
 ### Step 5c — Run audit gate
 
-Verify the new file passes the 12 checks:
+Verify the new file passes the 13 checks (Check #13 is the standards-coverage soft warning added in v1.0):
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
@@ -130,7 +130,41 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/adrs/${num}-${slug}-v1
 
 If FIX-INTERVIEW: present gaps to user, choose whether to fix or commit-as-is.
 
-If 12/12 PASS: commit with message `feat(adr): add ${num}-${slug}-v1.0.0 — <título curto>`.
+If 12/13 or 13/13 PASS: commit with message `feat(adr): add ${num}-${slug}-v1.0.0 — <título curto>`.
+
+### Step 5d — Chain integration offer (post-CREATE, dedup-aware)
+
+After the commit, surface follow-up actions that wire this ADR into the rest of the context layer. Run the suggester:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-chain-suggest.mjs .context/adrs/${num}-${slug}-v1.0.0.md --format=json
+```
+
+Parse the JSON and present grouped options to the user. The suggester deduplicates against existing artifacts — never blindly offers "create new" when a match exists.
+
+**Standards block** (`suggestions.standards`):
+
+| Output | Action to offer | Concrete next step |
+|---|---|---|
+| `matches: [{id, score, applyTo}, ...]` (1+) | "Esta ADR provavelmente devia estar em `relatedAdrs` de `<id>`. Linkar?" | Edit `.context/standards/<id>.md` frontmatter — append ADR slug to `relatedAdrs` |
+| `matches: []` AND `wouldCreate: <std-id>` | "Criar standard `<std-id>` para operacionalizar a regra dessa ADR via PostToolUse linter?" | Invoke `devflow standards new <slug-stripped>` |
+| `matches: [...]` (multiple) | "Top-3 candidatos. Linkar a um, criar novo, ou skip?" | Present numbered list; let user pick |
+
+Pular tudo é válido — esta é uma sugestão, não gate. ADR `Aprovado` sem standard é warning suave em audit Check #13, nunca block.
+
+**Stacks block** (`suggestions.stacks`, lista de objetos com `status`):
+
+| status | Action to offer |
+|---|---|
+| `linked` | Listar `existingRef` no Evidências/Anexos da ADR — "Já existe `<existingRef>`. Adicionar como evidência?" |
+| `drift` | "Manifest está em `<currentVersion>`. Refresh para `<version>` da ADR?" → invoca `devflow stacks scrape <lib> <version> --mode=refresh` |
+| `new` | "Lib não está no manifest. Scrape agora?" → invoca skill `devflow:scrape-stack-batch` ou `devflow stacks scrape <lib> <version>` |
+| `skipped` | (informativo, sem ação — manifest já marca `skipDocs: true`) |
+
+**Heurísticas:**
+- Stacks só são extraídos quando `category: arquitetura` (mantém o foco — ADRs de qualidade-testes ou principios-codigo não disparam scrape).
+- Apresentação deve ser **opt-in** ("quer fazer X?"), não confirmar/auto-rodar.
+- Se nenhuma sugestão tem ação útil (matches=0, wouldCreate=null, stacks=[] ou todas linked), simplesmente reporta "ADR isolada — sem chain action sugerida" e termina.
 
 ---
 

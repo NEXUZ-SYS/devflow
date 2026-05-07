@@ -78,6 +78,7 @@ async function runAudit(file, content, flags) {
     check10_codigoMinimal(body),
     check11_padroesNomeados(body, dir),
     await check12_grafo(file),
+    await check13_standardsCoverage(file, frontmatter, body),
   ];
 
   // S3 — Aprovado status auto-demotes FIX-AUTO to FIX-INTERVIEW
@@ -418,6 +419,54 @@ async function check12_grafo(file) {
     name: 'Grafo (supersedes/refines)',
     status: 'FIX-INTERVIEW',
     diagnosis: relevant.join('; '),
+  };
+}
+
+// Check #13 — standards coverage (Semana 4 follow-up / chain dedup-aware)
+//
+// Soft warning when an Aprovado ADR has a Guardrails section but no standard
+// references it via relatedAdrs. Helps surface the "ADR rule never operationalized
+// as a runtime linter" gap without blocking the gate (warnings don't fail).
+async function check13_standardsCoverage(file, frontmatter, body) {
+  const passResult = { id: 13, name: 'Cobertura por Standard', status: 'PASS', diagnosis: '' };
+
+  // Only meaningful for Aprovado ADRs with actionable guardrails
+  if (frontmatter.status !== 'Aprovado') {
+    return { ...passResult, diagnosis: 'not Aprovado yet — skipped' };
+  }
+  // Lazy-load helpers (keeps adr-audit.mjs decoupled when standards/ absent)
+  let findStandardsLinkingAdr, adrHasGuardrails;
+  try {
+    ({ findStandardsLinkingAdr, adrHasGuardrails } = await import('./lib/adr-chain.mjs'));
+  } catch {
+    return { ...passResult, diagnosis: 'adr-chain helper unavailable — skipped' };
+  }
+
+  if (!adrHasGuardrails(body)) {
+    return { ...passResult, diagnosis: 'no Guardrails section — skipped' };
+  }
+
+  // Walk up to project root (heuristic: find .context/ ancestor)
+  let projectRoot = dirname(file);
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(join(projectRoot, '.context'))) break;
+    const parent = dirname(projectRoot);
+    if (parent === projectRoot) { projectRoot = process.cwd(); break; }
+    projectRoot = parent;
+  }
+
+  const adrSlug = String(frontmatter.name || basename(file, '.md').replace(/^\d+-/, '').replace(/-v\d+\.\d+\.\d+$/, ''));
+  const linked = findStandardsLinkingAdr(adrSlug, projectRoot);
+
+  if (linked.length > 0) {
+    return { ...passResult, diagnosis: `linked by ${linked.length} standard(s): ${linked.map(s => s.id).join(', ')}` };
+  }
+  // Soft warning — never blocks gate
+  return {
+    id: 13,
+    name: 'Cobertura por Standard',
+    status: 'PASS',
+    diagnosis: `WARN: ADR Aprovado com Guardrails mas nenhum standard referencia '${adrSlug}' via relatedAdrs (considere 'devflow standards new' ou link manual)`,
   };
 }
 
