@@ -120,7 +120,33 @@ function parseBlock(lines, startIdx, baseIndent) {
         if (indentOf(ln) < childIndent) break;
         const lm = ln.match(/^\s*-\s+(.*)$/);
         if (!lm) break;
-        arr.push(parseScalar(lm[1]));
+        const itemContent = lm[1];
+        // Detect list-of-maps: "- key: value" starts an inline-keyed map
+        // whose continuation is at a deeper indent than the dash.
+        const dashIndent = indentOf(ln);
+        const inlineKey = itemContent.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+        if (inlineKey && j + 1 < lines.length) {
+          // Peek next non-blank line; if indented deeper than the dash content,
+          // this is a multi-key map item.
+          let k = j + 1;
+          while (k < lines.length && (lines[k].trim() === "" || /^\s*#/.test(lines[k]))) k++;
+          // Content position = dashIndent + 2 (for "- ")
+          const contentIndent = dashIndent + 2;
+          if (k < lines.length && indentOf(lines[k]) >= contentIndent && /^\s*[A-Za-z_]/.test(lines[k])) {
+            // Multi-key map item: parse rest of map at contentIndent
+            const item = {};
+            // First key from the dash line
+            item[inlineKey[1]] = parseScalar(inlineKey[2]);
+            // Continuation
+            const [rest, nextK] = parseBlock(lines, k, contentIndent);
+            Object.assign(item, rest);
+            arr.push(item);
+            j = nextK;
+            continue;
+          }
+        }
+        // Plain scalar list item
+        arr.push(parseScalar(itemContent));
         j++;
       }
       data[key] = arr;
