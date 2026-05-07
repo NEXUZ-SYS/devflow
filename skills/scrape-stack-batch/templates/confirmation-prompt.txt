@@ -1,0 +1,11 @@
+═══ Plano de scrape ({{count}} {{count_plural}}) ═══
+
+{{plan_table}}
+
+Tempo total estimado: {{total_time}}
+
+Confirma? [y/n/edit/details]
+  y       = executar
+  n       = cancelar (nenhuma mudança)
+  edit    = ajustar fonte de uma lib específica
+  details = ver discovery trace de cada lib

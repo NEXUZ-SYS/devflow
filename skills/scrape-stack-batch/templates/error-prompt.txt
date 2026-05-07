@@ -1,0 +1,14 @@
+═══ Falha em {{library}}@{{version}} ═══
+
+Estágio: {{stage}}
+Erro: {{error}}
+{{#suggestion}}
+Sugestão: {{suggestion}}
+{{/suggestion}}
+
+Como proceder?
+  retry      = tentar novamente (mesma fonte)
+  retry-alt  = tentar fonte alternativa: {{alternative}}
+  skip       = pular esta lib (continua com sucesso parcial)
+  abort      = abortar tudo (rollback dos commits parciais)
+  edit       = trocar fonte e tentar de novo
