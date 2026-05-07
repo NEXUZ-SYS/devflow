@@ -8,9 +8,16 @@
 
 import { runLintersFor } from "./run-linter.mjs";
 
+// SI-aligned: cap stdin at 1MB (matches run-linter execFile maxBuffer)
+const MAX_STDIN_BYTES = 1024 * 1024;
 let raw = "";
 process.stdin.setEncoding("utf-8");
-process.stdin.on("data", chunk => { raw += chunk; });
+process.stdin.on("data", chunk => {
+  if (raw.length + chunk.length > MAX_STDIN_BYTES) {
+    process.exit(0);  // silent — hook continues normally
+  }
+  raw += chunk;
+});
 process.stdin.on("end", async () => {
   let event;
   try {

@@ -5,6 +5,62 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — Semana 1 (Standards) cumulative since 1.0.0-rc1
+
+> Mini-V/C entry per checkpoint policy (option B). Final 1.0.0 release ships
+> after all 4 Gaps + V/C task groups complete. Security audit by
+> `devflow:security-auditor` returned PASS with 3 LOW + 2 INFO items (no
+> blockers); LOW #1 (stdin size cap) fixed inline.
+
+### Added (Gap 1 — Standards)
+
+- **ADR-002** (`adopt-standards-triple-layer`, Proposto, audit 12/12 PASS):
+  documents the architectural decision for standards as triple layer (Markdown
+  + LLM-readable frontmatter + executable linter, with `weakStandardWarning`
+  fallback). Status flips to Aprovado in F.0a.
+- **`.context/standards/`** directory + `README.md` authoring guide (pt-BR)
+  covering frontmatter spec, applyTo glob subset (SI-5), linter sandboxing
+  (SI-4), 7 anti-patterns, and CLI usage.
+- **`scripts/lib/standards-loader.mjs`** — `loadStandards(projectRoot)` parses
+  frontmatter, validates applyTo against SI-5, marks weak standards.
+  `findApplicableStandards(filePath, standards)` filters by glob match.
+- **`scripts/lib/run-linter.mjs`** — SI-4 sandboxed linter runner:
+  - 5 enforcement layers (format regex → forbidden chars → absolute path →
+    sandbox prefix → realpath symlink check)
+  - `execFile('node', [linter, file], { timeout: 5000, maxBuffer: 1MB })` —
+    no shell, no `exec`
+  - 11 unit tests + 3 RCE rejection shell tests (path traversal, abs path,
+    shell metacharacters with canary file)
+- **`scripts/lib/run-linter-cli.mjs`** — stdin wrapper for hook invocation.
+  SI-1 compliant (no `node -e` interpolation). 1MB stdin size cap (security
+  audit LOW #1 fix).
+- **`scripts/devflow-standards.mjs`** — CLI dispatcher:
+  - `new <id>` scaffolds `.context/standards/std-<id>.md` + linter template
+  - `verify [<id>] [--strict]` validates applyTo subset, linter file existence,
+    weak-standard warnings; `--strict` exits non-zero on weak standards
+- **`hooks/post-tool-use`** integration: parses Edit/Write events from stdin,
+  invokes `run-linter-cli.mjs` via JSON envelope, appends violations to the
+  reminder context.
+- **Frontmatter parser extended** (`scripts/lib/frontmatter.mjs`): handles
+  non-empty inline arrays (`applyTo: ["src/**", "test/**"]`).
+
+### Tests
+
+- 39 tests post-Semana 0 → **44 tests** post-Semana 1 (+5 new test files,
+  +25 test cases). All passing.
+- Security regression: SI-1 (no `node -e` interpolation), SI-4 (3 RCE vectors
+  rejected), SI-5 (glob subset enforced) — all PASS.
+
+### Known limitations (tracked, not blocking)
+
+- Weak-standard policy is non-blocking by default (security LOW). CI must
+  invoke `devflow standards verify --strict` to enforce.
+- `applyTo: ["**"]` would match dotfiles like `.git/`, `.context/`. Linters
+  still sandboxed via SI-4, but standards using global patterns may produce
+  noise. Tracking for v1.1 (`findApplicableStandards` exclusion list).
+
+---
+
 ## [1.0.0-rc1] — 2026-05-06
 
 Release candidate for **v1.0.0** — first stable release of the context layer
