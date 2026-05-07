@@ -154,6 +154,96 @@ test("N4 exec deny: blocks 'git push -f *'", async () => {
   assert.equal(r.decision, "deny");
 });
 
+// ─── H1 regression: deny.net runtime enforcement ───────────────────────────
+
+test("H1 fix: deny.net blocks curl http://169.254.169.254/...", async () => {
+  const cfg = withDeny([], [], ["169.254.169.254*"]);
+  const r = await evaluatePermissions(
+    { tool: "Bash", command: "curl http://169.254.169.254/latest/meta-data/iam/security-credentials/" },
+    cfg
+  );
+  assert.equal(r.decision, "deny");
+  assert.match(r.reason, /deny\.net/);
+});
+
+test("H1 fix: deny.net blocks metadata.google.internal in Bash command", async () => {
+  const cfg = withDeny([], [], ["metadata.google.internal*"]);
+  const r = await evaluatePermissions(
+    { tool: "Bash", command: "wget http://metadata.google.internal/computeMetadata/v1/" },
+    cfg
+  );
+  assert.equal(r.decision, "deny");
+});
+
+test("H1 fix: deny.net blocks via direct event.url field", async () => {
+  const cfg = withDeny([], [], ["169.254.*"]);
+  const r = await evaluatePermissions(
+    { tool: "WebFetch", url: "http://169.254.42.1/admin" },
+    cfg
+  );
+  assert.equal(r.decision, "deny");
+});
+
+// ─── H2 regression: SI-3 callback URL extended denylist ────────────────────
+
+test("H2 fix: callback URL rejected on IPv4 link-local 169.254.42.1", () => {
+  const cfg = { ...BASE, callback: { url: "https://169.254.42.1/cb" } };
+  const errors = validatePermissionsSchema(cfg);
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /link-local|metadata|denied/i);
+});
+
+test("H2 fix: callback URL rejected on IPv6 link-local fe80::1", () => {
+  const cfg = { ...BASE, callback: { url: "https://[fe80::1]/cb" } };
+  const errors = validatePermissionsSchema(cfg);
+  assert.ok(errors.length > 0);
+});
+
+test("H2 fix: callback URL rejected on IPv6 ULA fd00::1", () => {
+  const cfg = { ...BASE, callback: { url: "https://[fd00::1]/cb" } };
+  const errors = validatePermissionsSchema(cfg);
+  assert.ok(errors.length > 0);
+});
+
+test("H2 fix: callback URL rejected on instance-data.ec2.internal", () => {
+  const cfg = { ...BASE, callback: { url: "https://instance-data.ec2.internal/" } };
+  const errors = validatePermissionsSchema(cfg);
+  assert.ok(errors.length > 0);
+});
+
+test("H2 fix: callback URL rejected on trailing-dot hostname", () => {
+  const cfg = { ...BASE, callback: { url: "https://example.com./path" } };
+  const errors = validatePermissionsSchema(cfg);
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /trailing-dot|denied/i);
+});
+
+// ─── M1 regression: loadPermissions fails closed on schema errors ──────────
+
+test("M1 fix: loadPermissions falls back to mode:deny on bad globs", async () => {
+  const { mkdirSync, writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { loadPermissions } = await import("../../scripts/lib/permissions-evaluator.mjs");
+  const TEST_TMP_ROOT = "./tests/validation/tmp/";
+  mkdirSync(TEST_TMP_ROOT, { recursive: true });
+  const root = mkdtempSync(join(TEST_TMP_ROOT, "perm-bad-"));
+  try {
+    mkdirSync(join(root, ".context"), { recursive: true });
+    writeFileSync(join(root, ".context", "permissions.yaml"),
+      `spec: devflow-permissions/v0
+deny:
+  fs:
+    - "!**/poisoned/**"
+mode: accept
+`);
+    const cfg = loadPermissions(root);
+    // Even though manifest declared mode:accept, schema errors force mode:deny
+    assert.equal(cfg.mode, "deny", "should fail-closed on extglob/negation");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // ─── Evaluation order ──────────────────────────────────────────────────────
 
 test("evaluation order strictly deny → allow → mode → callback", async () => {

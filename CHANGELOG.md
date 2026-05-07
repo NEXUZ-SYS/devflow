@@ -5,6 +5,82 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — Semana 3 (Permissions) cumulative
+
+> Mini-V/C entry per checkpoint policy (option B). Security audit returned
+> **PROCEED-WITH-CONSTRAINTS** with 2 HIGH + 2 MEDIUM + 3 LOW; **all 4
+> non-LOW items fixed inline before merge**.
+
+### Added (Gap 3 — Permissions vendor-neutral)
+
+- **ADR-004** (`permissions-vendor-neutral`, Proposto, audit 12/12 PASS):
+  documents the deny→allow→mode→callback grammar. 4 Drivers
+  (portabilidade, auditabilidade, defense-in-depth, composability).
+  Status flips to Aprovado in F.0a.
+- **`.context/permissions.yaml`** template:
+  - `spec: devflow-permissions/v0` with `evaluationOrder: [deny, allow, mode, callback]`
+  - 17 fs deny patterns (env, .ssh, secrets, AWS creds, kubeconfig,
+    terraform state, etc. — N4 expanded coverage)
+  - 11 exec deny patterns (force-push variants, `curl|sh`, `rm -rf /*`, etc.)
+  - 5 net deny patterns (cloud metadata IPs)
+  - allow.fs.{read,write} + allow.exec + allow.tool wildcards
+  - `mode: prompt` (default), `callback: { url: null }` (opt-in)
+  - `claudeCodeCompat: { preserveGitStrategyHook, preserveBranchProtectionExceptions }`
+- **`scripts/lib/permissions-evaluator.mjs`**:
+  - `evaluatePermissions(event, cfg)`: order deny → allow → mode → callback
+  - `validatePermissionsSchema(cfg)`: SI-5 (rejects extglob/negação on all
+    glob fields) + SI-3 (callback URL denylist with link-local IPv4/IPv6,
+    ULA, instance-data, trailing-dot — H2 fix)
+  - `loadPermissions(projectRoot)`: parses YAML, calls validator,
+    **fail-closed to mode:deny on schema errors** (M1 fix from audit)
+  - `extractNetTargets(command)`: extracts URLs/hostnames from Bash
+    commands so `deny.net` is enforceable at runtime (H1 fix)
+- **`scripts/lib/permissions-cli.mjs`**: stdin wrapper for hook invocation
+  (SI-1 compliant, 1MB stdin cap).
+- **`hooks/pre-tool-use`** wiring: permissions check runs FIRST (before
+  Edit/Write filter, before branch-protection). Uses event.cwd (not PWD)
+  so user-project permissions.yaml is read correctly. Inline JSON
+  escape via `python3 json.dumps`.
+- **`skills/git-strategy/SKILL.md`**: new "Compatibilidade com
+  permissions.yaml" section explaining defense-in-depth + roadmap of
+  hook removal in v1.2.
+
+### Security fixes (inline, from Semana 3 audit)
+
+- **HIGH H1**: `deny.net` declared but never evaluated at runtime — cloud
+  metadata IPs in YAML were silently ignored. Fixed by adding URL/hostname
+  extraction from Bash commands + direct `event.url` field handling.
+  3 regression tests added.
+- **HIGH H2**: SI-3 sync regex check missed link-local IPv4 (169.254.0.0/16
+  beyond just `.169.254`), IPv6 link-local (fe80::), ULA (fc00::/7),
+  `instance-data.ec2.internal`, trailing-dot bypass. Extended denylist
+  with all gaps + URL parser-based trailing-dot check. 5 regression tests.
+- **MEDIUM M1**: `loadPermissions` previously accepted invalid configs (bad
+  globs, extglob/negation) silently — leading to silent fail-open at match
+  time. Now calls `validatePermissionsSchema` at load and returns
+  `{...cfg, mode: "deny"}` (fail-closed) when errors found. 1 regression test.
+- **MEDIUM M2**: `localhost:*/admin/*` deny rule was unreachable at runtime
+  (subset of H1). Fixed by H1's URL extraction; rule now matches Bash
+  commands invoking `curl http://localhost:...`.
+
+### Tests
+
+- 51 tests post-Semana 2 → **53 tests** post-Semana 3 (+2 new test files:
+  18 unit cases for permissions-evaluator including 9 security regressions
+  + 3 shell integration cases for pre-tool-use). All passing.
+
+### Known limitations (tracked, not blocking)
+
+- LOW: `allow.exec: ["npx *"]` permits arbitrary code via untrusted npm
+  packages — by design (operator opts in); v1.1 docs guide will flag this.
+- LOW: `allow.tool: ["mcp__dotcontext__*"]` wildcards trust MCP namespace —
+  malicious user-installed MCP plugin could register `mcp__dotcontext__rce`
+  and slip through. Lower impact (user-initiated install).
+- LOW: `permissions-cli.mjs` swallows errors silently to avoid
+  fail-closed-by-error. v1.1 will add stderr diagnostic logging.
+
+---
+
 ## [Unreleased] — Semana 2 (Stacks) cumulative
 
 > Mini-V/C entry per checkpoint policy (option B). Security audit by

@@ -39,8 +39,12 @@ print(d.get('cwd', ''))
 # 'allow' continues to existing branch protection (defense-in-depth);
 # 'prompt' falls through to the legacy logic (no behavior change for users
 # who haven't configured permissions.yaml — empty config returns 'prompt').
+#
+# Uses event.cwd (not PWD) so the hook reads the permissions.yaml of the
+# user's project, not the plugin install dir.
 
-if [ -f "${PWD}/.context/permissions.yaml" ]; then
+PERMS_DIR="${CWD:-$PWD}"
+if [ -f "${PERMS_DIR}/.context/permissions.yaml" ]; then
   EVENT_PATH=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -67,7 +71,9 @@ ev = {
 print(json.dumps(ev))
 " 2>/dev/null || echo "{}")
 
-  PERM_OUT=$(printf '%s' "$PERM_INPUT" | node "${PLUGIN_ROOT}/scripts/lib/permissions-cli.mjs" 2>/dev/null || echo "")
+  # Run the CLI with cwd set to the user's project so permissions-evaluator
+  # loads the correct .context/permissions.yaml.
+  PERM_OUT=$(printf '%s' "$PERM_INPUT" | (cd "${PERMS_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/permissions-cli.mjs") 2>/dev/null || echo "")
 
   if [ -n "$PERM_OUT" ]; then
     PERM_DECISION=$(printf '%s' "$PERM_OUT" | python3 -c "
