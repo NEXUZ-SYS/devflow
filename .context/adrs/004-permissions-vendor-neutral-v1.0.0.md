@@ -6,7 +6,7 @@ scope: organizational
 source: local
 stack: universal
 category: seguranca
-status: Proposto
+status: Aprovado
 version: 1.0.0
 created: 2026-05-06
 supersedes: []
