@@ -359,4 +359,14 @@ else
   printf '{\n  "additional_context": "%s"\n}\n' "$reminder_escaped"
 fi
 
+# --- OTel span close (Task 4.3, opt-in via .context/observability.yaml) ---
+# No-op when enabled:false. Emits a span marking the tool call completion.
+
+OTEL_DIR="${CWD:-$PWD}"
+if [ -f "${OTEL_DIR}/.context/observability.yaml" ]; then
+  printf '{"event":"devflow.tool_use","attributes":{"gen_ai.tool.call.id":"%s","devflow.tool.name":"%s"}}' \
+    "$TOOL_NAME" "$TOOL_NAME" \
+    | (cd "${OTEL_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
+fi
+
 exit 0

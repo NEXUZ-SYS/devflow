@@ -362,4 +362,15 @@ else
   printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
 fi
 
+# --- OTel span emission (Task 4.3, opt-in via .context/observability.yaml) ---
+# No-op when enabled:false (zero overhead, SDK not loaded). Per SI-1, the
+# emitter is invoked as a separate file with JSON envelope on stdin —
+# never via node -e with interpolation.
+
+if [ -f "${project_root}/.context/observability.yaml" ]; then
+  printf '{"event":"devflow.session_start","attributes":{"devflow.session.id":"%s","devflow.context.adrs_indexed":"unknown"}}' \
+    "$$" \
+    | (cd "${project_root}" && node "${SCRIPT_DIR}/../scripts/lib/otel-cli.mjs") 2>/dev/null || true
+fi
+
 exit 0
