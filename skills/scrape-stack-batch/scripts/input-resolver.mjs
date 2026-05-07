@@ -18,6 +18,14 @@ function cleanVersion(v) {
   return m ? m[1] : v;
 }
 
+// SECURITY (Semana 2 audit CRITICAL): npm-spec compliant. Rejects '..',
+// leading dots/dashes, paths, etc. Same pattern as pipeline.SLUG_RE.
+const SAFE_LIB_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
+
+function isSafeLibrary(name) {
+  return typeof name === "string" && SAFE_LIB_RE.test(name) && !name.includes("..");
+}
+
 export function parseArgPairs(args) {
   const out = [];
   for (const arg of args) {
@@ -29,6 +37,9 @@ export function parseArgPairs(args) {
     const version = cleanVersion(m[2]);
     if (!library || !version) {
       throw new Error(`malformed library or version in: '${arg}'`);
+    }
+    if (!isSafeLibrary(library)) {
+      throw new Error(`unsafe library name in: '${arg}' (path traversal or invalid chars)`);
     }
     out.push({ library, version });
   }
@@ -45,10 +56,13 @@ export function resolveFromPackage(projectRoot) {
     return [];
   }
   const all = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-  return Object.entries(all).map(([library, version]) => ({
-    library,
-    version: cleanVersion(version),
-  })).filter(x => x.version);
+  return Object.entries(all)
+    .filter(([library]) => isSafeLibrary(library))   // SECURITY: skip path-traversal keys
+    .map(([library, version]) => ({
+      library,
+      version: cleanVersion(version),
+    }))
+    .filter(x => x.version);
 }
 
 export function resolveFromManifest(projectRoot) {
@@ -67,6 +81,7 @@ export function resolveFromManifest(projectRoot) {
   const wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
   return wishlist
     .filter(x => x && typeof x === "object" && x.library && x.version)
+    .filter(x => isSafeLibrary(x.library))    // SECURITY: skip path-traversal entries
     .map(x => ({ library: x.library, version: cleanVersion(x.version) }))
     .filter(x => x.version);
 }

@@ -68,6 +68,21 @@ export function validateManifest(manifest) {
     if (!fw.version) {
       errors.push(`framework ${name}: version is required`);
     }
+    // SECURITY (Semana 2 audit HIGH): reject path traversal in artisanalRef
+    // (would otherwise let a malicious manifest read arbitrary local files).
+    if (fw.artisanalRef) {
+      const ref = fw.artisanalRef;
+      if (typeof ref !== "string"
+          || ref.includes("..")
+          || ref.startsWith("/")
+          || ref.startsWith("\\")
+          || !ref.startsWith("refs/")
+          || !/^refs\/[A-Za-z0-9._@/+-]+\.md$/.test(ref)) {
+        errors.push(
+          `framework ${name}: artisanalRef '${ref}' rejected — must match 'refs/<lib>@<version>.md' (no traversal, no abs paths)`
+        );
+      }
+    }
     // Either skipDocs:true OR artisanalRef must be present
     if (!fw.skipDocs && !fw.artisanalRef) {
       errors.push(

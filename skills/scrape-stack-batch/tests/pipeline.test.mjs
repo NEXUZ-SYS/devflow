@@ -37,6 +37,21 @@ test("resolve: rejects invalid library name (shell metachars)", async () => {
   );
 });
 
+test("resolve: rejects path-traversal library name (CRITICAL audit fix)", async () => {
+  await assert.rejects(
+    resolve({ library: "../../../tmp/pwned", version: "1.0.0", url: "https://example.com" }),
+    /traversal|invalid library/i
+  );
+  await assert.rejects(
+    resolve({ library: "../etc/passwd", version: "1.0.0", url: "https://example.com" }),
+    /traversal|invalid library/i
+  );
+  await assert.rejects(
+    resolve({ library: "/etc/passwd", version: "1.0.0", url: "https://example.com" }),
+    /invalid library/i
+  );
+});
+
 test("resolve: rejects invalid version (whitespace)", async () => {
   await assert.rejects(
     resolve({ library: "foo", version: "1.0 .0", url: "https://example.com" }),

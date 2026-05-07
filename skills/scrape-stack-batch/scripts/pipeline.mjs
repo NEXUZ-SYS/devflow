@@ -23,15 +23,20 @@ const execFileP = promisify(execFile);
 
 const DOCS_MCP_PKG = "@arabold/docs-mcp-server@2.2.1";
 const MD2LLM_PKG = "md2llm@1.1.0";
-const SLUG_RE = /^[A-Za-z0-9._@/+-]+$/;
+// SECURITY (Semana 2 audit CRITICAL): npm-spec compliant pattern — optional
+// scope prefix `@scope/`, then a single segment. No '..', no leading dot,
+// no slashes outside the scope prefix. Prevents path traversal in
+// consolidate() output path.
+const SLUG_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
+const VERSION_RE = /^[0-9][a-zA-Z0-9.+-]*$/;
 
 // ─── Stage 1: RESOLVE ──────────────────────────────────────────────────────
 
 export async function resolve({ library, version, url, type }) {
-  if (!library || !SLUG_RE.test(library)) {
-    throw new Error(`RESOLVE: invalid library name '${library}'`);
+  if (!library || !SLUG_RE.test(library) || library.includes("..")) {
+    throw new Error(`RESOLVE: invalid library name '${library}' (npm-spec required, no traversal)`);
   }
-  if (!version || !SLUG_RE.test(version)) {
+  if (!version || !VERSION_RE.test(version)) {
     throw new Error(`RESOLVE: invalid version '${version}'`);
   }
   if (!url) throw new Error(`RESOLVE: url required for ${library}@${version}`);
@@ -111,6 +116,15 @@ export async function refine(scraped) {
 // ─── Stage 4: CONSOLIDATE ──────────────────────────────────────────────────
 
 export async function consolidate(refined, projectRoot) {
+  // Defense-in-depth: re-validate library/version even though resolve()
+  // already did. Prevents bypass if a caller skips resolve() or mutates
+  // the refined object between stages.
+  if (!SLUG_RE.test(refined.library) || refined.library.includes("..")) {
+    throw new Error(`CONSOLIDATE: invalid library '${refined.library}' (path traversal)`);
+  }
+  if (!VERSION_RE.test(refined.version)) {
+    throw new Error(`CONSOLIDATE: invalid version '${refined.version}'`);
+  }
   const refsDir = join(projectRoot, ".context", "stacks", "refs");
   await mkdir(refsDir, { recursive: true });
 

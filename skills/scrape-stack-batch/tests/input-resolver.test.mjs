@@ -105,3 +105,52 @@ test("validateAdHocUrl: rejects file://", async () => {
 test("validateAdHocUrl: accepts public https", async () => {
   await assert.doesNotReject(validateAdHocUrl("https://github.com/foo/bar"));
 });
+
+// SECURITY regressions (Semana 2 audit CRITICAL fix)
+
+test("parseArgPairs: rejects path-traversal library name", () => {
+  // The arg regex itself rejects '../...' as malformed before the safety check
+  assert.throws(
+    () => parseArgPairs(["../../../tmp/pwned@1.0.0"]),
+    /malformed|unsafe|traversal|invalid/i
+  );
+  // Even if formed correctly with @@-syntax, isSafeLibrary catches it
+  assert.throws(
+    () => parseArgPairs(["..@1.0.0"]),
+    /malformed|unsafe|traversal/i
+  );
+});
+
+test("resolveFromPackage: silently skips path-traversal keys", () => {
+  const { root, cleanup } = fixture();
+  writeFileSync(join(root, "package.json"), JSON.stringify({
+    dependencies: {
+      "../../../tmp/pwned": "1.0.0",
+      "next": "15.0.0",
+    },
+  }));
+  const r = resolveFromPackage(root);
+  // Only the valid lib should remain
+  assert.equal(r.length, 1);
+  assert.equal(r[0].library, "next");
+  cleanup();
+});
+
+test("resolveFromManifest: skips wishlist entries with traversal", () => {
+  const { root, cleanup } = fixture();
+  mkdirSync(join(root, ".context", "stacks"), { recursive: true });
+  writeFileSync(
+    join(root, ".context", "stacks", "manifest.yaml"),
+    `spec: devflow-stack/v0
+wishlist:
+  - library: ../../../tmp/pwned
+    version: 1.0.0
+  - library: trpc
+    version: 11.0.0
+`
+  );
+  const r = resolveFromManifest(root);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].library, "trpc");
+  cleanup();
+});

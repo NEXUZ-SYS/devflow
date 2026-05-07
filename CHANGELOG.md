@@ -5,6 +5,97 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — Semana 2 (Stacks) cumulative
+
+> Mini-V/C entry per checkpoint policy (option B). Security audit by
+> `devflow:security-auditor` returned REVISE with 1 CRITICAL + 1 HIGH +
+> 2 LOW; CRITICAL (path traversal via library name) and HIGH (path
+> traversal via artisanalRef) **fixed inline before merge**.
+
+### Added (Gap 2 — Stacks + artisanal pipeline)
+
+- **ADR-003** (`stack-docs-artisanal-pipeline`, Proposto, audit 12/12 PASS):
+  documents the pipeline architecture with corrected CLI invocation
+  (`docs-mcp-server fetch-url`, NOT `docs-cli` as in spec). 6 Drivers
+  (determinism/latency/cost/resilience/governance/audit). Status flips
+  to Aprovado in F.0a.
+- **`.context/stacks/`** scaffolding: `manifest.yaml` stub + `refs/.gitkeep`
+  + `llms.txt` template. DevFlow self-repo has no frameworks (bridge plugin)
+  but the structure is in place for user projects.
+- **`scripts/lib/manifest-stacks.mjs`**:
+  - `loadManifest(projectRoot)` parses `.context/stacks/manifest.yaml`
+  - `validateManifest(m)`: spec, framework version, applyTo glob subset
+    (SI-5), AND `artisanalRef` must match `refs/<lib>@<version>.md` with
+    no traversal/abs paths (Semana 2 audit HIGH fix)
+  - `hashRef()` returns sha256 hex of ref file
+  - `findMissingRefs()` detects declared refs without backing file
+- **`scripts/lib/frontmatter.mjs` rewrite**: recursive `parseBlock()`
+  unblocks arbitrary nesting depth (manifests, future permissions/observability
+  configs). Also handles list-of-maps pattern (`- key: val` with continuation
+  lines) for `wishlist` entries.
+- **Skill `scrape-stack-batch/`**:
+  - `scripts/input-resolver.mjs` (Fase A): `parseArgPairs` /
+    `resolveFromPackage` / `resolveFromManifest` / `resolveAll` with SI-3
+    URL validation. **All 3 input paths reject path-traversal library
+    names** (Semana 2 audit CRITICAL fix).
+  - `scripts/discovery.mjs` (Fase B): registry probes (npm/PyPI/crates.io),
+    llms.txt HEAD probe, optional web_search fallback. **Triple-gated
+    SI-3** — every URL passes `validateUrl` before being returned.
+  - `scripts/confidence.mjs`: scoring per spec §3.4.4 (max() rule),
+    classify by 0.8/0.6 thresholds (recommended/review/uncertain).
+  - `scripts/pipeline.mjs` (Fase D): RESOLVE/SCRAPE/REFINE/CONSOLIDATE.
+    All `npx` invocations via `execFile` (SI-2). SI-6 sanitization +
+    sha256 canary fence wrapping output. Defense-in-depth library
+    validation in BOTH `resolve()` AND `consolidate()` (Semana 2 audit
+    CRITICAL fix).
+  - `SKILL.md` + 2 templates (confirmation + error prompts).
+- **`scripts/devflow-stacks.mjs`** CLI dispatcher:
+  - `validate [<lib>] [--strict]`: schema + missing refs + SI-6 fence
+    + ≥5 code blocks (md2llm sanity)
+  - `scrape <lib> <ver> --source=<type> --from=<url>`: single-lib pipeline
+  - `scrape-batch [args] [--from-package|--from-manifest] [--dry-run]`:
+    plan + delegation to skill for interactive flow
+- **`scripts/devflow-drift.mjs`** + **`.github/workflows/stack-drift.yml`**:
+  nightly + on-PR drift detection. Opens GitHub issue (with dedup) on
+  nightly drift; fails PR check on PR drift.
+
+### Security fixes (inline, from Semana 2 audit)
+
+- **CRITICAL**: Path traversal via library name (e.g.,
+  `package.json` key `"../../../tmp/pwned"`) would have written
+  consolidated `.md` files outside `.context/stacks/refs/`. Fixed by:
+  (1) tightening `SLUG_RE` in `pipeline.mjs` to npm-spec
+  (`@scope/`-optional + single segment, no `..`, no leading dots);
+  (2) defense-in-depth re-validation in `consolidate()`;
+  (3) `isSafeLibrary()` filter in all 3 input-resolver paths
+  (`parseArgPairs`, `resolveFromPackage`, `resolveFromManifest`).
+  Added 5 regression tests across input-resolver and pipeline suites.
+
+- **HIGH**: Path traversal via `artisanalRef` (e.g., manifest
+  `artisanalRef: "../../../etc/passwd"`) would have allowed arbitrary
+  local file reads via `existsSync`/`readFileSync`. Fixed by adding
+  strict `refs/<safe-chars>.md` regex check in `validateManifest()`.
+  Added 4 regression tests in `test-manifest-stacks.mjs`.
+
+### Tests
+
+- 44 tests post-Semana 1 → **51 tests** post-Semana 2 (+7 new test
+  files: confidence, discovery, pipeline, input-resolver, devflow-stacks,
+  devflow-drift, manifest-stacks). 1 skipped (smoke pipeline gated by
+  `RUN_SMOKE=1` env). 9 net regression tests added by security fixes.
+
+### Known limitations (tracked, not blocking)
+
+- LOW: `parseInlineArray` in frontmatter parser splits on comma —
+  edge case `["a,b", "c"]` parses as 3 items. Real ADR/manifest
+  patterns don't use quoted commas; documented constraint, fix in v1.1.
+- LOW: GitHub Actions `actions/github-script@v7` interpolation — mitigated
+  by parser-level rejection of backticks/`${` in framework keys (regex
+  `[A-Za-z_][\w-]*`), but remains a defense-in-depth gap. v1.1 will
+  switch to `core.getInput`-based pattern.
+
+---
+
 ## [Unreleased] — Semana 1 (Standards) cumulative since 1.0.0-rc1
 
 > Mini-V/C entry per checkpoint policy (option B). Final 1.0.0 release ships

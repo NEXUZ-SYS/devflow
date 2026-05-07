@@ -137,6 +137,48 @@ test("hashRef: returns null when ref file missing", () => {
   cleanup();
 });
 
+// SECURITY (Semana 2 audit HIGH fix): reject path-traversal in artisanalRef
+test("validateManifest: rejects artisanalRef with path traversal", () => {
+  const errors = validateManifest({
+    spec: "devflow-stack/v0",
+    frameworks: {
+      foo: { version: "1.0.0", artisanalRef: "../../../etc/passwd" },
+    },
+  });
+  assert.ok(errors.length > 0);
+  assert.match(errors.join("\n"), /traversal|artisanalRef|rejected/i);
+});
+
+test("validateManifest: rejects artisanalRef with absolute path", () => {
+  const errors = validateManifest({
+    spec: "devflow-stack/v0",
+    frameworks: {
+      foo: { version: "1.0.0", artisanalRef: "/etc/passwd" },
+    },
+  });
+  assert.ok(errors.length > 0);
+});
+
+test("validateManifest: rejects artisanalRef not starting with refs/", () => {
+  const errors = validateManifest({
+    spec: "devflow-stack/v0",
+    frameworks: {
+      foo: { version: "1.0.0", artisanalRef: "elsewhere/foo.md" },
+    },
+  });
+  assert.ok(errors.length > 0);
+});
+
+test("validateManifest: accepts well-formed artisanalRef", () => {
+  const errors = validateManifest({
+    spec: "devflow-stack/v0",
+    frameworks: {
+      foo: { version: "1.0.0", artisanalRef: "refs/foo@1.0.0.md" },
+    },
+  });
+  assert.deepEqual(errors, []);
+});
+
 test("findMissingRefs: detects declared artisanalRef without file", () => {
   const { root, cleanup } = fixture();
   const stacksDir = join(root, ".context", "stacks");
