@@ -63,15 +63,14 @@ test("fixture: 20 ADRs, 19 standards, 13 manifest entries presentes", () => {
 
 // ─── Camada 1: session-start index ──────────────────────────────────────────
 
-test("Camada 1: índice lista 19 stds e 13 refs (todos pending-scrape ou skip)", () => {
+test("Camada 1: índice lista 19 stds e 13 refs scrapeados", () => {
   const r = spawnSync("node", [INDEX_CLI, `--project=${FIXTURE}`, "--format=json"], { encoding: "utf-8" });
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const idx = JSON.parse(r.stdout);
   assert.equal(idx.totals.standards, 19);
   assert.equal(idx.totals.refs, 13);
-  // Sem typescript@5.9.0 scrapeado nesta rodada (skip por design)
-  assert.equal(idx.totals.refsScraped, 0,
-    "esta rodada não fez scrape — todos refs devem aparecer pending-scrape");
+  assert.equal(idx.totals.refsScraped, 13,
+    "todos 13 refs scrapeados (best-effort completou após escolha de URLs canônicas)");
 });
 
 test("Camada 1: services aparecem no índice com applyTo:[] (task #70)", () => {
