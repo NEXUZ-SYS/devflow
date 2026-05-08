@@ -64,7 +64,7 @@ Read these files in order (stop when you have enough context):
 5. **Tooling:** `.context/docs/tooling.md`
    - Build tools, linters, formatters, deployment
 
-6. **ADR Guardrails:** `.context/docs/adrs/README.md`
+6. **ADR Guardrails:** `.context/adrs/README.md`
    - Active architectural decisions and guardrails
    - Read README index, then relevant ADRs by stack/category
 

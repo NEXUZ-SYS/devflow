@@ -3,10 +3,12 @@
 // Subcommands: --next-number | --resolve=<query> | (default: regenerate)
 // Security: S4 (advisory lock with pid/ts liveness), S6 (path traversal mitigation).
 
-import { readdir, readFile, writeFile, open, unlink } from 'node:fs/promises';
+import { readdir, readFile, writeFile, open, unlink, mkdir } from 'node:fs/promises';
 import { resolve, join, basename, extname } from 'node:path';
+import { existsSync } from 'node:fs';
 import { parse } from './lib/adr-frontmatter.mjs';
 import { compareSemver } from './lib/adr-semver.mjs';
+import { resolveAdrPath } from './lib/path-resolver.mjs';
 
 const args = process.argv.slice(2);
 const rawProject = args.find((a) => a.startsWith('--project='))?.slice(10) || '.';
@@ -17,22 +19,29 @@ if (!project.startsWith(process.cwd())) {
   console.error(`Error: --project must resolve within cwd (got: ${project}, cwd: ${process.cwd()})`);
   process.exit(2);
 }
-const adrsDir = join(project, '.context/docs/adrs/');
+
+// Semana 0 dual-read: scan readPaths (new + legacy if present), write to first existing
+// path containing ADRs (preserves legacy README location during transition).
+const pathInfo = resolveAdrPath(project);
+const readPaths = pathInfo.readPaths.length > 0 ? pathInfo.readPaths : [pathInfo.write];
+// Lock + readme go to whichever path actually has ADRs; new path wins if both have them.
+const adrsDir = readPaths[0];
 
 // Subcommand dispatch
 const isNextNumber = args.includes('--next-number');
 const resolveArg = args.find((a) => a.startsWith('--resolve='))?.slice(10);
 
 try {
+  // Ensure the lock directory exists (might not when only legacy has ADRs)
+  await mkdir(adrsDir, { recursive: true });
   await withLock(adrsDir, async () => {
+    const adrs = await loadAdrsFromAllPaths(readPaths);
     if (isNextNumber) {
-      const adrs = await loadAdrs(adrsDir);
       const max = Math.max(0, ...adrs.map((a) => parseInt(a.number, 10) || 0));
       console.log(String(max + 1).padStart(3, '0'));
       return;
     }
     if (resolveArg) {
-      const adrs = await loadAdrs(adrsDir);
       const matches = adrs.filter(
         (a) => a.file.startsWith(resolveArg) || a.file.includes(resolveArg),
       );
@@ -44,8 +53,7 @@ try {
       console.log(matches[0].file);
       return;
     }
-    // Default: regenerate README
-    const adrs = await loadAdrs(adrsDir);
+    // Default: regenerate README — write to the same dir whose ADRs we listed.
     adrs.sort((a, b) => {
       const numCmp = a.number.localeCompare(b.number);
       if (numCmp !== 0) return numCmp;
@@ -126,6 +134,23 @@ async function loadAdrs(dir) {
       return { file: f, number: f.slice(0, 3), frontmatter, body };
     }),
   );
+}
+
+// Semana 0 dual-read: load ADRs from multiple paths, dedup by filename
+// (new path wins on conflict — first-occurrence in readPaths).
+async function loadAdrsFromAllPaths(paths) {
+  const seen = new Set();
+  const all = [];
+  for (const p of paths) {
+    const adrs = await loadAdrs(p);
+    for (const a of adrs) {
+      if (!seen.has(a.file)) {
+        seen.add(a.file);
+        all.push(a);
+      }
+    }
+  }
+  return all;
 }
 
 // ─── Render README ────────────────────────────────────────────────────────

@@ -483,8 +483,8 @@ Apos definir a fonte de templates:
 ### Instanciacao
 
 Para cada template aceito:
-1. Copiar para `.context/docs/adrs/` com numeracao sequencial (001, 002, ...)
-2. Gerar `.context/docs/adrs/README.md` com indice:
+1. Copiar para `.context/adrs/` com numeracao sequencial (001, 002, ...)
+2. Gerar `.context/adrs/README.md` com indice:
    ```markdown
    # ADRs do Projeto
 
@@ -509,8 +509,8 @@ Para cada template aceito:
 3. Adicionar referencia no PRD:
    ```markdown
    ## ADRs Associados
-   - [001 - SOLID para Python](.context/docs/adrs/001-solid-python.md)
-   - [002 - TDD para Python](.context/docs/adrs/002-tdd-python.md)
+   - [001 - SOLID para Python](.context/adrs/001-solid-python.md)
+   - [002 - TDD para Python](.context/adrs/002-tdd-python.md)
    ```
 
 ## Step 10: Handoff

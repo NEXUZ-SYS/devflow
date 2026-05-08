@@ -32,30 +32,33 @@ function runEvolve(file, ...flags) {
   );
 }
 
-test('patch: bump version and rename file', () => {
+test('patch: bump version, rename file, AND migrate to canonical path (Semana 0)', () => {
   const tmp = setupTmpProject();
   const before = join(tmp, '.context/docs/adrs/001-zod-validation-v1.0.0.md');
-  const after = join(tmp, '.context/docs/adrs/001-zod-validation-v1.0.1.md');
+  // Migrate-on-write: evolved file lands in canonical .context/adrs/, not legacy
+  const after = join(tmp, '.context/adrs/001-zod-validation-v1.0.1.md');
   assert.ok(existsSync(before));
 
   const r = runEvolve(before, '--kind=patch', '--apply');
   assert.equal(r.kind, 'patch');
   assert.equal(r.version, '1.0.1');
-  assert.ok(!existsSync(before), 'old file should be renamed away');
-  assert.ok(existsSync(after), 'new file should exist');
+  assert.equal(r.migrated, true, 'should report migrated:true when source is legacy');
+  assert.ok(!existsSync(before), 'old file should be git-mv\'d away');
+  assert.ok(existsSync(after), 'new file should exist at canonical path');
   const content = readFileSync(after, 'utf-8');
   assert.match(content, /version: 1\.0\.1/);
 
   rmSync(tmp, { recursive: true });
 });
 
-test('minor: bump and revert status to Proposto', () => {
+test('minor: bump and revert status to Proposto, migrate path', () => {
   const tmp = setupTmpProject();
   const before = join(tmp, '.context/docs/adrs/001-zod-validation-v1.0.0.md');
-  const after = join(tmp, '.context/docs/adrs/001-zod-validation-v1.1.0.md');
+  const after = join(tmp, '.context/adrs/001-zod-validation-v1.1.0.md');
 
   const r = runEvolve(before, '--kind=minor', '--apply');
   assert.equal(r.version, '1.1.0');
+  assert.equal(r.migrated, true);
   assert.ok(existsSync(after));
   const content = readFileSync(after, 'utf-8');
   assert.match(content, /version: 1\.1\.0/);

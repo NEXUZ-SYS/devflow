@@ -39,7 +39,7 @@ Read these files and incorporate into brainstorming:
 - `.context/docs/codebase-map.json` — file structure, dependencies
 - `.context/docs/development-workflow.md` — existing conventions
 - `.context/docs/testing-strategy.md` — testing approach
-- `.context/docs/adrs/README.md` — active ADR guardrails (if exists)
+- `.context/adrs/README.md` — active ADR guardrails (canonical since v1.0; fallback to `.context/docs/adrs/README.md` via dual-read transitório até v1.2)
 
 ### Minimal Mode
 Explore project files, docs, and recent git commits directly.
@@ -48,7 +48,7 @@ Explore project files, docs, and recent git commits directly.
 
 After gathering base context, check for active ADRs:
 
-1. Check if `.context/docs/adrs/README.md` exists. If not, continue without ADR constraints (ADRs are opt-in).
+1. Check if `.context/adrs/README.md` exists (canonical since v1.0). If not, fallback to `.context/docs/adrs/README.md` (legacy, dual-read until v1.2). If neither exists, continue without ADR constraints (ADRs are opt-in).
 
 2. If yes, **invoke `devflow:adr-filter`** passing the current task description. That skill:
    - Reads the README index
@@ -132,7 +132,7 @@ Se `sinais_presentes < 4 de 4` → pula este step, segue para Step 4. Alta espec
 > - **(c) Não oferecer novamente neste workflow** (`skip_adr_offer=true`)
 
 **Comportamento por escolha:**
-- **(a)** — suspende o fluxo de prevc-planning. Spawna workflow filho `/devflow adr:new --mode=prefilled` com o design atual como briefing. Quando workflow-filho conclui (V phase passa, ADR commitada), controle volta para Step 4 com ADR criada disponível em `.context/docs/adrs/`. Plan a ser escrito pode referenciá-la.
+- **(a)** — suspende o fluxo de prevc-planning. Spawna workflow filho `/devflow adr:new --mode=prefilled` com o design atual como briefing. Quando workflow-filho conclui (V phase passa, ADR commitada), controle volta para Step 4 com ADR criada disponível em `.context/adrs/`. Plan a ser escrito pode referenciá-la.
 - **(b)** — segue direto para Step 4. Nada muda.
 - **(c)** — escreve `skip_adr_offer: true` no workflow metadata. Step 3.5 não roda novamente neste workflow. Default permanece ativo em workflows futuros.
 

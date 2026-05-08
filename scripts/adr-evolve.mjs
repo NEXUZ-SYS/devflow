@@ -6,11 +6,12 @@
 //   S1 — execFileSync with argv array (no shell interpolation, no injection via filenames)
 //   S5 — atomic write-then-rename (write first, git mv after; rollback on failure)
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { dirname, basename, resolve, join } from 'node:path';
 import { parse, stringify } from './lib/adr-frontmatter.mjs';
 import { bumpSemver } from './lib/adr-semver.mjs';
+import { resolveAdrPath } from './lib/path-resolver.mjs';
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith('--'));
@@ -42,12 +43,34 @@ try {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function projectRootFromAdrFile(file) {
-  // .context/docs/adrs/xxx.md → .context/.. = project
+  // Walk up looking for a .context/ sibling. Handles both layouts:
+  //   .context/adrs/xxx.md           → 3 levels up (canonical, v1.0+)
+  //   .context/docs/adrs/xxx.md      → 4 levels up (legacy)
+  let dir = dirname(resolve(file));
+  for (let i = 0; i < 6; i++) {
+    if (basename(dir) === '.context') {
+      return dirname(dir);
+    }
+    dir = dirname(dir);
+  }
+  // Fallback: assume legacy 4-up depth
   return resolve(dirname(dirname(dirname(dirname(resolve(file))))));
 }
 
 function renameToVersion(file, version) {
   return file.replace(/-v\d+\.\d+\.\d+\.md$/, `-v${version}.md`);
+}
+
+// Semana 0 migrate-on-write: if the source file is in legacy path AND the
+// project hasn't migrated yet (canonical doesn't exist or is empty), the
+// EVOLVED file should land in the canonical .context/adrs/ — automatic
+// transparent migration (per plan §0.4).
+function maybeMigratePath(file, projectRoot) {
+  const fileAbs = resolve(file);
+  const inLegacy = fileAbs.includes('/.context/docs/adrs/');
+  if (!inLegacy) return file;
+  const canonical = join(projectRoot, '.context', 'adrs');
+  return join(canonical, basename(file));
 }
 
 async function regenerateIndex(projectRoot) {
@@ -65,14 +88,21 @@ async function handlePatch(file, opts) {
   const newVersion = bumpSemver(frontmatter.version || '0.1.0', 'patch');
   frontmatter.version = newVersion;
   // Patch preserves status: do not modify
-  const newFile = renameToVersion(file, newVersion);
+  const projectRoot = projectRootFromAdrFile(file);
+  const versionRenamed = renameToVersion(file, newVersion);
+  // Migrate-on-write: if source is legacy, evolve into canonical path
+  const newFile = maybeMigratePath(versionRenamed, projectRoot);
+  const migrating = newFile !== versionRenamed;
 
   if (opts.apply) {
     // S5 — atomic write-then-rename: write new content first under old name; if write fails, original untouched.
     // Then git mv to new name. If git mv fails, rollback the content change.
     const newContent = stringify(frontmatter, body);
     await writeFile(file, newContent);
-    const projectRoot = projectRootFromAdrFile(file);
+    // Ensure canonical dir exists when migrating
+    if (migrating) {
+      await mkdir(dirname(newFile), { recursive: true });
+    }
     const fileAbs = resolve(file);
     const newFileAbs = resolve(newFile);
     const oldRel = fileAbs.startsWith(projectRoot) ? fileAbs.slice(projectRoot.length + 1) : fileAbs;
@@ -85,7 +115,7 @@ async function handlePatch(file, opts) {
     }
     await regenerateIndex(projectRoot);
   }
-  console.log(JSON.stringify({ kind: 'patch', from: file, to: newFile, version: newVersion }));
+  console.log(JSON.stringify({ kind: 'patch', from: file, to: newFile, version: newVersion, migrated: migrating }));
 }
 
 // ─── Minor handler ────────────────────────────────────────────────────────
@@ -96,12 +126,17 @@ async function handleMinor(file, opts) {
   const newVersion = bumpSemver(frontmatter.version || '0.1.0', 'minor');
   frontmatter.version = newVersion;
   frontmatter.status = 'Proposto'; // minor requires re-approval
-  const newFile = renameToVersion(file, newVersion);
+  const projectRoot = projectRootFromAdrFile(file);
+  const versionRenamed = renameToVersion(file, newVersion);
+  const newFile = maybeMigratePath(versionRenamed, projectRoot);
+  const migrating = newFile !== versionRenamed;
 
   if (opts.apply) {
     const newContent = stringify(frontmatter, body);
     await writeFile(file, newContent);
-    const projectRoot = projectRootFromAdrFile(file);
+    if (migrating) {
+      await mkdir(dirname(newFile), { recursive: true });
+    }
     const fileAbs = resolve(file);
     const newFileAbs = resolve(newFile);
     const oldRel = fileAbs.startsWith(projectRoot) ? fileAbs.slice(projectRoot.length + 1) : fileAbs;
@@ -114,7 +149,7 @@ async function handleMinor(file, opts) {
     }
     await regenerateIndex(projectRoot);
   }
-  console.log(JSON.stringify({ kind: 'minor', from: file, to: newFile, version: newVersion }));
+  console.log(JSON.stringify({ kind: 'minor', from: file, to: newFile, version: newVersion, migrated: migrating }));
 }
 
 // ─── Major handler ────────────────────────────────────────────────────────
