@@ -4,8 +4,8 @@
 // the YAML body since it's plain top-level YAML; glob validates applyTo
 // patterns against SI-5 subset).
 
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { validateSubset } from "./glob.mjs";
@@ -108,6 +108,98 @@ export function hashRef(projectRoot, refRelative) {
   if (!existsSync(path)) return null;
   const content = readFileSync(path);
   return createHash("sha256").update(content).digest("hex");
+}
+
+// ─── Manifest mutation ─────────────────────────────────────────────────────
+
+/**
+ * Idempotent merge of detected stack mentions into manifest.yaml.
+ *
+ * @param {string} projectRoot
+ * @param {Array<{lib: string, version: string, applyTo?: string[]}>} entries
+ * @returns {{added: string[], skipped: string[], drift: Array<{lib, existingVersion, newVersion}>}}
+ *
+ * Behavior:
+ *   - lib NOT present in manifest → added with `artisanalRef: refs/<lib>@<ver>.md`
+ *   - lib present with SAME version → skipped (no-op)
+ *   - lib present with DIFFERENT version → drift reported, NOT overwritten
+ *
+ * Pure node:* — uses minimal YAML serializer (manifest is a known shape;
+ * not preserving arbitrary external comments by design).
+ */
+export function addFrameworksToManifest(projectRoot, entries) {
+  const manifest = loadManifest(projectRoot);
+  const result = { added: [], skipped: [], drift: [] };
+
+  for (const entry of entries) {
+    const { lib, version } = entry;
+    if (!lib || !version) continue;
+    const existing = manifest.frameworks[lib];
+    if (existing) {
+      if (existing.version === version) {
+        result.skipped.push(`${lib}@${version}`);
+      } else {
+        result.drift.push({
+          lib,
+          existingVersion: existing.version,
+          newVersion: version,
+        });
+      }
+      continue;
+    }
+    manifest.frameworks[lib] = {
+      version,
+      artisanalRef: `refs/${lib}@${version}.md`,
+    };
+    if (Array.isArray(entry.applyTo) && entry.applyTo.length > 0) {
+      manifest.frameworks[lib].applyTo = entry.applyTo;
+    }
+    result.added.push(`${lib}@${version}`);
+  }
+
+  if (result.added.length > 0) {
+    writeManifest(projectRoot, manifest);
+  }
+  return result;
+}
+
+/**
+ * Serialize manifest to YAML. Intentionally minimal — manifest is a known
+ * shape (spec + frameworks map); we don't preserve external comments.
+ */
+function serializeManifest(manifest) {
+  const lines = [`spec: ${manifest.spec || "devflow-stack/v0"}`];
+  if (manifest.runtime && Object.keys(manifest.runtime).length > 0) {
+    lines.push("runtime:");
+    for (const [k, v] of Object.entries(manifest.runtime)) {
+      lines.push(`  ${k}: ${typeof v === "string" ? `"${v}"` : v}`);
+    }
+  }
+  const fws = manifest.frameworks || {};
+  lines.push("frameworks:");
+  if (Object.keys(fws).length === 0) {
+    lines[lines.length - 1] = "frameworks: {}";
+  } else {
+    for (const [name, fw] of Object.entries(fws)) {
+      lines.push(`  ${name}:`);
+      for (const [k, v] of Object.entries(fw)) {
+        if (Array.isArray(v)) {
+          lines.push(`    ${k}: [${v.map(x => `"${x}"`).join(", ")}]`);
+        } else if (typeof v === "string") {
+          lines.push(`    ${k}: "${v}"`);
+        } else {
+          lines.push(`    ${k}: ${v}`);
+        }
+      }
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
+function writeManifest(projectRoot, manifest) {
+  const path = join(projectRoot, STACKS_DIR, MANIFEST_FILE);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, serializeManifest(manifest));
 }
 
 export function findMissingRefs(projectRoot) {

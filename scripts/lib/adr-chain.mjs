@@ -243,7 +243,44 @@ function normalizeVersion(v) {
 // match is the discriminator that prevents false positives like "Process 1.2".
 const PROSE_VERSION_RE = /(?<=^|[\s(`"',])([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+\.[\dxX]+(?:\.[\dxX]+)?(?:-[a-zA-Z0-9.-]+)?)(?=[\s.,;:)`"']|$)/g;
 
+// Tier-0 frontmatter regex: more permissive than tier-2 since we trust the
+// `stack` field as a structured declaration. Accepts bare major (e.g. "Tauri 2"),
+// X.Y (e.g. "FastAPI 0.135"), full X.Y.Z, with optional 'x' wildcard.
+const FM_STACK_RE = /^([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+(?:\.[\dxX]+){0,2}(?:-[a-zA-Z0-9.-]+)?)\s*$/;
+
+// Parse an ADR's `stack` frontmatter value into {lib, version}.
+// Examples:
+//   "TypeScript 5.9.x"   → {lib: "typescript", version: "5.9.0"}
+//   "Next.js 16.2.x"     → {lib: "next", version: "16.2.0"}
+//   "FastAPI 0.135"      → {lib: "fastapi", version: "0.135.0"}
+//   "Tauri 2"            → {lib: "tauri", version: "2.0.0"}
+//   "Anthropic Claude API" → null (no version)
+//   "universal"          → null (placeholder, not a stack)
+function parseStackFrontmatter(stackString) {
+  const m = stackString.trim().match(FM_STACK_RE);
+  if (!m) return null;
+  const displayName = m[1];
+  const version = normalizeVersion(m[2]);
+  if (version === "0.0.0") return null;
+  // Normalize lib name: lowercase, strip non-alphanumeric, drop common
+  // marketing suffixes ("js" in "Next.js" → keep core "next" — pattern of
+  // STACK_GLOBS table aliases). For unknown libs, use full normalized name.
+  const norm = displayName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // Heuristic: strip trailing "js" if present and the prefix is itself ≥ 3
+  // alphanumeric chars (avoids truncating "rxjs" → "rx"). E.g. "next.js"
+  // → norm "nextjs" → strip → "next". "react" → no change. "vite" → no change.
+  let lib = norm;
+  if (norm.endsWith("js") && norm.length >= 5 && /[a-z]/.test(norm[norm.length - 3])) {
+    lib = norm.slice(0, -2);
+  }
+  if (!lib || lib.length < 2) return null;
+  return { lib, version };
+}
+
 export function extractStackMentions(adr, opts = {}) {
+  // Tier-0 (frontmatter): adr.stack is the structured declaration —
+  // unambiguous regardless of manifest state. Bootstraps tier-2 prose
+  // detection (see addFrameworksToManifest workflow).
   // Tier-1 (strict): <lib>@<version> form — works for any lib, no manifest
   // required. Catches new libs being introduced.
   // Tier-2 (prose, opt-in via opts.projectRoot): "<DisplayName> <version>"
@@ -253,6 +290,18 @@ export function extractStackMentions(adr, opts = {}) {
   const text = `${adr.description || ""}\n${adr.body || ""}`;
   const seen = new Set();
   const out = [];
+
+  // ─── Tier 0: frontmatter stack field ────────────────────────────────────
+  if (adr.stack && typeof adr.stack === "string") {
+    const stackParse = parseStackFrontmatter(adr.stack);
+    if (stackParse) {
+      const key = `${stackParse.lib}@${stackParse.version}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(stackParse);
+      }
+    }
+  }
 
   // ─── Tier 1: strict <lib>@<version> ─────────────────────────────────────
   let m;
