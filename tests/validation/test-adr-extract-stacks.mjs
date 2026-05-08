@@ -221,6 +221,23 @@ test("CLI extract-stacks: numeric prefix slug resolves to ADR file", () => {
   }
 });
 
+test("CLI extract-stacks: warns to stderr when fm.stack exists but Tier-0 cannot parse", () => {
+  // E2E bug: ADRs with stack="Datadog LLM Observability" / "Husky + lint-staged"
+  // were silently dropped. User had no signal that pinning a version would help.
+  // Fix: emit explicit warning to stderr explaining the format expected.
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {});
+    const adr = SAMPLE_ADR.replace("stack: TypeScript 5.9.x", "stack: GitHub Actions");
+    const adrPath = writeAdr(root, "001-adr-github-actions-v1.0.0.md", adr);
+    const r = spawnSync("node", [CLI, adrPath, `--project=${root}`], { encoding: "utf-8" });
+    assert.equal(r.status, 0, "exit 0 — not detecting is OK, just warn");
+    assert.match(r.stderr,
+      /stack.*GitHub Actions.*not.*parsed|cannot parse stack|unversioned/i,
+      "stderr should explain that the stack field couldn't be parsed and what format is expected");
+  } finally { cleanup(); }
+});
+
 test("CLI extract-stacks: missing ADR file exits non-zero with clear error", () => {
   const { root, cleanup } = fixture();
   try {

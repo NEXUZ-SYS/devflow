@@ -19,7 +19,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
-import { extractStackMentions, extractEvidenciasUrls } from "./lib/adr-chain.mjs";
+import { extractStackMentions, extractEvidenciasUrls, parseStackFrontmatter } from "./lib/adr-chain.mjs";
 import { addFrameworksToManifest } from "./lib/manifest-stacks.mjs";
 import { resolveAdrSlug } from "./lib/standard-from-adr.mjs";
 
@@ -64,6 +64,28 @@ function main() {
 
   // Extract mentions (tier-1 strict + tier-2 prose if manifest exists)
   const mentions = extractStackMentions(adr, { projectRoot });
+
+  // Pre-flight: if fm.stack exists but Tier-0 couldn't parse it AND nothing
+  // else extracted that lib, warn the user with actionable explanation.
+  // (Common cause: stack is a service/platform without version pinned, e.g.,
+  // "GitHub Actions", "Datadog LLM Observability", "Husky + lint-staged".)
+  if (fm.stack && !parseStackFrontmatter(fm.stack)) {
+    const stackTrimmed = String(fm.stack).trim();
+    const hasNumber = /\d/.test(stackTrimmed);
+    console.error(`⚠ stack='${stackTrimmed}' could not be parsed as <Name> <X.Y[.Z]>.`);
+    if (!hasNumber) {
+      console.error(`  Reason: no version detected. This stack looks like a platform/service`);
+      console.error(`  (not a versioned package). To extract anyway, edit the ADR to pin a`);
+      console.error(`  version, e.g. "Datadog Agent 7.50" or "GitHub Actions runner-images@2024.11".`);
+      console.error(`  If this stack truly has no version (it's an external service), declare`);
+      console.error(`  it manually in manifest.yaml with skipDocs: true.`);
+    } else {
+      console.error(`  Hint: format expected is "<Name> <X.Y>" or "<Name> <X.Y.Z>" — names with`);
+      console.error(`  parens like "Foo (Bar) 1.2" are tolerated; multi-lib values like`);
+      console.error(`  "Husky + lint-staged 9.0" are NOT (split into separate ADRs or use`);
+      console.error(`  the strict <lib>@<version> form in the ADR body).`);
+    }
+  }
 
   console.log(`ADR: ${fm.name || "(unnamed)"}`);
   console.log(`File: ${adrPath}`);

@@ -245,19 +245,40 @@ const PROSE_VERSION_RE = /(?<=^|[\s(`"',])([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+\
 
 // Tier-0 frontmatter regex: more permissive than tier-2 since we trust the
 // `stack` field as a structured declaration. Accepts bare major (e.g. "Tauri 2"),
-// X.Y (e.g. "FastAPI 0.135"), full X.Y.Z, with optional 'x' wildcard.
-const FM_STACK_RE = /^([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+(?:\.[\dxX]+){0,2}(?:-[a-zA-Z0-9.-]+)?)\s*$/;
+// X.Y (e.g. "FastAPI 0.135"), full X.Y.Z, with optional 'x' wildcard, and
+// optional trailing '+' suffix (e.g. "Ruff 0.7+" — ADR convention for
+// "0.7 or later"; we strip the + and treat as the floor version).
+const FM_STACK_RE = /^([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+(?:\.[\dxX]+){0,2}(?:-[a-zA-Z0-9.-]+)?)\+?\s*$/;
 
-// Parse an ADR's `stack` frontmatter value into {lib, version}.
-// Examples:
-//   "TypeScript 5.9.x"   → {lib: "typescript", version: "5.9.0"}
-//   "Next.js 16.2.x"     → {lib: "next", version: "16.2.0"}
-//   "FastAPI 0.135"      → {lib: "fastapi", version: "0.135.0"}
-//   "Tauri 2"            → {lib: "tauri", version: "2.0.0"}
-//   "Anthropic Claude API" → null (no version)
-//   "universal"          → null (placeholder, not a stack)
-function parseStackFrontmatter(stackString) {
-  const m = stackString.trim().match(FM_STACK_RE);
+/**
+ * Parse an ADR's `stack` frontmatter value into {lib, version}.
+ *
+ * Tolerates: parens-suffixed names (`Firestore (Web SDK) 12.0.x` → firestore@12.0.0),
+ * trailing '+' on version (`Ruff 0.7+` → ruff@0.7.0), `.js` marketing suffix
+ * (`Next.js 16.2.x` → next@16.2.0). Returns null for unversioned strings
+ * (services/platforms like "GitHub Actions", "Datadog LLM Observability") —
+ * those have no scrape-target semantic and shouldn't be auto-extracted.
+ *
+ * EXPORTED for CLI use: `adr-extract-stacks` calls this to determine WHY a
+ * stack field couldn't be parsed and emit an actionable warning to stderr.
+ *
+ * Examples:
+ *   "TypeScript 5.9.x"          → {lib: "typescript", version: "5.9.0"}
+ *   "Next.js 16.2.x"            → {lib: "next", version: "16.2.0"}
+ *   "FastAPI 0.135"             → {lib: "fastapi", version: "0.135.0"}
+ *   "Tauri 2"                   → {lib: "tauri", version: "2.0.0"}
+ *   "Ruff 0.7+"                 → {lib: "ruff", version: "0.7.0"}
+ *   "Firestore (Web SDK) 12.0"  → {lib: "firestore", version: "12.0.0"}
+ *   "Anthropic Claude API"      → null (no version)
+ *   "universal"                 → null (placeholder)
+ *   "Datadog LLM Observability" → null (no version — service, not package)
+ */
+export function parseStackFrontmatter(stackString) {
+  if (!stackString || typeof stackString !== "string") return null;
+  // Strip parens-and-content (`(Web SDK)`, `(Anthropic)`, `(Beta)`) — these
+  // are clarification tags on the lib name, not part of the package id.
+  const stripped = stackString.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+  const m = stripped.match(FM_STACK_RE);
   if (!m) return null;
   const displayName = m[1];
   const version = normalizeVersion(m[2]);

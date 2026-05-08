@@ -614,6 +614,45 @@ test("findRelatedStandards: deriveStdId leaves slug intact when no camada suffix
   cleanup();
 });
 
+// ─── Bugs from E2E run (Tier-0 frontmatter robustness) ────────────────────
+
+test("extractStackMentions: Tier-0 accepts version with '+' suffix (Ruff 0.7+)", () => {
+  // E2E found: ADR with stack="Ruff 0.7+" silently dropped. The `+` is
+  // ADR convention for "0.7 or later" — strip it and normalize to 0.7.0.
+  const adr = { stack: "Ruff 0.7+", description: "", body: "" };
+  const mentions = extractStackMentions(adr);
+  assert.equal(mentions.length, 1, "should detect ruff with + suffix");
+  assert.equal(mentions[0].lib, "ruff");
+  assert.equal(mentions[0].version, "0.7.0");
+});
+
+test("extractStackMentions: Tier-0 strips parens from stack name (Firestore (Web SDK))", () => {
+  // E2E found: ADR with stack="Firestore (Web SDK) 12.0.x" failed because
+  // parens broke the name regex. Strip parens, retry parse.
+  const adr = { stack: "Firestore (Web SDK) 12.0.x", description: "", body: "" };
+  const mentions = extractStackMentions(adr);
+  assert.equal(mentions.length, 1, "should detect firestore despite parens in name");
+  assert.equal(mentions[0].lib, "firestore");
+  assert.equal(mentions[0].version, "12.0.0");
+});
+
+test("extractStackMentions: unversioned platform/service stacks correctly skipped (Datadog/GitHub Actions/Husky)", () => {
+  // E2E found: stacks without version (services/platforms, not packages)
+  // shouldn't be auto-extracted — they have no scrape semantic. Confirmed
+  // skipped (returns empty).
+  const cases = [
+    "Datadog LLM Observability",
+    "GitHub Actions",
+    "Husky + lint-staged",
+    "Claude API (Anthropic)",
+  ];
+  for (const stack of cases) {
+    const mentions = extractStackMentions({ stack, description: "", body: "" });
+    assert.deepEqual(mentions, [],
+      `unversioned stack '${stack}' should NOT be extracted (no version → no scrape target)`);
+  }
+});
+
 test("extractStackMentions: prose form does not require manifest when called without projectRoot (back-compat)", () => {
   // Caller without projectRoot (older callers) should still get tier-1 results
   const adr = {
