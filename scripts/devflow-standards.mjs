@@ -24,27 +24,42 @@ applyTo: ["src/**"]
 relatedAdrs: []
 enforcement:
   linter: standards/machine/std-${id}.js
+# REMOVE este comment + flag quando body for preenchido:
+scaffolded: true
 ---
 
 # Standard: ${id}
 
+> ⚠ SCAFFOLD INCOMPLETO — \`devflow standards audit ${id}\` falha enquanto este standard contém placeholders abaixo.
+> Preencha as 3 seções obrigatórias (Princípios, Anti-patterns, Linter) e remova \`scaffolded: true\` do frontmatter.
+
 ## Princípios
 
-<Em prosa, descreva o "porquê" da regra. Standards são para humanos primeiro.>
+TODO: substituir por prosa real. Standards são gatilho semântico para humanos
+e LLMs — explique o **porquê** da regra (1-2 parágrafos), referenciando a
+ADR de origem em \`relatedAdrs\` quando aplicável. Não copie a ADR; resuma a
+intenção operacional.
 
 ## Anti-patterns
 
+TODO: substituir a tabela placeholder abaixo por ≥3 pares (errado, certo)
+extraídos da realidade do projeto. Cada \`certo\` deve incluir o import
+corretivo ou patch concreto que o agent pode aplicar.
+
 | Errado | Certo |
 |---|---|
-| <padrão errado> | <padrão correto + import corretivo> |
+| TODO: padrão errado real | TODO: padrão correto + import corretivo |
 
 ## Linter
 
-Ver \`.context/standards/machine/std-${id}.js\`.
+\`./machine/std-${id}.js\` (TODO: implementar regra real — scaffold inicial
+apenas exit 0). O linter recebe \`process.argv[2]\` (filePath) e deve emitir
+\`VIOLATION: <regra> (<file>:<line>) — <correção>\` quando detectar falha.
 
 ## Referência
 
-Ver authoring guide: \`.context/standards/README.md\`.
+- ADRs relacionadas: TODO listar slugs de ADRs em \`relatedAdrs\`
+- Authoring guide: \`.context/standards/README.md\`
 `;
 
 const LINTER_TEMPLATE = (id) => `#!/usr/bin/env node
@@ -70,9 +85,14 @@ const content = readFileSync(filePath, "utf-8");
 process.exit(0);
 `;
 
-async function cmdNew(id, projectRoot) {
+async function cmdNew(id, projectRoot, opts = {}) {
+  // Strip leading 'std-' if user passed a fully-prefixed id (chain-suggest
+  // returns 'std-X' format; CLI consumers may paste it verbatim).
+  if (typeof id === "string" && id.startsWith("std-")) {
+    id = id.slice(4);
+  }
   if (!id || !/^[a-z][a-z0-9-]*$/.test(id)) {
-    console.error("Error: id must match /^[a-z][a-z0-9-]*$/");
+    console.error("Error: id must match /^[a-z][a-z0-9-]*$/ (after optional 'std-' prefix strip)");
     process.exit(2);
   }
   const stdsDir = join(projectRoot, ".context", "standards");
@@ -82,21 +102,49 @@ async function cmdNew(id, projectRoot) {
   const stdPath = join(stdsDir, `std-${id}.md`);
   const linterPath = join(machineDir, `std-${id}.js`);
 
-  if (existsSync(stdPath)) {
-    console.error(`Error: ${stdPath} already exists`);
+  if (existsSync(stdPath) && !opts.force) {
+    console.error(`Error: ${stdPath} already exists (use --force to overwrite)`);
     process.exit(1);
   }
 
+  // ─── --from-adr mode: deterministic extraction from ADR(s) ─────────────
+  if (opts.fromAdr && opts.fromAdr.length > 0) {
+    const { buildStandardFromAdrs } = await import("./lib/standard-from-adr.mjs");
+    let stdContent;
+    try {
+      stdContent = buildStandardFromAdrs(opts.fromAdr, {
+        projectRoot,
+        id,
+        weakStandardWarning: true,
+      });
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    await writeFile(stdPath, stdContent);
+    if (!existsSync(linterPath)) {
+      await writeFile(linterPath, LINTER_TEMPLATE(id));
+    }
+    console.log(`Created std-${id} (from ADR${opts.fromAdr.length > 1 ? 's' : ''}: ${opts.fromAdr.join(", ")}):`);
+    console.log(`  ${stdPath}`);
+    console.log(`  ${linterPath}`);
+    console.log("");
+    console.log(`Validate: node scripts/devflow-standards.mjs audit std-${id} --project=${projectRoot}`);
+    return;
+  }
+
+  // ─── Default mode: SCAFFOLD with TODO markers (legacy) ─────────────────
   await writeFile(stdPath, SCAFFOLD_TEMPLATE(id));
   if (!existsSync(linterPath)) {
     await writeFile(linterPath, LINTER_TEMPLATE(id));
   }
 
-  console.log(`Created std-${id}:`);
+  console.log(`Created std-${id} (SCAFFOLD — has TODO markers):`);
   console.log(`  ${stdPath}`);
   console.log(`  ${linterPath}`);
   console.log("");
   console.log("Next: edit Princípios + Anti-patterns; implement the linter rule check.");
+  console.log("Tip: derive automatically from ADRs with --from-adr=<slug1>,<slug2>");
 }
 
 async function cmdVerify(targetId, strict, projectRoot) {
@@ -154,13 +202,28 @@ async function cmdVerify(targetId, strict, projectRoot) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  // Honor --project=<path>, --from-adr=<csv>, --force before consuming
+  // positional args (matches adr-audit/adr-update-index/adr-chain-suggest convention).
+  let projectRoot = process.cwd();
+  let fromAdr = null;
+  let force = false;
+  const args = [];
+  for (const a of rawArgs) {
+    if (a.startsWith("--project=")) {
+      projectRoot = resolve(a.slice("--project=".length));
+    } else if (a.startsWith("--from-adr=")) {
+      fromAdr = a.slice("--from-adr=".length).split(",").map(s => s.trim()).filter(Boolean);
+    } else if (a === "--force") {
+      force = true;
+    } else {
+      args.push(a);
+    }
+  }
   const sub = args[0];
 
-  const projectRoot = process.cwd();
-
   if (sub === "new") {
-    await cmdNew(args[1], projectRoot);
+    await cmdNew(args[1], projectRoot, { fromAdr, force });
     return;
   }
 
@@ -172,10 +235,41 @@ async function main() {
     process.exit(code);
   }
 
-  console.error("Usage: devflow standards <new|verify> [args]");
-  console.error("  new <id>              Scaffold std-<id>.md + machine/std-<id>.js");
-  console.error("  verify [<id>] [--strict]  Validate standards");
+  if (sub === "audit") {
+    const code = await cmdAudit(args[1], projectRoot);
+    process.exit(code);
+  }
+
+  console.error("Usage: devflow standards <new|verify|audit> [args]");
+  console.error("  new <id>                              Scaffold std-<id>.md + machine/std-<id>.js (TODO markers)");
+  console.error("  new <id> --from-adr=<slug>[,<slug>]   Derive std-<id> from ADR(s) — no TODO, audit-ready");
+  console.error("  new <id> --from-adr=<slug> --force    Overwrite existing std-<id>.md");
+  console.error("  verify [<id>] [--strict]              Validate standards (lightweight)");
+  console.error("  audit <id>                            Deep audit (5 checks: scaffold/linter/refs/...)");
+  console.error("");
+  console.error("  Common: --project=<path> to operate on a fixture/sub-project.");
   process.exit(2);
+}
+
+async function cmdAudit(targetId, projectRoot) {
+  const { auditStandard } = await import("./lib/standard-audit.mjs");
+  if (!targetId) {
+    console.error("Usage: devflow standards audit <id>");
+    return 2;
+  }
+  // Resolve id → file path
+  const stdsDir = `${projectRoot}/.context/standards`;
+  const fname = targetId.startsWith("std-") ? `${targetId}.md` : `std-${targetId}.md`;
+  const filePath = `${stdsDir}/${fname}`;
+  const r = auditStandard(filePath, projectRoot);
+  console.log(`=== Audit: ${fname} ===`);
+  console.log(`Resumo: ${r.summary.pass} PASS · ${r.summary.fail} FAIL · ${r.summary.warn} WARN\n`);
+  for (const c of r.checks) {
+    const icon = c.status === "PASS" ? "✅" : c.status === "WARN" ? "⚠️ " : "❌";
+    console.log(`  ${icon} ${c.id} ${c.name.padEnd(32)} ${c.status.padEnd(4)} ${c.diagnosis}`);
+  }
+  console.log(`\nGate: ${r.gate}`);
+  return r.gate === "PASSED" ? 0 : 1;
 }
 
 main().catch(err => {

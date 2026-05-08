@@ -166,6 +166,7 @@ function parseArgs(argv) {
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);
     else if (arg.startsWith("--mode=")) opts.mode = arg.slice(7);
+    else if (arg.startsWith("--project=")) opts.project = arg.slice(10);
     else if (!arg.startsWith("--")) opts.args.push(arg);
   }
   return opts;
@@ -173,14 +174,13 @@ function parseArgs(argv) {
 
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
-  const projectRoot = process.cwd();
+  const opts = parseArgs(rest);
+  const projectRoot = opts.project ? resolve(opts.project) : process.cwd();
 
   if (!sub) {
-    console.error("Usage: devflow stacks <scrape-batch|scrape|validate> [args]");
+    console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit> [args]");
     process.exit(2);
   }
-
-  const opts = parseArgs(rest);
 
   switch (sub) {
     case "validate": {
@@ -196,10 +196,35 @@ async function main() {
       const code = await cmdScrapeBatch(opts, projectRoot);
       process.exit(code);
     }
+    case "audit": {
+      const [arg] = opts.args;
+      const code = await cmdAudit(arg, projectRoot);
+      process.exit(code);
+    }
     default:
       console.error(`Unknown subcommand: ${sub}`);
+      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit> [args]");
+      console.error("  audit <lib>@<version>   Deep audit of refs/<lib>@<version>.md (5 checks)");
       process.exit(2);
   }
+}
+
+async function cmdAudit(arg, projectRoot) {
+  const { auditStack } = await import("./lib/stack-audit.mjs");
+  if (!arg || !arg.includes("@")) {
+    console.error("Usage: devflow stacks audit <lib>@<version>");
+    return 2;
+  }
+  const [lib, version] = arg.split("@");
+  const r = auditStack(lib, version, projectRoot);
+  console.log(`=== Audit: ${lib}@${version} ===`);
+  console.log(`Resumo: ${r.summary.pass} PASS · ${r.summary.fail} FAIL · ${r.summary.warn} WARN\n`);
+  for (const c of r.checks) {
+    const icon = c.status === "PASS" ? "✅" : c.status === "WARN" ? "⚠️ " : "❌";
+    console.log(`  ${icon} ${c.id} ${c.name.padEnd(34)} ${c.status.padEnd(4)} ${c.diagnosis}`);
+  }
+  console.log(`\nGate: ${r.gate}`);
+  return r.gate === "PASSED" ? 0 : 1;
 }
 
 main().catch(err => {
