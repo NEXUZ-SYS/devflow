@@ -2,20 +2,38 @@
 //
 // Per roadmap-futuro-validacao-pipeline.md Item 2, extended to standards:
 // catches placeholder/scaffold content + frontmatter integrity + linter
-// existence + cross-reference correctness.
+// existence + cross-reference correctness + stack-refs completeness.
 //
-// 5 checks (deterministic, fail-loud, exit code via CLI):
+// 6 checks (deterministic, fail-loud, exit code via CLI):
 //   S1. Frontmatter complete (id, applyTo, version, enforcement.linter)
 //   S2. Body has no scaffold placeholders (TODO markers, <...>, scaffolded:true)
 //   S3. Linter file exists at enforcement.linter path AND is valid JS
 //   S4. relatedAdrs reference real ADR files in .context/adrs/
 //   S5. applyTo passes SI-5 validateSubset (no extglob/negation)
+//   S6. stack-refs completeness — std body mentions versioned libs that
+//       are declared in manifest.yaml (non-skipDocs) → ref must exist in
+//       stacks/refs/. Configurable via .devflow.yaml standards.s6Level
+//       ("fail" default | "warn" demotes to non-blocking).
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { validateSubset } from "./glob.mjs";
 import { resolveAdrPath } from "./path-resolver.mjs";
+import { extractStackMentions } from "./adr-chain.mjs";
+import { loadManifest } from "./manifest-stacks.mjs";
+
+function loadDevflowConfig(projectRoot) {
+  const path = join(projectRoot, ".context", ".devflow.yaml");
+  if (!existsSync(path)) return {};
+  try {
+    const wrapped = `---\n${readFileSync(path, "utf-8")}\n---\n`;
+    const { data } = parseFrontmatter(wrapped);
+    return data || {};
+  } catch {
+    return {};
+  }
+}
 
 const PLACEHOLDER_PATTERNS = [
   /\bTODO\b/,
@@ -194,6 +212,54 @@ export function auditStandard(stdPath, projectRoot) {
       status: errors.length === 0 ? "PASS" : "FAIL",
       diagnosis: errors.length === 0 ? `${applyTo.length} pattern(s) valid` : errors.join("; "),
     });
+  }
+
+  // S6 — Stack-refs completeness
+  // Extract lib@version mentions from std body via the same tier-1+tier-2
+  // regex that adr-chain uses (manifest is the source of truth for prose
+  // detection). For each detected mention that maps to a non-skipDocs
+  // manifest entry, verify stacks/refs/<lib>@<ver>.md exists.
+  {
+    const cfg = loadDevflowConfig(projectRoot);
+    const s6Level = (cfg.standards && cfg.standards.s6Level) || "fail";
+    const adrShape = {
+      name: fm.id || "",
+      description: fm.description || "",
+      stack: "", // std doesn't have a single stack; mentions live in body
+      body,
+    };
+    const mentions = extractStackMentions(adrShape, { projectRoot });
+    const manifest = loadManifest(projectRoot);
+    const fws = manifest.frameworks || {};
+    const orphans = [];
+    for (const m of mentions) {
+      const fw = fws[m.lib];
+      if (!fw) continue;            // not in manifest — out of scope for std-audit
+      if (fw.skipDocs) continue;    // explicitly opted out of scrape
+      const refRel = fw.artisanalRef || `refs/${m.lib}@${m.version}.md`;
+      const refPath = join(projectRoot, ".context", "stacks", refRel);
+      if (!existsSync(refPath)) {
+        orphans.push(`${m.lib}@${m.version}`);
+      }
+    }
+    if (orphans.length === 0) {
+      checks.push({
+        id: "S6",
+        name: "stack-refs completeness",
+        status: "PASS",
+        diagnosis: mentions.length === 0
+          ? "no versioned lib mentions in std body"
+          : `${mentions.length} lib mention(s); all refs present (or out-of-scope)`,
+      });
+    } else {
+      const status = s6Level === "warn" ? "WARN" : "FAIL";
+      checks.push({
+        id: "S6",
+        name: "stack-refs completeness",
+        status,
+        diagnosis: `std mentions ${orphans.join(", ")} but refs missing — run \`devflow stacks scrape <lib> <ver> --source=... --from=...\` (orphan refs)`,
+      });
+    }
   }
 
   // Summary
