@@ -13,12 +13,10 @@
 // enough for a typical session, short enough to avoid stale state across
 // days. On stale, cache is reset transparently.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
-import { loadManifest } from "./manifest-stacks.mjs";
-import { parseFrontmatter } from "./frontmatter.mjs";
-import { parseStackFrontmatter } from "./adr-chain.mjs";
+import { deriveRefsForStandards } from "./standard-refs.mjs";
 
 const CACHE_REL = ".context/cache/session-injected.json";
 const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -38,67 +36,53 @@ export function buildNudge({ tool, path, projectRoot }) {
 
   const derivedRefs = deriveRefsForStandards(fresh, projectRoot);
 
+  // Camada 3: on first touch (std not yet cached), extract Princípios +
+  // Anti-patterns from the std body so the LLM sees the rules without
+  // having to Read the std file separately.
+  const rules = fresh
+    .map(s => {
+      const r = extractStandardRules(s.body || "");
+      if (!r.principios && !r.antiPatterns) return null;
+      return { stdId: s.id, principios: r.principios, antiPatterns: r.antiPatterns };
+    })
+    .filter(Boolean);
+
   return {
     tool,
     path,
     matchedStandards: fresh.map(s => s.id),
     derivedRefs,
+    rules,
   };
 }
 
-// Derives stack refs from a set of standards by following:
-//   std.relatedAdrs[] → ADR file → fm.stack → parseStackFrontmatter →
-//   manifest.frameworks[lib] → artisanalRef + on-disk status.
+// Extracts named sections from a standard's markdown body. Supports the
+// canonical sections used by the standard-from-adr generator:
+//   ## Princípios
+//   ## Anti-patterns
+// Returns empty strings when a section is missing — never undefined.
 //
-// Dedup by lib — a single ref serves multiple stds (e.g., std-typescript +
-// std-zod might both reference TypeScript-the-language docs).
-function deriveRefsForStandards(stds, projectRoot) {
-  const manifest = loadManifest(projectRoot);
-  const seen = new Set();
-  const refs = [];
-
-  for (const std of stds) {
-    const adrSlugs = std.relatedAdrs || [];
-    for (const slug of adrSlugs) {
-      const adrPath = findAdrFile(slug, projectRoot);
-      if (!adrPath) continue;
-      let parsed;
-      try {
-        parsed = parseFrontmatter(readFileSync(adrPath, "utf-8"));
-      } catch {
-        continue;
-      }
-      const stackMeta = parseStackFrontmatter(parsed.data?.stack);
-      if (!stackMeta) continue;
-      if (seen.has(stackMeta.lib)) continue;
-      seen.add(stackMeta.lib);
-
-      const fw = manifest.frameworks?.[stackMeta.lib];
-      if (!fw || fw.skipDocs || !fw.artisanalRef) continue;
-
-      const refOnDisk = join(projectRoot, ".context", "stacks", fw.artisanalRef);
-      refs.push({
-        lib: stackMeta.lib,
-        version: fw.version || stackMeta.version,
-        refPath: fw.artisanalRef,
-        status: existsSync(refOnDisk) ? "scraped" : "pending-scrape",
-      });
-    }
-  }
-  return refs;
+// Note: section names are pt-BR by convention (DevFlow standards are written
+// in pt-BR). English-language standards using "## Principles" would not
+// match — extend the regex if/when that becomes a project requirement.
+export function extractStandardRules(body) {
+  return {
+    principios: extractSection(body, /Princ[íi]pios/i),
+    antiPatterns: extractSection(body, /Anti-?patterns/i),
+  };
 }
 
-// Resolves an ADR slug to its on-disk path. ADR files live under
-// .context/adrs/ with names like `001-adr-typescript-frontend-v1.0.0.md`.
-// Match by suffix-with-version OR plain name match (no numeric prefix).
-function findAdrFile(slug, projectRoot) {
-  const adrDir = join(projectRoot, ".context", "adrs");
-  if (!existsSync(adrDir)) return null;
-  const files = readdirSync(adrDir).filter(f => f.endsWith(".md") && f !== "README.md");
-  for (const f of files) {
-    if (f.includes(slug)) return join(adrDir, f);
-  }
-  return null;
+function extractSection(body, headingRe) {
+  if (!body) return "";
+  const heading = new RegExp(`^##\\s+${headingRe.source}\\s*$`, "im");
+  const m = body.match(heading);
+  if (!m) return "";
+  const start = m.index + m[0].length;
+  const rest = body.slice(start);
+  // Stop at next "## " or "# " heading (or EOF)
+  const nextHeading = rest.match(/^#{1,2}\s/m);
+  const slice = nextHeading ? rest.slice(0, nextHeading.index) : rest;
+  return slice.trim();
 }
 
 // ─── Cache management ─────────────────────────────────────────────────────
@@ -166,6 +150,23 @@ export function renderNudgeText(nudge) {
     }
     if (pending.length > 0) {
       lines.push(`Refs declarados sem scrape: ${pending.join(", ")}`);
+    }
+  }
+
+  // Camada 3: include rule body on first-touch. The cache (recordInjection)
+  // ensures these only ship once per std per session.
+  if (nudge.rules && nudge.rules.length > 0) {
+    for (const rule of nudge.rules) {
+      lines.push("");
+      lines.push(`### Regras de ${rule.stdId} (primeira aparição)`);
+      if (rule.principios) {
+        lines.push("#### Princípios");
+        lines.push(rule.principios);
+      }
+      if (rule.antiPatterns) {
+        lines.push("#### Anti-patterns");
+        lines.push(rule.antiPatterns);
+      }
     }
   }
   return lines.join("\n");

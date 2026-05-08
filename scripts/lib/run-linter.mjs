@@ -10,11 +10,12 @@
 //
 // Linters that fail any check are silently skipped (with stderr log) — never executed.
 
-import { resolve, isAbsolute } from "node:path";
+import { resolve, isAbsolute, relative } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
+import { deriveFirstRefForStandard } from "./standard-refs.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -100,13 +101,13 @@ export async function runLintersFor(event, projectRoot) {
         cwd: projectRoot,
       });
       if (stdout && stdout.includes("VIOLATION:")) {
-        result.violations.push({ id: std.id, msg: stdout.trim() });
+        result.violations.push(buildViolation(std, stdout, projectRoot));
       }
     } catch (err) {
       // Linter exited non-zero — capture stdout if it has VIOLATION
       const stdout = err.stdout?.toString() || "";
       if (stdout.includes("VIOLATION:")) {
-        result.violations.push({ id: std.id, msg: stdout.trim() });
+        result.violations.push(buildViolation(std, stdout, projectRoot));
       } else if (err.code === "ETIMEDOUT") {
         result.rejected.push({ id: std.id, reason: `linter timed out (>5s)` });
       }
@@ -114,4 +115,23 @@ export async function runLintersFor(event, projectRoot) {
     }
   }
   return result;
+}
+
+// Camada 4: enrich each violation with paths the LLM can read directly.
+// stdPath: where to read the standard's full body (Princípios + Anti-patterns).
+// refPath/refStatus: where to read the API ref scraped for the lib (when std
+// declares relatedAdrs leading to a manifest entry). null when no ref derivable.
+function buildViolation(std, stdout, projectRoot) {
+  const stdPathAbs = std.filePath || "";
+  const stdPathRel = stdPathAbs && stdPathAbs.startsWith(projectRoot)
+    ? relative(projectRoot, stdPathAbs)
+    : stdPathAbs;
+  const ref = deriveFirstRefForStandard(std, projectRoot);
+  return {
+    id: std.id,
+    msg: stdout.trim(),
+    stdPath: stdPathRel || null,
+    refPath: ref ? `.context/stacks/${ref.refPath}` : null,
+    refStatus: ref ? ref.status : null,
+  };
 }

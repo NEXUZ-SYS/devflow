@@ -32,9 +32,18 @@ process.stdin.on("end", async () => {
     if (violations.length === 0) {
       process.exit(0);
     }
-    // Format for human reader
-    const lines = violations.map(v => `Standard ${v.id} violated: ${v.msg}`);
-    console.log(lines.join("\n"));
+    // Format for human reader. Camada 4: append stdPath + refPath so the
+    // LLM knows where to read the rule body and the API ref docs.
+    const lines = violations.map(v => {
+      const parts = [`Standard ${v.id} violated: ${v.msg}`];
+      if (v.stdPath) parts.push(`  std: ${v.stdPath}`);
+      if (v.refPath) {
+        const tag = v.refStatus === "pending-scrape" ? " (pending-scrape)" : "";
+        parts.push(`  ref: ${v.refPath}${tag}`);
+      }
+      return parts.join("\n");
+    });
+    console.log(lines.join("\n\n"));
     process.exit(0);
   } catch (err) {
     // Don't fail the hook — silent exit on internal errors

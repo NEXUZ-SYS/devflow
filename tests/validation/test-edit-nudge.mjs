@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildNudge, isFresh, loadCache, recordInjection, clearCache } from "../../scripts/lib/edit-nudge.mjs";
+import { buildNudge, isFresh, loadCache, recordInjection, clearCache, extractStandardRules } from "../../scripts/lib/edit-nudge.mjs";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const CLI = new URL("../../scripts/lib/edit-nudge-cli.mjs", import.meta.url).pathname;
@@ -31,7 +31,7 @@ function writeManifest(root, frameworks) {
   writeFileSync(join(dir, "manifest.yaml"), lines.join("\n") + "\n");
 }
 
-function writeStandard(root, slug, fm) {
+function writeStandard(root, slug, fm, body) {
   const dir = join(root, ".context", "standards");
   mkdirSync(dir, { recursive: true });
   const fmLines = ["---"];
@@ -42,7 +42,8 @@ function writeStandard(root, slug, fm) {
       for (const [kk, vv] of Object.entries(v)) fmLines.push(`  ${kk}: ${vv}`);
     } else fmLines.push(`${k}: ${typeof v === "string" ? `"${v}"` : v}`);
   }
-  fmLines.push("---", "", "# Standard\n## Princípios\n- foo\n");
+  const defaultBody = "# Standard\n## Princípios\n- foo\n";
+  fmLines.push("---", "", body || defaultBody);
   writeFileSync(join(dir, `${slug}.md`), fmLines.join("\n"));
 }
 
@@ -287,6 +288,99 @@ test("CLI nudge: --clear flag wipes cache and exits without reading stdin", () =
     });
     assert.equal(r.status, 0);
     assert.deepEqual(loadCache(root).injected, []);
+  } finally { cleanup(); }
+});
+
+// ─── Camada 3: regras (Princípios + Anti-patterns) na primeira ocorrência ──
+
+test("extractStandardRules: parses '## Princípios' section", () => {
+  const body = `# std
+## Princípios
+- regra A
+- regra B
+
+## Outra
+foo`;
+  const r = extractStandardRules(body);
+  assert.match(r.principios, /regra A/);
+  assert.match(r.principios, /regra B/);
+  assert.equal(r.antiPatterns, "", "missing section → empty string, not undefined");
+});
+
+test("extractStandardRules: parses '## Anti-patterns' section", () => {
+  const body = `# std
+## Anti-patterns
+| Errado | Certo |
+|---|---|
+| any | unknown |
+
+## Linter`;
+  const r = extractStandardRules(body);
+  assert.match(r.antiPatterns, /any/);
+  assert.match(r.antiPatterns, /unknown/);
+});
+
+test("extractStandardRules: returns empty fields when no recognized sections", () => {
+  const r = extractStandardRules("# std\nblah blah");
+  assert.equal(r.principios, "");
+  assert.equal(r.antiPatterns, "");
+});
+
+test("buildNudge: first-touch injects rules in nudge.rules", () => {
+  // Camada 3: na primeira aparição de um std numa sessão, o nudge inclui
+  // Princípios + Anti-patterns extraídos do body — não só o id. Isso dá ao
+  // LLM a regra inteira sem precisar de Read separado no std.
+  const { root, cleanup } = fixture();
+  try {
+    const body = `# std
+## Princípios
+- TS strict total
+- sem any
+
+## Anti-patterns
+| Errado | Certo |
+|---|---|
+| any | unknown |
+`;
+    writeStandard(root, "std-typescript", {
+      id: "std-typescript", description: "TS", version: "1.0.0",
+      applyTo: ["**/*.ts"],
+    }, body);
+    const r = buildNudge({ tool: "Read", path: "src/foo.ts", projectRoot: root });
+    assert.ok(r);
+    assert.ok(r.rules, "expected nudge.rules on first touch");
+    assert.equal(r.rules.length, 1);
+    assert.equal(r.rules[0].stdId, "std-typescript");
+    assert.match(r.rules[0].principios, /TS strict/);
+    assert.match(r.rules[0].antiPatterns, /any/);
+  } finally { cleanup(); }
+});
+
+test("CLI nudge: first-touch text output includes Princípios block", () => {
+  const { root, cleanup } = fixture();
+  try {
+    const body = `# std
+## Princípios
+- foo bar baz qux
+
+## Anti-patterns
+- WRONG: a
+`;
+    writeStandard(root, "std-x", {
+      id: "std-x", description: "X", version: "1.0.0", applyTo: ["**/*.ts"],
+    }, body);
+    const input = JSON.stringify({ tool: "Read", path: "src/a.ts" });
+    const r = spawnSync("node", [CLI, `--project=${root}`, "--record"], {
+      encoding: "utf-8", input,
+    });
+    assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+    assert.match(r.stdout, /Princípios/, "first-touch must include Princípios header");
+    assert.match(r.stdout, /foo bar baz qux/);
+    // Second invocation: silenced (cache active)
+    const r2 = spawnSync("node", [CLI, `--project=${root}`, "--record"], {
+      encoding: "utf-8", input,
+    });
+    assert.equal(r2.stdout.trim(), "", "second touch silenced (no rule re-injection)");
   } finally { cleanup(); }
 });
 
