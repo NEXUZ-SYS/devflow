@@ -215,6 +215,22 @@ if [ "${#adr_dirs[@]}" -gt 0 ]; then
   fi
 fi
 
+# --- DevFlow context index (Camada 1: standards + stack refs available) ---
+# Lists declared standards and scraped/pending stack refs so the LLM knows
+# what's available without reading every file. Pure scan — no network/LLM.
+# Also clears the per-session nudge cache so Camada 2 fires fresh in this
+# new conversation (cache is time-TTL'd at 6h, but sessions can overlap).
+
+context_index_context=""
+if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context/stacks/manifest.yaml" ]; then
+  (cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --clear 2>/dev/null) || true
+  index_text=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/context-index-cli.mjs" --format=text 2>/dev/null || echo "")
+  if [ -n "$index_text" ]; then
+    index_escaped=$(escape_for_json "$index_text")
+    context_index_context="\\n<DEVFLOW_CONTEXT_INDEX>\\n${index_escaped}\\n</DEVFLOW_CONTEXT_INDEX>\\n"
+  fi
+fi
+
 # --- MemPalace auto-recall ---
 
 mempalace_context=""
@@ -350,7 +366,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
