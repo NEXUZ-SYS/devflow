@@ -154,9 +154,31 @@ test("deriveApplyTo: maps stack to glob list", () => {
   assert.deepEqual(deriveApplyTo("TypeScript 5.9.x"), ["**/*.ts", "**/*.tsx"]);
   assert.deepEqual(deriveApplyTo("Python 3.13"), ["**/*.py"]);
   assert.deepEqual(deriveApplyTo("Rust 1.75"), ["**/*.rs"]);
-  // Unknown stack → fallback
-  assert.deepEqual(deriveApplyTo("Datadog"), ["src/**"]);
-  assert.deepEqual(deriveApplyTo(""), ["src/**"]);
+});
+
+test("deriveApplyTo: tauri uses src-tauri convention", () => {
+  // Tauri has a real directory convention (src-tauri/) so we can match safely.
+  assert.deepEqual(
+    deriveApplyTo("Tauri 2"),
+    ["src-tauri/**/*.rs", "src-tauri/tauri.conf.json"]
+  );
+});
+
+test("deriveApplyTo: unknown stack returns [] (no auto-trigger)", () => {
+  // Behavior change (task #70): the previous fallback was ["src/**"], which
+  // caused services and SDKs without a file footprint (Datadog, GitHub
+  // Actions, Claude API, Firestore Web SDK, Zustand) to match every file
+  // under src/, generating ~9 stds per .ts edit. The correct contract is:
+  // the std exists in the index (Camada 1 lists it) but does NOT auto-trigger
+  // via path glob. Project owners can override with --applyTo if needed.
+  assert.deepEqual(deriveApplyTo("Datadog"), []);
+  assert.deepEqual(deriveApplyTo("Datadog LLM Observability"), []);
+  assert.deepEqual(deriveApplyTo("GitHub Actions"), []);
+  assert.deepEqual(deriveApplyTo("Claude API"), []);
+  assert.deepEqual(deriveApplyTo("Firestore (Web SDK) 12"), []);
+  assert.deepEqual(deriveApplyTo("Zustand 5"), []);
+  assert.deepEqual(deriveApplyTo(""), []);
+  assert.deepEqual(deriveApplyTo(null), []);
 });
 
 // ─── resolveAdrSlug ─────────────────────────────────────────────────────────

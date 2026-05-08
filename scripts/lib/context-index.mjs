@@ -89,8 +89,14 @@ export function renderContextIndexText(idx) {
   } else {
     for (const s of idx.standards) {
       const linter = s.hasLinter ? "linter:✓" : "linter:✗";
-      const applyTo = (s.applyTo || []).join(", ");
-      lines.push(`  - ${s.id} — ${applyTo} (${linter})`);
+      const apply = s.applyTo || [];
+      // Empty applyTo (task #70): service/SDK stds without a reliable file
+      // footprint don't auto-trigger Camada 2. The marker tells the LLM the
+      // std exists but won't fire on Read/Edit/Write.
+      const applyToText = apply.length === 0
+        ? "(manual — sem auto-trigger)"
+        : apply.join(", ");
+      lines.push(`  - ${s.id} — ${applyToText} (${linter})`);
     }
   }
   lines.push("");

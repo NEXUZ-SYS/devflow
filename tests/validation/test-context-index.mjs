@@ -188,6 +188,37 @@ test("CLI context-index: missing project arg defaults to cwd, still produces JSO
   } finally { cleanup(); }
 });
 
+test("buildContextIndex: standard with empty applyTo is preserved (still in list)", () => {
+  // Task #70: services like Datadog/GitHub Actions have applyTo:[] now —
+  // they should still appear in the index (LLM knows they exist) but
+  // Camada 2 won't auto-trigger.
+  const { root, cleanup } = fixture();
+  try {
+    writeStandard(root, "std-datadog", {
+      id: "std-datadog", description: "DD", version: "1.0.0",
+      applyTo: [],
+    });
+    const idx = buildContextIndex(root);
+    assert.equal(idx.standards.length, 1);
+    assert.deepEqual(idx.standards[0].applyTo, []);
+  } finally { cleanup(); }
+});
+
+test("CLI context-index: empty applyTo renders as '(manual — sem auto-trigger)'", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeStandard(root, "std-datadog", {
+      id: "std-datadog", description: "DD", version: "1.0.0",
+      applyTo: [],
+    });
+    const r = spawnSync("node", [CLI, `--project=${root}`, "--format=text"], { encoding: "utf-8" });
+    assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+    assert.match(r.stdout, /std-datadog/);
+    assert.match(r.stdout, /manual.*sem auto-trigger|sem glob|manual/i,
+      "empty applyTo should render with explicit 'manual' marker so the LLM knows it won't fire automatically");
+  } finally { cleanup(); }
+});
+
 test("CLI context-index: --format=text produces human-readable output for hook injection", () => {
   // The hook wants a textual block — not raw JSON — so the LLM sees it as
   // narrative context. Schema: stable headers we can grep in tests.

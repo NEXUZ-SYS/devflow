@@ -142,21 +142,29 @@ const STACK_GLOBS = {
   zod:         ["**/*.ts", "**/*.tsx"],
   pytest:      ["tests/**/*.py", "**/test_*.py", "**/*_test.py"],
   vitest:      ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts"],
+  // Tauri ships a fixed src-tauri/ directory next to the JS app
+  tauri:       ["src-tauri/**/*.rs", "src-tauri/tauri.conf.json"],
   // CI / tooling
   biome:       ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
   ruff:        ["**/*.py", "pyproject.toml"],
   eslint:      ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
   prettier:    ["**/*"],
   husky:       [".husky/**", "package.json"],
-  // Default fallback
 };
 
 /**
  * Map an ADR.stack value (e.g., "TypeScript 5.9.x", "Python 3.13", "Tauri 2")
- * to a list of applyTo globs. Falls back to ["src/**"] for unknown stacks.
+ * to a list of applyTo globs.
+ *
+ * Returns `[]` for unknown stacks (services/SDKs without a reliable file
+ * footprint, e.g., Datadog, GitHub Actions, Claude API, Firestore Web SDK,
+ * Zustand). The std remains visible in the Camada 1 index but does not
+ * auto-trigger via path globs in Camada 2 — overriding with --applyTo at
+ * generation time is the explicit opt-in. See task #70 for the rationale:
+ * the previous ["src/**"] fallback caused 9 stds to match every .ts edit.
  */
 export function deriveApplyTo(stackString) {
-  if (!stackString || typeof stackString !== "string") return ["src/**"];
+  if (!stackString || typeof stackString !== "string") return [];
   const normalized = stackString
     .toLowerCase()
     .replace(/[^a-z0-9]/g, " ")
@@ -165,7 +173,7 @@ export function deriveApplyTo(stackString) {
   for (const word of normalized) {
     if (STACK_GLOBS[word]) return STACK_GLOBS[word];
   }
-  return ["src/**"];
+  return [];
 }
 
 // ─── ADR resolution (slug | numeric prefix | full path) ──────────────────────
