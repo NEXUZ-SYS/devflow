@@ -134,7 +134,14 @@ export async function consolidate(refined, projectRoot) {
     const content = await readFile(join(refined.refinedDir, f), "utf-8");
     parts.push(content);
   }
-  const consolidated = parts.join("\n\n");
+  // md2llm writes `SOURCE: <local-tmp-path>` because it processes raw files
+  // off disk. Replace with the actual upstream URL so committed refs are
+  // self-contained and traceable (no /tmp leakage). Single --from URL per
+  // scrape means all snippets share the same source.
+  const consolidated = parts.join("\n\n").replace(
+    /^SOURCE: \/tmp\/devflow-scrape-[^\n]*$/gm,
+    `SOURCE: ${refined.url}`
+  );
 
   // SI-6: sanitize before writing. Hash is computed AFTER sanitization (the
   // canary references the cleaned content).
