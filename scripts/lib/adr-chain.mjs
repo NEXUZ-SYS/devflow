@@ -381,6 +381,44 @@ export function findStackMatches(mentions, projectRoot) {
   });
 }
 
+// ─── Source discovery: extract official URLs from ADR Evidências ───────────
+
+/**
+ * Extract URLs from `## Evidências / Anexos` section of an ADR.
+ *
+ * - Only HTTPS (security: official sources only — http/javascript: rejected).
+ * - Markdown link syntax `[text](url)` parsed; bare URLs ignored.
+ * - Deduplicated, original order preserved.
+ *
+ * Used by adr-extract-stacks → manifest.discoveryHints, then by
+ * `devflow stacks discover-source` to surface curated sources.
+ */
+export function extractEvidenciasUrls(adrContent) {
+  if (typeof adrContent !== "string") return [];
+  // Find ## Evidências section header (with optional " / Anexos" suffix)
+  const headRe = /^##\s+Evid[êe]ncias[^\n]*$/im;
+  const headMatch = adrContent.match(headRe);
+  if (!headMatch) return [];
+  const startIdx = headMatch.index + headMatch[0].length;
+  // Find next ## (or # — ADR titles use single-#) heading or EOF
+  const after = adrContent.slice(startIdx);
+  const nextHead = after.match(/^#{1,2}\s+\S/m);
+  const endIdx = nextHead ? startIdx + nextHead.index : adrContent.length;
+  const section = adrContent.slice(startIdx, endIdx);
+
+  const seen = new Set();
+  const urls = [];
+  const linkRe = /\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g;
+  let m;
+  while ((m = linkRe.exec(section)) !== null) {
+    const url = m[2];
+    if (seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
 // ─── Helper for adr-audit Check #13 ────────────────────────────────────────
 
 export function adrHasGuardrails(body) {

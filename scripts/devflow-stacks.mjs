@@ -201,12 +201,63 @@ async function main() {
       const code = await cmdAudit(arg, projectRoot);
       process.exit(code);
     }
+    case "discover-source": {
+      const [lib] = opts.args;
+      const code = await cmdDiscoverSource(lib, projectRoot);
+      process.exit(code);
+    }
     default:
       console.error(`Unknown subcommand: ${sub}`);
-      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit> [args]");
-      console.error("  audit <lib>@<version>   Deep audit of refs/<lib>@<version>.md (5 checks)");
+      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|discover-source> [args]");
+      console.error("  audit <lib>@<version>          Deep audit of refs/<lib>@<version>.md (5 checks)");
+      console.error("  discover-source <lib>          List candidate URLs to scrape (curated + heuristic)");
       process.exit(2);
   }
+}
+
+async function cmdDiscoverSource(lib, projectRoot) {
+  if (!lib) {
+    console.error("Usage: devflow stacks discover-source <lib> [--project=<path>]");
+    return 2;
+  }
+  const m = loadManifest(projectRoot);
+  const fw = m.frameworks?.[lib];
+  if (!fw) {
+    console.error(`Error: '${lib}' not found in manifest.yaml`);
+    console.error(`Hint: run \`node scripts/adr-extract-stacks.mjs <adr> --add-to-manifest --project=${projectRoot}\` first.`);
+    return 1;
+  }
+
+  const version = fw.version;
+  console.log(`Source candidates for ${lib}@${version}:`);
+  console.log("");
+
+  const curated = Array.isArray(fw.discoveryHints) ? fw.discoveryHints : [];
+  if (curated.length > 0) {
+    console.log("Curated (from ADR ## Evidências — official sources, human-vetted):");
+    curated.forEach((url, i) => console.log(`  ${i + 1}. ${url}`));
+    console.log("");
+  } else {
+    console.log("(no curated hints in manifest — re-run adr-extract-stacks --add-to-manifest");
+    console.log(" to hydrate from ADR ## Evidências URLs)");
+    console.log("");
+  }
+
+  // Heuristic fallbacks (deterministic — no network call required).
+  // Order: registry README mirror (npmjs.com works well with md2llm),
+  // then registry homepage / project pages.
+  console.log("Heuristic candidates (try if curated URLs scrape poorly):");
+  console.log(`  - https://www.npmjs.com/package/${lib}    (npm — README mirror, scrape-friendly)`);
+  console.log(`  - https://pypi.org/project/${lib}/         (PyPI — if Python lib)`);
+  console.log(`  - https://crates.io/crates/${lib}          (crates.io — if Rust lib)`);
+  console.log("");
+  console.log("Run scrape with chosen URL:");
+  console.log(`  node scripts/devflow-stacks.mjs scrape ${lib} ${version} --source=<type> --from=<URL> --project=${projectRoot}`);
+  console.log("");
+  console.log("Note: SPA-rendered docs (typescriptlang.org/docs, react.dev) often");
+  console.log("scrape poorly because md2llm needs static markdown/HTML. Prefer");
+  console.log("registry pages (npmjs.com) or raw GitHub README URLs.");
+  return 0;
 }
 
 async function cmdAudit(arg, projectRoot) {

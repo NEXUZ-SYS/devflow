@@ -19,7 +19,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
-import { extractStackMentions } from "./lib/adr-chain.mjs";
+import { extractStackMentions, extractEvidenciasUrls } from "./lib/adr-chain.mjs";
 import { addFrameworksToManifest } from "./lib/manifest-stacks.mjs";
 import { resolveAdrSlug } from "./lib/standard-from-adr.mjs";
 
@@ -89,8 +89,13 @@ function main() {
     process.exit(0);
   }
 
-  // Mutating mode — add to manifest
-  const r = addFrameworksToManifest(projectRoot, mentions);
+  // Mutating mode — hydrate each mention with discoveryHints from the ADR's
+  // ## Evidências section (curated official URLs). Same hints attached to all
+  // detected libs in this ADR — accuracy improves at scrape time when the
+  // user picks the URL that matches the lib.
+  const evidenciasUrls = extractEvidenciasUrls(content);
+  const enriched = mentions.map(m => ({ ...m, discoveryHints: evidenciasUrls }));
+  const r = addFrameworksToManifest(projectRoot, enriched);
   console.log("");
   if (r.added.length > 0) {
     console.log(`Added ${r.added.length} entries to manifest.yaml:`);

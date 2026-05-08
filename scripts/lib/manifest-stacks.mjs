@@ -13,11 +13,18 @@ import { validateSubset } from "./glob.mjs";
 const STACKS_DIR = ".context/stacks";
 const MANIFEST_FILE = "manifest.yaml";
 
-const EMPTY = Object.freeze({
-  spec: "devflow-stack/v0",
-  runtime: {},
-  frameworks: {},
-});
+// IMPORTANT: do NOT export a shared frozen EMPTY constant. Object.freeze is
+// shallow — `EMPTY.frameworks` (the inner `{}`) is mutable, and shallow spread
+// `{...EMPTY}` shares that reference across calls. Callers that mutate the
+// returned manifest (addFrameworksToManifest) would corrupt all subsequent
+// loadManifest() calls. Use a fresh-empty factory instead.
+function freshEmpty() {
+  return {
+    spec: "devflow-stack/v0",
+    runtime: {},
+    frameworks: {},
+  };
+}
 
 // Manifest is YAML (no frontmatter delimiters). parseFrontmatter expects
 // `---\n...\n---\n<body>` shape. Wrap the manifest content as a frontmatter
@@ -30,16 +37,16 @@ function parseYamlAsManifest(yamlContent) {
 
 export function loadManifest(projectRoot) {
   const path = join(projectRoot, STACKS_DIR, MANIFEST_FILE);
-  if (!existsSync(path)) return { ...EMPTY };
+  if (!existsSync(path)) return freshEmpty();
   let parsed;
   try {
     parsed = parseYamlAsManifest(readFileSync(path, "utf-8"));
   } catch (err) {
     console.error(`[manifest-stacks] parse error: ${err.message}`);
-    return { ...EMPTY };
+    return freshEmpty();
   }
   return {
-    spec: parsed.spec || EMPTY.spec,
+    spec: parsed.spec || "devflow-stack/v0",
     runtime: parsed.runtime || {},
     frameworks: parsed.frameworks || {},
   };
@@ -153,6 +160,12 @@ export function addFrameworksToManifest(projectRoot, entries) {
     };
     if (Array.isArray(entry.applyTo) && entry.applyTo.length > 0) {
       manifest.frameworks[lib].applyTo = entry.applyTo;
+    }
+    if (Array.isArray(entry.discoveryHints) && entry.discoveryHints.length > 0) {
+      // Curated official URLs (typically from ADR ## Evidências section).
+      // Used by `devflow stacks discover-source <lib>` to surface scrape
+      // candidates without requiring network/registry calls.
+      manifest.frameworks[lib].discoveryHints = entry.discoveryHints;
     }
     result.added.push(`${lib}@${version}`);
   }
