@@ -54,7 +54,8 @@ try {
 
   const projectRoot = findProjectRoot(file);
   const standards = findRelatedStandards(adr, projectRoot);
-  const mentions = extractStackMentions(adr);
+  // Pass projectRoot to enable Tier-2 prose extraction (manifest-gated).
+  const mentions = extractStackMentions(adr, { projectRoot });
   const stacks = findStackMatches(mentions, projectRoot);
 
   const suggestions = {

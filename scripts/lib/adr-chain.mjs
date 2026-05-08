@@ -28,14 +28,42 @@ function tokenize(text) {
     .filter(t => t.length >= 3 && !STOPWORDS.has(t));
 }
 
-function jaccard(aTokens, bTokens) {
+// Overlap coefficient: |A ∩ B| / min(|A|, |B|).
+// Better than Jaccard when comparing a small "category" (std with ~5 tokens)
+// to a large "instance" (ADR with ~50 tokens including verbose guardrails) —
+// avoids the asymmetric-size penalty that Jaccard suffers from.
+function tokenOverlap(aTokens, bTokens) {
   const a = new Set(aTokens);
   const b = new Set(bTokens);
   if (a.size === 0 || b.size === 0) return 0;
   let inter = 0;
   for (const x of a) if (b.has(x)) inter++;
-  const union = a.size + b.size - inter;
-  return union === 0 ? 0 : inter / union;
+  return inter / Math.min(a.size, b.size);
+}
+
+// Normalize a stack name for comparison: lowercase + strip non-alphanumeric.
+// Examples: "TypeScript" → "typescript", "Next.js" → "nextjs", "Zod" → "zod".
+function normalizeStackName(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Stripped from std.id when comparing to adr.stack — common camada suffixes.
+const STD_LAYER_SUFFIX_RE = /-(frontend|bff|backend|data-infra|web|api|server|client|cli)$/;
+
+// Strong boost when adr.stack matches std.id core (after stripping `std-` prefix
+// and common camada suffixes). Captures cases where token overlap is low but
+// the underlying stack is the same lib (e.g., Zod across multiple camadas).
+function stackIdBoost(adrStack, stdId) {
+  const adrCore = normalizeStackName(adrStack);
+  const stdCore = normalizeStackName(
+    String(stdId || "").replace(/^std-/, "").replace(STD_LAYER_SUFFIX_RE, "")
+  );
+  if (!adrCore || !stdCore || adrCore.length < 2 || stdCore.length < 2) return 0;
+  if (adrCore === stdCore) return 0.50;
+  // Partial: e.g., "nextjs" / "next", "typescript" / "ts" (both >= 3 chars)
+  if (adrCore.length >= 3 && stdCore.length >= 3 &&
+      (adrCore.includes(stdCore) || stdCore.includes(adrCore))) return 0.30;
+  return 0;
 }
 
 // Stack glob hints — used to detect overlap between adr.stack and std.applyTo
@@ -89,6 +117,7 @@ function standardLinksAdr(std, adrSlug) {
 
 export function findRelatedStandards(adr, projectRoot, opts = {}) {
   const threshold = opts.threshold ?? 0.20;
+  const strongOverlap = opts.strongOverlap ?? 0.50;
   const topN = opts.topN ?? 3;
   const standards = loadStandards(projectRoot);
   if (standards.length === 0) return { matches: [], wouldCreate: deriveStdId(adr) };
@@ -105,21 +134,50 @@ export function findRelatedStandards(adr, projectRoot, opts = {}) {
       ...tokenize(std.id),
       ...tokenize(std.description),
     ];
-    let score = jaccard(adrTokens, stdTokens);
-    score += stackBoost(adr.stack, std.applyTo);
+    // Composite scoring (v1.2):
+    //   - overlap     (overlap coefficient): handles asymmetric sizes
+    //     (small std + large ADR) better than Jaccard
+    //   - idBoost     (stackIdBoost): strong signal when adr.stack matches
+    //     std.id core (e.g., adr.stack="Zod" matches std-zod across camadas)
+    //   - applyBoost  (stackBoost): applyTo glob extension overlap (legacy)
+    //
+    // Composite score is informational; LINK eligibility is gated separately
+    // by (overlap >= strongOverlap) OR (idBoost > 0). See filter below.
+    const overlap = tokenOverlap(adrTokens, stdTokens);
+    const idBoost = stackIdBoost(adr.stack, std.id);
+    const applyBoost = stackBoost(adr.stack, std.applyTo);
+    let score = overlap + idBoost + applyBoost;
     if (score > 1) score = 1;
 
     const alreadyLinked = standardLinksAdr(std, adrSlug);
     return {
       id: std.id,
       score: Math.round(score * 100) / 100,
+      tokenOverlap: Math.round(overlap * 100) / 100,
+      stackIdBoost: Math.round(idBoost * 100) / 100,
+      stackBoost: Math.round(applyBoost * 100) / 100,
       applyTo: std.applyTo || [],
       alreadyLinked,
     };
   });
 
+  // v1.2 dedup-stricter LINK gate: low textual overlap alone (0.20-0.49) is
+  // too weak — it admits cross-domain false positives via shared camada words
+  // ("frontend"/"backend"/"bff"). Require either:
+  //   • tokenOverlap >= strongOverlap (pure textual signal), OR
+  //   • some textual overlap (>= threshold) AND a stack-identity confirmation
+  //     (stackIdBoost: same lib name across camadas, or
+  //      stackBoost:   same applyTo extension/glob)
+  // The composite `score` threshold remains as a floor; the OR-gate above
+  // does the actual discrimination.
   const filtered = scored
-    .filter(x => !x.alreadyLinked && x.score >= threshold)
+    .filter(x => {
+      if (x.alreadyLinked) return false;
+      if (x.score < threshold) return false;
+      if (x.tokenOverlap >= strongOverlap) return true;
+      if (x.tokenOverlap >= threshold && (x.stackIdBoost > 0 || x.stackBoost > 0)) return true;
+      return false;
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, topN);
 
@@ -131,10 +189,19 @@ export function findRelatedStandards(adr, projectRoot, opts = {}) {
 
 function deriveStdId(adr) {
   const slug = adrIdentity(adr) || "from-adr";
-  // Drop common ADR slug prefixes/suffixes like "adopt-", "-strategy"
+  // Drop common ADR slug prefixes/suffixes:
+  // - "adr-" (universal in nxz.one and other orgs that prefix slugs)
+  // - "adopt-", "use-", "migrate-", "introduce-" (intent-flavor prefixes)
+  // - "-strategy", "-policy" (boilerplate suffixes)
+  // - "-frontend|bff|backend|data-infra|web|api|server|client|cli" (camada
+  //   suffix — convention is one std per lib with applyTo widening across
+  //   camadas; stripping here lets ADR-N+1 in another camada dedup to the
+  //   same std-X created by the first ADR)
   const cleaned = slug
+    .replace(/^adr-/i, "")
     .replace(/^(adopt|use|migrate|introduce)-/i, "")
-    .replace(/-strategy$|-policy$/i, "");
+    .replace(/-strategy$|-policy$/i, "")
+    .replace(STD_LAYER_SUFFIX_RE, "");
   return `std-${cleaned}`;
 }
 
@@ -147,28 +214,100 @@ export function findStandardsLinkingAdr(adrSlug, projectRoot) {
 
 // ─── Public: stacks lookup ─────────────────────────────────────────────────
 
-// Match: optional @scope, lib name, @, semver. Lookbehind for separator
-// (so consecutive matches don't consume their preceding space). \b doesn't
-// fire before '@' since '@' is non-word.
-const PKG_VERSION_RE = /(?<=^|[\s(`"',])(@?[a-z][a-z0-9._-]*(?:\/[a-z0-9._-]+)?)@(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?)\b/g;
+// Match: optional @scope, lib name, @, version (tolerant — accepts x.y.z,
+// x.y.x, x.y, x bare; pre-release suffix optional). Lookbehind for separator
+// so consecutive matches don't consume their preceding space.
+//
+// Tolerant version segment: accepts digits OR 'x'/'X' (semver wildcard).
+// Up to 2 dot-separated segments after major (so `5.9.x`, `5.9.0`, `16.2`,
+// `16` all match). Pre-release suffix optional.
+const PKG_VERSION_RE = /(?<=^|[\s(`"',])(@?[a-z][a-z0-9._-]*(?:\/[a-z0-9._-]+)?)@(\d+(?:\.(?:\d+|[xX])){0,2}(?:-[a-zA-Z0-9.-]+)?)\b/g;
 const SAFE_LIB_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
 
-export function extractStackMentions(adr) {
-  if (adr.category !== "arquitetura") return [];
+// Normalize a captured version: replace x/X with 0, pad to x.y.z.
+// Examples: "5.9.x" → "5.9.0", "16" → "16.0.0", "5.9.0-alpha" → "5.9.0-alpha".
+function normalizeVersion(v) {
+  if (!v) return "";
+  const m = v.match(/^(\d+(?:\.[\dxX]+)*)(.*)$/);
+  if (!m) return v;
+  const core = m[1];
+  const suffix = m[2] || "";
+  const parts = core.split(".").map(p => /^[xX]$/.test(p) ? "0" : p);
+  while (parts.length < 3) parts.push("0");
+  return parts.slice(0, 3).join(".") + suffix;
+}
+
+// Tier-2 prose regex: captures `<DisplayName> <X.Y[.Z[-suffix]]>`. Requires
+// at least 2 dotted segments after major (so "Section 1" / "Phase 2" don't
+// match — only X.Y minimum). Display name is captured loosely; manifest
+// match is the discriminator that prevents false positives like "Process 1.2".
+const PROSE_VERSION_RE = /(?<=^|[\s(`"',])([A-Za-z][A-Za-z0-9.+-]{1,30})\s+(\d+\.[\dxX]+(?:\.[\dxX]+)?(?:-[a-zA-Z0-9.-]+)?)(?=[\s.,;:)`"']|$)/g;
+
+export function extractStackMentions(adr, opts = {}) {
+  // Tier-1 (strict): <lib>@<version> form — works for any lib, no manifest
+  // required. Catches new libs being introduced.
+  // Tier-2 (prose, opt-in via opts.projectRoot): "<DisplayName> <version>"
+  // matched only against libs already declared in manifest.yaml. Manifest
+  // is the source of truth — prevents "Section 1.2" false positives without
+  // requiring a hardcoded allowlist that would rot.
   const text = `${adr.description || ""}\n${adr.body || ""}`;
   const seen = new Set();
   const out = [];
+
+  // ─── Tier 1: strict <lib>@<version> ─────────────────────────────────────
   let m;
   PKG_VERSION_RE.lastIndex = 0;
   while ((m = PKG_VERSION_RE.exec(text)) !== null) {
     const lib = m[1].toLowerCase();
-    const version = m[2];
+    const rawVersion = m[2];
+    const version = normalizeVersion(rawVersion);
     if (!SAFE_LIB_RE.test(lib) || lib.includes("..")) continue;
+    if (version === "0.0.0") continue;
     const key = `${lib}@${version}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ lib, version });
   }
+
+  // ─── Tier 2: prose form, manifest-gated ─────────────────────────────────
+  if (opts.projectRoot) {
+    const manifest = loadManifest(opts.projectRoot);
+    const fws = manifest.frameworks || {};
+    if (Object.keys(fws).length > 0) {
+      // Build alias map: every manifest key + its display aliases → manifest key.
+      // Aliases are derived by stripping non-alphanumeric and lowercasing both
+      // sides, so "Next.js" / "NextJS" / "nextjs" all collapse to "nextjs"
+      // and match the manifest key "next" (since "nextjs".includes("next")).
+      const manifestKeys = Object.keys(fws);
+      const normalizedKeys = manifestKeys.map(k => ({
+        key: k,
+        norm: normalizeStackName(k),
+      }));
+
+      let pm;
+      PROSE_VERSION_RE.lastIndex = 0;
+      while ((pm = PROSE_VERSION_RE.exec(text)) !== null) {
+        const displayName = pm[1];
+        const rawVersion = pm[2];
+        const version = normalizeVersion(rawVersion);
+        if (version === "0.0.0") continue;
+        const dispNorm = normalizeStackName(displayName);
+        if (dispNorm.length < 2) continue;
+        // Match manifest key whose normalized form equals or is contained in
+        // the display name (so manifest "next" matches "Next.js" via dispNorm
+        // "nextjs" containing "next"). Symmetric containment too.
+        const hit = normalizedKeys.find(({ norm }) =>
+          norm === dispNorm || dispNorm.includes(norm) || norm.includes(dispNorm)
+        );
+        if (!hit) continue;
+        const key = `${hit.key}@${version}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ lib: hit.key, version });
+      }
+    }
+  }
+
   return out;
 }
 
