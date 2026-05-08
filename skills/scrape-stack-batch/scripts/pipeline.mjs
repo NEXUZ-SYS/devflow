@@ -138,10 +138,16 @@ export async function consolidate(refined, projectRoot) {
   // off disk. Replace with the actual upstream URL so committed refs are
   // self-contained and traceable (no /tmp leakage). Single --from URL per
   // scrape means all snippets share the same source.
-  const consolidated = parts.join("\n\n").replace(
+  let consolidated = parts.join("\n\n").replace(
     /^SOURCE: \/tmp\/devflow-scrape-[^\n]*$/gm,
     `SOURCE: ${refined.url}`
   );
+  // md2llm sometimes appends a trailing `@<encoded-filename>` line that
+  // mirrors the local raw filename — pure leakage with no semantic value.
+  // Pattern: starts with `@`, followed by underscore-encoded URL chars only.
+  consolidated = consolidated.replace(/^@[a-zA-Z0-9_]+\s*$/gm, "").trim();
+  // Collapse any consecutive blank lines created by the strip
+  consolidated = consolidated.replace(/\n{3,}/g, "\n\n");
 
   // SI-6: sanitize before writing. Hash is computed AFTER sanitization (the
   // canary references the cleaned content).

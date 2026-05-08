@@ -234,7 +234,8 @@ async function cmdDiscoverSource(lib, projectRoot) {
 
   const curated = Array.isArray(fw.discoveryHints) ? fw.discoveryHints : [];
   if (curated.length > 0) {
-    console.log("Curated (from ADR ## Evidências — official sources, human-vetted):");
+    console.log("PRIMARY — Curated official sources (from ADR ## Evidências):");
+    console.log("These are what the ADR author selected as authoritative. Try first.");
     curated.forEach((url, i) => console.log(`  ${i + 1}. ${url}`));
     console.log("");
   } else {
@@ -243,20 +244,38 @@ async function cmdDiscoverSource(lib, projectRoot) {
     console.log("");
   }
 
-  // Heuristic fallbacks (deterministic — no network call required).
-  // Order: registry README mirror (npmjs.com works well with md2llm),
-  // then registry homepage / project pages.
-  console.log("Heuristic candidates (try if curated URLs scrape poorly):");
-  console.log(`  - https://www.npmjs.com/package/${lib}    (npm — README mirror, scrape-friendly)`);
-  console.log(`  - https://pypi.org/project/${lib}/         (PyPI — if Python lib)`);
-  console.log(`  - https://crates.io/crates/${lib}          (crates.io — if Rust lib)`);
+  // Tier-1 fallback: raw GitHub README. Best content fidelity for OSS libs
+  // (real markdown, not HTML wrapper). Requires manual repo URL knowledge —
+  // we suggest patterns but can't auto-resolve without network/registry call.
+  console.log("FALLBACK Tier-1 — Raw GitHub README (best content quality):");
+  console.log(`  - https://raw.githubusercontent.com/<org>/<repo>/main/README.md`);
+  console.log(`  - https://raw.githubusercontent.com/<org>/${lib}/main/README.md`);
+  console.log("Tip: replace <org> with the actual GitHub org (e.g., microsoft/TypeScript,");
+  console.log("colinhacks/zod, vercel/next.js). For libs in monorepos, look for");
+  console.log("docs/ subdirectory or specific docs files in the repo.");
   console.log("");
+
+  // Tier-2 fallback: registry pages — REGISTRY-LEVEL ONLY, content varies.
+  // npmjs.com works for libs with rich READMEs (zod, vitest); fails for libs
+  // that only have install commands in their README (typescript, react).
+  console.log("FALLBACK Tier-2 — Registry pages (mixed quality, depends on lib's README):");
+  console.log(`  - https://www.npmjs.com/package/${lib}    (npm)`);
+  console.log(`  - https://pypi.org/project/${lib}/         (PyPI)`);
+  console.log(`  - https://crates.io/crates/${lib}          (crates.io)`);
+  console.log("⚠ Quality warning: registry pages capture only what the lib's");
+  console.log("README contains. For libs that document via separate sites (TypeScript,");
+  console.log("React), the npm page has just install commands — NOT useful as docs.");
+  console.log("");
+
   console.log("Run scrape with chosen URL:");
   console.log(`  node scripts/devflow-stacks.mjs scrape ${lib} ${version} --source=<type> --from=<URL> --project=${projectRoot}`);
   console.log("");
-  console.log("Note: SPA-rendered docs (typescriptlang.org/docs, react.dev) often");
-  console.log("scrape poorly because md2llm needs static markdown/HTML. Prefer");
-  console.log("registry pages (npmjs.com) or raw GitHub README URLs.");
+  console.log("AVOID: SPA-rendered docs (typescriptlang.org/docs, react.dev,");
+  console.log("zod.dev) — md2llm needs static markdown/HTML; SPAs return empty");
+  console.log("HTML shell that produces zero useful snippets.");
+  console.log("");
+  console.log("After scrape, verify quality with `devflow stacks audit ${lib}@${version}` —");
+  console.log("T3 check warns if <5 snippets (registry-pages-of-install-commands signal).");
   return 0;
 }
 
