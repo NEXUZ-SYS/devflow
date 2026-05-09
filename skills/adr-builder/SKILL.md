@@ -91,6 +91,15 @@ Returns 3-digit zero-padded number (e.g. `004`). Filename will be `${num}-${slug
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/TEMPLATE-ADR.md` as structural source of truth. Fill in placeholders with real content (or `<a definir>` for missing pieces, with explicit warning at end).
 
+**Web research is expected for technical content.** Each section that requires concrete details should be grounded in current docs/specs, not memory:
+
+- **Contexto** — version-specific pain points; check release notes if user named a version (`X.Y.Z`).
+- **Decisão** — current API surface (deprecations matter); confirm via official docs.
+- **Alternativas** — viable competitors at the version you're documenting; if user said "TypeScript 5.9" don't cite alternatives that only matter pre-5.0.
+- **Consequências / Guardrails / Enforcement** — concrete tooling versions, lint rule names, CI step names. Use WebSearch + WebFetch when details are uncertain or version-sensitive.
+
+Use the same research depth you would for any technical question — don't fabricate details to fit the template. If a section can't be grounded in 2-3 minutes of research, mark it `<a definir>` and surface that gap at the end of the response.
+
 Frontmatter defaults (NEVER ask user about these):
 - `version: 1.0.0` (semver of the document, not stack)
 - `supersedes: []`
@@ -106,15 +115,35 @@ Format rules:
 - Guardrails as bullets starting with `SEMPRE` / `NUNCA` / `QUANDO…ENTÃO` (uppercase)
 - Enforcement as `- [ ]` GFM checkboxes
 
-### Step 4.1 — Populate ## Evidências with canonical URLs
+### Step 4.1 — Populate ## Evidências with canonical URLs (web research)
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/KNOWN-DOC-URLS.md` and look up the chosen stack. If the lib appears in the table:
-1. Use the **primary** URL as the first source in `## Evidências` (this is what `extract-stacks --add-to-manifest` will hydrate as `discoveryHints[0]`, and `scrape --auto-fallback` will try first).
-2. Optionally include 1-2 fallback URLs as additional sources.
+The same way you research the body's technical content, **research the canonical doc URLs for each chosen stack**. Goal: 2-3 URLs in `## Evidências` per stack — primary tutorial/guide first, alternates after — that scrape cleanly through the DevFlow `stacks scrape` pipeline.
 
-If the lib is **not** in the table, use your judgment but follow the anti-patterns at the bottom of the asset (avoid raw GitHub READMEs, pure API reference pages, JS-heavy SPAs, and registry pages when the lib has its own docs site). Prefer tutorial/guide pages.
+**Process:**
 
-Why this matters: ADR `## Evidências` URLs become `discoveryHints` in the manifest, which `scrape --auto-fallback` consumes when generating the artisanal ref. Bad URLs in `## Evidências` cascade into scrape failures downstream.
+1. **Cache check.** Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/KNOWN-DOC-URLS.md`. If the lib is listed, use those URLs (they're empirically verified). Skip web search.
+
+2. **If not in cache: WebSearch.** Query for the lib's canonical documentation. Examples of useful queries:
+   - `"<lib> documentation tutorial getting started"`
+   - `"<lib> official docs"`
+   - `"<lib> v<X.Y> guide"`
+
+   Aim for the lib's *own* docs site (e.g., `fastapi.tiangolo.com`, `docs.pydantic.dev`, `vitest.dev`), not third-party blogs or aggregators.
+
+3. **Apply anti-patterns from the asset.** The bottom of `KNOWN-DOC-URLS.md` lists URL shapes that empirically fail scrape (raw GitHub READMEs, API-reference-only pages, JS-heavy SPAs, registry pages when the lib has its own site). **These rules ALWAYS apply** — even when WebSearch surfaces such a URL as the top result, reject it.
+
+4. **(Optional) WebFetch validation.** If you're uncertain a URL has prose-rich content (vs. a link list), fetch it once and confirm. Worth it for unusual libs; skip for well-known ones.
+
+5. **Write 2-3 URLs into `## Evidências`.** Primary (best tutorial/guide) first, alternates after. Format:
+   ```markdown
+   **Fontes oficiais:** [<nome>](<url-primary>) · [<spec>](<url-alt-1>) · [<api-ref>](<url-alt-2>)
+   ```
+
+**Fallback when WebSearch is unavailable:** If your environment doesn't expose WebSearch, fall back to convention — try `<lib>.dev`, `docs.<lib>.org`, `<lib>.tiangolo.com`, etc. — and consult `KNOWN-DOC-URLS.md` even if your specific lib isn't listed (the anti-patterns still apply).
+
+**Why this matters:** ADR `## Evidências` URLs become `discoveryHints[]` in the manifest (via `extract-stacks --add-to-manifest`), which `scrape --auto-fallback` consumes when generating the artisanal ref. With 2-3 URLs, the auto-fallback has real alternatives to try when the primary breaks. With 1 URL, it has nothing to fall back to.
+
+**Do NOT** modify `KNOWN-DOC-URLS.md` mid-skill-run. It's a curated artifact maintained by humans through PR; new entries from skill runs would be unreviewed side effects.
 
 ### Step 5 — Self-review against checklist
 

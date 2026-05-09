@@ -1,19 +1,21 @@
-# Known canonical doc URLs (verified scrape-friendly)
+# Known canonical doc URLs — cache + anti-pattern catalog
 
-Use this table when populating `## Evidências` in newly-generated ADRs. The first URL listed for each lib has been empirically verified to scrape cleanly through the DevFlow `stacks scrape` pipeline (md2llm produces useful output, page has prose-rich docs). Fallbacks listed second.
+This asset is **two things**, not a closed table:
+
+1. **Warm cache** of doc URLs already verified to scrape cleanly through the DevFlow `stacks scrape` pipeline. When the chosen stack appears here, the adr-builder agent uses these URLs and skips WebSearch (saves tokens, avoids flaky search results).
+
+2. **Anti-pattern catalog** — the bottom of this file lists URL shapes that empirically fail (raw GitHub READMEs, API-reference-only pages, JS-heavy SPAs, registry pages). These rules **always apply**, even when WebSearch surfaces such a URL as the top result.
 
 Mirrors `scripts/lib/known-doc-urls.mjs` — keep both in sync. Date stamps tell you when the URL was last verified; pages restructure and entries go stale within months.
 
-## How to use (instructions for the adr-builder agent)
+**Maintenance:** Append-only by humans through PR. The adr-builder skill MUST NOT write into this file mid-run.
 
-When generating an ADR, populate the `## Evidências` section with the canonical URL for the chosen stack. Look up the lib in this table:
+## How the adr-builder agent uses this file
 
-1. Find the row for your lib (lowercase, exact match).
-2. Copy the **primary** URL into `## Evidências` as the first source.
-3. Optionally include 1-2 fallback URLs.
-4. If the lib is **not** in this table, fall back to your judgment — official docs site is the right place to look. Record what you chose.
-
-The table is the seed for `discoveryHints` (populated by `extract-stacks --add-to-manifest`) which `scrape --auto-fallback` then iterates through if the primary fails.
+1. **Check the cache table below.** If the lib is listed, use those URLs and skip web search.
+2. **If not listed, WebSearch** for the lib's canonical docs.
+3. **Apply the anti-patterns at the bottom** to filter out bad shapes — even if they appear in WebSearch results.
+4. **Write 2-3 URLs** into `## Evidências` (primary first, alternates after) so `scrape --auto-fallback` has real options downstream.
 
 ## Table
 
