@@ -93,30 +93,67 @@ async function cmdValidate(targetLib, strict, projectRoot) {
 
 async function cmdScrape(library, version, opts, projectRoot) {
   if (!library || !version) {
-    console.error("Usage: devflow stacks scrape <library> <version> --source=<type> --from=<url>");
+    console.error("Usage: devflow stacks scrape <library> <version> --source=<type> --from=<url> [--auto-fallback]");
     return 2;
   }
   if (!opts.source || !opts.from) {
     console.error("Error: --source and --from are required");
     return 2;
   }
-  const { runPipeline } = await loadSkillScript("pipeline.mjs");
+
+  // Build the ordered list of URLs to try. --from is always tried first.
+  // With --auto-fallback, append discoveryHints from the manifest (deduped).
+  const urls = [opts.from];
+  if (opts.autoFallback) {
+    try {
+      const m = loadManifest(projectRoot);
+      const fw = m.frameworks?.[library];
+      const hints = Array.isArray(fw?.discoveryHints) ? fw.discoveryHints : [];
+      for (const url of hints) {
+        if (!urls.includes(url)) urls.push(url);
+      }
+    } catch {
+      // Manifest absent or unreadable — proceed with just --from.
+    }
+  }
+
   if (opts.dryRun) {
-    console.log(`Would scrape ${library}@${version} from ${opts.source}://${opts.from}`);
+    if (opts.autoFallback && urls.length > 1) {
+      console.log(`Would scrape ${library}@${version} (auto-fallback, ${urls.length} URL(s) in order):`);
+      urls.forEach((u, i) => console.log(`  ${i + 1}. ${opts.source}://${u}`));
+    } else {
+      console.log(`Would scrape ${library}@${version} from ${opts.source}://${urls[0]}`);
+    }
     return 0;
   }
-  try {
-    const result = await runPipeline({
-      library, version,
-      url: opts.from,
-      type: opts.source,
-    }, projectRoot);
-    console.log(`OK: ${result.refPath} (hash ${result.hash}, ${result.snippetCount} snippets, ${result.sanitizationHits} sanitizations)`);
-    return 0;
-  } catch (err) {
-    console.error(`SCRAPE FAILED: ${err.message}`);
-    return 1;
+
+  const { runPipeline } = await loadSkillScript("pipeline.mjs");
+  const attempts = [];
+  for (const url of urls) {
+    try {
+      const result = await runPipeline({
+        library, version,
+        url,
+        type: opts.source,
+      }, projectRoot);
+      if (attempts.length > 0) {
+        console.log(`Auto-fallback: tried ${attempts.length + 1} URL(s), succeeded with: ${url}`);
+        for (const a of attempts) console.log(`  ✗ ${a.url} — ${a.error}`);
+      }
+      console.log(`OK: ${result.refPath} (hash ${result.hash}, ${result.snippetCount} snippets, ${result.sanitizationHits} sanitizations)`);
+      return 0;
+    } catch (err) {
+      attempts.push({ url, error: err.message });
+      if (!opts.autoFallback) {
+        console.error(`SCRAPE FAILED: ${err.message}`);
+        return 1;
+      }
+      // Auto-fallback: continue to next URL
+    }
   }
+  console.error(`SCRAPE FAILED: tried ${attempts.length} URL(s), all failed:`);
+  for (const a of attempts) console.error(`  ✗ ${a.url} — ${a.error}`);
+  return 1;
 }
 
 // ─── scrape-batch ──────────────────────────────────────────────────────────
@@ -162,6 +199,7 @@ function parseArgs(argv) {
     if (arg === "--dry-run") opts.dryRun = true;
     else if (arg === "--from-package") opts.fromPackage = true;
     else if (arg === "--from-manifest") opts.fromManifest = true;
+    else if (arg === "--auto-fallback") opts.autoFallback = true;
     else if (arg === "--strict") opts.strict = true;
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);

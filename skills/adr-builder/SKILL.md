@@ -106,6 +106,16 @@ Format rules:
 - Guardrails as bullets starting with `SEMPRE` / `NUNCA` / `QUANDO…ENTÃO` (uppercase)
 - Enforcement as `- [ ]` GFM checkboxes
 
+### Step 4.1 — Populate ## Evidências with canonical URLs
+
+Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/KNOWN-DOC-URLS.md` and look up the chosen stack. If the lib appears in the table:
+1. Use the **primary** URL as the first source in `## Evidências` (this is what `extract-stacks --add-to-manifest` will hydrate as `discoveryHints[0]`, and `scrape --auto-fallback` will try first).
+2. Optionally include 1-2 fallback URLs as additional sources.
+
+If the lib is **not** in the table, use your judgment but follow the anti-patterns at the bottom of the asset (avoid raw GitHub READMEs, pure API reference pages, JS-heavy SPAs, and registry pages when the lib has its own docs site). Prefer tutorial/guide pages.
+
+Why this matters: ADR `## Evidências` URLs become `discoveryHints` in the manifest, which `scrape --auto-fallback` consumes when generating the artisanal ref. Bad URLs in `## Evidências` cascade into scrape failures downstream.
+
 ### Step 5 — Self-review against checklist
 
 Mentally run through `references/checklist-qualidade.md`. Fix anything that fails. Mark `<a definir>` for what couldn't be fixed; flag at end.
