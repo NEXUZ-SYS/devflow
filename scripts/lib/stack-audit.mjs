@@ -97,53 +97,70 @@ export function auditStack(lib, version, projectRoot) {
   const content = readFileSync(refPath, "utf-8");
   const stats = statSync(refPath);
 
-  // T2 — All snippets have required headers
+  // Format detector: refs come in 2 shapes during the transition.
+  //   Legacy (md2llm fetch-url):  multiple "TITLE:/DESCRIPTION:/SOURCE:/LANGUAGE:/CODE:" headers
+  //   Current (recursive scrape): "**URL:** <url>" markers, 1 per crawled page
+  const titles = (content.match(/^TITLE:/gm) || []).length;
+  const urlMarkers = (content.match(/^\*\*URL:\*\*\s+https?:\/\//gm) || []).length;
+  const isLegacy = titles > 0;
+  const isRecursive = urlMarkers > 0;
+  const unitCount = Math.max(titles, urlMarkers);
+
+  // T2 — Structural headers consistent for the detected format
   {
-    // Count snippets via TITLE: occurrences
-    const titles = (content.match(/^TITLE:/gm) || []).length;
-    const missing = REQUIRED_HEADERS.filter(h => !content.includes(h));
-    if (titles === 0) {
+    if (!isLegacy && !isRecursive) {
       checks.push({
         id: "T2",
-        name: "Snippet headers complete",
+        name: "Structural markers",
         status: "FAIL",
-        diagnosis: "zero snippets (no TITLE: header found)",
+        diagnosis: "zero structural markers (no TITLE: nor **URL:** headers — likely empty scrape)",
       });
-    } else if (missing.length > 0) {
+    } else if (isRecursive) {
+      // New format — pages with **URL:** markers
       checks.push({
         id: "T2",
-        name: "Snippet headers complete",
-        status: "WARN",
-        diagnosis: `${titles} snippet(s) but missing global header types: ${missing.join(", ")}`,
+        name: "Structural markers",
+        status: "PASS",
+        diagnosis: `${urlMarkers} page(s) crawled (recursive scrape format)`,
       });
     } else {
-      // Check each snippet has all 5 headers (rough heuristic: header counts ~equal)
-      const counts = REQUIRED_HEADERS.map(h => ({
-        h,
-        count: (content.match(new RegExp(`^${h.replace(":", "")}:`, "gm")) || []).length,
-      }));
-      const inconsistent = counts.filter(c => c.count !== titles);
-      if (inconsistent.length > 0) {
+      // Legacy md2llm format — verify all 5 header types are present and consistent
+      const missing = REQUIRED_HEADERS.filter(h => !content.includes(h));
+      if (missing.length > 0) {
         checks.push({
           id: "T2",
-          name: "Snippet headers complete",
+          name: "Structural markers",
           status: "WARN",
-          diagnosis: `header counts inconsistent: ${counts.map(c => `${c.h}=${c.count}`).join(", ")} (titles=${titles})`,
+          diagnosis: `${titles} snippet(s) but missing global header types: ${missing.join(", ")}`,
         });
       } else {
-        checks.push({
-          id: "T2",
-          name: "Snippet headers complete",
-          status: "PASS",
-          diagnosis: `${titles} snippet(s), all 5 header types present and consistent`,
-        });
+        const counts = REQUIRED_HEADERS.map(h => ({
+          h,
+          count: (content.match(new RegExp(`^${h.replace(":", "")}:`, "gm")) || []).length,
+        }));
+        const inconsistent = counts.filter(c => c.count !== titles);
+        if (inconsistent.length > 0) {
+          checks.push({
+            id: "T2",
+            name: "Structural markers",
+            status: "WARN",
+            diagnosis: `header counts inconsistent: ${counts.map(c => `${c.h}=${c.count}`).join(", ")} (titles=${titles})`,
+          });
+        } else {
+          checks.push({
+            id: "T2",
+            name: "Structural markers",
+            status: "PASS",
+            diagnosis: `${titles} snippet(s) (legacy md2llm format), all 5 header types consistent`,
+          });
+        }
       }
     }
   }
 
-  // T3 — File size + snippet count within band
+  // T3 — File size + unit count within band
   {
-    const titles = (content.match(/^TITLE:/gm) || []).length;
+    const unitLabel = isRecursive ? "page(s)" : "snippet(s)";
     if (stats.size < MIN_SIZE_BYTES) {
       checks.push({
         id: "T3",
@@ -151,19 +168,19 @@ export function auditStack(lib, version, projectRoot) {
         status: "FAIL",
         diagnosis: `${stats.size} bytes (< ${MIN_SIZE_BYTES} minimum) — likely scrape failure`,
       });
-    } else if (titles < WARN_BELOW_SNIPPETS) {
+    } else if (unitCount < WARN_BELOW_SNIPPETS) {
       checks.push({
         id: "T3",
         name: "Size band",
         status: "WARN",
-        diagnosis: `only ${titles} snippet(s) (md2llm convention expects ≥${WARN_BELOW_SNIPPETS} for non-trivial libs)`,
+        diagnosis: `only ${unitCount} ${unitLabel} (expected ≥${WARN_BELOW_SNIPPETS} for non-trivial libs)`,
       });
     } else {
       checks.push({
         id: "T3",
         name: "Size band",
         status: "PASS",
-        diagnosis: `${stats.size} bytes, ${titles} snippets`,
+        diagnosis: `${stats.size} bytes, ${unitCount} ${unitLabel}`,
       });
     }
   }

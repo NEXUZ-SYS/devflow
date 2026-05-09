@@ -18,11 +18,16 @@ import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { validateUrl } from "../../../scripts/lib/url-validator.mjs";
 import { sanitizeSnippet } from "../../../scripts/lib/sanitize-snippet.mjs";
+import { recursiveScrape } from "../../../scripts/lib/scrape-recursive.mjs";
 
 const execFileP = promisify(execFile);
 
-const DOCS_MCP_PKG = "@arabold/docs-mcp-server@2.2.1";
-const MD2LLM_PKG = "md2llm@1.1.0";
+// Legacy single-page pipeline (kept for reference, no longer invoked):
+//   const DOCS_MCP_PKG = "@arabold/docs-mcp-server@2.2.1";  fetch-url single page
+//   const MD2LLM_PKG = "md2llm@1.1.0";                      HTML→MD refinement
+// The recursive scrape uses docs-mcp-server's `scrape` subcommand directly,
+// which produces consolidated markdown via SQLite store. md2llm is no longer
+// needed because the upstream output is already markdown.
 // SECURITY (Semana 2 audit CRITICAL): npm-spec compliant pattern — optional
 // scope prefix `@scope/`, then a single segment. No '..', no leading dot,
 // no slashes outside the scope prefix. Prevents path traversal in
@@ -54,63 +59,34 @@ export async function resolve({ library, version, url, type }) {
   };
 }
 
-// ─── Stage 2: SCRAPE ───────────────────────────────────────────────────────
+// ─── Stage 2+3: SCRAPE+REFINE (recursivo) ──────────────────────────────────
+// Substitui o pipeline antigo (fetch-url single page → md2llm) por
+// docs-mcp-server `scrape` (multi-page) + extração direta do SQLite store.
+// O output já vem markdown — md2llm não é mais necessário.
 
 export async function scrape(resolved) {
-  const rawDir = join(resolved.workDir, "raw");
-  await mkdir(rawDir, { recursive: true });
-
-  // SI-2: execFile, NEVER shell
-  const args = ["-y", DOCS_MCP_PKG, "fetch-url", resolved.url];
-  const env = { ...process.env, OUTPUT_DIR: rawDir };
-  try {
-    const { stdout } = await execFileP("npx", args, {
-      timeout: 5 * 60 * 1000,        // 5 min per page (libs vary)
-      maxBuffer: 50 * 1024 * 1024,   // 50MB output
-      env,
-    });
-    // docs-mcp-server fetch-url writes markdown to stdout. Capture it.
-    const safeName = resolved.url
-      .replace(/[^a-zA-Z0-9]/g, "_")
-      .slice(0, 200);
-    await writeFile(join(rawDir, `${safeName}.md`), stdout || "");
-  } catch (err) {
-    if (err.code === "ETIMEDOUT") {
-      throw new Error(`SCRAPE: docs-mcp-server timed out for ${resolved.url}`);
-    }
-    throw new Error(`SCRAPE: ${err.message}`);
-  }
-  return { ...resolved, rawDir };
+  const result = await recursiveScrape({
+    library: resolved.library,
+    version: resolved.version,
+    url: resolved.url,
+    maxPages: resolved.maxPages ?? 50,
+    maxDepth: resolved.maxDepth ?? 3,
+    scope: resolved.scope ?? "hostname",
+  });
+  // Surface page-level diagnostics for the caller (CLI prints them).
+  return {
+    ...resolved,
+    consolidatedMarkdown: result.markdown,
+    pageCount: result.pageCount,
+    chunkCount: result.chunkCount,
+    crawledUrls: result.urls,
+  };
 }
 
-// ─── Stage 3: REFINE ───────────────────────────────────────────────────────
-
+// `refine` is now a no-op pass-through — kept for backwards compat with
+// runPipeline orchestrator; the markdown is already consolidated by scrape().
 export async function refine(scraped) {
-  const refinedDir = join(scraped.workDir, "refined");
-  await mkdir(refinedDir, { recursive: true });
-
-  try {
-    await execFileP("npx", [
-      "-y", MD2LLM_PKG,
-      refinedDir,
-      scraped.rawDir,
-      "--source-url", scraped.url,
-      "--exclude", "images,build",
-    ], {
-      timeout: 60 * 1000,
-      maxBuffer: 50 * 1024 * 1024,
-    });
-  } catch (err) {
-    // md2llm sometimes exits non-zero with no output but still produces files.
-    // Tolerate if refined dir has content.
-  }
-
-  // Collect refined files
-  const files = (await readdir(refinedDir)).filter(f => f.endsWith(".md")).sort();
-  if (files.length === 0) {
-    throw new Error(`REFINE: md2llm produced no output for ${scraped.library}@${scraped.version}`);
-  }
-  return { ...scraped, refinedDir, refinedFiles: files };
+  return scraped;
 }
 
 // ─── Stage 4: CONSOLIDATE ──────────────────────────────────────────────────
@@ -128,26 +104,22 @@ export async function consolidate(refined, projectRoot) {
   const refsDir = join(projectRoot, ".context", "stacks", "refs");
   await mkdir(refsDir, { recursive: true });
 
-  // Concatenate refined snippets in order
-  const parts = [];
-  for (const f of refined.refinedFiles) {
-    const content = await readFile(join(refined.refinedDir, f), "utf-8");
-    parts.push(content);
-  }
-  // md2llm writes `SOURCE: <local-tmp-path>` because it processes raw files
-  // off disk. Replace with the actual upstream URL so committed refs are
-  // self-contained and traceable (no /tmp leakage). Single --from URL per
-  // scrape means all snippets share the same source.
-  let consolidated = parts.join("\n\n").replace(
-    /^SOURCE: \/tmp\/devflow-scrape-[^\n]*$/gm,
-    `SOURCE: ${refined.url}`
-  );
-  // md2llm sometimes appends a trailing `@<encoded-filename>` line that
-  // mirrors the local raw filename — pure leakage with no semantic value.
-  // Pattern: starts with `@`, followed by underscore-encoded URL chars only.
-  consolidated = consolidated.replace(/^@[a-zA-Z0-9_]+\s*$/gm, "").trim();
-  // Collapse any consecutive blank lines created by the strip
-  consolidated = consolidated.replace(/\n{3,}/g, "\n\n");
+  // Recursive scrape already consolidates pages into a single markdown
+  // string with per-page section headers. Prepend a top-level heading so
+  // the ref is self-describing.
+  const header = [
+    `# ${refined.library}@${refined.version}`,
+    ``,
+    `**Source:** ${refined.url}`,
+    `**Pages crawled:** ${refined.pageCount} (${refined.chunkCount} chunks)`,
+    `**Crawled URLs:**`,
+    ...(refined.crawledUrls || []).map(u => `- ${u}`),
+    ``,
+    `---`,
+    ``,
+  ].join("\n");
+
+  const consolidated = (header + (refined.consolidatedMarkdown || "")).trim();
 
   // SI-6: sanitize before writing. Hash is computed AFTER sanitization (the
   // canary references the cleaned content).
@@ -167,7 +139,7 @@ export async function consolidate(refined, projectRoot) {
     refRelative: refined.refRelative,
     hash,
     sanitizationHits: hits,
-    snippetCount: refined.refinedFiles.length,
+    snippetCount: refined.pageCount,
   };
 }
 
