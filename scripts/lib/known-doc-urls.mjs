@@ -67,8 +67,11 @@ export const KNOWN_DOC_URLS = {
     verified: "2026-05-08",
   },
   zod: {
-    primary: "https://zod.dev/",
-    fallbacks: ["https://github.com/colinhacks/zod"],
+    // zod.dev/ is a thin landing page (intro + install only); the real docs
+    // live in /basics, /api, /v4 sub-routes. md2llm doesn't navigate sidebars
+    // — pointing at /basics gets prose-rich content (8+ snippets vs 3).
+    primary: "https://zod.dev/basics",
+    fallbacks: ["https://zod.dev/v4", "https://github.com/colinhacks/zod"],
     verified: "2026-05-08",
   },
   pydantic: {

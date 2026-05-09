@@ -139,6 +139,8 @@ The same way you research the body's technical content, **research the canonical
    **Fontes oficiais:** [<nome>](<url-primary>) · [<spec>](<url-alt-1>) · [<api-ref>](<url-alt-2>)
    ```
 
+6. **Beware of landing pages.** Many doc sites have a thin root URL (`<lib>.dev/`, `<lib>.org/`) that's mostly intro + install, with the real content under sub-routes (`/basics`, `/guide`, `/tutorial`, `/api`). Prefer the sub-route over the landing page when possible — landing pages often produce only 1-3 snippets while sub-routes give 8-30+. After scraping, run `node scripts/devflow-stacks.mjs audit <lib>@<ver>` and inspect the T3 size band — if it's below the threshold, the URL was probably the landing page; pick a sub-route and re-scrape.
+
 **Fallback when WebSearch is unavailable:** If your environment doesn't expose WebSearch, fall back to convention — try `<lib>.dev`, `docs.<lib>.org`, `<lib>.tiangolo.com`, etc. — and consult `KNOWN-DOC-URLS.md` even if your specific lib isn't listed (the anti-patterns still apply).
 
 **Why this matters:** ADR `## Evidências` URLs become `discoveryHints[]` in the manifest (via `extract-stacks --add-to-manifest`), which `scrape --auto-fallback` consumes when generating the artisanal ref. With 2-3 URLs, the auto-fallback has real alternatives to try when the primary breaks. With 1 URL, it has nothing to fall back to.
