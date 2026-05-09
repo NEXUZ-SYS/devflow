@@ -28,7 +28,7 @@ Mirrors `scripts/lib/known-doc-urls.mjs` — keep both in sync. Date stamps tell
 | tauri          | https://v2.tauri.app/develop/calling-rust/                                   | https://v2.tauri.app/start/                     | 2026-05-08 |
 | fastapi        | https://fastapi.tiangolo.com/tutorial/first-steps/                           | https://fastapi.tiangolo.com/                   | 2026-05-08 |
 | zustand        | https://github.com/pmndrs/zustand                                            | —                                               | 2026-05-08 |
-| zod            | https://zod.dev/basics                                                       | https://zod.dev/v4 · https://github.com/colinhacks/zod | 2026-05-08 |
+| zod            | https://zod.dev/                                                             | https://github.com/colinhacks/zod               | 2026-05-08 |
 | pydantic       | https://docs.pydantic.dev/2.10/concepts/models/                              | https://docs.pydantic.dev/latest/               | 2026-05-08 |
 | vitest         | https://vitest.dev/guide/                                                    | https://github.com/vitest-dev/vitest            | 2026-05-08 |
 | pytest         | https://docs.pytest.org/en/stable/getting-started.html                       | https://docs.pytest.org/en/stable/              | 2026-05-08 |
