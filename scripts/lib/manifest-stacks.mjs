@@ -90,10 +90,16 @@ export function validateManifest(manifest) {
         );
       }
     }
-    // Either skipDocs:true OR artisanalRef must be present
-    if (!fw.skipDocs && !fw.artisanalRef) {
+    // One of {skipDocs:true, artisanalRef:"refs/..." (legacy), mcpIndexed:true (modern)}
+    // must be present. mcpIndexed means the lib is indexed in the
+    // docs-mcp-server global store — consumers query via MCP tools instead
+    // of reading a .md file.
+    if (fw.mcpIndexed !== undefined && typeof fw.mcpIndexed !== "boolean") {
+      errors.push(`framework ${name}: mcpIndexed must be a boolean`);
+    }
+    if (!fw.skipDocs && !fw.artisanalRef && !fw.mcpIndexed) {
       errors.push(
-        `framework ${name}: either artisanalRef must be set or skipDocs:true must be declared`
+        `framework ${name}: one of mcpIndexed:true, artisanalRef, or skipDocs:true must be declared`
       );
     }
     // Validate applyTo against SI-5 subset
@@ -154,9 +160,13 @@ export function addFrameworksToManifest(projectRoot, entries) {
       }
       continue;
     }
+    // Fase B (Migration to docs-mcp-server): new entries use `mcpIndexed: true`
+    // by default. The lib is expected to be indexed in the docs-mcp-server
+    // global store via `recursiveScrape()`. Legacy `artisanalRef` is still
+    // supported by readers but no longer written by this path.
     manifest.frameworks[lib] = {
       version,
-      artisanalRef: `refs/${lib}@${version}.md`,
+      mcpIndexed: true,
     };
     if (Array.isArray(entry.applyTo) && entry.applyTo.length > 0) {
       manifest.frameworks[lib].applyTo = entry.applyTo;

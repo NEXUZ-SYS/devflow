@@ -1,18 +1,16 @@
-// scripts/lib/scrape-recursive.mjs — multi-page scrape via docs-mcp-server.
+// scripts/lib/scrape-recursive.mjs — populate the docs-mcp-server global
+// store via recursive scrape. No SQLite extraction, no .md file output.
 //
-// Replaces the single-page `fetch-url` invocation with the recursive
-// `scrape` subcommand of @arabold/docs-mcp-server. The tool stores
-// indexed pages in a SQLite DB (`documents.db`); this lib invokes the
-// scrape, then reads the DB to consolidate all pages into a single
-// markdown string consumable by the existing pipeline (sanitize +
-// fence canary + write ref).
+// The legacy version (pre-Fase B) extracted scraped content from the SQLite
+// store into a single markdown file under .context/stacks/refs/. That has
+// been removed: the store IS the output. Consumers (Camadas 1-4, search,
+// agent queries) read directly from the docs-mcp-server MCP server via
+// tool calls (`mcp__docs-mcp-server__*`), or via this lib's `listLibraries`.
 //
 // SECURITY:
 //   - SI-2: external command via execFile, NEVER shell.
 //   - SI-3: caller pre-validates URL via url-validator (defense in depth
 //     in pipeline.mjs::resolve).
-//   - Tmp store path is mkdtemp under os.tmpdir() — auto-cleanup at end
-//     even on error.
 //
 // Limits enforced by docs-mcp-server scrape flags:
 //   --max-pages    cap total pages (default 50)
@@ -23,10 +21,6 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
 
 const execFileP = promisify(execFile);
 
@@ -35,59 +29,10 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000; // 10 min for full multi-page crawl
 const DEFAULT_MAX_BUFFER = 50 * 1024 * 1024;
 
 /**
- * Reads pages + chunks from a docs-mcp-server SQLite store and consolidates
- * into a single markdown string. Each page is prefixed with a header
- * (URL + title) for traceability; chunks within a page concat in id order.
- *
- * @param {string} dbPath — path to documents.db
- * @returns {{ markdown: string, pageCount: number, chunkCount: number }}
- */
-export function extractFromStore(dbPath) {
-  if (!existsSync(dbPath)) {
-    throw new Error(`scrape-recursive: store not found at ${dbPath} (ENOENT)`);
-  }
-  const db = new DatabaseSync(dbPath);
-  try {
-    // Pages with at least 1 chunk (orphan pages dropped). Order by depth so
-    // index/intro pages come first, then sub-pages, then deeper.
-    const rows = db.prepare(`
-      SELECT p.url, p.title, p.depth, d.id AS chunk_id, d.content
-      FROM pages p
-      INNER JOIN documents d ON d.page_id = p.id
-      ORDER BY p.depth ASC, p.id ASC, d.id ASC
-    `).all();
-
-    const sections = [];
-    const seenPages = new Set();
-    let chunkCount = 0;
-    let currentPageKey = null;
-
-    for (const row of rows) {
-      const pageKey = `${row.depth}|${row.url}`;
-      if (pageKey !== currentPageKey) {
-        // New page — emit a section header
-        const title = row.title || row.url;
-        sections.push(`## ${title}\n\n**URL:** ${row.url}  \n**Depth:** ${row.depth}\n`);
-        currentPageKey = pageKey;
-        seenPages.add(pageKey);
-      }
-      sections.push(String(row.content || "").trim());
-      chunkCount++;
-    }
-
-    return {
-      markdown: sections.join("\n\n"),
-      pageCount: seenPages.size,
-      chunkCount,
-    };
-  } finally {
-    db.close();
-  }
-}
-
-/**
- * Runs `docs-mcp-server scrape` against a URL, then extracts the result.
- * Cleans up the tmp store regardless of success/failure.
+ * Runs `docs-mcp-server scrape` against a URL. The library is indexed into
+ * the user's global docs-mcp-server store (~/.local/share/docs-mcp-server/
+ * by default — `envPaths('docs-mcp-server')`). Subsequent MCP queries via
+ * `search_docs`, `list_libraries`, etc. read from this store.
  *
  * @param {{
  *   library: string,
@@ -98,7 +43,7 @@ export function extractFromStore(dbPath) {
  *   scope?: 'subpages'|'hostname'|'domain',
  *   timeoutMs?: number,
  * }} opts
- * @returns {Promise<{ markdown: string, pageCount: number, chunkCount: number, urls: string[] }>}
+ * @returns {Promise<{ library: string, version: string, url: string }>}
  */
 export async function recursiveScrape(opts) {
   const {
@@ -113,55 +58,66 @@ export async function recursiveScrape(opts) {
     throw new Error("recursiveScrape: library, version, and url are required");
   }
 
-  const safeLib = String(library).replace(/[/@]/g, "_");
-  const storeDir = mkdtempSync(join(tmpdir(), `devflow-scrape-recursive-${safeLib}-`));
-  const dbPath = join(storeDir, "documents.db");
-
+  // SI-2: execFile, never shell. NO --store-path — let the tool use its
+  // default global store (~/.local/share/docs-mcp-server/) so all projects
+  // share the indexed libraries (dedup), and MCP server reads from the
+  // same place.
+  const args = [
+    "-y", DOCS_MCP_PKG,
+    "scrape", library, url,
+    "--version", String(version),
+    "--max-pages", String(maxPages),
+    "--max-depth", String(maxDepth),
+    "--scope", scope,
+    "--scrape-mode", "auto",
+    "--quiet",
+  ];
   try {
-    // SI-2: execFile, never shell
-    const args = [
-      "-y", DOCS_MCP_PKG,
-      "scrape", library, url,
-      "--version", String(version),
-      "--max-pages", String(maxPages),
-      "--max-depth", String(maxDepth),
-      "--scope", scope,
-      "--scrape-mode", "auto",
-      "--quiet",
-      "--store-path", storeDir,
-    ];
-    try {
-      await execFileP("npx", args, {
-        timeout: timeoutMs,
-        maxBuffer: DEFAULT_MAX_BUFFER,
-      });
-    } catch (err) {
-      if (err.code === "ETIMEDOUT") {
-        throw new Error(`SCRAPE: docs-mcp-server scrape timed out after ${timeoutMs}ms for ${url}`);
+    await execFileP("npx", args, {
+      timeout: timeoutMs,
+      maxBuffer: DEFAULT_MAX_BUFFER,
+    });
+  } catch (err) {
+    if (err.code === "ETIMEDOUT") {
+      throw new Error(`SCRAPE: docs-mcp-server scrape timed out after ${timeoutMs}ms for ${url}`);
+    }
+    throw new Error(`SCRAPE: ${err.message}`);
+  }
+  return { library, version, url };
+}
+
+/**
+ * Lists libraries indexed in the docs-mcp-server global store via the CLI's
+ * `list` subcommand. Used by Camada 1 (context-index) and audit to know
+ * which libs are available without invoking MCP tools.
+ *
+ * Returns [] when the CLI fails or the store is empty.
+ *
+ * @returns {Promise<Array<{ library: string, version: string }>>}
+ */
+export async function listIndexedLibraries() {
+  const args = ["-y", DOCS_MCP_PKG, "list", "--output", "json"];
+  try {
+    const { stdout } = await execFileP("npx", args, {
+      timeout: 60 * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const parsed = JSON.parse(stdout);
+    if (!Array.isArray(parsed)) return [];
+    // Normalize: list output shape is `[{library, versions: [{version, ...}]}]`
+    // Flatten into [{library, version}] entries.
+    const out = [];
+    for (const lib of parsed) {
+      const name = lib?.library || lib?.name;
+      if (!name) continue;
+      const versions = Array.isArray(lib?.versions) ? lib.versions : [];
+      for (const v of versions) {
+        const ver = typeof v === "string" ? v : (v?.version || v?.name);
+        if (ver) out.push({ library: name, version: ver });
       }
-      throw new Error(`SCRAPE: ${err.message}`);
     }
-
-    if (!existsSync(dbPath)) {
-      throw new Error(`SCRAPE: docs-mcp-server produced no store at ${dbPath} (silent failure)`);
-    }
-
-    const extracted = extractFromStore(dbPath);
-    if (extracted.pageCount === 0) {
-      throw new Error(`SCRAPE: 0 pages extracted from ${url} (URL likely empty or blocked)`);
-    }
-
-    // Distinct URLs visited (for caller diagnostics)
-    const db = new DatabaseSync(dbPath);
-    const urlRows = db.prepare("SELECT DISTINCT url FROM pages ORDER BY id").all();
-    db.close();
-    const urls = urlRows.map(r => r.url);
-
-    return { ...extracted, urls };
-  } finally {
-    // Always cleanup tmp store
-    try {
-      rmSync(storeDir, { recursive: true, force: true });
-    } catch { /* best-effort */ }
+    return out;
+  } catch {
+    return [];
   }
 }

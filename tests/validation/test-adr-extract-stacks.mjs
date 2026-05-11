@@ -82,7 +82,12 @@ test("addFrameworksToManifest: creates manifest if missing", () => {
     assert.deepEqual(result.drift, []);
     const m = loadManifest(root);
     assert.equal(m.frameworks.typescript.version, "5.9.0");
-    assert.equal(m.frameworks.typescript.artisanalRef, "refs/typescript@5.9.0.md");
+    // Fase B (Migration to docs-mcp-server): new entries use mcpIndexed:true
+    // instead of writing an artisanalRef path. Legacy artisanalRef field is
+    // still accepted by validate/load for backwards compatibility.
+    assert.equal(m.frameworks.typescript.mcpIndexed, true);
+    assert.equal(m.frameworks.typescript.artisanalRef, undefined,
+      "new entries should NOT write artisanalRef (mcpIndexed replaces it)");
   } finally {
     cleanup();
   }
