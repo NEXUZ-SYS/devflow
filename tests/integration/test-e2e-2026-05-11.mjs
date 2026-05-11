@@ -37,31 +37,35 @@ const SERVICE_STDS = [
 const EXPECTED_LIBS = [
   "typescript", "python", "react", "next", "tauri", "fastapi",
   "zustand", "zod", "pydantic", "vitest", "pytest", "biome", "ruff",
+  "feature-sliced-design",  // ADR 021 (manual manifest entry — Tier-0 não parseia "Feature-Sliced Design 2.x")
 ];
 
 // ─── Pré-requisitos ─────────────────────────────────────────────────────────
 
-test("fixture: 20 ADRs, 19 standards, 13 manifest entries", () => {
+test("fixture: 21 ADRs, 20 standards, 14 manifest entries", () => {
+  // 20 ADRs originais + ADR 021 (FSD = Feature Sliced Design)
+  // 19 stds + std-feature-sliced-design = 20
+  // 13 manifest entries + feature-sliced-design = 14
   const adrDir = join(FIXTURE, ".context", "adrs");
   const stdDir = join(FIXTURE, ".context", "standards");
   const manifestPath = join(FIXTURE, ".context", "stacks", "manifest.yaml");
 
   const adrs = readdirSync(adrDir).filter(f => f.endsWith(".md") && f !== "README.md");
-  assert.equal(adrs.length, 20, `expected 20 ADRs, got ${adrs.length}`);
+  assert.equal(adrs.length, 21, `expected 21 ADRs, got ${adrs.length}`);
 
   const stds = readdirSync(stdDir).filter(f => f.endsWith(".md") && f !== "README.md");
-  assert.equal(stds.length, 19, `expected 19 stds (consolidação TS), got ${stds.length}`);
+  assert.equal(stds.length, 20, `expected 20 stds, got ${stds.length}`);
 
   const manifest = readFileSync(manifestPath, "utf-8");
   const fwLines = manifest.match(/^  [a-z][a-z0-9-]*:$/gm) || [];
-  assert.equal(fwLines.length, 13, `expected 13 frameworks, got ${fwLines.length}`);
+  assert.equal(fwLines.length, 14, `expected 14 frameworks, got ${fwLines.length}`);
 });
 
-test("manifest: todas as 13 entries têm mcpIndexed:true (paradigma novo)", () => {
+test("manifest: todas as 14 entries têm mcpIndexed:true (paradigma novo)", () => {
   const manifest = readFileSync(join(FIXTURE, ".context", "stacks", "manifest.yaml"), "utf-8");
   // Cada entry deve ter "mcpIndexed: true"
   const mcpIndexedCount = (manifest.match(/^\s+mcpIndexed:\s*true/gm) || []).length;
-  assert.equal(mcpIndexedCount, 13, `expected 13 mcpIndexed:true entries, got ${mcpIndexedCount}`);
+  assert.equal(mcpIndexedCount, 14, `expected 14 mcpIndexed:true entries, got ${mcpIndexedCount}`);
   // Nenhuma entry deve ter artisanalRef legacy
   assert.ok(
     !manifest.includes("artisanalRef:"),
@@ -71,13 +75,13 @@ test("manifest: todas as 13 entries têm mcpIndexed:true (paradigma novo)", () =
 
 // ─── Camada 1: índice com mcp-indexed status ───────────────────────────────
 
-test("Camada 1: 19 stds + 13 refs mcp-indexed (totals.refsScraped=13)", () => {
+test("Camada 1: 20 stds + 14 refs mcp-indexed", () => {
   const r = spawnSync("node", [INDEX_CLI, `--project=${FIXTURE}`, "--format=json"], { encoding: "utf-8" });
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const idx = JSON.parse(r.stdout);
-  assert.equal(idx.totals.standards, 19);
-  assert.equal(idx.totals.refs, 13);
-  assert.equal(idx.totals.refsScraped, 13, "mcp-indexed count = todos os refs");
+  assert.equal(idx.totals.standards, 20);
+  assert.equal(idx.totals.refs, 14);
+  assert.equal(idx.totals.refsScraped, 14, "mcp-indexed count = todos os refs");
   for (const ref of idx.refs) {
     assert.equal(ref.status, "mcp-indexed", `${ref.lib}: status='${ref.status}', esperado 'mcp-indexed'`);
     assert.equal(ref.refPath, null, "mcp-indexed refs têm refPath=null");

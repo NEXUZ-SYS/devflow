@@ -52,3 +52,6 @@ frameworks:
     version: "0.9.0"
     mcpIndexed: true
     discoveryHints: ["https://docs.astral.sh/ruff/configuration/", "https://docs.astral.sh/ruff/rules/", "https://docs.astral.sh/ruff/formatter/"]
+  feature-sliced-design:
+    version: "2.0.0"
+    mcpIndexed: true
