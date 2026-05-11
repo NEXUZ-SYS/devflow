@@ -1,0 +1,54 @@
+spec: devflow-stack/v0
+frameworks:
+  typescript:
+    version: "5.9.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.typescriptlang.org/docs/handbook/2/everyday-types.html", "https://www.typescriptlang.org/docs/handbook/intro.html", "https://github.com/tc39/proposals"]
+  python:
+    version: "3.13.0"
+    mcpIndexed: true
+    discoveryHints: ["https://docs.python.org/3.13/whatsnew/3.13.html", "https://docs.python.org/3/tutorial/index.html", "https://peps.python.org/pep-0695/"]
+  react:
+    version: "19.2.0"
+    mcpIndexed: true
+    discoveryHints: ["https://react.dev/learn", "https://github.com/facebook/react", "https://react.dev/blog/2024/12/05/react-19"]
+  next:
+    version: "16.2.0"
+    mcpIndexed: true
+    discoveryHints: ["https://nextjs.org/docs/app", "https://nextjs.org/docs/app/building-your-application/routing/route-handlers", "https://nextjs.org/docs/app/building-your-application/caching"]
+  tauri:
+    version: "2.10.0"
+    mcpIndexed: true
+    discoveryHints: ["https://v2.tauri.app/develop/calling-rust/", "https://v2.tauri.app/start/", "https://v2.tauri.app/plugin/updater/"]
+  fastapi:
+    version: "0.135.0"
+    mcpIndexed: true
+    discoveryHints: ["https://fastapi.tiangolo.com/tutorial/first-steps/", "https://fastapi.tiangolo.com/tutorial/bigger-applications/", "https://www.starlette.io/"]
+  zustand:
+    version: "5.0.0"
+    mcpIndexed: true
+    discoveryHints: ["https://github.com/pmndrs/zustand", "https://github.com/pmndrs/zustand/blob/main/docs/integrations/persisting-store-data.md", "https://github.com/pmndrs/zustand/blob/main/docs/guides/typescript.md"]
+  zod:
+    version: "4.1.0"
+    mcpIndexed: true
+    discoveryHints: ["https://zod.dev/", "https://github.com/colinhacks/zod", "https://zod.dev/?id=discriminated-unions"]
+  pydantic:
+    version: "2.10.0"
+    mcpIndexed: true
+    discoveryHints: ["https://docs.pydantic.dev/2.10/concepts/models/", "https://docs.pydantic.dev/latest/", "https://docs.pydantic.dev/2.10/concepts/pydantic_settings/"]
+  vitest:
+    version: "3.2.0"
+    mcpIndexed: true
+    discoveryHints: ["https://vitest.dev/guide/", "https://github.com/vitest-dev/vitest", "https://testing-library.com/docs/queries/about"]
+  pytest:
+    version: "8.0.0"
+    mcpIndexed: true
+    discoveryHints: ["https://docs.pytest.org/en/stable/getting-started.html", "https://docs.pytest.org/en/stable/", "https://pytest-asyncio.readthedocs.io/"]
+  biome:
+    version: "2.0.0"
+    mcpIndexed: true
+    discoveryHints: ["https://biomejs.dev/guides/getting-started/", "https://biomejs.dev/linter/rules/", "https://biomejs.dev/guides/migrate-eslint-prettier/"]
+  ruff:
+    version: "0.9.0"
+    mcpIndexed: true
+    discoveryHints: ["https://docs.astral.sh/ruff/configuration/", "https://docs.astral.sh/ruff/rules/", "https://docs.astral.sh/ruff/formatter/"]
