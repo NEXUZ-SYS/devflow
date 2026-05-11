@@ -1,6 +1,6 @@
 ---
 name: adr-builder
-description: "Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs). Trigger words: 'crie/criar ADR', 'gerar ADR', 'registrar decisão', 'audita ADR', 'revisa ADR', 'evolve ADR', 'patch/minor/major na ADR', 'substituir ADR'. Also trigger when the user just made an architectural decision (framework, library, pattern, auth strategy, testing approach, protocol contract) that needs recording. Three modes: CREATE (new ADR via guided/free/prefilled briefing), AUDIT (12 deterministic checks via adr-audit.mjs lib), EVOLVE (patch/minor/major/refine transition with version bump). Skill writes directly to .context/docs/adrs/ — no zip packaging."
+description: "Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs). Trigger words: 'crie/criar ADR', 'gerar ADR', 'registrar decisão', 'audita ADR', 'revisa ADR', 'evolve ADR', 'patch/minor/major na ADR', 'substituir ADR'. Also trigger when the user just made an architectural decision (framework, library, pattern, auth strategy, testing approach, protocol contract) that needs recording. Three modes: CREATE (new ADR via guided/free/prefilled briefing), AUDIT (12 deterministic checks via adr-audit.mjs lib), EVOLVE (patch/minor/major/refine transition with version bump). Skill writes directly to .context/adrs/ (canonical since v1.0; legacy .context/docs/adrs/ read-only via dual-read until v1.2) — no zip packaging."
 ---
 
 # ADR Builder — DevFlow Edition
@@ -36,9 +36,9 @@ Detect in cascade — do not ask if the signal is clear:
 
 <HARD-GATE>
 **Path & script invocation rules — NON-NEGOTIABLE:**
-1. ADR files **MUST** be saved to `.context/docs/adrs/` (relative to the user's project root). NEVER `adrs/`, `docs/adrs/`, `.context/adrs/`, or anywhere else.
+1. ADR files **MUST** be saved to `.context/adrs/` (relative to the user's project root, canonical since v1.0). NEVER `adrs/` (no `.context/` prefix), `docs/adrs/` (no `.context/` prefix), or `.context/docs/adrs/` (legacy — removed in v1.2; existing legacy ADRs are read-only via dual-read in v1.0.x/v1.1.x).
 2. ADR scripts (`adr-update-index.mjs`, `adr-audit.mjs`, `adr-evolve.mjs`) live in the **DevFlow plugin install**, NOT in the user's project. ALWAYS invoke them via `node ${CLAUDE_PLUGIN_ROOT}/scripts/<script>.mjs`. NEVER use the bare relative `node scripts/<script>.mjs` — it will fail silently in user projects.
-3. The script's `--project=<path>` flag (default `.`) tells the script which project's `.context/docs/adrs/` to operate on. The script reads/writes there, not in the plugin location.
+3. The script's `--project=<path>` flag (default `.`) tells the script which project's `.context/adrs/` to operate on. The script reads/writes there, not in the plugin location.
 
 If `${CLAUDE_PLUGIN_ROOT}` is not set in your environment (rare), resolve it via `claude plugin path devflow@NEXUZ-SYS` or instruct the user to reinstall the plugin. Do NOT fall back to bare `scripts/...` — that bug is what this gate exists to prevent.
 </HARD-GATE>
@@ -46,7 +46,7 @@ If `${CLAUDE_PLUGIN_ROOT}` is not set in your environment (rare), resolve it via
 Before any of the modes, verify project setup:
 
 1. **Seed copy** — if `.context/templates/adrs/patterns-catalog.md` doesn't exist, copy from `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/patterns-catalog.md`. Same for `context.yaml`. This makes them substituable per project.
-2. **Verify `.context/docs/adrs/` exists** — create directory if missing; first ADR uses `001-` prefix.
+2. **Verify `.context/adrs/` exists** — create directory if missing; first ADR uses `001-` prefix.
 3. **Verify libs available** — `${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs`, `${CLAUDE_PLUGIN_ROOT}/scripts/adr-evolve.mjs`. If missing, the plugin install is broken; ask the user to reinstall DevFlow.
 
 ---
@@ -91,6 +91,15 @@ Returns 3-digit zero-padded number (e.g. `004`). Filename will be `${num}-${slug
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/TEMPLATE-ADR.md` as structural source of truth. Fill in placeholders with real content (or `<a definir>` for missing pieces, with explicit warning at end).
 
+**Web research is expected for technical content.** Each section that requires concrete details should be grounded in current docs/specs, not memory:
+
+- **Contexto** — version-specific pain points; check release notes if user named a version (`X.Y.Z`).
+- **Decisão** — current API surface (deprecations matter); confirm via official docs.
+- **Alternativas** — viable competitors at the version you're documenting; if user said "TypeScript 5.9" don't cite alternatives that only matter pre-5.0.
+- **Consequências / Guardrails / Enforcement** — concrete tooling versions, lint rule names, CI step names. Use WebSearch + WebFetch when details are uncertain or version-sensitive.
+
+Use the same research depth you would for any technical question — don't fabricate details to fit the template. If a section can't be grounded in 2-3 minutes of research, mark it `<a definir>` and surface that gap at the end of the response.
+
 Frontmatter defaults (NEVER ask user about these):
 - `version: 1.0.0` (semver of the document, not stack)
 - `supersedes: []`
@@ -106,31 +115,95 @@ Format rules:
 - Guardrails as bullets starting with `SEMPRE` / `NUNCA` / `QUANDO…ENTÃO` (uppercase)
 - Enforcement as `- [ ]` GFM checkboxes
 
+### Step 4.1 — Populate ## Evidências with canonical URLs (web research)
+
+The same way you research the body's technical content, **research the canonical doc URLs for each chosen stack**. Goal: 2-3 URLs in `## Evidências` per stack — primary tutorial/guide first, alternates after — that scrape cleanly through the DevFlow `stacks scrape` pipeline.
+
+**Process:**
+
+1. **Cache check.** Read `${CLAUDE_PLUGIN_ROOT}/skills/adr-builder/assets/KNOWN-DOC-URLS.md`. If the lib is listed, use those URLs (they're empirically verified). Skip web search.
+
+2. **If not in cache: WebSearch.** Query for the lib's canonical documentation. Examples of useful queries:
+   - `"<lib> documentation tutorial getting started"`
+   - `"<lib> official docs"`
+   - `"<lib> v<X.Y> guide"`
+
+   Aim for the lib's *own* docs site (e.g., `fastapi.tiangolo.com`, `docs.pydantic.dev`, `vitest.dev`), not third-party blogs or aggregators.
+
+3. **Apply anti-patterns from the asset.** The bottom of `KNOWN-DOC-URLS.md` lists URL shapes that empirically fail scrape (raw GitHub READMEs, API-reference-only pages, JS-heavy SPAs, registry pages when the lib has its own site). **These rules ALWAYS apply** — even when WebSearch surfaces such a URL as the top result, reject it.
+
+4. **(Optional) WebFetch validation.** If you're uncertain a URL has prose-rich content (vs. a link list), fetch it once and confirm. Worth it for unusual libs; skip for well-known ones.
+
+5. **Write 2-3 URLs into `## Evidências`.** Primary (best tutorial/guide) first, alternates after. Format:
+   ```markdown
+   **Fontes oficiais:** [<nome>](<url-primary>) · [<spec>](<url-alt-1>) · [<api-ref>](<url-alt-2>)
+   ```
+
+**Fallback when WebSearch is unavailable:** If your environment doesn't expose WebSearch, fall back to convention — try `<lib>.dev`, `docs.<lib>.org`, `<lib>.tiangolo.com`, etc. — and consult `KNOWN-DOC-URLS.md` even if your specific lib isn't listed (the anti-patterns still apply).
+
+**Why this matters:** ADR `## Evidências` URLs become `discoveryHints[]` in the manifest (via `extract-stacks --add-to-manifest`), which `scrape --auto-fallback` consumes when generating the artisanal ref. With 2-3 URLs, the auto-fallback has real alternatives to try when the primary breaks. With 1 URL, it has nothing to fall back to.
+
+**Do NOT** modify `KNOWN-DOC-URLS.md` mid-skill-run. It's a curated artifact maintained by humans through PR; new entries from skill runs would be unreviewed side effects.
+
 ### Step 5 — Self-review against checklist
 
 Mentally run through `references/checklist-qualidade.md`. Fix anything that fails. Mark `<a definir>` for what couldn't be fixed; flag at end.
 
 ### Step 5b — Write file + regenerate index
 
-Write the file to `.context/docs/adrs/${num}-${slug}-v1.0.0.md` (in the user's project root, NEVER elsewhere). Then **mandatorily** regenerate the index:
+Write the file to `.context/adrs/${num}-${slug}-v1.0.0.md` (in the user's project root, NEVER elsewhere). Then **mandatorily** regenerate the index:
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-update-index.mjs
 ```
 
-Regenerates `.context/docs/adrs/README.md` with 14 columns including the new entry. **Skipping this step is a bug** — the README index goes stale and the AI loses the ability to discover the new ADR during PREVC Planning context gathering. If the command fails, surface the error to the user immediately; do NOT proceed to commit.
+Regenerates `.context/adrs/README.md` with 14 columns including the new entry. **Skipping this step is a bug** — the README index goes stale and the AI loses the ability to discover the new ADR during PREVC Planning context gathering. If the command fails, surface the error to the user immediately; do NOT proceed to commit.
 
 ### Step 5c — Run audit gate
 
-Verify the new file passes the 12 checks:
+Verify the new file passes the 13 checks (Check #13 is the standards-coverage soft warning added in v1.0):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/docs/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-audit.mjs .context/adrs/${num}-${slug}-v1.0.0.md --enforce-gate
 ```
 
 If FIX-INTERVIEW: present gaps to user, choose whether to fix or commit-as-is.
 
-If 12/12 PASS: commit with message `feat(adr): add ${num}-${slug}-v1.0.0 — <título curto>`.
+If 12/13 or 13/13 PASS: commit with message `feat(adr): add ${num}-${slug}-v1.0.0 — <título curto>`.
+
+### Step 5d — Chain integration offer (post-CREATE, dedup-aware)
+
+After the commit, surface follow-up actions that wire this ADR into the rest of the context layer. Run the suggester:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-chain-suggest.mjs .context/adrs/${num}-${slug}-v1.0.0.md --format=json
+```
+
+Parse the JSON and present grouped options to the user. The suggester deduplicates against existing artifacts — never blindly offers "create new" when a match exists.
+
+**Standards block** (`suggestions.standards`):
+
+| Output | Action to offer | Concrete next step |
+|---|---|---|
+| `matches: [{id, score, applyTo}, ...]` (1+) | "Esta ADR provavelmente devia estar em `relatedAdrs` de `<id>`. Linkar?" | Edit `.context/standards/<id>.md` frontmatter — append ADR slug to `relatedAdrs` |
+| `matches: []` AND `wouldCreate: <std-id>` | "Criar standard `<std-id>` para operacionalizar a regra dessa ADR via PostToolUse linter?" | Invoke `devflow standards new <slug-stripped>` |
+| `matches: [...]` (multiple) | "Top-3 candidatos. Linkar a um, criar novo, ou skip?" | Present numbered list; let user pick |
+
+Pular tudo é válido — esta é uma sugestão, não gate. ADR `Aprovado` sem standard é warning suave em audit Check #13, nunca block.
+
+**Stacks block** (`suggestions.stacks`, lista de objetos com `status`):
+
+| status | Action to offer |
+|---|---|
+| `linked` | Listar `existingRef` no Evidências/Anexos da ADR — "Já existe `<existingRef>`. Adicionar como evidência?" |
+| `drift` | "Manifest está em `<currentVersion>`. Refresh para `<version>` da ADR?" → invoca `devflow stacks scrape <lib> <version> --mode=refresh` |
+| `new` | "Lib não está no manifest. Scrape agora?" → invoca skill `devflow:scrape-stack-batch` ou `devflow stacks scrape <lib> <version>` |
+| `skipped` | (informativo, sem ação — manifest já marca `skipDocs: true`) |
+
+**Heurísticas:**
+- Stacks só são extraídos quando `category: arquitetura` (mantém o foco — ADRs de qualidade-testes ou principios-codigo não disparam scrape).
+- Apresentação deve ser **opt-in** ("quer fazer X?"), não confirmar/auto-rodar.
+- Se nenhuma sugestão tem ação útil (matches=0, wouldCreate=null, stacks=[] ou todas linked), simplesmente reporta "ADR isolada — sem chain action sugerida" e termina.
 
 ---
 
@@ -226,7 +299,7 @@ For major: audit BOTH files (new and old-with-Substituido). For refine: audit on
 ### Step E5 — Commit + close workflow
 
 ```bash
-git add .context/docs/adrs/
+git add .context/adrs/
 git commit -m "<type>(adr): <kind> <old-slug> → <new-slug-or-version> — <descrição>"
 ```
 
@@ -255,7 +328,7 @@ EVOLVE always runs as PREVC SMALL (P → E → V), so the V phase Step 2.5 picks
 - `references/extracao-livre.md` — free CREATE extraction rules
 - `references/auditoria.md` — AUDIT 11 checks (Check 12 added by adr-graph.mjs)
 - `references/checklist-qualidade.md` — pre-delivery self-review
-- `references/saida-distribuicao.md` — DevFlow-adapted output (writes to `.context/docs/adrs/`, no zip)
+- `references/saida-distribuicao.md` — DevFlow-adapted output (writes to `.context/adrs/`, no zip)
 
 ## Asset files
 

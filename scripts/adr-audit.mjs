@@ -5,10 +5,11 @@
 // Spec ref: docs/superpowers/specs/2026-04-24-adr-system-v2-design.md §6.2, §6.3, §6.7
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, basename, join } from 'node:path';
+import { dirname, basename, join, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { parse, stringify } from './lib/adr-frontmatter.mjs';
 import { validateGraph } from './lib/adr-graph.mjs';
+import { resolveAdrPath } from './lib/path-resolver.mjs';
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith('--'));
@@ -23,6 +24,28 @@ if (!file) {
   console.error('Usage: adr-audit.mjs <file> [flags]');
   process.exit(2);
 }
+
+// Semana 0 dual-read: emit LEGACY_PATH_DETECTED if file lives in legacy path
+// AND project hasn't migrated to .context/adrs/ yet. Warning only — not blocking.
+function detectLegacyPath(filePath) {
+  const absFile = resolve(filePath);
+  let dir = dirname(absFile);
+  for (let i = 0; i < 10 && dir !== '/' && dir !== '.'; i++) {
+    if (existsSync(join(dir, '.context'))) {
+      const info = resolveAdrPath(dir);
+      const inLegacy = absFile.includes('/.context/docs/adrs/');
+      if (inLegacy && info.isLegacy) {
+        console.error(
+          `[devflow] LEGACY_PATH_DETECTED: ADRs found in .context/docs/adrs/. ` +
+          `Migrate to .context/adrs/ before v1.2 — see ADR-001 (path migration).`
+        );
+      }
+      return;
+    }
+    dir = dirname(dir);
+  }
+}
+detectLegacyPath(file);
 
 try {
   const content = await readFile(file, 'utf-8');
@@ -55,6 +78,7 @@ async function runAudit(file, content, flags) {
     check10_codigoMinimal(body),
     check11_padroesNomeados(body, dir),
     await check12_grafo(file),
+    await check13_standardsCoverage(file, frontmatter, body),
   ];
 
   // S3 — Aprovado status auto-demotes FIX-AUTO to FIX-INTERVIEW
@@ -395,6 +419,54 @@ async function check12_grafo(file) {
     name: 'Grafo (supersedes/refines)',
     status: 'FIX-INTERVIEW',
     diagnosis: relevant.join('; '),
+  };
+}
+
+// Check #13 — standards coverage (Semana 4 follow-up / chain dedup-aware)
+//
+// Soft warning when an Aprovado ADR has a Guardrails section but no standard
+// references it via relatedAdrs. Helps surface the "ADR rule never operationalized
+// as a runtime linter" gap without blocking the gate (warnings don't fail).
+async function check13_standardsCoverage(file, frontmatter, body) {
+  const passResult = { id: 13, name: 'Cobertura por Standard', status: 'PASS', diagnosis: '' };
+
+  // Only meaningful for Aprovado ADRs with actionable guardrails
+  if (frontmatter.status !== 'Aprovado') {
+    return { ...passResult, diagnosis: 'not Aprovado yet — skipped' };
+  }
+  // Lazy-load helpers (keeps adr-audit.mjs decoupled when standards/ absent)
+  let findStandardsLinkingAdr, adrHasGuardrails;
+  try {
+    ({ findStandardsLinkingAdr, adrHasGuardrails } = await import('./lib/adr-chain.mjs'));
+  } catch {
+    return { ...passResult, diagnosis: 'adr-chain helper unavailable — skipped' };
+  }
+
+  if (!adrHasGuardrails(body)) {
+    return { ...passResult, diagnosis: 'no Guardrails section — skipped' };
+  }
+
+  // Walk up to project root (heuristic: find .context/ ancestor)
+  let projectRoot = dirname(file);
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(join(projectRoot, '.context'))) break;
+    const parent = dirname(projectRoot);
+    if (parent === projectRoot) { projectRoot = process.cwd(); break; }
+    projectRoot = parent;
+  }
+
+  const adrSlug = String(frontmatter.name || basename(file, '.md').replace(/^\d+-/, '').replace(/-v\d+\.\d+\.\d+$/, ''));
+  const linked = findStandardsLinkingAdr(adrSlug, projectRoot);
+
+  if (linked.length > 0) {
+    return { ...passResult, diagnosis: `linked by ${linked.length} standard(s): ${linked.map(s => s.id).join(', ')}` };
+  }
+  // Soft warning — never blocks gate
+  return {
+    id: 13,
+    name: 'Cobertura por Standard',
+    status: 'PASS',
+    diagnosis: `WARN: ADR Aprovado com Guardrails mas nenhum standard referencia '${adrSlug}' via relatedAdrs (considere 'devflow standards new' ou link manual)`,
   };
 }
 

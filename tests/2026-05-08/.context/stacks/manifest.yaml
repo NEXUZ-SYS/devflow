@@ -1,0 +1,54 @@
+spec: devflow-stack/v0
+frameworks:
+  typescript:
+    version: "5.9.0"
+    artisanalRef: "refs/typescript@5.9.0.md"
+    discoveryHints: ["https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html", "https://www.typescriptlang.org/tsconfig", "https://zod.dev/?id=type-inference", "https://nextjs.org/docs/app/building-your-application/configuring/typescript"]
+  python:
+    version: "3.13.0"
+    artisanalRef: "refs/python@3.13.0.md"
+    discoveryHints: ["https://docs.python.org/3/whatsnew/3.13.html", "https://peps.python.org/pep-0695/", "https://fastapi.tiangolo.com/release-notes/", "https://docs.pydantic.dev/latest/", "https://docs.astral.sh/uv/", "https://cloud.google.com/run/docs/about-concurrency"]
+  react:
+    version: "19.2.0"
+    artisanalRef: "refs/react@19.2.0.md"
+    discoveryHints: ["https://react.dev/blog/2024/12/05/react-19", "https://react.dev/reference/rsc/server-components", "https://react.dev/reference/react/useActionState", "https://nextjs.org/docs/app/building-your-application/rendering/server-components"]
+  next:
+    version: "16.2.0"
+    artisanalRef: "refs/next@16.2.0.md"
+    discoveryHints: ["https://nextjs.org/docs", "https://nextjs.org/docs/app", "https://nextjs.org/docs/app/building-your-application/routing/route-handlers", "https://nextjs.org/docs/app/building-your-application/caching", "https://firebase.google.com/docs/app-hosting"]
+  tauri:
+    version: "2.10.0"
+    artisanalRef: "refs/tauri@2.10.0.md"
+    discoveryHints: ["https://v2.tauri.app/blog/tauri-20/", "https://v2.tauri.app/security/capabilities/", "https://v2.tauri.app/develop/calling-rust/", "https://v2.tauri.app/plugin/updater/", "https://github.com/tauri-apps/tauri"]
+  fastapi:
+    version: "0.135.0"
+    artisanalRef: "refs/fastapi@0.135.0.md"
+    discoveryHints: ["https://fastapi.tiangolo.com/", "https://github.com/fastapi/fastapi/releases", "https://www.starlette.io/", "https://docs.pydantic.dev/2.10/", "https://www.uvicorn.org/"]
+  zustand:
+    version: "5.0.0"
+    artisanalRef: "refs/zustand@5.0.0.md"
+    discoveryHints: ["https://github.com/pmndrs/zustand", "https://zustand.docs.pmnd.rs/", "https://zustand.docs.pmnd.rs/migrations/migrating-to-v5", "https://zustand.docs.pmnd.rs/integrations/persisting-store-data", "https://zustand.docs.pmnd.rs/hooks/use-shallow"]
+  zod:
+    version: "4.1.0"
+    artisanalRef: "refs/zod@4.1.0.md"
+    discoveryHints: ["https://zod.dev/", "https://github.com/colinhacks/zod", "https://zod.dev/v4", "https://github.com/react-hook-form/resolvers", "https://www.typescriptlang.org/docs/handbook/type-inference.html"]
+  pydantic:
+    version: "2.10.0"
+    artisanalRef: "refs/pydantic@2.10.0.md"
+    discoveryHints: ["https://docs.pydantic.dev/2.10/", "https://github.com/pydantic/pydantic", "https://github.com/pydantic/pydantic-core", "https://docs.pydantic.dev/latest/concepts/pydantic_settings/", "https://fastapi.tiangolo.com/python-types/#pydantic-models"]
+  vitest:
+    version: "3.2.0"
+    artisanalRef: "refs/vitest@3.2.0.md"
+    discoveryHints: ["https://vitest.dev/", "https://vitest.dev/config/", "https://vitest.dev/guide/browser/", "https://testing-library.com/docs/react-testing-library/intro/", "https://github.com/vitest-dev/vitest"]
+  pytest:
+    version: "8.0.0"
+    artisanalRef: "refs/pytest@8.0.0.md"
+    discoveryHints: ["https://docs.pytest.org/en/stable/", "https://docs.pytest.org/en/stable/explanation/fixtures.html", "https://pytest-asyncio.readthedocs.io/en/latest/", "https://fastapi.tiangolo.com/tutorial/testing/", "https://testcontainers-python.readthedocs.io/en/latest/", "https://github.com/pytest-dev/pytest"]
+  biome:
+    version: "2.0.0"
+    artisanalRef: "refs/biome@2.0.0.md"
+    discoveryHints: ["https://biomejs.dev/", "https://biomejs.dev/blog/biome-v2/", "https://biomejs.dev/linter/rules/", "https://biomejs.dev/reference/configuration/"]
+  ruff:
+    version: "0.9.0"
+    artisanalRef: "refs/ruff@0.9.0.md"
+    discoveryHints: ["https://docs.astral.sh/ruff/", "https://docs.astral.sh/ruff/rules/", "https://docs.astral.sh/ruff/configuration/", "https://peps.python.org/pep-0008/", "https://peps.python.org/pep-0621/"]

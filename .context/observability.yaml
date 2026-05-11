@@ -1,0 +1,61 @@
+# .context/observability.yaml — DevFlow OTel telemetry (spec v0)
+#
+# Per ADR-005 (decision_kind: gated): telemetry is opt-in. Default `enabled:
+# false` — zero overhead, no SDK loaded. When enabled, OTel SDK lazy-loads
+# and spans emit gen_ai.* (per OTel GenAI semconv) + devflow.* (extension
+# namespace) attributes.
+#
+# OTel deps (@opentelemetry/sdk-node + exporter-trace-otlp-http) are the
+# SINGLE exception to DevFlow's no-deps policy — they only load when this
+# config sets enabled:true.
+#
+# Reference: ADR-005 (.context/adrs/005-observability-otel-genai-v1.0.0.md)
+
+spec: devflow-observability/v0
+enabled: false                        # opt-in explicit; default off
+
+exporter:
+  type: otlp
+  endpoint: ""                        # e.g. http://localhost:4318 (Jaeger/Phoenix/Langfuse OTLP)
+  protocol: http/protobuf
+
+semanticConventions:
+  genAi: true                         # gen_ai.* attributes (OTel GenAI semconv)
+  devflow: true                       # devflow.* extension namespace
+
+sampling:
+  default: 1.0                        # 100% in dev; reduce in production
+  errors: 1.0                         # always sample errors
+
+attributes:
+  capture:
+    # OTel GenAI semconv
+    - gen_ai.request.model
+    - gen_ai.usage.input_tokens
+    - gen_ai.usage.output_tokens
+    - gen_ai.tool.call.id
+    # DevFlow extension namespace
+    - devflow.repro.token             # sha256(model+params+lockHash+toolsHash)
+    - devflow.adrs.loaded             # ADR IDs injected
+    - devflow.standards.applied       # standard IDs applied
+    - devflow.stacks.refs_loaded      # stack ref paths loaded
+    - devflow.permission.decision     # allow | deny | prompt
+    - devflow.session.id
+    # Context layer observability (Gate 3 — observability without enforcement)
+    - devflow.context.adrs_filtered_in
+    - devflow.context.adrs_filtered_out_count
+    - devflow.context.standards_filtered_in
+    - devflow.context.stacks_filtered_in
+    - devflow.context.tokens_loaded
+    - devflow.context.tokens_budget_status   # always 'under' in v1.0
+  redact:
+    # Default: never capture prompts/completions content. Opt-in via env var.
+    - gen_ai.prompt
+    - gen_ai.completion
+
+# Content capture is gated by an explicit env var. Even when capture is
+# enabled, redactPii applies PII scrubbing (emails, IPs, long digit
+# sequences) to the captured strings.
+contentCapture:
+  envVar: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+  redactPii: true

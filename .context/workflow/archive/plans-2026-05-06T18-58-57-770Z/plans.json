@@ -1,0 +1,14 @@
+{
+  "active": [
+    {
+      "slug": "mempalace-integration",
+      "path": "plans/mempalace-integration.md",
+      "title": "MemPalace Integration",
+      "summary": "Integrate MemPalace as optional memory layer in DevFlow — MCP detection, hooks, skill, agent diaries",
+      "linkedAt": "2026-04-09T01:22:27.194Z",
+      "status": "active"
+    }
+  ],
+  "completed": [],
+  "primary": "mempalace-integration"
+}

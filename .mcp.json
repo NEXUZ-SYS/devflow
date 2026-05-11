@@ -13,7 +13,14 @@
     },
     "mempalace": {
       "command": "python",
-      "args": ["-m", "mempalace.mcp_server"]
+      "args": [
+        "-m",
+        "mempalace.mcp_server"
+      ]
+    },
+    "docs-mcp-server": {
+      "type": "sse",
+      "url": "http://localhost:6280/sse"
     }
   }
 }

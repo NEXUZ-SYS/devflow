@@ -1,0 +1,104 @@
+name: Stack drift detection
+
+on:
+  schedule:
+    # Nightly at 03:00 UTC
+    - cron: "0 3 * * *"
+  pull_request:
+    # Run on PR if package.json or manifest changes
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - ".context/stacks/manifest.yaml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Detect major version drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run drift detection
+        id: drift
+        run: |
+          set -e
+          output=$(node scripts/devflow-drift.mjs 2>&1)
+          echo "$output"
+          if echo "$output" | grep -q "Drift detected"; then
+            echo "has_drift=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "drift_report<<EOF"
+              echo "$output"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_drift=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on drift (nightly only)
+        if: |
+          steps.drift.outputs.has_drift == 'true' &&
+          github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.drift.outputs.drift_report }}`;
+            const title = `Stack drift detected (nightly ${new Date().toISOString().slice(0, 10)})`;
+            const body = [
+              "## Stack drift detected",
+              "",
+              "The nightly drift check found major-version divergence between",
+              "your installed dependencies and pinned `artisanalRef` versions.",
+              "",
+              "```",
+              report,
+              "```",
+              "",
+              "### How to resolve",
+              "",
+              "1. Run the suggested `devflow stacks scrape <lib> <version> --mode=refresh`",
+              "   for each drifted framework.",
+              "2. Review the new `.context/stacks/refs/<lib>@<version>.md`.",
+              "3. Update the manifest entry: `version` and `artisanalRef`.",
+              "4. Commit and open a PR.",
+              "",
+              "Reference: ADR-003 stack-docs-artisanal-pipeline.",
+            ].join("\n");
+            // Avoid duplicates: search for existing open issue
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "stack-drift",
+            });
+            const dup = existing.data.find(i => i.title.startsWith("Stack drift detected (nightly"));
+            if (dup) {
+              core.info(`Existing drift issue #${dup.number} found — skipping.`);
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["stack-drift", "context-layer"],
+            });
+
+      - name: Fail PR on drift
+        if: |
+          steps.drift.outputs.has_drift == 'true' &&
+          github.event_name == 'pull_request'
+        run: |
+          echo "::error::Stack drift detected — refresh artisanalRef before merging."
+          exit 1

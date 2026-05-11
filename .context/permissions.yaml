@@ -1,0 +1,132 @@
+# .context/permissions.yaml — DevFlow vendor-neutral permissions (spec v0)
+#
+# Evaluation order (fixed): deny → allow → mode → callback
+#   - deny:     hard rules; never overridden by allow
+#   - allow:    explicit; if matches, allow immediately
+#   - mode:     default action for unmatched (prompt | accept | deny)
+#   - callback: optional HTTP endpoint for complex decisions (SI-3 enforced)
+#
+# Glob subset (SI-5): **, *, ?, {a,b} — NO negation (!), NO extglob (+(...) etc.)
+# Schema validator at scripts/lib/permissions-evaluator.mjs:validatePermissionsSchema()
+# rejects forbidden patterns at load time.
+#
+# This file is consumed by hooks/pre-tool-use (deny-first; runs BEFORE any
+# other gate in PreToolUse). claudeCodeCompat.preserveGitStrategyHook keeps
+# the git-strategy hook running in parallel as defense-in-depth during the
+# v1.0.x/v1.1.x transition (removed in v1.2 once permissions.yaml is the
+# sole source of truth).
+#
+# Reference: ADR-004 (.context/adrs/004-permissions-vendor-neutral-v1.0.0.md)
+
+spec: devflow-permissions/v0
+evaluationOrder: [deny, allow, mode, callback]
+
+# ─── DENY (hard rules — never overridden) ─────────────────────────────────
+
+deny:
+  fs:
+    # Secrets and credentials
+    - "**/.env*"
+    - "**/.ssh/**"
+    - "**/secrets/**"
+    - "**/credentials/**"
+    - "**/*.pem"
+    - "**/*.key"
+    # Cloud / CI credential files (N4 expanded coverage)
+    - "**/.aws/credentials"
+    - "**/.docker/config.json"
+    - "**/.npmrc"
+    - "**/.netrc"
+    - "**/.pgpass"
+    - "**/id_rsa*"
+    - "**/*.pfx"
+    - "**/*.p12"
+    - "**/kubeconfig"
+    - "**/.kube/config"
+    - "**/terraform.tfstate*"
+  exec:
+    # Destructive commands
+    - "rm -rf /*"
+    - "chmod -R 777 *"
+    # Force-push variants (N4 expanded)
+    - "git push --force origin main"
+    - "git push --force origin master"
+    - "git push -f *"
+    - "git push --force-with-lease origin main"
+    - "git push --force-with-lease origin master"
+    # Pipe-to-shell from network (RCE vector)
+    - "curl * | sh"
+    - "curl * | bash"
+    - "wget * | sh"
+    - "wget * | bash"
+  net:
+    # Cloud metadata endpoints (SSRF defense — same list as url-validator.mjs)
+    - "169.254.169.254/*"
+    - "[fd00:ec2::254]/*"
+    - "metadata.google.internal/*"
+    - "metadata.azure.com/*"
+    # Loopback admin paths (defense-in-depth; deny is hard)
+    - "localhost:*/admin/*"
+
+# ─── ALLOW (explicit allowlist) ───────────────────────────────────────────
+
+allow:
+  fs:
+    read:
+      - "src/**"
+      - "tests/**"
+      - ".context/**"
+      - "docs/**"
+      - "scripts/**"
+      - "skills/**"
+      - "hooks/**"
+      - "*.md"
+      - "package.json"
+      - "tsconfig.json"
+    write:
+      - "src/**"
+      - "tests/**"
+      - ".context/**"
+      - "docs/**"
+      - "scripts/**"
+      - "skills/**"
+      - "hooks/**"
+  exec:
+    - "npm run *"
+    - "npx *"
+    - "node *"
+    - "git status"
+    - "git log *"
+    - "git diff *"
+    - "git add *"
+    - "git commit *"
+    - "git checkout *"
+    - "git switch *"
+    - "git stash *"
+    - "git branch *"
+    - "git rebase *"
+    - "git pull *"
+    - "git merge *"
+    - "gh *"
+  tool:
+    - "mcp__dotcontext__*"
+    - "mcp__mempalace__*"
+
+# ─── MODE (default for unmatched) ─────────────────────────────────────────
+
+mode: prompt    # prompt | accept | deny
+
+# ─── CALLBACK (optional HTTP endpoint for complex decisions) ──────────────
+
+callback:
+  url: null     # https:// only (SI-3 enforced); null disables callback layer
+
+# ─── Claude Code compatibility ────────────────────────────────────────────
+#
+# DevFlow continues to honor the git-strategy hook + branch protection
+# exceptions during v1.0.x/v1.1.x. permissions.yaml is the source of truth;
+# hooks are defense-in-depth.
+
+claudeCodeCompat:
+  preserveGitStrategyHook: true
+  preserveBranchProtectionExceptions: true

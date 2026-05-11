@@ -242,6 +242,50 @@ AskUserQuestion:
 4. Inicializar palace: `mempalace init ~/.mempalace/palace`
 5. Seguir para P7 e P8
 
+### 2.4 (opcional) docs-mcp-server — referência de stacks via MCP
+
+Substitui o paradigma antigo de `.context/stacks/refs/<lib>@<ver>.md` por um índice de documentação consultável via tools MCP (`scrape_docs`, `search_docs`, `list_libraries`). Store global em `~/.local/share/docs-mcp-server/` é compartilhado entre projetos (dedup).
+
+**Detectar instalação existente:**
+```bash
+HAS_DOCS_MCP=false
+if [ -f ".mcp.json" ] && grep -q "docs-mcp-server" ".mcp.json" 2>/dev/null; then
+  HAS_DOCS_MCP=true
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "docs-mcp-server" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  HAS_DOCS_MCP=true
+fi
+```
+
+**Se `HAS_DOCS_MCP=true`:** pular setup (já configurado). Apenas informar no resumo final.
+
+**Se `HAS_DOCS_MCP=false`, P9: Ativar docs-mcp-server?**
+```
+AskUserQuestion:
+  question: "Configurar docs-mcp-server para indexar docs das stacks deste projeto?"
+  header: "docs-mcp-server"
+  multiSelect: false
+  options:
+    - label: "Sim, configurar agora"
+      description: "Adiciona entry MCP no .mcp.json. Após restart do Claude Code, scrape de stacks via tool MCP (sem gerar .md gigantes)"
+    - label: "Não, pular"
+      description: "Continuar usando refs .md em .context/stacks/refs/ (paradigma antigo)"
+```
+
+**Se sim (configurar):**
+1. Adicionar entry ao `.mcp.json` dentro de `mcpServers` (merge se já existe, criar se não):
+   ```json
+   {
+     "mcpServers": {
+       "docs-mcp-server": {
+         "command": "npx",
+         "args": ["-y", "@arabold/docs-mcp-server@latest"]
+       }
+     }
+   }
+   ```
+2. Avisar o usuário **explicitamente** que o Claude Code precisa ser reiniciado para carregar o novo MCP server (`exit` + relaunch). Sem restart, as tools `mcp__docs-mcp-server__*` não estarão disponíveis na sessão atual.
+3. Ressaltar que store é global (`~/.local/share/docs-mcp-server/`) — limpeza manual via `npx @arabold/docs-mcp-server remove <lib>` se necessário.
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -296,6 +340,7 @@ Após gerar o arquivo, mostrar ao usuário:
   Proteção de branch: ativada
   Auto-finish: desativado
   MemPalace: ativado (global, 500 tokens)    ← novo (só se configurado)
+  docs-mcp-server: ativado (.mcp.json)       ← novo (só se configurado — reiniciar Claude Code)
 
 Para reconfigurar: /devflow config
 ```

@@ -152,6 +152,19 @@ Não aplicar gate quando:
 - Branch atual já é de trabalho
 - Estratégia trunk-based
 
+## Compatibilidade com `.context/permissions.yaml` (v1.0+)
+
+A partir de v1.0 (Gap 3, ADR-004), `.context/permissions.yaml` é a fonte de verdade vendor-neutral para permissões. O hook `git-strategy` continua rodando em paralelo durante v1.0.x e v1.1.x como **defense-in-depth** quando `claudeCodeCompat.preserveGitStrategyHook: true` (default no template).
+
+**Ordem de avaliação no PreToolUse:**
+1. `permissions.yaml` → se `deny`, retorna imediatamente (deny-first universal)
+2. Caso contrário, `git-strategy` (este skill) avalia branch protection
+3. `claudeCodeCompat.preserveBranchProtectionExceptions: true` mantém as exceções históricas (auto-memory + napkin) aplicáveis
+
+**Quando `permissions.yaml` está ausente** (projetos legacy ou em transição), apenas o git-strategy hook roda — comportamento idêntico a v0.13.x.
+
+**Roadmap de remoção:** v1.2 remove o hook git-strategy, deixando apenas `permissions.yaml` como fonte. Migração documentada no CHANGELOG.
+
 ## Finalização (pós-merge)
 
 | Estratégia | Ação |

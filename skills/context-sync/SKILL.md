@@ -38,7 +38,7 @@ O argumento do comando define o escopo:
 | Argumento | Escopo | Diretórios |
 |-----------|--------|------------|
 | (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/` |
-| `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/docs/adrs/` |
+| `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/adrs/` |
 | `agents` | Apenas agents | `.context/agents/` |
 | `skills` | Apenas skills | `.context/skills/` |
 | `workflow` | Apenas workflow | `.context/workflow/` |
@@ -179,13 +179,13 @@ Scaffold and validate `.context/workflow/` for autonomous loop readiness.
 
 ## Step 3d: Sync ADR Index
 
-Update `.context/docs/adrs/README.md` to reflect current ADR state.
+Update `.context/adrs/README.md` to reflect current ADR state.
 
 ### When running full sync or `docs` scope:
 
-1. Check if `.context/docs/adrs/` exists
+1. Check if `.context/adrs/` exists
 2. If yes:
-   a. Scan all `.md` files in `.context/docs/adrs/` (excluding README.md)
+   a. Scan all `.md` files in `.context/adrs/` (excluding README.md)
    b. Parse frontmatter of each ADR (name, status, scope, stack, category)
    c. Count guardrails rules (lines matching `^- (SEMPRE|NUNCA|QUANDO)`)
    d. Regenerate README.md index table with current data
@@ -195,7 +195,7 @@ Update `.context/docs/adrs/README.md` to reflect current ADR state.
 ### Report for ADR scope:
 ```markdown
 ### ADRs
-- .context/docs/adrs/ — [exists | not found]
+- .context/adrs/ — [exists | not found]
 - README.md — [regenerated | up-to-date | created]
 - Active ADRs: [count]
 - Total guardrails: [count]

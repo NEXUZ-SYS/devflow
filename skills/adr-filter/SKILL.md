@@ -12,7 +12,9 @@ Seleciona as ADRs relevantes a uma task específica em vez de dumpar todas as ap
 - **Automaticamente** — durante `devflow:prevc-planning` Step 1, **depois** que a task está definida
 - **Sob demanda** — usuário diz "filtre as ADRs para esta task X", ou menciona ter muitas ADRs ativas e querer foco
 
-**Não invoque** se `.context/docs/adrs/README.md` não existir. Skill é no-op nesse caso.
+**Não invoque** se `.context/adrs/README.md` não existir. Skill é no-op nesse caso.
+
+> **Dual-read transitório (v1.0.x/v1.1.x):** Se `.context/adrs/README.md` não existir, verifique também `.context/docs/adrs/README.md` (path legado). Se apenas legado existir, carregue de lá e emita aviso "LEGACY_PATH_DETECTED — migre para `.context/adrs/` antes de v1.2 (ver ADR-001)". Path legado é removido em v1.2.
 
 ## Anuncie ao iniciar
 
@@ -22,7 +24,7 @@ Seleciona as ADRs relevantes a uma task específica em vez de dumpar todas as ap
 
 ### Step 1 — Ler o índice
 
-Leia `.context/docs/adrs/README.md`. Extraia a tabela com:
+Leia `.context/adrs/README.md`. Extraia a tabela com:
 - **v2 schema (14 cols)** — número, título, **versão**, categoria, stack, escopo, status, **kind**, contrato, refines, supersedes, criada, guardrails (count), arquivo
 - **v1 schema (legacy)** — número, título, escopo, status, guardrails, stack, arquivo
 
@@ -81,7 +83,7 @@ Para cada ADR aprovada, aplicar em ordem:
 
 ### Step 5 — Carregar guardrails
 
-Para cada ADR que passou em Step 4, abra `.context/docs/adrs/<nn>-<slug>.md` e extraia a seção `## Guardrails` (SEMPRE/NUNCA/QUANDO).
+Para cada ADR que passou em Step 4, abra `.context/adrs/<nn>-<slug>.md` e extraia a seção `## Guardrails` (SEMPRE/NUNCA/QUANDO).
 
 ### Step 6 — Emitir bloco
 

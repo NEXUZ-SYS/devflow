@@ -101,10 +101,47 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 ---
 
+## Context Layer (v1.0)
+
+A partir da v1.0, o `.context/` ganha 4 dimensões novas que transformam o DevFlow de
+"orquestrador de skills" em **harness completo** para projetos reais:
+
+| Pasta/arquivo | Função | ADR |
+|---|---|---|
+| `.context/adrs/` | ADRs com path canônico (era `.context/docs/adrs/`); dual-read até v1.2 | ADR-001 |
+| `.context/standards/` | Standards com tripla camada (Markdown + LLM frontmatter + linter sandboxed SI-4) | ADR-002 |
+| `.context/stacks/` | Pipeline artesanal de docs por library (`docs-mcp-server` CLI + `md2llm`) | ADR-003 |
+| `.context/permissions.yaml` | Gramática vendor-neutral deny → allow → mode → callback | ADR-004 |
+| `.context/observability.yaml` | OTel GenAI semconv opt-in; `gen_ai.*` + `devflow.*` namespace | ADR-005 |
+| `.context/.lock` | Hashes de conteúdo para reproducibility token | — |
+
+**Comandos novos:**
+```bash
+devflow stacks scrape-batch --from-package    # bootstrap stack docs from package.json
+devflow stacks validate                        # check artisanalRef integrity + SI-6 fence
+devflow standards new error-handling           # scaffold std-<id>.md + linter template
+devflow standards verify --strict              # fail CI on weak-standards
+```
+
+**Security invariants (SI-1 a SI-7)** aplicados: no `node -e` interpolation, `execFile`
+sempre, URL allowlist (cloud metadata + RFC1918 + link-local + trailing-dot), linter
+sandboxing (`.context/standards/machine/**` realpath gate), glob subset, snippet
+sanitization (sha256 canary), hook sequencing.
+
+**Filosofia de dependências:** zero npm deps em runtime. Seis primitivas in-house em
+`scripts/lib/` substituem `micromatch`/`gray-matter`/`tiktoken`. OTel SDK é a única
+exceção, lazy-loaded só com `observability.enabled: true`.
+
+Ver `.context/adrs/00[1-5]-*.md` e `.context/plans/context-layer-v2.md` para o detalhe
+de design e cobertura de testes (55 tests, 27 novos arquivos).
+
+---
+
 ## Histórico de Versões
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **1.0.0** | 2026-05-06 | First stable release of the context layer foundation. v0.x → v1.0 marks the harness as production-ready across 5 platforms. Ships Gap 1-4: Standards (`.context/standards/` triple-layer + SI-4 linter sandbox), Stacks (`.context/stacks/` artisanal pipeline replacing Context7 SaaS), Permissions (`.context/permissions.yaml` vendor-neutral deny-first), Observability (`.context/observability.yaml` OTel GenAI semconv opt-in). 5 ADRs Aprovados (001-005). 7 security invariants (SI-1 to SI-7) enforced by tests. Zero runtime deps (6 in-house primitives replace micromatch/gray-matter/tiktoken; OTel single exception lazy-loaded). 55 tests (28 baseline + 27 new files). 4 audit rounds with 1 CRITICAL + 4 HIGH + 6 MEDIUM blockers — all fixed inline. ADR canonical path migrated `docs/adrs/` → `adrs/` with dual-read until v1.2. See CHANGELOG.md for migration recipe. |
 | **0.13.3** | 2026-04-27 | Fix: invocações de scripts ADR (`adr-update-index.mjs`, `adr-audit.mjs`, `adr-evolve.mjs`) agora usam `${CLAUDE_PLUGIN_ROOT}/scripts/` em vez de `scripts/` relativo — bug crítico onde `/devflow adr:new` em projetos do usuário falhava silenciosamente porque os scripts vivem só no plugin install (`~/.claude/plugins/cache/...`), não no projeto; consequência: README/índice de ADRs não era regenerado e o LLM podia salvar o ADR em pasta errada por confusão de paths; novo HARD-GATE no preflight da skill `adr-builder` reforça (a) save **MUST** ir para `.context/docs/adrs/`, (b) scripts **MUST** ser invocados via `${CLAUDE_PLUGIN_ROOT}/scripts/...`, (c) falha do `adr-update-index.mjs` deve ser surfaced (não engolida); afeta `skills/adr-builder/SKILL.md` (12 sites), `skills/prevc-validation/SKILL.md` (3 sites), `commands/devflow-adr.md` (1 site); incident reference: usuário relatou que `/devflow adr:new` não regenerava o README e salvava em path divergente |
 | **0.13.2** | 2026-04-27 | Fix: `project-init` agora cria `.context/skills/README.md` em todos os tiers (Step 4.5 obrigatório) explicando que skills genéricos do DevFlow vêm via plugin (não copiados ao projeto) e que esse diretório é só para skills específicos do projeto — fecha gap de UX em projetos green-field onde `.context/skills/` ficava vazio/inexistente e usuário pensava que init falhou; Step 7 (Report) atualizado com seção "Skills available" listando skills do plugin disponíveis + estado de `.context/skills/`; checklist renumerado (5 = Ensure skills README); workflow de projeto existente intacto (HARD-GATE de delegação para `context-sync` quando `.context/docs/` já existe não foi tocado) |
 | **0.13.1** | 2026-04-27 | Fix: `prevc-confirmation` Step 4 (Finalize Branch) consulta `autoFinish` em `.context/.devflow.yaml` antes de invocar a skill genérica `superpowers:finishing-a-development-branch` — `autoFinish: true` agora executa direto via `gh pr merge --squash --delete-branch` + cleanup local (sem menu de 4 opções); `autoFinish: false`/ausente mantém comportamento atual; correção em nível de plugin (não memória local) para propagar config declarada do projeto a todas as sessões; incident reference: finalização da `feature/adr-system-v2` apresentou menu mesmo com `autoFinish: true`; 7/7 testes de regressão em `tests/validation/test-prevc-confirmation-autofinish.mjs` |

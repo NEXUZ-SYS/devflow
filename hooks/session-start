@@ -54,6 +54,15 @@ elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.c
   mempalace_available="true"
 fi
 
+# Check docs-mcp-server MCP: searched indices for stack docs via MCP tools
+# (replaces the legacy .context/stacks/refs/<lib>@<ver>.md paradigm)
+docs_mcp_available="false"
+if [ -f "${project_root}/.mcp.json" ] && grep -q "docs-mcp-server" "${project_root}/.mcp.json" 2>/dev/null; then
+  docs_mcp_available="true"
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "docs-mcp-server" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  docs_mcp_available="true"
+fi
+
 # Check dotcontext CLI: global install or npx available
 if [ "$mode" != "full" ]; then
   if command -v dotcontext >/dev/null 2>&1; then
@@ -154,40 +163,93 @@ NAPKIN_TMPL
   napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
 fi
 
-# --- Detect and inject ADR guardrails ---
+# --- Detect and inject ADR guardrails (Semana 0 dual-read) ---
+#
+# Canonical path: .context/adrs/ (v1.0+)
+# Legacy path:    .context/docs/adrs/ (deprecated, removed in v1.2)
+# Both are scanned during transition. If only legacy contributes ADRs, emit
+# LEGACY_PATH_DETECTED warning to stderr (per N6).
 
 adr_context=""
-adr_dir="${project_root}/.context/docs/adrs"
+adr_dir_new="${project_root}/.context/adrs"
+adr_dir_legacy="${project_root}/.context/docs/adrs"
 
-if [ -f "${adr_dir}/README.md" ]; then
+# Build list of existing ADR directories (canonical first)
+adr_dirs=()
+[ -d "$adr_dir_new" ] && adr_dirs+=("$adr_dir_new")
+[ -d "$adr_dir_legacy" ] && adr_dirs+=("$adr_dir_legacy")
+
+if [ "${#adr_dirs[@]}" -gt 0 ]; then
   adr_count=0
+  legacy_contributed=0
   adr_guardrails_content=""
 
-  # Iterate ADR files in sorted order, skipping README
-  while IFS= read -r adr_file; do
-    [ -f "$adr_file" ] || continue
+  # Track seen filenames so canonical wins on conflict (legacy is shadowed)
+  declare -A seen_files
 
-    # Read status from frontmatter
-    adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
-    [ "$adr_status" = "Aprovado" ] || continue
+  for d in "${adr_dirs[@]}"; do
+    while IFS= read -r adr_file; do
+      [ -f "$adr_file" ] || continue
+      fn=$(basename "$adr_file")
+      [ -n "${seen_files[$fn]:-}" ] && continue
+      seen_files[$fn]=1
 
-    adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
-    adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      [ "$adr_status" = "Aprovado" ] || continue
 
-    # Extract "## Guardrails" section: from the heading to the next "## " heading
-    guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
+      adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
 
-    if [ -n "$guardrails" ]; then
-      adr_count=$((adr_count + 1))
-      adr_guardrails_content+=$'\n### '"${adr_name}"' (stack: '"${adr_stack}"')'$'\n'"${guardrails}"$'\n'
-    fi
-  done < <(find "$adr_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort)
+      guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
+
+      if [ -n "$guardrails" ]; then
+        adr_count=$((adr_count + 1))
+        if [ "$d" = "$adr_dir_legacy" ]; then
+          legacy_contributed=1
+        fi
+        adr_guardrails_content+=$'\n### '"${adr_name}"' (stack: '"${adr_stack}"')'$'\n'"${guardrails}"$'\n'
+      fi
+    done < <(find "$d" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort)
+  done
+
+  # N6: emit warning when legacy path contributed AND canonical doesn't exist
+  if [ "$legacy_contributed" = "1" ] && [ ! -d "$adr_dir_new" ]; then
+    echo "[devflow] WARN: ADRs loaded from legacy path .context/docs/adrs/ — migrate to .context/adrs/ before v1.2 (see ADR-001)." >&2
+  fi
 
   if [ "$adr_count" -gt 0 ]; then
     adr_header="Loaded ${adr_count} active ADR(s). These are HARD CONSTRAINTS — apply during brainstorming, design, and implementation. Do not propose alternatives already rejected in ADRs."
     adr_escaped=$(escape_for_json "${adr_header}${adr_guardrails_content}")
     adr_context="\\n<ADR_GUARDRAILS>\\n${adr_escaped}\\n</ADR_GUARDRAILS>\\n"
   fi
+fi
+
+# --- DevFlow context index (Camada 1: standards + stack refs available) ---
+# Lists declared standards and scraped/pending stack refs so the LLM knows
+# what's available without reading every file. Pure scan — no network/LLM.
+# Also clears the per-session nudge cache so Camada 2 fires fresh in this
+# new conversation (cache is time-TTL'd at 6h, but sessions can overlap).
+
+context_index_context=""
+if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context/stacks/manifest.yaml" ]; then
+  (cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --clear 2>/dev/null) || true
+  index_text=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/context-index-cli.mjs" --format=text 2>/dev/null || echo "")
+  if [ -n "$index_text" ]; then
+    index_escaped=$(escape_for_json "$index_text")
+    context_index_context="\\n<DEVFLOW_CONTEXT_INDEX>\\n${index_escaped}\\n</DEVFLOW_CONTEXT_INDEX>\\n"
+  fi
+fi
+
+# --- docs-mcp-server recommendation (when project has stacks but MCP not configured) ---
+# When .context/stacks/manifest.yaml exists (project declares libs) but
+# docs-mcp-server is NOT in .mcp.json, emit a recommendation so the user
+# knows the modern paradigm (MCP-indexed docs) is available via /devflow config.
+
+docs_mcp_recommendation=""
+if [ -f "${project_root}/.context/stacks/manifest.yaml" ] && [ "$docs_mcp_available" = "false" ]; then
+  rec_text="docs-mcp-server não configurado. Este projeto declara stacks em .context/stacks/manifest.yaml mas não usa MCP indexing para docs. Para ativar (recomendado): execute \`/devflow config\` e responda 'Sim' à pergunta sobre docs-mcp-server. Após reiniciar o Claude Code, scrape de stacks passa a usar tool MCP em vez de arquivos .md gigantes."
+  rec_escaped=$(escape_for_json "$rec_text")
+  docs_mcp_recommendation="\\n<DOCS_MCP_RECOMMENDATION>\\n${rec_escaped}\\n</DOCS_MCP_RECOMMENDATION>\\n"
 fi
 
 # --- MemPalace auto-recall ---
@@ -245,6 +307,7 @@ mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
 mode_context+="- dotcontext CLI: ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
 mode_context+="- mempalace: ${mempalace_available}\\n"
+mode_context+="- docs-mcp-server: ${docs_mcp_available}\\n"
 
 # --- Mode status announcement (i18n) ---
 
@@ -325,7 +388,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${docs_mcp_recommendation}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
@@ -335,6 +398,17 @@ elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
 else
   printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
+fi
+
+# --- OTel span emission (Task 4.3, opt-in via .context/observability.yaml) ---
+# No-op when enabled:false (zero overhead, SDK not loaded). Per SI-1, the
+# emitter is invoked as a separate file with JSON envelope on stdin —
+# never via node -e with interpolation.
+
+if [ -f "${project_root}/.context/observability.yaml" ]; then
+  printf '{"event":"devflow.session_start","attributes":{"devflow.session.id":"%s","devflow.context.adrs_indexed":"unknown"}}' \
+    "$$" \
+    | (cd "${project_root}" && node "${SCRIPT_DIR}/../scripts/lib/otel-cli.mjs") 2>/dev/null || true
 fi
 
 exit 0

@@ -1,0 +1,28 @@
+# .context/stacks/manifest.yaml — DevFlow self-repo
+#
+# DevFlow é um BRIDGE plugin: roda em projetos de usuários (Claude Code,
+# Cursor, Codex, Gemini CLI, OpenCode), não tem frameworks de aplicação
+# próprios. Por isso este manifest fica vazio no self-repo.
+#
+# Em projetos de usuário, declare frameworks usando o schema completo:
+#
+#   spec: devflow-stack/v0
+#   runtime:
+#     node: "20.11"
+#   frameworks:
+#     next:
+#       version: "15.0.0"
+#       artisanalRef: refs/next@15.0.0.md
+#       source:
+#         type: github   # github | docs-site
+#         repo: vercel/next.js
+#         tag: v15.0.0
+#         path: docs/
+#       applyTo: ["src/app/**", "src/middleware.ts"]
+#
+# Ver authoring guide: scripts/lib/manifest-stacks.mjs (schema validator)
+# e ADR-003 (decisão arquitetural).
+
+spec: devflow-stack/v0
+runtime: {}
+frameworks: {}
