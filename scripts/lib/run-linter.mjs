@@ -117,21 +117,37 @@ export async function runLintersFor(event, projectRoot) {
   return result;
 }
 
-// Camada 4: enrich each violation with paths the LLM can read directly.
-// stdPath: where to read the standard's full body (Princípios + Anti-patterns).
-// refPath/refStatus: where to read the API ref scraped for the lib (when std
-// declares relatedAdrs leading to a manifest entry). null when no ref derivable.
+// Camada 4: enrich each violation with paths/queries the LLM can use.
+// stdPath:   where to read the standard's full body (Princípios + Anti-patterns).
+// refPath:   for legacy "scraped" refs, the .context/stacks/refs/<lib>@<ver>.md path;
+//            for "mcp-indexed" refs, a synthetic hint like "mcp:<lib>@<ver>"
+//            telling the agent to use the MCP search tool.
+// refStatus: "mcp-indexed" | "scraped" | "pending-scrape" | null
+//
+// Returns null fields when the std has no derivable ref.
 function buildViolation(std, stdout, projectRoot) {
   const stdPathAbs = std.filePath || "";
   const stdPathRel = stdPathAbs && stdPathAbs.startsWith(projectRoot)
     ? relative(projectRoot, stdPathAbs)
     : stdPathAbs;
   const ref = deriveFirstRefForStandard(std, projectRoot);
+  let refPath = null;
+  let refStatus = null;
+  if (ref) {
+    refStatus = ref.status;
+    if (ref.status === "mcp-indexed") {
+      // Synthetic locator: caller (run-linter-cli + post-tool-use hook)
+      // formats this as a `mcp__docs-mcp-server__search_docs` instruction.
+      refPath = `mcp:${ref.lib}@${ref.version}`;
+    } else if (ref.refPath) {
+      refPath = `.context/stacks/${ref.refPath}`;
+    }
+  }
   return {
     id: std.id,
     msg: stdout.trim(),
     stdPath: stdPathRel || null,
-    refPath: ref ? `.context/stacks/${ref.refPath}` : null,
-    refStatus: ref ? ref.status : null,
+    refPath,
+    refStatus,
   };
 }

@@ -82,6 +82,19 @@ export function auditStack(lib, version, projectRoot) {
         status: "WARN",
         diagnosis: `'${lib}' manifest version=${fw.version}, audit target=${version} (drift)`,
       });
+    } else if (fw.mcpIndexed === true) {
+      // Fase B: lib indexed in docs-mcp-server global store. Audit
+      // short-circuits — content checks T2-T5 don't apply (no .md to read).
+      // Full verification of MCP-indexed libs requires querying the MCP
+      // server, which is out of scope for the static audit.
+      checks.push({
+        id: "T1",
+        name: "Manifest entry",
+        status: "PASS",
+        diagnosis: `${lib}@${version} declared with mcpIndexed:true (query via mcp__docs-mcp-server__search_docs to verify content)`,
+      });
+      const summary = { pass: 1, fail: 0, warn: 0 };
+      return { lib, version, file: null, checks, summary, gate: "PASSED" };
     } else {
       checks.push({
         id: "T1",

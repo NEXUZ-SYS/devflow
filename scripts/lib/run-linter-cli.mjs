@@ -34,12 +34,22 @@ process.stdin.on("end", async () => {
     }
     // Format for human reader. Camada 4: append stdPath + refPath so the
     // LLM knows where to read the rule body and the API ref docs.
+    //
+    // Fase B: mcp-indexed refs render as a MCP query instruction instead of
+    // a file path, since there's no .md to read.
     const lines = violations.map(v => {
       const parts = [`Standard ${v.id} violated: ${v.msg}`];
       if (v.stdPath) parts.push(`  std: ${v.stdPath}`);
       if (v.refPath) {
-        const tag = v.refStatus === "pending-scrape" ? " (pending-scrape)" : "";
-        parts.push(`  ref: ${v.refPath}${tag}`);
+        if (v.refStatus === "mcp-indexed") {
+          // refPath shape: "mcp:<lib>@<ver>"
+          const libVer = v.refPath.replace(/^mcp:/, "");
+          const [lib] = libVer.split("@");
+          parts.push(`  ref: query mcp__docs-mcp-server__search_docs("${lib}", "<question>") (MCP-indexed)`);
+        } else {
+          const tag = v.refStatus === "pending-scrape" ? " (pending-scrape)" : "";
+          parts.push(`  ref: ${v.refPath}${tag}`);
+        }
       }
       return parts.join("\n");
     });

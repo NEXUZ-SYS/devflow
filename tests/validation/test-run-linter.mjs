@@ -336,6 +336,75 @@ enforcement:
   cleanup();
 });
 
+test("Camada 4 (Fase B): violation includes MCP search instruction for mcpIndexed lib", async () => {
+  // When std → relatedAdr → manifest entry has mcpIndexed:true, the violation's
+  // refPath becomes the synthetic "mcp:<lib>@<ver>" locator and refStatus is
+  // "mcp-indexed". run-linter-cli formats this as the MCP search instruction.
+  const { root, cleanup } = fixture();
+  const machineDir = join(root, ".context", "standards", "machine");
+  mkdirSync(machineDir, { recursive: true });
+
+  // Linter
+  writeFileSync(
+    join(machineDir, "std-zod.js"),
+    `console.log("VIOLATION: missing .parse()"); process.exit(1);`
+  );
+
+  // ADR with stack
+  mkdirSync(join(root, ".context", "adrs"), { recursive: true });
+  writeFileSync(
+    join(root, ".context", "adrs", "010-adr-zod-frontend-v1.0.0.md"),
+    `---
+type: adr
+name: adr-zod-frontend
+stack: Zod 4.1
+status: Aprovado
+version: 1.0.0
+---
+# ADR
+## Decisão
+`
+  );
+
+  // Manifest with mcpIndexed:true (no artisanalRef)
+  mkdirSync(join(root, ".context", "stacks"), { recursive: true });
+  writeFileSync(
+    join(root, ".context", "stacks", "manifest.yaml"),
+    `spec: devflow-stack/v0
+frameworks:
+  zod:
+    version: "4.1.0"
+    mcpIndexed: true
+`
+  );
+
+  // Standard with relatedAdrs
+  writeFileSync(
+    join(root, ".context", "standards", "std-zod.md"),
+    `---
+id: std-zod
+description: Zod validation
+version: 1.0.0
+applyTo: ["**/*.ts"]
+relatedAdrs: ["adr-zod-frontend"]
+enforcement:
+  linter: standards/machine/std-zod.js
+---
+# std
+`
+  );
+
+  const result = await runLintersFor(
+    { tool: "Edit", path: "src/foo.ts" },
+    root
+  );
+  assert.equal(result.violations.length, 1);
+  assert.equal(result.violations[0].refPath, "mcp:zod@4.1.0",
+    "mcpIndexed refs use synthetic 'mcp:<lib>@<ver>' locator");
+  assert.equal(result.violations[0].refStatus, "mcp-indexed");
+  cleanup();
+});
+
 test("runLintersFor: violation has refPath=null when std has no relatedAdrs", async () => {
   const { root, cleanup } = fixture();
   const machineDir = join(root, ".context", "standards", "machine");

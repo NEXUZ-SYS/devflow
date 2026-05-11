@@ -219,6 +219,38 @@ test("CLI context-index: empty applyTo renders as '(manual — sem auto-trigger)
   } finally { cleanup(); }
 });
 
+test("buildContextIndex: lib with mcpIndexed:true gets status='mcp-indexed'", () => {
+  // Fase B: new manifest entries use mcpIndexed:true instead of artisanalRef.
+  // Context index must recognize the new shape and report it as a valid
+  // (available) ref via MCP query — not pending-scrape.
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {
+      zod: { version: "4.1.0", mcpIndexed: true },
+    });
+    const idx = buildContextIndex(root);
+    assert.equal(idx.refs.length, 1);
+    const r = idx.refs[0];
+    assert.equal(r.lib, "zod");
+    assert.equal(r.status, "mcp-indexed");
+    assert.equal(r.refPath, null);
+    assert.equal(idx.totals.refsScraped, 1, "mcp-indexed counts as 'available'");
+  } finally { cleanup(); }
+});
+
+test("CLI context-index: text output explains MCP query path for mcp-indexed refs", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {
+      zod: { version: "4.1.0", mcpIndexed: true },
+    });
+    const r = spawnSync("node", [CLI, `--project=${root}`, "--format=text"], { encoding: "utf-8" });
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /MCP indexed/);
+    assert.match(r.stdout, /mcp__docs-mcp-server__search_docs/);
+  } finally { cleanup(); }
+});
+
 test("CLI context-index: --format=text produces human-readable output for hook injection", () => {
   // The hook wants a textual block — not raw JSON — so the LLM sees it as
   // narrative context. Schema: stable headers we can grep in tests.

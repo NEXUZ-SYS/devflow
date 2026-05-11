@@ -216,6 +216,26 @@ test("T5 FAIL when manual-generation marker present (HTML comment)", () => {
   }
 });
 
+test("Fase B: lib with mcpIndexed:true short-circuits audit to PASS", () => {
+  // mcpIndexed libs have no .md file by design. The audit must recognize
+  // this and pass T1 + bypass T2-T5 (which all assume file content).
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {
+      zod: { version: "4.1.0", mcpIndexed: true },
+    });
+    const r = auditStack("zod", "4.1.0", root);
+    assert.equal(r.gate, "PASSED", "mcpIndexed lib should pass without file");
+    assert.equal(r.checks.length, 1, "only T1 should run (T2-T5 short-circuited)");
+    const t1 = r.checks[0];
+    assert.equal(t1.id, "T1");
+    assert.equal(t1.status, "PASS");
+    assert.match(t1.diagnosis, /mcpIndexed/i);
+  } finally {
+    cleanup();
+  }
+});
+
 test("T5 PASS when prose mentions 'manually created' in legitimate context", () => {
   // Past false positive (E2E 2026-05-09 round): Python whatsnew prose said
   // "Manually created type variables may be explicitly marked covariant..."

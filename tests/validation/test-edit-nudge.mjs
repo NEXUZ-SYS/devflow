@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildNudge, isFresh, loadCache, recordInjection, clearCache, extractStandardRules } from "../../scripts/lib/edit-nudge.mjs";
+import { buildNudge, isFresh, loadCache, recordInjection, clearCache, extractStandardRules, renderNudgeText } from "../../scripts/lib/edit-nudge.mjs";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const CLI = new URL("../../scripts/lib/edit-nudge-cli.mjs", import.meta.url).pathname;
@@ -116,6 +116,48 @@ test("buildNudge: derives stack refs via std.relatedAdrs → manifest", () => {
     assert.equal(r.derivedRefs[0].status, "scraped");
     assert.equal(r.derivedRefs[0].refPath, "refs/typescript@5.9.0.md");
   } finally { cleanup(); }
+});
+
+test("buildNudge: mcpIndexed ref reported with status='mcp-indexed' (Fase B)", () => {
+  // Manifest entry uses new mcpIndexed:true shape instead of legacy
+  // artisanalRef. Nudge must surface this so the LLM knows to use the MCP
+  // search tool rather than read a file.
+  const { root, cleanup } = fixture();
+  try {
+    writeAdr(root, "001-adr-zod-frontend-v1.0.0", {
+      type: "adr", name: "adr-zod-frontend",
+      stack: "Zod 4.1", status: "Aprovado", version: "1.0.0",
+    });
+    writeManifest(root, {
+      zod: { version: "4.1.0", mcpIndexed: true },
+    });
+    writeStandard(root, "std-zod", {
+      id: "std-zod", description: "Zod", version: "1.0.0",
+      applyTo: ["**/*.ts"],
+      relatedAdrs: ["adr-zod-frontend"],
+    });
+    const r = buildNudge({ tool: "Edit", path: "src/foo.ts", projectRoot: root });
+    assert.ok(r);
+    assert.equal(r.derivedRefs.length, 1);
+    assert.equal(r.derivedRefs[0].status, "mcp-indexed");
+    assert.equal(r.derivedRefs[0].refPath, null);
+    assert.equal(r.derivedRefs[0].lib, "zod");
+  } finally { cleanup(); }
+});
+
+test("renderNudgeText: mcp-indexed refs render with MCP search instruction", () => {
+  const nudge = {
+    tool: "Edit",
+    path: "src/foo.ts",
+    matchedStandards: ["std-zod"],
+    derivedRefs: [
+      { lib: "zod", version: "4.1.0", refPath: null, status: "mcp-indexed" },
+    ],
+    rules: [],
+  };
+  const text = renderNudgeText(nudge);
+  assert.match(text, /Refs MCP-indexed: zod@4\.1\.0/);
+  assert.match(text, /mcp__docs-mcp-server__search_docs/);
 });
 
 test("buildNudge: pending-scrape ref still listed (LLM knows it was declared)", () => {

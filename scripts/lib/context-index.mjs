@@ -10,9 +10,10 @@
 //     totals:    { standards, refs, refsScraped }
 //   }
 //
-// `status` for refs:
-//   - "scraped"        — refPath exists on disk, lines counted
-//   - "pending-scrape" — declared in manifest but file missing
+// `status` for refs (Fase B onwards):
+//   - "mcp-indexed"    — lib has mcpIndexed:true in manifest (query via MCP tool)
+//   - "scraped"        — legacy: refPath exists on disk, lines counted
+//   - "pending-scrape" — legacy: declared in manifest but file missing
 //
 // skipDocs:true frameworks are excluded — they're services/platforms (e.g.,
 // GitHub Actions) without a scrapeable canonical doc.
@@ -31,7 +32,8 @@ export function buildContextIndex(projectRoot) {
     totals: {
       standards: standards.length,
       refs: refs.length,
-      refsScraped: refs.filter(r => r.status === "scraped").length,
+      // "available" = ref is queryable, either via MCP or by reading the .md
+      refsScraped: refs.filter(r => r.status === "scraped" || r.status === "mcp-indexed").length,
     },
   };
 }
@@ -52,8 +54,23 @@ function collectRefs(projectRoot) {
   const out = [];
   for (const [lib, fw] of Object.entries(m.frameworks || {})) {
     if (fw.skipDocs) continue;
-    if (!fw.artisanalRef) continue;
 
+    // Fase B (Migration to docs-mcp-server): mcpIndexed:true is the modern
+    // declaration. Lib is indexed in the docs-mcp-server global store and
+    // queryable via `mcp__docs-mcp-server__search_docs` / `list_libraries`.
+    if (fw.mcpIndexed === true) {
+      out.push({
+        lib,
+        version: fw.version || "0.0.0",
+        refPath: null,
+        status: "mcp-indexed",
+        lines: 0,
+      });
+      continue;
+    }
+
+    // Legacy path: artisanalRef points to a generated .md file
+    if (!fw.artisanalRef) continue;
     const fullPath = join(projectRoot, ".context", "stacks", fw.artisanalRef);
     if (existsSync(fullPath)) {
       const content = readFileSync(fullPath, "utf-8");
@@ -100,19 +117,25 @@ export function renderContextIndexText(idx) {
     }
   }
   lines.push("");
-  lines.push(`Stack refs (${idx.totals.refsScraped}/${idx.totals.refs} scraped):`);
+  lines.push(`Stack refs (${idx.totals.refsScraped}/${idx.totals.refs} disponíveis):`);
   if (idx.refs.length === 0) {
     lines.push("  (nenhum)");
   } else {
     for (const r of idx.refs) {
-      if (r.status === "scraped") {
-        lines.push(`  - ${r.lib}@${r.version} — ${r.refPath} (${r.lines} linhas)`);
+      if (r.status === "mcp-indexed") {
+        // Modern: query via MCP tools instead of reading a file
+        lines.push(`  - ${r.lib}@${r.version} — MCP indexed (query: mcp__docs-mcp-server__search_docs)`);
+      } else if (r.status === "scraped") {
+        lines.push(`  - ${r.lib}@${r.version} — ${r.refPath} (${r.lines} linhas, legacy .md)`);
       } else {
-        lines.push(`  - ${r.lib}@${r.version} — pending-scrape`);
+        lines.push(`  - ${r.lib}@${r.version} — pending-scrape (legacy)`);
       }
     }
   }
   lines.push("");
-  lines.push("Para detalhes: read .context/stacks/refs/<lib>@<ver>.md ou .context/standards/<id>.md");
+  lines.push("Para detalhes:");
+  lines.push("  - mcp-indexed: use mcp__docs-mcp-server__search_docs(<lib>, <query>) ou list_libraries");
+  lines.push("  - legacy .md: read .context/stacks/refs/<lib>@<ver>.md");
+  lines.push("  - standards: read .context/standards/<id>.md");
   return lines.join("\n");
 }

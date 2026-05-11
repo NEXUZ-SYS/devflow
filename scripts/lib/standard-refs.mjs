@@ -15,8 +15,14 @@ import { parseFrontmatter } from "./frontmatter.mjs";
 import { parseStackFrontmatter } from "./adr-chain.mjs";
 
 // Returns a list of refs derived from the given standards. Each ref:
-//   { lib, version, refPath, status: "scraped" | "pending-scrape" }
+//   { lib, version, refPath, status: "mcp-indexed" | "scraped" | "pending-scrape" }
 // Dedup by lib — multiple stds may map to the same ref.
+//
+// Status values (Fase B onwards):
+//   - "mcp-indexed":    fw.mcpIndexed=true. refPath is null; consumers query
+//                       via mcp__docs-mcp-server__search_docs.
+//   - "scraped":        legacy fw.artisanalRef + file present on disk.
+//   - "pending-scrape": legacy fw.artisanalRef declared but file missing.
 export function deriveRefsForStandards(stds, projectRoot) {
   const manifest = loadManifest(projectRoot);
   const seen = new Set();
@@ -39,8 +45,21 @@ export function deriveRefsForStandards(stds, projectRoot) {
       seen.add(stackMeta.lib);
 
       const fw = manifest.frameworks?.[stackMeta.lib];
-      if (!fw || fw.skipDocs || !fw.artisanalRef) continue;
+      if (!fw || fw.skipDocs) continue;
 
+      // Fase B: prefer mcpIndexed over legacy artisanalRef
+      if (fw.mcpIndexed === true) {
+        refs.push({
+          lib: stackMeta.lib,
+          version: fw.version || stackMeta.version,
+          refPath: null,
+          status: "mcp-indexed",
+        });
+        continue;
+      }
+
+      // Legacy path
+      if (!fw.artisanalRef) continue;
       const refOnDisk = join(projectRoot, ".context", "stacks", fw.artisanalRef);
       refs.push({
         lib: stackMeta.lib,

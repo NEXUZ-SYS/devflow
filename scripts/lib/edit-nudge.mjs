@@ -139,14 +139,22 @@ export function renderNudgeText(nudge) {
   lines.push(`DevFlow: ${nudge.tool} em ${nudge.path}`);
   lines.push(`Standards aplicáveis: ${nudge.matchedStandards.join(", ")}`);
   if (nudge.derivedRefs.length > 0) {
+    // Fase B: 3 ref states. MCP-indexed libs query via MCP tool; legacy
+    // .md refs read from disk; pending-scrape are declared but not indexed.
+    const mcpIndexed = nudge.derivedRefs.filter(r => r.status === "mcp-indexed");
     const scraped = nudge.derivedRefs
       .filter(r => r.status === "scraped")
       .map(r => `.context/stacks/${r.refPath}`);
     const pending = nudge.derivedRefs
       .filter(r => r.status === "pending-scrape")
       .map(r => `${r.lib}@${r.version}`);
+    if (mcpIndexed.length > 0) {
+      const libList = mcpIndexed.map(r => `${r.lib}@${r.version}`).join(", ");
+      lines.push(`Refs MCP-indexed: ${libList}`);
+      lines.push(`  → query: mcp__docs-mcp-server__search_docs(<lib>, "<question>")`);
+    }
     if (scraped.length > 0) {
-      lines.push(`Refs disponíveis: ${scraped.join(", ")}`);
+      lines.push(`Refs disponíveis (legacy .md): ${scraped.join(", ")}`);
     }
     if (pending.length > 0) {
       lines.push(`Refs declarados sem scrape: ${pending.join(", ")}`);
