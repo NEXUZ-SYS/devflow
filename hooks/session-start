@@ -54,6 +54,15 @@ elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.c
   mempalace_available="true"
 fi
 
+# Check docs-mcp-server MCP: searched indices for stack docs via MCP tools
+# (replaces the legacy .context/stacks/refs/<lib>@<ver>.md paradigm)
+docs_mcp_available="false"
+if [ -f "${project_root}/.mcp.json" ] && grep -q "docs-mcp-server" "${project_root}/.mcp.json" 2>/dev/null; then
+  docs_mcp_available="true"
+elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "docs-mcp-server" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  docs_mcp_available="true"
+fi
+
 # Check dotcontext CLI: global install or npx available
 if [ "$mode" != "full" ]; then
   if command -v dotcontext >/dev/null 2>&1; then
@@ -231,6 +240,18 @@ if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context
   fi
 fi
 
+# --- docs-mcp-server recommendation (when project has stacks but MCP not configured) ---
+# When .context/stacks/manifest.yaml exists (project declares libs) but
+# docs-mcp-server is NOT in .mcp.json, emit a recommendation so the user
+# knows the modern paradigm (MCP-indexed docs) is available via /devflow config.
+
+docs_mcp_recommendation=""
+if [ -f "${project_root}/.context/stacks/manifest.yaml" ] && [ "$docs_mcp_available" = "false" ]; then
+  rec_text="docs-mcp-server não configurado. Este projeto declara stacks em .context/stacks/manifest.yaml mas não usa MCP indexing para docs. Para ativar (recomendado): execute \`/devflow config\` e responda 'Sim' à pergunta sobre docs-mcp-server. Após reiniciar o Claude Code, scrape de stacks passa a usar tool MCP em vez de arquivos .md gigantes."
+  rec_escaped=$(escape_for_json "$rec_text")
+  docs_mcp_recommendation="\\n<DOCS_MCP_RECOMMENDATION>\\n${rec_escaped}\\n</DOCS_MCP_RECOMMENDATION>\\n"
+fi
+
 # --- MemPalace auto-recall ---
 
 mempalace_context=""
@@ -286,6 +307,7 @@ mode_context+="- dotcontext MCP: ${dotcontext_mcp}\\n"
 mode_context+="- dotcontext CLI: ${dotcontext_cli}\\n"
 mode_context+="- dotcontext lite (.context/): ${dotcontext_lite}\\n"
 mode_context+="- mempalace: ${mempalace_available}\\n"
+mode_context+="- docs-mcp-server: ${docs_mcp_available}\\n"
 
 # --- Mode status announcement (i18n) ---
 
@@ -366,7 +388,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${docs_mcp_recommendation}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
