@@ -1,0 +1,49 @@
+version: 1.0.0-test
+generated: 2026-05-15
+
+entries:
+  - id: runtime-validation
+    summary: Validar payloads na borda externa antes de tocar lógica de domínio
+    category: contracts
+    defaultApplyTo:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.py"
+    inverseHints:
+      - zod
+      - yup
+      - pydantic
+      - valibot
+    principleTemplate: |
+      Toda entrada vinda de borda externa ({{boundaryList}}) DEVE ser parsed
+      contra um schema declarado antes de qualquer state update ou render.
+      Tipos de domínio derivam do schema; nunca declarados em paralelo.
+    antiPatternTemplate:
+      - rule: "Aceitar `unknown` da borda sem parse"
+        correct: "`Schema.parse(input)` na primeira linha após I/O"
+      - rule: "Declarar `type Foo` paralelo a um schema existente"
+        correct: "`type Foo = z.infer<typeof FooSchema>` (DRY)"
+    linterHints:
+      - "AST: fetch sem .parse na sequência"
+    relatedAdrCategories:
+      - qualidade-testes
+      - frontend
+      - backend
+
+  - id: error-handling
+    summary: Como erros são lançados, capturados e propagados
+    category: errors
+    defaultApplyTo:
+      - "src/**/*.ts"
+    inverseHints: []
+    principleTemplate: |
+      Erros de domínio estendem BaseError; nunca `throw new Error` em produção.
+    antiPatternTemplate:
+      - rule: "throw new Error sem contexto"
+        correct: "throw new DomainError({ code, cause })"
+    linterHints:
+      - "regex: throw\\s+new\\s+Error\\("
+    relatedAdrCategories:
+      - frontend
+      - bff
+      - backend

@@ -1,0 +1,213 @@
+version: 1.0.0
+generated: 2026-05-15
+license: project-internal
+
+# Catálogo curado de concerns operacionais para a skill standards-builder.
+# Cada entry descreve uma regra cross-cutting que NÃO depende de lib específica.
+# inverseHints lista libs/keywords que "puxam" o concern (ex: ADR sobre Zod → runtime-validation).
+#
+# v1.0 traz 6 concerns iniciais cobrindo os fluxos testados (F1-F4 + E2E sandbox).
+# Concerns adicionais podem ser registrados em .context/standards/concerns.local.yaml.
+
+entries:
+  - id: runtime-validation
+    summary: Validar payloads na borda externa antes de tocar lógica de domínio
+    category: contracts
+    defaultApplyTo:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.py"
+    inverseHints:
+      - zod
+      - yup
+      - valibot
+      - pydantic
+      - marshmallow
+      - io-ts
+      - ajv
+    principleTemplate: |
+      Toda entrada vinda de borda externa ({{boundaryList}}) DEVE ser parsed
+      contra um schema declarado antes de qualquer state update ou render.
+      Tipos de domínio derivam do schema; nunca declarados em paralelo.
+    antiPatternTemplate:
+      - rule: "Aceitar `unknown` da borda sem parse"
+        correct: "`Schema.parse(input)` na primeira linha após I/O"
+      - rule: "Declarar `type Foo` paralelo a um schema existente"
+        correct: "Derivar tipo via `infer` do schema (DRY)"
+      - rule: "Validar duas vezes o mesmo dado no fluxo"
+        correct: "Parse na borda, propaga tipo estreito"
+    linterHints:
+      - "AST: fetch().then(res => res.json()) sem .parse() na sequência"
+      - "ESLint custom: proibir `type X = ...` onde existe `XSchema` no mesmo pacote"
+    relatedAdrCategories:
+      - qualidade-testes
+      - frontend
+      - backend
+      - bff
+
+  - id: error-handling
+    summary: Como erros são lançados, capturados e propagados pelo sistema
+    category: errors
+    defaultApplyTo:
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+      - "src/**/*.py"
+    inverseHints: []
+    principleTemplate: |
+      Erros de domínio estendem uma classe base (BaseError / DomainError) e carregam
+      `code` + `cause` + contexto estruturado. NUNCA `throw new Error("string")` em
+      código de produção. Captura sempre nomeia o tipo esperado; rethrow preserva cause.
+    antiPatternTemplate:
+      - rule: "throw new Error sem contexto"
+        correct: "throw new DomainError({ code, cause, ctx })"
+      - rule: "catch (e) sem inspecionar tipo"
+        correct: "catch (e) { if (!(e instanceof DomainError)) throw e; ... }"
+      - rule: "swallow de erro silencioso (catch vazio)"
+        correct: "logger.warn + rethrow ou explicit fallback documentado"
+    linterHints:
+      - "regex: throw\\s+new\\s+Error\\("
+      - "ESLint: prefer-promise-reject-errors, no-throw-literal"
+    relatedAdrCategories:
+      - frontend
+      - bff
+      - backend
+
+  - id: pre-commit-hygiene
+    summary: Format + lint + typecheck obrigatórios antes de cada commit
+    category: hygiene
+    defaultApplyTo:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.mjs"
+      - "**/*.py"
+    inverseHints:
+      - husky
+      - lefthook
+      - pre-commit
+      - lint-staged
+      - biome
+      - eslint
+      - prettier
+      - ruff
+      - black
+    principleTemplate: |
+      Todo commit passa por formatter + linter + typechecker antes de aterrissar no
+      working tree. Hooks rodam em modo staged-only para velocidade; CI roda full no
+      PR. Falha de hook bloqueia o commit — nunca usar --no-verify exceto em emergência
+      documentada (não a regra).
+    antiPatternTemplate:
+      - rule: "Skip de hook (--no-verify) como hábito"
+        correct: "Investigar e corrigir a falha; --no-verify é exceção justificada"
+      - rule: "Format-on-save desabilitado no editor"
+        correct: "Editor formata + organize imports automaticamente (settings versionados)"
+      - rule: "Lint só roda em CI, não local"
+        correct: "Hook pre-commit roda lint nos staged files; CI roda full"
+    linterHints:
+      - "Verificar existência de .husky/ ou lefthook.yml ou .pre-commit-config.yaml"
+      - "package.json scripts contém format, lint, typecheck idempotentes"
+    relatedAdrCategories:
+      - frontend
+      - bff
+      - backend
+      - qualidade-testes
+
+  - id: test-discipline
+    summary: Testes colocalizados, nomeados por comportamento, isolados por unidade
+    category: testing
+    defaultApplyTo:
+      - "**/*.test.ts"
+      - "**/*.test.tsx"
+      - "**/*.test.mjs"
+      - "**/test_*.py"
+      - "**/*_test.py"
+    inverseHints:
+      - vitest
+      - jest
+      - pytest
+      - playwright
+      - cypress
+      - mocha
+    principleTemplate: |
+      Test files vivem ao lado do código testado (não em `__tests__/` paralelo isolado).
+      Cada teste descreve UM comportamento observável; nome usa verbo no presente
+      (\"returns X when Y\"). Mocks só na fronteira de I/O; lógica de domínio testa
+      direto. Coverage não é meta — confiança é. Test-first (TDD) é o default.
+    antiPatternTemplate:
+      - rule: "Testes em diretório paralelo (`tests/` fora de `src/`)"
+        correct: "Colocalize: `feature/foo.ts` + `feature/foo.test.ts`"
+      - rule: "Test names descrevem método (`testFoo`) em vez de comportamento"
+        correct: "`foo returns X when Y` / `should reject when Z`"
+      - rule: "Mockar lógica de domínio para passar teste"
+        correct: "Mock só na borda (rede, DB, FS); domínio testa real"
+    linterHints:
+      - "Detectar `__tests__/` paralelo fora do path do código testado"
+      - "Detectar coverage como assertion em CI (anti-pattern de meta-de-coverage)"
+    relatedAdrCategories:
+      - qualidade-testes
+      - frontend
+      - backend
+
+  - id: naming-conventions
+    summary: Nomes de arquivos, símbolos e exports seguem regras explícitas e estáveis
+    category: naming
+    defaultApplyTo:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.py"
+    inverseHints: []
+    principleTemplate: |
+      Arquivos: kebab-case (TS/JS) ou snake_case (Python). Símbolos: camelCase
+      (variáveis/funções), PascalCase (tipos/classes), SCREAMING_SNAKE (constantes
+      de módulo). Exports nomeados por padrão; default export só em entry points.
+      Nomes descrevem propósito, não implementação ({{lib}} não aparece em nome).
+    antiPatternTemplate:
+      - rule: "Default exports espalhados pela codebase"
+        correct: "Named exports; default só em pages/routes/entry points"
+      - rule: "Nome com prefixo de lib (`ZodUserSchema`, `ReactUserCard`)"
+        correct: "`UserSchema`, `UserCard` — lib é detalhe de implementação"
+      - rule: "Abreviações não documentadas (`usr`, `pmt`, `cfg`)"
+        correct: "Nome completo (`user`, `payment`, `config`) ou termo de domínio do glossário"
+    linterHints:
+      - "ESLint @typescript-eslint/naming-convention"
+      - "Detectar default export fora de pages/entry"
+    relatedAdrCategories:
+      - frontend
+      - bff
+      - backend
+
+  - id: observability-spans
+    summary: Operações de I/O e LLM emitem spans estruturados com atributos consistentes
+    category: obs
+    defaultApplyTo:
+      - "src/**/*.ts"
+      - "src/**/*.py"
+      - "**/route.ts"
+      - "**/handler.py"
+    inverseHints:
+      - datadog
+      - opentelemetry
+      - otel
+      - sentry
+      - newrelic
+      - jaeger
+      - honeycomb
+    principleTemplate: |
+      Cada operação de I/O (HTTP, DB, LLM call, queue) abre um span com nome
+      `<domain>.<operation>` e atributos OTel GenAI-compatíveis quando aplicável
+      (gen_ai.system, gen_ai.request.model, gen_ai.usage.*). Erros marcam o span
+      como `ERROR` antes de re-throw. Span IDs aparecem em logs estruturados.
+    antiPatternTemplate:
+      - rule: "Operação de LLM sem span ou sem atributos de modelo/tokens"
+        correct: "Span com `gen_ai.*` atributos; tokens medidos no callback"
+      - rule: "Span name dinâmico com user input (cardinality bomb)"
+        correct: "Span name é constante; user input vai como atributo"
+      - rule: "Erro engolido sem marcar span como ERROR"
+        correct: "span.recordException(e) + span.setStatus({ code: ERROR }); rethrow"
+    linterHints:
+      - "AST: chamada a llm.chat / openai.complete sem wrapper de span"
+      - "Detectar span.setName com template literal contendo variável"
+    relatedAdrCategories:
+      - bff
+      - backend
+      - qualidade-testes
