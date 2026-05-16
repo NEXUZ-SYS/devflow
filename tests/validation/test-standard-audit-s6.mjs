@@ -177,8 +177,8 @@ test("S6: counts as 6th check in summary", () => {
     writeManifest(root, {});
     writeStd(root, "minimal");
     const r = auditStandard(join(root, ".context/standards/std-minimal.md"), root);
-    assert.equal(r.checks.length, 6, "audit should now run 6 checks (S1-S6)");
+    assert.equal(r.checks.length, 7, "audit now runs 7 checks (S1-S7, S7=concern alignment)");
     const ids = r.checks.map(c => c.id).sort();
-    assert.deepEqual(ids, ["S1", "S2", "S3", "S4", "S5", "S6"]);
+    assert.deepEqual(ids, ["S1", "S2", "S3", "S4", "S5", "S6", "S7"]);
   } finally { cleanup(); }
 });

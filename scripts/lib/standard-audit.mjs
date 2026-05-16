@@ -4,7 +4,7 @@
 // catches placeholder/scaffold content + frontmatter integrity + linter
 // existence + cross-reference correctness + stack-refs completeness.
 //
-// 6 checks (deterministic, fail-loud, exit code via CLI):
+// 7 checks (deterministic, fail-loud, exit code via CLI):
 //   S1. Frontmatter complete (id, applyTo, version, enforcement.linter)
 //   S2. Body has no scaffold placeholders (TODO markers, <...>, scaffolded:true)
 //   S3. Linter file exists at enforcement.linter path AND is valid JS
@@ -14,6 +14,9 @@
 //       are declared in manifest.yaml (non-skipDocs) → ref must exist in
 //       stacks/refs/. Configurable via .devflow.yaml standards.s6Level
 //       ("fail" default | "warn" demotes to non-blocking).
+//   S7. concern alignment — non-blocking WARN when the std id matches a known
+//       library name (taxonomy inverseHints), i.e. the std is lib-centric and
+//       should migrate to a concern-based standard. Deprecated stds skip S7.
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -22,6 +25,11 @@ import { validateSubset } from "./glob.mjs";
 import { resolveAdrPath } from "./path-resolver.mjs";
 import { extractStackMentions } from "./adr-chain.mjs";
 import { loadManifest } from "./manifest-stacks.mjs";
+import { loadTaxonomySync } from "./taxonomy-loader.mjs";
+
+function defaultTaxonomyPath() {
+  return resolve(import.meta.dirname, "../../skills/standards-builder/references/taxonomy-of-concerns.yaml");
+}
 
 function loadDevflowConfig(projectRoot) {
   const path = join(projectRoot, ".context", ".devflow.yaml");
@@ -65,7 +73,7 @@ function findAdrSlugs(projectRoot) {
   return slugs;
 }
 
-export function auditStandard(stdPath, projectRoot) {
+export function auditStandard(stdPath, projectRoot, options = {}) {
   const checks = [];
 
   if (!existsSync(stdPath)) {
@@ -259,6 +267,58 @@ export function auditStandard(stdPath, projectRoot) {
         status,
         diagnosis: `std mentions ${orphans.join(", ")} but refs missing — run \`devflow stacks scrape <lib> <ver> --source=... --from=...\` (orphan refs)`,
       });
+    }
+  }
+
+  // S7 — Lib-centric detection (concern alignment)
+  // A non-blocking WARN: a std whose id matches a known library name (from the
+  // taxonomy's inverseHints) is lib-centric. Standards should describe an
+  // operational concern, not a library — suggest migration. Deprecated stds
+  // skip this check (already on the way out).
+  {
+    if (fm.deprecated) {
+      checks.push({
+        id: "S7",
+        name: "concern alignment",
+        status: "PASS",
+        diagnosis: "deprecated std — S7 skipped",
+      });
+    } else {
+      const taxonomyPath = options.taxonomyPath || defaultTaxonomyPath();
+      const tax = loadTaxonomySync({ distributedPath: taxonomyPath, projectRoot: null });
+      const allHints = new Set(
+        tax.entries.flatMap(e => (e.inverseHints || []).map(h => h.toLowerCase()))
+      );
+      const id = (fm.id || "").replace(/^std-/, "").toLowerCase();
+      const prefix = id.split("-")[0];
+
+      if (allHints.has(id)) {
+        const suggested = tax.entries.find(e =>
+          (e.inverseHints || []).map(h => h.toLowerCase()).includes(id)
+        );
+        checks.push({
+          id: "S7",
+          name: "concern alignment",
+          status: "WARN",
+          diagnosis: `std-${id} casa lib conhecida; concern canônico: ${suggested?.id ?? "?"} — devflow standards new --migrate=${id}`,
+        });
+      } else if (allHints.has(prefix)) {
+        checks.push({
+          id: "S7",
+          name: "concern alignment",
+          status: "WARN",
+          diagnosis: `std-${id} parece lib-centric (prefixo "${prefix}") — revisar; possivelmente migrate-able`,
+        });
+      } else {
+        checks.push({
+          id: "S7",
+          name: "concern alignment",
+          status: "PASS",
+          diagnosis: tax.entries.length === 0
+            ? "taxonomy indisponível — S7 não avaliado"
+            : "id é concern-based (não casa lib conhecida)",
+        });
+      }
     }
   }
 

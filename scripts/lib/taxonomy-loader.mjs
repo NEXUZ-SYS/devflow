@@ -11,8 +11,11 @@
 // synthesized document).
 //
 // Public API:
-//   loadTaxonomy({ distributedPath, projectRoot })
-//     → { entries: Entry[], warnings: string[] }
+//   loadTaxonomy({ distributedPath, projectRoot })       → Promise<{ entries, warnings }>
+//   loadTaxonomySync({ distributedPath, projectRoot })   → { entries, warnings }
+//   (loadTaxonomy is an async wrapper over loadTaxonomySync — both share the
+//    same fully-synchronous core; sync variant is for callers that must stay
+//    synchronous, e.g. standard-audit.auditStandard)
 //
 // Entry shape (validated downstream):
 //   { id, summary, category, defaultApplyTo, inverseHints,
@@ -107,7 +110,7 @@ function parseTaxonomyYaml(yamlText) {
   return data || {};
 }
 
-export async function loadTaxonomy({ distributedPath, projectRoot }) {
+export function loadTaxonomySync({ distributedPath, projectRoot }) {
   const result = { entries: [], warnings: [] };
 
   if (!distributedPath || !existsSync(distributedPath)) {
@@ -149,4 +152,8 @@ export async function loadTaxonomy({ distributedPath, projectRoot }) {
   }
 
   return result;
+}
+
+export async function loadTaxonomy(opts) {
+  return loadTaxonomySync(opts);
 }
