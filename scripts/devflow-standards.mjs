@@ -208,7 +208,6 @@ async function warnLegacyFromAdr(fromAdr, projectRoot, opts) {
 async function cmdNewConcern(projectRoot, opts) {
   const { loadTaxonomy } = await import("./lib/taxonomy-loader.mjs");
   const { resolveConcern } = await import("./lib/concern-resolver.mjs");
-  const { generateStandardFromConcern } = await import("./lib/standard-from-concern.mjs");
 
   const distributedPath = opts.taxonomy || defaultTaxonomyPath();
   const tax = await loadTaxonomy({ distributedPath, projectRoot });
@@ -249,33 +248,16 @@ async function cmdNewConcern(projectRoot, opts) {
   // Optional enrichment from ADR(s).
   let enrichment = null;
   if (opts.enrichFromAdr && opts.enrichFromAdr.length > 0) {
-    const { enrichFromAdrs } = await import("./lib/standard-enrich.mjs");
-    const { resolveAdrSlug } = await import("./lib/standard-from-adr.mjs");
-    const { parseFrontmatter } = await import("./lib/frontmatter.mjs");
-    const { readFileSync } = await import("node:fs");
-    const adrPaths = [];
-    const adrSlugs = [];
-    for (const slug of opts.enrichFromAdr) {
-      let p;
-      try {
-        p = resolveAdrSlug(slug, projectRoot);
-      } catch (err) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
-      }
-      adrPaths.push(p);
-      const { data } = parseFrontmatter(readFileSync(p, "utf-8"));
-      adrSlugs.push(data?.name || slug);
+    try {
+      enrichment = await buildEnrichment(opts.enrichFromAdr, projectRoot);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
     }
-    enrichment = await enrichFromAdrs(adrPaths);
-    enrichment.adrSlugs = adrSlugs;
   }
 
-  const { fullDocument } = generateStandardFromConcern({ concern, enrichment });
-  await writeFile(stdPath, fullDocument);
-  if (!existsSync(linterPath)) {
-    await writeFile(linterPath, LINTER_TEMPLATE(concern.id));
-  }
+  const { generateStandardFromConcern: gen } = await import("./lib/standard-from-concern.mjs");
+  await writeConcernStandard(projectRoot, concern, enrichment, gen);
 
   const enrichNote = enrichment ? ` (enriched from: ${enrichment.adrSlugs.join(", ")})` : "";
   console.log(`Created ${stdId}${enrichNote}:`);
@@ -283,6 +265,152 @@ async function cmdNewConcern(projectRoot, opts) {
   console.log(`  ${linterPath}`);
   console.log("");
   console.log(`Validate: node scripts/devflow-standards.mjs audit ${stdId} --project=${projectRoot}`);
+}
+
+// Writes std-<concern>.md + linter stub. Shared by cmdNewConcern and cmdMigrate.
+async function writeConcernStandard(projectRoot, concern, enrichment, gen) {
+  const stdId = `std-${concern.id}`;
+  const stdsDir = join(projectRoot, ".context", "standards");
+  const machineDir = join(stdsDir, "machine");
+  await mkdir(machineDir, { recursive: true });
+  const stdPath = join(stdsDir, `${stdId}.md`);
+  const linterPath = join(machineDir, `${stdId}.js`);
+
+  const { fullDocument } = gen({ concern, enrichment });
+  await writeFile(stdPath, fullDocument);
+  if (!existsSync(linterPath)) {
+    await writeFile(linterPath, LINTER_TEMPLATE(concern.id));
+  }
+  return stdPath;
+}
+
+// Resolves --enrich-from-adr CSV (slugs/prefixes) into an enrichment object.
+async function buildEnrichment(adrRefs, projectRoot) {
+  const { enrichFromAdrs } = await import("./lib/standard-enrich.mjs");
+  const { resolveAdrSlug } = await import("./lib/standard-from-adr.mjs");
+  const { parseFrontmatter } = await import("./lib/frontmatter.mjs");
+  const { readFileSync } = await import("node:fs");
+  const adrPaths = [];
+  const adrSlugs = [];
+  for (const ref of adrRefs) {
+    const p = resolveAdrSlug(ref, projectRoot);
+    adrPaths.push(p);
+    const { data } = parseFrontmatter(readFileSync(p, "utf-8"));
+    adrSlugs.push(data?.name || ref);
+  }
+  const enrichment = await enrichFromAdrs(adrPaths);
+  enrichment.adrSlugs = adrSlugs;
+  return enrichment;
+}
+
+// new --migrate=<lib-std-id> — transitions a lib-centric std to a concern std.
+async function cmdMigrate(projectRoot, opts) {
+  const { readFileSync, unlinkSync } = await import("node:fs");
+  const { parseFrontmatter } = await import("./lib/frontmatter.mjs");
+  const { loadTaxonomy } = await import("./lib/taxonomy-loader.mjs");
+  const { resolveConcern } = await import("./lib/concern-resolver.mjs");
+  const { generateStandardFromConcern: gen } = await import("./lib/standard-from-concern.mjs");
+
+  const oldId = opts.migrate.replace(/^std-/, "");
+  const stdsDir = join(projectRoot, ".context", "standards");
+  const oldStdPath = join(stdsDir, `std-${oldId}.md`);
+  const deprecatedPath = join(stdsDir, `std-${oldId}.deprecated.md`);
+
+  // Idempotent: already migrated.
+  if (existsSync(deprecatedPath)) {
+    console.error(`std-${oldId} already migrated (std-${oldId}.deprecated.md exists). No-op.`);
+    process.exit(0);
+  }
+  if (!existsSync(oldStdPath)) {
+    console.error(`Error: std-${oldId} not found at ${oldStdPath}`);
+    process.exit(1);
+  }
+
+  const distributedPath = opts.taxonomy || defaultTaxonomyPath();
+  const tax = await loadTaxonomy({ distributedPath, projectRoot });
+
+  // Resolve target concern: explicit --target-concern, else inverseHints lookup.
+  let targetConcern = opts.targetConcern;
+  if (!targetConcern) {
+    const match = tax.entries.find(e =>
+      (e.inverseHints || []).map(h => h.toLowerCase()).includes(oldId.toLowerCase())
+    );
+    targetConcern = match?.id;
+  }
+  if (!targetConcern) {
+    console.error(`Error: no concern hint for lib '${oldId}'. Pass --target-concern=<id>.`);
+    process.exit(1);
+  }
+
+  // Read old std's relatedAdrs — they become the enrichment source.
+  const oldContent = readFileSync(oldStdPath, "utf-8");
+  const { data: oldFm } = parseFrontmatter(oldContent);
+  const oldAdrs = Array.isArray(oldFm.relatedAdrs) ? oldFm.relatedAdrs : [];
+
+  const newStdPath = join(stdsDir, `std-${targetConcern}.md`);
+
+  if (existsSync(newStdPath)) {
+    // INJECT path — concern std already exists: merge relatedAdrs.
+    const newContent = readFileSync(newStdPath, "utf-8");
+    const { data: newFm } = parseFrontmatter(newContent);
+    const merged = Array.from(new Set([...(newFm.relatedAdrs || []), ...oldAdrs]));
+    await writeFile(newStdPath, replaceRelatedAdrs(newContent, merged));
+    console.log(`std-${targetConcern} já existe — merged relatedAdrs: ${merged.join(", ")}`);
+    console.log(`  (revise INJECT de guardrails/enforcement manualmente via skill)`);
+  } else {
+    // CREATE path — generate concern std enriched from the old std's ADRs.
+    const resolution = resolveConcern(targetConcern, tax);
+    const concern = resolution.match ?? tax.entries.find(e => e.id === targetConcern);
+    if (!concern) {
+      console.error(`Error: concern '${targetConcern}' not in taxonomy.`);
+      process.exit(1);
+    }
+    let enrichment = null;
+    if (oldAdrs.length > 0) {
+      try {
+        enrichment = await buildEnrichment(oldAdrs, projectRoot);
+      } catch (err) {
+        console.error(`Warning: enrichment skipped — ${err.message}`);
+      }
+    }
+    await writeConcernStandard(projectRoot, concern, enrichment, gen);
+    console.log(`Created std-${targetConcern} from concern (migrated from std-${oldId}).`);
+  }
+
+  // Deprecate the old std.
+  const today = new Date().toISOString().slice(0, 10);
+  const deprecatedHeader = `---
+id: std-${oldId}
+deprecated: true
+supersededBy: std-${targetConcern}
+deprecatedReason: lib-centric — migrado para concern operacional
+deprecatedAt: ${today}
+---
+`;
+  const oldBody = oldContent.replace(/^---[\s\S]*?---\r?\n?/, "");
+  if (opts.keepOld) {
+    await writeFile(oldStdPath, deprecatedHeader + oldBody);
+    console.log(`Marked std-${oldId}.md as deprecated (--keep-old).`);
+  } else {
+    await writeFile(deprecatedPath, deprecatedHeader + oldBody);
+    unlinkSync(oldStdPath);
+    console.log(`Renamed std-${oldId}.md → std-${oldId}.deprecated.md.`);
+  }
+  console.log(`Migrated std-${oldId} → std-${targetConcern}.`);
+}
+
+// Replaces the `relatedAdrs:` block in a frontmatter document with a fresh
+// rendered list. Handles both `relatedAdrs: []` and multi-line block form.
+function replaceRelatedAdrs(documentText, slugs) {
+  const rendered = slugs.length === 0
+    ? "relatedAdrs: []"
+    : `relatedAdrs:\n${slugs.map(s => `  - "${s}"`).join("\n")}`;
+  // Match `relatedAdrs:` followed by either ` []` or a block list.
+  const re = /relatedAdrs:(?:[ \t]*\[\]|(?:\r?\n[ \t]+-[ \t].*)+)/;
+  if (re.test(documentText)) {
+    return documentText.replace(re, rendered);
+  }
+  return documentText;
 }
 
 // search --by-guardrail=<adr-slug> | --by-concern=<concern-id>
@@ -384,6 +512,9 @@ async function main() {
   let yes = false;
   let byGuardrail = null;
   let byConcern = null;
+  let migrate = null;
+  let targetConcern = null;
+  let keepOld = false;
   const args = [];
   for (const a of rawArgs) {
     if (a.startsWith("--project=")) {
@@ -400,6 +531,12 @@ async function main() {
       byGuardrail = a.slice("--by-guardrail=".length).trim();
     } else if (a.startsWith("--by-concern=")) {
       byConcern = a.slice("--by-concern=".length).trim();
+    } else if (a.startsWith("--migrate=")) {
+      migrate = a.slice("--migrate=".length).trim();
+    } else if (a.startsWith("--target-concern=")) {
+      targetConcern = a.slice("--target-concern=".length).trim();
+    } else if (a === "--keep-old") {
+      keepOld = true;
     } else if (a === "--force") {
       force = true;
     } else if (a === "--yes") {
@@ -411,6 +548,10 @@ async function main() {
   const sub = args[0];
 
   if (sub === "new") {
+    if (migrate) {
+      await cmdMigrate(projectRoot, { migrate, targetConcern, keepOld, taxonomy });
+      return;
+    }
     if (concern) {
       await cmdNewConcern(projectRoot, { concern, enrichFromAdr, taxonomy, force });
       return;

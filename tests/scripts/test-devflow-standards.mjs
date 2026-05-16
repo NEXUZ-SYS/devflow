@@ -247,3 +247,63 @@ test("search without --by-* flag: exits non-zero", () => {
     cleanup();
   }
 });
+
+// Seeds a lib-centric std-zod.md (relatedAdrs → adr-zod-frontend) + the ADR.
+function seedLibStd(root) {
+  seedAdr(root);
+  const dir = join(root, ".context", "standards");
+  const machineDir = join(dir, "machine");
+  mkdirSync(machineDir, { recursive: true });
+  copyFileSync(join(FIX, "std-zod-fake.md"), join(dir, "std-zod.md"));
+  writeFileSync(join(machineDir, "std-zod.js"), "process.exit(0);\n");
+}
+
+test("new --migrate: creates concern std + deprecates lib std", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedLibStd(root);
+    const res = spawnSync("node",
+      [SCRIPT, "new", "--migrate=zod", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+    const stdsDir = join(root, ".context", "standards");
+    assert.ok(existsSync(join(stdsDir, "std-runtime-validation.md")), "concern std created");
+    assert.ok(existsSync(join(stdsDir, "std-zod.deprecated.md")), "old std deprecated");
+    assert.ok(!existsSync(join(stdsDir, "std-zod.md")), "old std.md removed");
+    const dep = readFileSync(join(stdsDir, "std-zod.deprecated.md"), "utf-8");
+    assert.match(dep, /deprecated: true/);
+    assert.match(dep, /supersededBy: std-runtime-validation/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --migrate: concern std carries relatedAdrs from the old lib std", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedLibStd(root);
+    spawnSync("node",
+      [SCRIPT, "new", "--migrate=zod", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    const content = readFileSync(
+      join(root, ".context", "standards", "std-runtime-validation.md"), "utf-8");
+    assert.match(content, /adr-zod-frontend/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --migrate: idempotent — no-op when already deprecated", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedLibStd(root);
+    spawnSync("node", [SCRIPT, "new", "--migrate=zod", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    const res2 = spawnSync("node", [SCRIPT, "new", "--migrate=zod", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    assert.equal(res2.status, 0, "second migrate should exit 0 (no-op)");
+    assert.match(res2.stderr + res2.stdout, /already migrated/i);
+  } finally {
+    cleanup();
+  }
+});
