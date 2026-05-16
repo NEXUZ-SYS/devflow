@@ -138,3 +138,43 @@ test("loadStandards: skips machine/ subdir and README.md", () => {
   assert.equal(result[0].id, "std-error-handling");
   cleanup();
 });
+
+test("loadStandards: skips deprecated standards (deprecated: true)", () => {
+  const { root, cleanup } = fixture();
+  const dir = join(root, ".context", "standards");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "std-real.md"), STD_FULL);
+  // A migrated lib-centric std, renamed to .deprecated.md by `new --migrate`.
+  writeFileSync(join(dir, "std-zod.deprecated.md"), `---
+id: std-zod
+deprecated: true
+supersededBy: std-runtime-validation
+deprecatedReason: lib-centric — migrado para concern operacional
+deprecatedAt: 2026-05-16
+---
+
+# Standard: zod
+`);
+  const result = loadStandards(root);
+  assert.equal(result.length, 1, "deprecated std must not be loaded");
+  assert.equal(result[0].id, "std-error-handling");
+  cleanup();
+});
+
+test("loadStandards: skips deprecated std even with a plain .md filename (--keep-old)", () => {
+  const { root, cleanup } = fixture();
+  const dir = join(root, ".context", "standards");
+  mkdirSync(dir, { recursive: true });
+  // `new --migrate --keep-old` marks deprecated in place — filename stays std-X.md.
+  writeFileSync(join(dir, "std-zod.md"), `---
+id: std-zod
+deprecated: true
+supersededBy: std-runtime-validation
+---
+
+# Standard: zod
+`);
+  const result = loadStandards(root);
+  assert.deepEqual(result, [], "deprecated:true must be skipped regardless of filename");
+  cleanup();
+});

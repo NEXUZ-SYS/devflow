@@ -50,7 +50,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "TaskUpdate|Write|Bash",
+        "matcher": "TaskUpdate|Edit|Write|Bash",
         "hooks": [
           {
             "type": "command",

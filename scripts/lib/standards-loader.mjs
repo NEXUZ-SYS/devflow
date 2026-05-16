@@ -38,6 +38,10 @@ export function loadStandards(projectRoot) {
     // Required: id (silently drop if missing)
     if (!fm.id) continue;
 
+    // Deprecated standards (superseded by a concern std via `new --migrate`)
+    // are inert: never loaded, never linted, never counted by `verify`.
+    if (fm.deprecated === true) continue;
+
     // applyTo must be an array of valid glob-subset patterns
     const applyTo = Array.isArray(fm.applyTo) ? fm.applyTo : [];
     let validApplyTo = true;
