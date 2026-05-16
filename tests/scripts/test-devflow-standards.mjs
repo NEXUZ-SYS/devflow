@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 // tests/scripts/test-devflow-standards.mjs
-// Smoke tests for scripts/devflow-standards.mjs (new|verify subcommands).
+// Smoke tests for scripts/devflow-standards.mjs (new|verify|audit|search subcommands).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const SCRIPT = join(process.cwd(), "scripts", "devflow-standards.mjs");
+const TAXONOMY = join(process.cwd(), "skills/standards-builder/references/taxonomy-of-concerns.yaml");
+const FIX = join(process.cwd(), "tests/validation/fixtures");
 
 function fixture() {
   mkdirSync(TEST_TMP_ROOT, { recursive: true });
   const root = mkdtempSync(join(TEST_TMP_ROOT, "stds-cli-"));
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+// Seeds a tmp project with one ADR (adr-zod-frontend) under .context/adrs/.
+function seedAdr(root) {
+  const adrDir = join(root, ".context", "adrs");
+  mkdirSync(adrDir, { recursive: true });
+  copyFileSync(join(FIX, "adr-zod-fake.md"), join(adrDir, "009-adr-zod-frontend-v1.0.0.md"));
 }
 
 function runCmd(root, ...args) {
@@ -112,6 +121,46 @@ applyTo: ["src/**"]
 `);
     const result = runCmdExpectError(root, "verify", "--strict");
     assert.notEqual(result.status, 0, "--strict should exit non-zero with weak standards");
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --concern: creates std-<concern-id>.md with concern frontmatter", () => {
+  const { root, cleanup } = fixture();
+  try {
+    runCmd(root, "new", "--concern=runtime-validation", `--taxonomy=${TAXONOMY}`);
+    const stdPath = join(root, ".context", "standards", "std-runtime-validation.md");
+    assert.ok(existsSync(stdPath), "std-runtime-validation.md should be created");
+    const content = readFileSync(stdPath, "utf-8");
+    assert.match(content, /^id: std-runtime-validation/m);
+    assert.match(content, /^weakStandardWarning: true/m);
+    assert.match(content, /## Princípios/);
+    // linter stub created
+    assert.ok(existsSync(join(root, ".context", "standards", "machine", "std-runtime-validation.js")));
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --concern: exits non-zero on unknown concern", () => {
+  const { root, cleanup } = fixture();
+  try {
+    const result = runCmdExpectError(root, "new", "--concern=totally-bogus-xyz", `--taxonomy=${TAXONOMY}`);
+    assert.notEqual(result.status, 0, "unknown concern should exit non-zero");
+    assert.match(result.stderr, /not found|no-match/i);
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --concern --enrich-from-adr: populates relatedAdrs from ADR", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedAdr(root);
+    runCmd(root, "new", "--concern=runtime-validation", "--enrich-from-adr=009", `--taxonomy=${TAXONOMY}`);
+    const content = readFileSync(join(root, ".context", "standards", "std-runtime-validation.md"), "utf-8");
+    assert.match(content, /adr-zod-frontend/, "relatedAdrs should include the enriched ADR slug");
   } finally {
     cleanup();
   }

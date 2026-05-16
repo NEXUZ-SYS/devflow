@@ -147,6 +147,91 @@ async function cmdNew(id, projectRoot, opts = {}) {
   console.log("Tip: derive automatically from ADRs with --from-adr=<slug1>,<slug2>");
 }
 
+function defaultTaxonomyPath() {
+  return resolve(import.meta.dirname, "../skills/standards-builder/references/taxonomy-of-concerns.yaml");
+}
+
+// new --concern=<id> [--enrich-from-adr=<csv>] — concern-first generation.
+async function cmdNewConcern(projectRoot, opts) {
+  const { loadTaxonomy } = await import("./lib/taxonomy-loader.mjs");
+  const { resolveConcern } = await import("./lib/concern-resolver.mjs");
+  const { generateStandardFromConcern } = await import("./lib/standard-from-concern.mjs");
+
+  const distributedPath = opts.taxonomy || defaultTaxonomyPath();
+  const tax = await loadTaxonomy({ distributedPath, projectRoot });
+
+  if (tax.entries.length === 0) {
+    console.error(`Error: taxonomy not found or empty: ${distributedPath}`);
+    process.exit(1);
+  }
+
+  const resolution = resolveConcern(opts.concern, tax);
+  if (resolution.status === "no-match") {
+    console.error(`Error: concern not found: '${opts.concern}'`);
+    console.error(`  Available concerns: ${tax.entries.map(e => e.id).join(", ")}`);
+    process.exit(1);
+  }
+  if (resolution.status === "ambiguous") {
+    console.error(`Error: concern '${opts.concern}' is ambiguous. Candidates:`);
+    for (const c of resolution.candidates) {
+      console.error(`  - ${c.entry.id} (score ${c.score.toFixed(2)})`);
+    }
+    console.error(`  Pass an exact concern id to disambiguate.`);
+    process.exit(1);
+  }
+
+  const concern = resolution.match;
+  const stdId = `std-${concern.id}`;
+  const stdsDir = join(projectRoot, ".context", "standards");
+  const machineDir = join(stdsDir, "machine");
+  await mkdir(machineDir, { recursive: true });
+  const stdPath = join(stdsDir, `${stdId}.md`);
+  const linterPath = join(machineDir, `${stdId}.js`);
+
+  if (existsSync(stdPath) && !opts.force) {
+    console.error(`Error: ${stdPath} already exists (use --force to overwrite)`);
+    process.exit(1);
+  }
+
+  // Optional enrichment from ADR(s).
+  let enrichment = null;
+  if (opts.enrichFromAdr && opts.enrichFromAdr.length > 0) {
+    const { enrichFromAdrs } = await import("./lib/standard-enrich.mjs");
+    const { resolveAdrSlug } = await import("./lib/standard-from-adr.mjs");
+    const { parseFrontmatter } = await import("./lib/frontmatter.mjs");
+    const { readFileSync } = await import("node:fs");
+    const adrPaths = [];
+    const adrSlugs = [];
+    for (const slug of opts.enrichFromAdr) {
+      let p;
+      try {
+        p = resolveAdrSlug(slug, projectRoot);
+      } catch (err) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+      adrPaths.push(p);
+      const { data } = parseFrontmatter(readFileSync(p, "utf-8"));
+      adrSlugs.push(data?.name || slug);
+    }
+    enrichment = await enrichFromAdrs(adrPaths);
+    enrichment.adrSlugs = adrSlugs;
+  }
+
+  const { fullDocument } = generateStandardFromConcern({ concern, enrichment });
+  await writeFile(stdPath, fullDocument);
+  if (!existsSync(linterPath)) {
+    await writeFile(linterPath, LINTER_TEMPLATE(concern.id));
+  }
+
+  const enrichNote = enrichment ? ` (enriched from: ${enrichment.adrSlugs.join(", ")})` : "";
+  console.log(`Created ${stdId}${enrichNote}:`);
+  console.log(`  ${stdPath}`);
+  console.log(`  ${linterPath}`);
+  console.log("");
+  console.log(`Validate: node scripts/devflow-standards.mjs audit ${stdId} --project=${projectRoot}`);
+}
+
 async function cmdVerify(targetId, strict, projectRoot) {
   let standards = loadStandards(projectRoot);
 
@@ -208,14 +293,26 @@ async function main() {
   let projectRoot = process.cwd();
   let fromAdr = null;
   let force = false;
+  let concern = null;
+  let enrichFromAdr = null;
+  let taxonomy = null;
+  let yes = false;
   const args = [];
   for (const a of rawArgs) {
     if (a.startsWith("--project=")) {
       projectRoot = resolve(a.slice("--project=".length));
     } else if (a.startsWith("--from-adr=")) {
       fromAdr = a.slice("--from-adr=".length).split(",").map(s => s.trim()).filter(Boolean);
+    } else if (a.startsWith("--concern=")) {
+      concern = a.slice("--concern=".length).trim();
+    } else if (a.startsWith("--enrich-from-adr=")) {
+      enrichFromAdr = a.slice("--enrich-from-adr=".length).split(",").map(s => s.trim()).filter(Boolean);
+    } else if (a.startsWith("--taxonomy=")) {
+      taxonomy = resolve(a.slice("--taxonomy=".length));
     } else if (a === "--force") {
       force = true;
+    } else if (a === "--yes") {
+      yes = true;
     } else {
       args.push(a);
     }
@@ -223,6 +320,10 @@ async function main() {
   const sub = args[0];
 
   if (sub === "new") {
+    if (concern) {
+      await cmdNewConcern(projectRoot, { concern, enrichFromAdr, taxonomy, force });
+      return;
+    }
     await cmdNew(args[1], projectRoot, { fromAdr, force });
     return;
   }
