@@ -285,6 +285,38 @@ async function cmdNewConcern(projectRoot, opts) {
   console.log(`Validate: node scripts/devflow-standards.mjs audit ${stdId} --project=${projectRoot}`);
 }
 
+// search --by-guardrail=<adr-slug> | --by-concern=<concern-id>
+// Emits a JSON array to stdout for programmatic consumption (adr-builder
+// Step 5e reverse hook, standards-builder Step 2).
+async function cmdSearch(projectRoot, opts) {
+  const { searchByGuardrail, searchByConcern } = await import("./lib/standards-search.mjs");
+  let results;
+
+  if (opts.byGuardrail) {
+    const raw = await searchByGuardrail(opts.byGuardrail, { projectRoot });
+    results = raw.map(r => ({
+      id: r.id,
+      file: r.file,
+      deprecated: r.data?.deprecated ?? false,
+    }));
+  } else if (opts.byConcern) {
+    const distributedPath = opts.taxonomy || defaultTaxonomyPath();
+    const raw = await searchByConcern(opts.byConcern, { projectRoot, distributedPath });
+    results = raw.map(r => ({
+      slug: r.slug,
+      file: r.file,
+      stack: r.data?.stack ?? null,
+      category: r.data?.category ?? null,
+    }));
+  } else {
+    console.error("Usage: devflow standards search --by-guardrail=<adr> | --by-concern=<id>");
+    return 2;
+  }
+
+  console.log(JSON.stringify(results, null, 2));
+  return 0;
+}
+
 async function cmdVerify(targetId, strict, projectRoot) {
   let standards = loadStandards(projectRoot);
 
@@ -350,6 +382,8 @@ async function main() {
   let enrichFromAdr = null;
   let taxonomy = null;
   let yes = false;
+  let byGuardrail = null;
+  let byConcern = null;
   const args = [];
   for (const a of rawArgs) {
     if (a.startsWith("--project=")) {
@@ -362,6 +396,10 @@ async function main() {
       enrichFromAdr = a.slice("--enrich-from-adr=".length).split(",").map(s => s.trim()).filter(Boolean);
     } else if (a.startsWith("--taxonomy=")) {
       taxonomy = resolve(a.slice("--taxonomy=".length));
+    } else if (a.startsWith("--by-guardrail=")) {
+      byGuardrail = a.slice("--by-guardrail=".length).trim();
+    } else if (a.startsWith("--by-concern=")) {
+      byConcern = a.slice("--by-concern=".length).trim();
     } else if (a === "--force") {
       force = true;
     } else if (a === "--yes") {
@@ -394,12 +432,21 @@ async function main() {
     process.exit(code);
   }
 
-  console.error("Usage: devflow standards <new|verify|audit> [args]");
+  if (sub === "search") {
+    const code = await cmdSearch(projectRoot, { byGuardrail, byConcern, taxonomy });
+    process.exit(code);
+  }
+
+  console.error("Usage: devflow standards <new|verify|audit|search> [args]");
+  console.error("  new --concern=<id>                    Generate std from concern taxonomy (concern-first — preferred)");
+  console.error("  new --concern=<id> --enrich-from-adr=<csv>  Concern std enriched with ADR guardrails");
   console.error("  new <id>                              Scaffold std-<id>.md + machine/std-<id>.js (TODO markers)");
-  console.error("  new <id> --from-adr=<slug>[,<slug>]   Derive std-<id> from ADR(s) — no TODO, audit-ready");
+  console.error("  new <id> --from-adr=<slug>[,<slug>]   Derive std-<id> from ADR(s) — LEGACY lib-centric, emits warning");
   console.error("  new <id> --from-adr=<slug> --force    Overwrite existing std-<id>.md");
   console.error("  verify [<id>] [--strict]              Validate standards (lightweight)");
   console.error("  audit <id>                            Deep audit (5 checks: scaffold/linter/refs/...)");
+  console.error("  search --by-guardrail=<adr-slug>      List stds referencing an ADR (JSON)");
+  console.error("  search --by-concern=<concern-id>      List ADRs matching a concern (JSON)");
   console.error("");
   console.error("  Common: --project=<path> to operate on a fixture/sub-project.");
   process.exit(2);

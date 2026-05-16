@@ -198,3 +198,52 @@ test("new --from-adr legacy: appends to .legacy-from-adr.log", () => {
     cleanup();
   }
 });
+
+// Seeds a std-runtime-validation.md referencing adr-zod-frontend.
+function seedConcernStd(root) {
+  const dir = join(root, ".context", "standards");
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(join(FIX, "std-runtime-validation-fake.md"), join(dir, "std-runtime-validation.md"));
+}
+
+test("search --by-guardrail: returns JSON list of stds referencing the ADR", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedConcernStd(root);
+    const res = spawnSync("node",
+      [SCRIPT, "search", "--by-guardrail=adr-zod-frontend"],
+      { cwd: root, encoding: "utf-8" });
+    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+    const parsed = JSON.parse(res.stdout);
+    assert.ok(Array.isArray(parsed));
+    assert.ok(parsed.some(s => s.id === "std-runtime-validation"));
+  } finally {
+    cleanup();
+  }
+});
+
+test("search --by-concern: returns JSON list of ADRs matching the concern", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedAdr(root);
+    const res = spawnSync("node",
+      [SCRIPT, "search", "--by-concern=runtime-validation", `--taxonomy=${TAXONOMY}`],
+      { cwd: root, encoding: "utf-8" });
+    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+    const parsed = JSON.parse(res.stdout);
+    assert.ok(Array.isArray(parsed));
+    assert.ok(parsed.some(a => a.slug === "adr-zod-frontend"));
+  } finally {
+    cleanup();
+  }
+});
+
+test("search without --by-* flag: exits non-zero", () => {
+  const { root, cleanup } = fixture();
+  try {
+    const res = spawnSync("node", [SCRIPT, "search"], { cwd: root, encoding: "utf-8" });
+    assert.notEqual(res.status, 0);
+  } finally {
+    cleanup();
+  }
+});
