@@ -1,6 +1,6 @@
 {
   "name": "devflow",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Unified software development workflow — bridges superpowers (discipline/tools) with dotcontext (agents/workflow/context)",
   "author": "nxz"
 }

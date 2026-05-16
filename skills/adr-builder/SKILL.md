@@ -181,15 +181,10 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-chain-suggest.mjs .context/adrs/${num}-${
 
 Parse the JSON and present grouped options to the user. The suggester deduplicates against existing artifacts — never blindly offers "create new" when a match exists.
 
-**Standards block** (`suggestions.standards`):
-
-| Output | Action to offer | Concrete next step |
-|---|---|---|
-| `matches: [{id, score, applyTo}, ...]` (1+) | "Esta ADR provavelmente devia estar em `relatedAdrs` de `<id>`. Linkar?" | Edit `.context/standards/<id>.md` frontmatter — append ADR slug to `relatedAdrs` |
-| `matches: []` AND `wouldCreate: <std-id>` | "Criar standard `<std-id>` para operacionalizar a regra dessa ADR via PostToolUse linter?" | Invoke `devflow standards new <slug-stripped>` |
-| `matches: [...]` (multiple) | "Top-3 candidatos. Linkar a um, criar novo, ou skip?" | Present numbered list; let user pick |
-
-Pular tudo é válido — esta é uma sugestão, não gate. ADR `Aprovado` sem standard é warning suave em audit Check #13, nunca block.
+**Standards block** — handled by **Step 5e** (concern-aware reverse hook). The
+legacy `adr-chain-suggest.mjs` standards heuristic is superseded: standards are
+now concern-first, so the recommendation must go through the taxonomy, not a
+slug-stripped lib id. Skip `suggestions.standards` here and run Step 5e instead.
 
 **Stacks block** (`suggestions.stacks`, lista de objetos com `status`):
 
@@ -204,6 +199,61 @@ Pular tudo é válido — esta é uma sugestão, não gate. ADR `Aprovado` sem s
 - Stacks só são extraídos quando `category: arquitetura` (mantém o foco — ADRs de qualidade-testes ou principios-codigo não disparam scrape).
 - Apresentação deve ser **opt-in** ("quer fazer X?"), não confirmar/auto-rodar.
 - Se nenhuma sugestão tem ação útil (matches=0, wouldCreate=null, stacks=[] ou todas linked), simplesmente reporta "ADR isolada — sem chain action sugerida" e termina.
+
+### Step 5e — Standards reverse hook (concern-aware)
+
+Runs **after the ADR is committed**, before returning control. Detects which
+operational concern(s) the ADR touches and recommends wiring it into a
+concern-based standard — never a lib-centric one.
+
+This step **fails silently** on any error (taxonomy missing, search error): the
+ADR is already committed, so the hook must never block the flow.
+
+**When NOT to fire** (skip silently, report one informative line):
+
+| Situação | Por quê |
+|---|---|
+| ADR `decision_kind: soft` ou `status: Rascunho` | Não estável o suficiente |
+| ADR `refines:` ou `supersedes:` outra ADR | A ADR original já gerou a recomendação |
+| `taxonomy-of-concerns.yaml` inacessível | Hook não pode operar — skip |
+| Nenhum concern casado | Informa "este ADR pode merecer um concern novo na taxonomia"; sem ação |
+
+**Algorithm:**
+
+1. Extract signals from the committed ADR frontmatter: `stack` (→ lib name = first lowercased token), `category`.
+2. Run the reverse search to find concerns and existing standards:
+   ```bash
+   node ${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs search --by-concern=<concern-id> --project=<path>
+   ```
+   To discover which concern(s) the ADR maps to, match the lib name against each taxonomy entry's `inverseHints` and the ADR `category` against `relatedAdrCategories` (the `standards-search.mjs` lib does this matching).
+3. For each matched concern, check whether `.context/standards/std-<concern>.md` exists:
+   - **exists** → INJECT path
+   - **absent** → CREATE path
+4. Present a single consolidated recommendation (not one per concern).
+
+**INJECT path** (concern std exists):
+
+Diff the ADR against the existing std:
+
+| Checagem | Ação |
+|---|---|
+| ADR `## Guardrails` traz regra ausente do std `## Anti-patterns`? | Candidato a inject |
+| ADR `## Enforcement` traz checkbox ausente do std `## Linter`? | Candidato a inject |
+| ADR (camada/stack) fora do `applyTo` do std? | Recomenda WIDEN do `applyTo` |
+| Nada novo | Apenas adiciona o slug da ADR em `relatedAdrs` do std |
+
+Present opt-in: `[s] inject tudo  [p] revisar item-a-item  [n] só relatedAdrs  [skip]`.
+If applied, edit the std `.md`, run `devflow standards audit <id>` (S1-S7 must stay PASSED), commit `chore(std): inject <adr-slug> guardrails into std-<concern>`.
+
+**CREATE path** (concern std absent):
+
+Recommend, opt-in: `[s] criar agora  [d] depois (registra TODO)  [n] não cria`.
+- `s` → invoke `devflow:standards-builder` em modo FROM-CONCERN: `devflow standards new --concern=<concern> --enrich-from-adr=<adr-slug>`.
+- `d` → append a line to `.context/standards/TODO.md`: `- [ ] std-<concern> — sugerido por <adr-slug> em <data>`.
+
+**Autonomous mode** (PREVC autonomous-loop or `--yes`):
+- INJECT applies automatically ONLY if every detected guardrail is additive (no conflict).
+- CREATE never runs unattended — it always registers the TODO (`d` path). Generating a new std file requires human confirmation.
 
 ---
 
