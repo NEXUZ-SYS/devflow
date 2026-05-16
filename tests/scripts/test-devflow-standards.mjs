@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const SCRIPT = join(process.cwd(), "scripts", "devflow-standards.mjs");
@@ -161,6 +161,39 @@ test("new --concern --enrich-from-adr: populates relatedAdrs from ADR", () => {
     runCmd(root, "new", "--concern=runtime-validation", "--enrich-from-adr=009", `--taxonomy=${TAXONOMY}`);
     const content = readFileSync(join(root, ".context", "standards", "std-runtime-validation.md"), "utf-8");
     assert.match(content, /adr-zod-frontend/, "relatedAdrs should include the enriched ADR slug");
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --from-adr legacy: emits lib-centric warning + concern hint to stderr", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedAdr(root);
+    const res = spawnSync("node",
+      [SCRIPT, "new", "zod", "--from-adr=009", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    assert.equal(res.status, 0, `expected success, stderr: ${res.stderr}`);
+    assert.match(res.stderr, /lib-centric/i, "stderr should warn about lib-centric std");
+    assert.match(res.stderr, /runtime-validation/,
+      "stderr should suggest the canonical concern via inverseHints");
+  } finally {
+    cleanup();
+  }
+});
+
+test("new --from-adr legacy: appends to .legacy-from-adr.log", () => {
+  const { root, cleanup } = fixture();
+  try {
+    seedAdr(root);
+    spawnSync("node",
+      [SCRIPT, "new", "zod", "--from-adr=009", `--taxonomy=${TAXONOMY}`, "--yes"],
+      { cwd: root, encoding: "utf-8" });
+    const logPath = join(root, ".context", "standards", ".legacy-from-adr.log");
+    assert.ok(existsSync(logPath), ".legacy-from-adr.log should be written");
+    const log = readFileSync(logPath, "utf-8");
+    assert.match(log, /009/);
+    assert.match(log, /runtime-validation/);
   } finally {
     cleanup();
   }

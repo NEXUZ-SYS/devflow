@@ -109,6 +109,7 @@ async function cmdNew(id, projectRoot, opts = {}) {
 
   // ─── --from-adr mode: deterministic extraction from ADR(s) ─────────────
   if (opts.fromAdr && opts.fromAdr.length > 0) {
+    await warnLegacyFromAdr(opts.fromAdr, projectRoot, opts);
     const { buildStandardFromAdrs } = await import("./lib/standard-from-adr.mjs");
     let stdContent;
     try {
@@ -149,6 +150,58 @@ async function cmdNew(id, projectRoot, opts = {}) {
 
 function defaultTaxonomyPath() {
   return resolve(import.meta.dirname, "../skills/standards-builder/references/taxonomy-of-concerns.yaml");
+}
+
+// Emits a stderr warning when --from-adr is used without --concern (legacy
+// lib-centric path). Suggests the canonical operational concern via the
+// taxonomy's inverseHints, logs the invocation, and pauses 3s (skipped with
+// --yes) so a human can abort. Never blocks — legacy path stays functional.
+async function warnLegacyFromAdr(fromAdr, projectRoot, opts) {
+  const { loadTaxonomy } = await import("./lib/taxonomy-loader.mjs");
+  const { mkdirSync, appendFileSync } = await import("node:fs");
+
+  const distributedPath = opts.taxonomy || defaultTaxonomyPath();
+  const tax = await loadTaxonomy({ distributedPath, projectRoot });
+
+  // Derive a lib name for the first ADR. A numeric prefix ("009") carries no
+  // lib name, so resolve the ADR file and read its frontmatter `stack`/`name`.
+  // Fall back to the raw slug heuristic when resolution fails.
+  let libName = (fromAdr[0] || "").replace(/^adr-/, "").split("-")[0].toLowerCase();
+  try {
+    const { resolveAdrSlug } = await import("./lib/standard-from-adr.mjs");
+    const { parseFrontmatter } = await import("./lib/frontmatter.mjs");
+    const { readFileSync } = await import("node:fs");
+    const adrPath = resolveAdrSlug(fromAdr[0], projectRoot);
+    const { data } = parseFrontmatter(readFileSync(adrPath, "utf-8"));
+    const stackLib = (data?.stack || "").toLowerCase().split(/\s+/)[0];
+    const nameLib = (data?.name || "").replace(/^adr-/, "").split("-")[0].toLowerCase();
+    libName = stackLib || nameLib || libName;
+  } catch {
+    // best-effort — keep the raw-slug heuristic
+  }
+  const hint = tax.entries.find(e => (e.inverseHints || []).includes(libName));
+  const hintId = hint?.id || "<concern não detectado>";
+
+  process.stderr.write(
+    `\n⚠️  std lib-centric detectado (--from-adr sem --concern).\n` +
+    `   Concern operacional canônico: ${hintId}\n` +
+    `   Preferido: devflow standards new --concern=${hint?.id || "<id>"} --enrich-from-adr=${fromAdr.join(",")}\n` +
+    `   Prosseguindo em modo legado em ${opts.yes ? "0" : "3"}s (Ctrl-C para abortar)...\n\n`
+  );
+
+  // Audit log — one line per legacy invocation.
+  try {
+    const stdsDir = join(projectRoot, ".context", "standards");
+    mkdirSync(stdsDir, { recursive: true });
+    appendFileSync(
+      join(stdsDir, ".legacy-from-adr.log"),
+      `${new Date().toISOString()} from-adr=${fromAdr.join(",")} hint=${hint?.id || "none"}\n`
+    );
+  } catch {
+    // logging is best-effort; never blocks the legacy path
+  }
+
+  if (!opts.yes) await new Promise(r => setTimeout(r, 3000));
 }
 
 // new --concern=<id> [--enrich-from-adr=<csv>] — concern-first generation.
@@ -324,7 +377,7 @@ async function main() {
       await cmdNewConcern(projectRoot, { concern, enrichFromAdr, taxonomy, force });
       return;
     }
-    await cmdNew(args[1], projectRoot, { fromAdr, force });
+    await cmdNew(args[1], projectRoot, { fromAdr, force, taxonomy, yes });
     return;
   }
 
