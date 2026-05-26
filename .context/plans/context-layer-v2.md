@@ -288,9 +288,9 @@ skills/prevc-planning/SKILL.md                       (Step 3.5 ADR opportunity c
 skills/prevc-execution/SKILL.md                      (note new commands)
 skills/project-init/SKILL.md                         (scaffold .context/standards|stacks|permissions|observability)
 skills/context-sync/SKILL.md                         (sync new directories)
-commands/devflow-adr.md                              (path examples updated)
+commands/adr.md                              (path examples updated)
 commands/devflow.md                                  (new commands documented)
-commands/devflow-status.md                           (recognize new artifacts)
+commands/status.md                           (recognize new artifacts)
 
 scripts/adr-update-index.mjs                         (use resolveAdrPath; emit LEGACY warning)
 scripts/adr-audit.mjs                                (use resolveAdrPath; emit LEGACY_PATH_DETECTED)
@@ -1111,7 +1111,7 @@ git commit -m "feat(adr-builder): canonical path .context/adrs/ + summary/Driver
 - Modify: `skills/adr-filter/SKILL.md` (Step 1 dual-read)
 - Modify: `skills/prevc-validation/SKILL.md` (Step 2.6 ADR Audit Gate)
 - Modify: `skills/prevc-planning/SKILL.md` (Step 3.5 ADR opportunity check)
-- Modify: `commands/devflow-adr.md` (path examples)
+- Modify: `commands/adr.md` (path examples)
 - Modify: `commands/devflow.md` (path examples in init/sync sections)
 
 **Agent:** documentation-writer
@@ -1139,7 +1139,7 @@ test("no skill references legacy ADR path without legacy marker", () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/adr-filter/ skills/prevc-validation/ skills/prevc-planning/ commands/devflow-adr.md commands/devflow.md tests/validation/test-adr-path-canonical.mjs
+git add skills/adr-filter/ skills/prevc-validation/ skills/prevc-planning/ commands/adr.md commands/devflow.md tests/validation/test-adr-path-canonical.mjs
 git commit -m "docs(adr): update path references across skills/commands to .context/adrs/"
 ```
 

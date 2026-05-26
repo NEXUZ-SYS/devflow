@@ -272,7 +272,7 @@ When escalation is triggered:
   - <specific suggestion based on error>
   
   To resume: fix the issue and say "continue"
-  To abort:  say "stop" or "/devflow-status"
+  To abort:  say "stop" or "/devflow:status"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 

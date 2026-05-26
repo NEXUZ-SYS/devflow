@@ -5,6 +5,45 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-05-26
+
+### Changed (breaking, command surface only — no data/config migration needed)
+
+Command slugs renamed to drop the redundant `devflow-` prefix. Because the plugin is registered as `devflow`, Claude Code mounted each command as `/devflow:devflow-<verb>` (e.g. `/devflow:devflow-dispatch`), which duplicated the word. Renaming the source files in `commands/` shortens every invocation by 8 characters and matches the help text users were already seeing.
+
+Mapping:
+
+| Old (until v1.1.1) | New (v1.2.0) |
+|---|---|
+| `/devflow:devflow-dispatch` | `/devflow:dispatch` |
+| `/devflow:devflow-next` | `/devflow:next` |
+| `/devflow:devflow-status` | `/devflow:status` |
+| `/devflow:devflow-sync` | `/devflow:sync` |
+| `/devflow:devflow-adr` | `/devflow:adr` |
+| `/devflow:devflow-recall` | `/devflow:recall` |
+
+`/devflow:devflow` (the help/entry command) is unchanged — only the verb-style commands were renamed.
+
+ADR subcommand syntax updated from `/devflow adr:new` to `/devflow:adr new` (space instead of colon) to match standard plugin command pattern.
+
+Files renamed via `git mv` (history preserved):
+- `commands/devflow-dispatch.md` → `commands/dispatch.md`
+- `commands/devflow-next.md` → `commands/next.md`
+- `commands/devflow-status.md` → `commands/status.md`
+- `commands/devflow-sync.md` → `commands/sync.md`
+- `commands/devflow-adr.md` → `commands/adr.md`
+- `commands/devflow-recall.md` → `commands/recall.md`
+
+`name:` frontmatter in each command file updated to the new short slug. Help text in `commands/devflow.md` and all 27 docs/skills/specs/tests references updated to the new invocation form. No aliases were added — old `/devflow:devflow-<verb>` commands are gone.
+
+### Migration
+
+No project state to migrate. Users running v1.1.1 should:
+1. Run `/devflow update` (or the equivalent `claude plugin update`) to fetch the new plugin
+2. Replace any muscle-memory shortcuts: `/devflow:devflow-status` → `/devflow:status`, etc.
+
+---
+
 ## [1.0.0] — 2026-05-07
 
 ### Hotfix added pre-merge: ADR ↔ standards/stacks chain integration

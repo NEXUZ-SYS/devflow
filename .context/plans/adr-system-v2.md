@@ -60,7 +60,7 @@ phases:
 
 **Goal:** Evoluir o sistema de ADR do DevFlow para o padrão v2.1.0 com nova skill `devflow:adr-builder` (3 modos), lib Node determinística (5 arquivos, zero deps), e integração ativa em 3 skills do PREVC.
 
-**Architecture:** Skill conversacional em Markdown (`skills/adr-builder/`) orquestra modos CREATE/AUDIT/EVOLVE. AUDIT é determinístico via lib `adr-audit.mjs` (12 checks). Dispatcher em `commands/devflow-adr.md` roteia subcomandos. Cross-project compatibility via Node 20+ stdlib only — parser de YAML frontmatter próprio (~80 linhas). Gates de validação em `prevc-validation` Step 2.5. Detecção proativa de decisão arquitetural em `prevc-planning` Step 5.6.
+**Architecture:** Skill conversacional em Markdown (`skills/adr-builder/`) orquestra modos CREATE/AUDIT/EVOLVE. AUDIT é determinístico via lib `adr-audit.mjs` (12 checks). Dispatcher em `commands/adr.md` roteia subcomandos. Cross-project compatibility via Node 20+ stdlib only — parser de YAML frontmatter próprio (~80 linhas). Gates de validação em `prevc-validation` Step 2.5. Detecção proativa de decisão arquitetural em `prevc-planning` Step 5.6.
 
 **Tech Stack:** Node 20+ (stdlib only), Markdown + YAML frontmatter, Bash, dotcontext v2 format, git CLI 2.x+.
 
@@ -1851,10 +1851,10 @@ git commit -m "feat(adrs): SKILL.md EVOLVE mode section (Steps E1-E5)"
 
 ---
 
-#### Task 2.12: Author `commands/devflow-adr.md` dispatcher
+#### Task 2.12: Author `commands/adr.md` dispatcher
 
 **Files:**
-- Create: `commands/devflow-adr.md`
+- Create: `commands/adr.md`
 - Reference: spec §2.3
 
 - [ ] **Step 1: Write dispatcher**
@@ -1863,12 +1863,12 @@ Format follows `commands/devflow.md` pattern (subcommand routing in markdown). S
 
 - [ ] **Step 2: Update plugin.json (if needed)**
 
-Verify `commands/devflow-adr.md` is recognized — DevFlow auto-discovers `commands/*.md`.
+Verify `commands/adr.md` is recognized — DevFlow auto-discovers `commands/*.md`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add commands/devflow-adr.md
+git add commands/adr.md
 git commit -m "feat(adrs): add /devflow adr dispatcher (new/audit/evolve)"
 ```
 
@@ -2588,7 +2588,7 @@ for path in \
   "scripts/lib/adr-frontmatter.mjs" \
   "scripts/lib/adr-graph.mjs" \
   "scripts/lib/adr-semver.mjs" \
-  "commands/devflow-adr.md"
+  "commands/adr.md"
 do
   if [ ! -f "$SCRATCH/devflow/$path" ]; then
     echo "FAIL: missing $path in fresh install"
@@ -2671,7 +2671,7 @@ git commit --allow-empty -m "chore(adrs): Phase 5 complete — Suite D green, ve
 - [ ] `.context/docs/adrs/README.md` regenerado com schema 14 colunas
 - [ ] `adr-audit.mjs` retorna 12/12 PASS para todas as ADRs do repo
 - [ ] `skills/adr-builder/SKILL.md` cobre CREATE/AUDIT/EVOLVE
-- [ ] `commands/devflow-adr.md` dispatcha 3 subcomandos
+- [ ] `commands/adr.md` dispatcha 3 subcomandos
 - [ ] `skills/prevc-planning/SKILL.md` Step 5.6 funcional (smoke test)
 - [ ] `skills/prevc-validation/SKILL.md` Step 2.5 bloqueia FIX-INTERVIEW
 - [ ] `skills/adr-filter/SKILL.md` parseia 14 colunas + emite tags `[firm]`/`[gated]`/`[experimental]`

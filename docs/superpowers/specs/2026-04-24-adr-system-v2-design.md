@@ -59,7 +59,7 @@ revision_notes: "Architect review aplicada — adicionadas tabela FIX-AUTO compl
 | 2 | Lib `adr-audit` | `scripts/adr-audit.mjs` + `scripts/lib/adr-frontmatter.mjs` + `scripts/lib/adr-graph.mjs` | Node executável. 12 checks (11 originais + Check 12 grafo). Output JSON. |
 | 3 | Lib `adr-evolve` | `scripts/adr-evolve.mjs` | Orquestra transição patch/minor/major/refine — git mv ou novo arquivo + bump frontmatter + status. |
 | 4 | Lib `adr-update-index` | `scripts/adr-update-index.mjs` | Regenera `.context/docs/adrs/README.md` a partir do frontmatter de cada arquivo. |
-| 5 | Comando dispatcher | `commands/devflow-adr.md` | Recebe `/devflow adr:<new\|audit\|evolve>` e dispatcha para a skill. |
+| 5 | Comando dispatcher | `commands/adr.md` | Recebe `/devflow adr:<new\|audit\|evolve>` e dispatcha para a skill. |
 | 6 | Script migração one-shot | `scripts/adr-migrate-v1-to-v2.mjs` | Migra ADRs do template v1 (DevFlow original) para v2.1.0. Artefato descartável após Fase 3. |
 | 7 | Modificação `prevc-planning` | `skills/prevc-planning/SKILL.md` | Adicionar Step 5.6 — ADR opportunity check (instrução LLM com 4 sinais; opt-in). |
 | 8 | Modificação `prevc-validation` | `skills/prevc-validation/SKILL.md` | Adicionar Step 2.5 — ADR Compliance Check (matriz por status). |
@@ -480,7 +480,7 @@ Cada fixture tem header `# EXPECTED:` com classificação por check para asserts
 | B3 | `/devflow adr:deprecate <file>` (Descontinuado standalone) | Volume suficiente de ADRs obsoletas-não-substituídas |
 | B4 | ADR como first-class do PRD (gera ADR de arquitetura na Fase 0) | Após ≥3 projetos usarem fluxo PRD + ADR juntos |
 | B5 | Pre-commit hook opcional rodando `adr-audit.mjs` | Demanda de feedback antes do gate V |
-| B6 | MemPalace para ADRs (`/devflow-recall` semântico) | MemPalace estável; ≥10 ADRs ativas |
+| B6 | MemPalace para ADRs (`/devflow:recall` semântico) | MemPalace estável; ≥10 ADRs ativas |
 | B7 | Suite D — subagent E2E harness para `devflow:adr-builder` | ≥3 incidents reais que harness teria pego; ou skill estável v1+ com volume de uso justificando custo de CI (~$0.10/run, ~60-90s, ~1-2k tokens) |
 
 ## 12. Resumo executivo

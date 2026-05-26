@@ -139,17 +139,17 @@ Autonomy modes feature bidirectional escalation:
 | `/devflow language <code>` | Set language directly (en-US, pt-BR, es-ES) |
 | `/devflow config` | Configure git strategy and generate .context/.devflow.yaml |
 | `/devflow prd` | Generate or update product PRD with phased roadmap |
-| `/devflow-status` | Show current phase, progress, and available actions |
-| `/devflow-next` | Attempt to advance to next phase (checks gates) |
-| `/devflow-dispatch` | List available agents for current phase and mode |
-| `/devflow-dispatch <role>` | Dispatch a specific agent |
-| `/devflow-sync [scope]` | Update .context/ with current project state (docs/agents/skills) |
+| `/devflow:status` | Show current phase, progress, and available actions |
+| `/devflow:next` | Attempt to advance to next phase (checks gates) |
+| `/devflow:dispatch` | List available agents for current phase and mode |
+| `/devflow:dispatch <role>` | Dispatch a specific agent |
+| `/devflow:sync [scope]` | Update .context/ with current project state (docs/agents/skills) |
 | `/devflow auto [description]` | Start fully autonomous workflow with smart escalation |
 | `/devflow auto --from-prd` | Autonomous from existing PRD (skip brainstorming) |
 | `/devflow autonomy:X [description]` | Start with explicit autonomy (supervised/assisted/autonomous) |
 | `/devflow autonomy:X` (no desc) | Upgrade/downgrade active workflow's autonomy mode |
-| `/devflow-sync workflow` | Validate/scaffold `.context/workflow/` directory |
-| `/devflow-recall <query>` | Search MemPalace for project memories |
+| `/devflow:sync workflow` | Validate/scaffold `.context/workflow/` directory |
+| `/devflow:recall <query>` | Search MemPalace for project memories |
 
 ### `/devflow config`
 1. Invoke `devflow:config` skill

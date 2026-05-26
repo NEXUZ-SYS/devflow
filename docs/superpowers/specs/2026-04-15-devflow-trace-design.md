@@ -186,7 +186,7 @@ trap trace_fail_safe ERR
 | `post-tool-use` | `tool_post` + (se `tool=Task`) `agent_return` | Correlaciona via `tool_id` |
 | `pre-compact` / `post-compact` | `compact_start` / `compact_end` | Inclui contagem de tokens |
 | `stop` (fim de sessão) | `session_end` + atualiza manifest + pruning best-effort | Fecha a sessão atual |
-| `phase-advance` (novo, invocado por `devflow:devflow-next`) | `phase_transition` | Só grava se trace ativo |
+| `phase-advance` (novo, invocado por `devflow:next`) | `phase_transition` | Só grava se trace ativo |
 
 ### 7.3 CLI — `/devflow-trace`
 
@@ -418,7 +418,7 @@ Será reaberto quando houver sinal concreto de que a captura externa deixa pergu
 | Sistema | O que guarda | Prazo | Consulta via |
 |---------|--------------|-------|--------------|
 | **Trace** (v1) | Stream operacional de eventos da sessão (tool calls, dispatches, prompts) | Curto (7 dias, efêmero, ruído alto) | `/devflow-trace`, `trace-inspect` |
-| **MemPalace** (já integrado) | Memórias semânticas curadas (decisões, aprendizados, diários de agentes) | Longo (permanente, sinal alto) | `/devflow-recall`, `devflow:memory-recall` |
+| **MemPalace** (já integrado) | Memórias semânticas curadas (decisões, aprendizados, diários de agentes) | Longo (permanente, sinal alto) | `/devflow:recall`, `devflow:memory-recall` |
 
 Trace responde *"o que aconteceu minuto a minuto na sessão X?"*; MemPalace responde *"o que já aprendemos/decidimos sobre Y?"*. O sink MemPalace seria a ponte automática: enquanto o trace grava tudo, detecta eventos de alto valor semântico e os **promove** a MemPalace como memórias.
 
@@ -469,7 +469,7 @@ trace:
 1. **Filtros de promoção exigem validação empírica** — sem dados reais de uso do trace, inventar regras agora é premature optimization
 2. **Classificação "isso é feedback forte?" não é trivial** — provavelmente exige LLM judge ou convenção manual, não regex
 3. **Integração exige mapear schema evento→memória, garantir idempotência** (não duplicar a cada sessão) e tratar retry/falha
-4. **v1 já entrega valor sem sink** — `/devflow-trace` + skill `trace-inspect` respondem as perguntas operacionais; MemPalace continua populado via `auto memory` e `/devflow-recall` como hoje
+4. **v1 já entrega valor sem sink** — `/devflow-trace` + skill `trace-inspect` respondem as perguntas operacionais; MemPalace continua populado via `auto memory` e `/devflow:recall` como hoje
 
 Será reaberto quando: (a) o trace estiver em uso e surgir padrão claro de "isso aqui deveria virar memória permanente", ou (b) o `auto memory` atual deixar lacunas que o trace poderia preencher automaticamente.
 

@@ -35,10 +35,12 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 ## Related Commands
 
 ```
-/devflow-status                        # Show current phase and progress
-/devflow-next                          # Advance to next phase
-/devflow-dispatch [role]               # Dispatch or recommend agents
-/devflow-sync [docs|agents|skills]     # Update .context/ with current project state
+/devflow:status                        # Show current phase and progress
+/devflow:next                          # Advance to next phase
+/devflow:dispatch [role]               # Dispatch or recommend agents
+/devflow:sync [docs|agents|skills]     # Update .context/ with current project state
+/devflow:adr [new|audit|evolve] <...>  # ADR system
+/devflow:recall <query>                # Search MemPalace
 ```
 
 ## Behavior
@@ -80,13 +82,14 @@ COMMANDS
   /devflow prd                Generate or update product PRD
   /devflow prd --status       Show PRD phase status
   /devflow <desc>             Start workflow (auto-detects scale)
-  /devflow-status             Show current phase, progress, and mode
-  /devflow-next               Advance to next phase (checks gates)
-  /devflow-dispatch           Recommend best agent for current task
-  /devflow-dispatch <role>    Dispatch a specific specialist agent
-  /devflow-sync               Update .context/ with current project state
-  /devflow-sync <scope>       Update only docs, agents, or skills
-  /devflow-recall <query>   Search MemPalace for project memories
+  /devflow:status             Show current phase, progress, and mode
+  /devflow:next               Advance to next phase (checks gates)
+  /devflow:dispatch           Recommend best agent for current task
+  /devflow:dispatch <role>    Dispatch a specific specialist agent
+  /devflow:sync               Update .context/ with current project state
+  /devflow:sync <scope>       Update only docs, agents, or skills
+  /devflow:adr <sub> <args>   ADR system (new/audit/evolve)
+  /devflow:recall <query>     Search MemPalace for project memories
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -141,7 +144,7 @@ OPERATING MODES
   Lite      .context/ files + superpowers (read-only agents, manual tracking)
   Minimal   superpowers only (brainstorming, TDD, code review)
 
-  Mode is auto-detected at session start. Check with /devflow-status
+  Mode is auto-detected at session start. Check with /devflow:status
 
 SETUP (one-time, no terminal)
   1. claude plugin install superpowers@claude-plugins-official --scope user
@@ -161,10 +164,10 @@ EXAMPLES
     → Then: scaffolds .context/ with agents, skills, and docs in the selected language
     → If .context/ already exists, runs sync to update existing content
 
-  /devflow-sync
+  /devflow:sync
     → Updates all .context/ docs, agents, and skills with current project state
 
-  /devflow-sync docs
+  /devflow:sync docs
     → Updates only .context/docs/ files
 
   /devflow fix the login timeout bug
@@ -176,16 +179,16 @@ EXAMPLES
   /devflow scale:LARGE migrate from REST to GraphQL
     → Full PREVC with checkpoints and parallel agent dispatch
 
-  /devflow-status
+  /devflow:status
     → E Execution ● In Progress (7/12 tasks) — Full mode
 
-  /devflow-dispatch security-auditor
+  /devflow:dispatch security-auditor
     → Dispatches the security auditor for the current task
 
-  /devflow-dispatch
+  /devflow:dispatch
     → Recommends: backend-specialist → test-writer (based on context)
 
-  /devflow-next
+  /devflow:next
     → Gate check passed. Advancing to V (Validation)...
 
   /devflow auto implement user CRUD with validation
@@ -217,11 +220,11 @@ QUICK REFERENCE
   Check roadmap progress        /devflow prd --status
   Start a new feature           /devflow <description>
   Fix a bug                     /devflow scale:QUICK <desc>
-  Update project context        /devflow-sync
-  Check current progress        /devflow-status
-  Advance to next phase         /devflow-next
-  List available agents         /devflow-dispatch
-  Dispatch a specialist         /devflow-dispatch <role>
+  Update project context        /devflow:sync
+  Check current progress        /devflow:status
+  Advance to next phase         /devflow:next
+  List available agents         /devflow:dispatch
+  Dispatch a specialist         /devflow:dispatch <role>
   Run fully autonomous           /devflow auto <desc>
   Autonomous from existing PRD   /devflow auto --from-prd
   Upgrade workflow to autonomous /devflow autonomy:autonomous
@@ -232,10 +235,10 @@ QUICK REFERENCE
   Check security                "audit X for vulnerabilities"
   Debug a tricky issue          "debug the X issue"
   Break down a big feature      "break down the X feature"
-  Search project memories      /devflow-recall <query>
+  Search project memories       /devflow:recall <query>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  DevFlow v0.7.0 — https://github.com/NEXUZ-SYS/devflow
+  DevFlow v1.2.0 — https://github.com/NEXUZ-SYS/devflow
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -381,7 +384,7 @@ Then show a consolidated "Next Steps" section with only the features that are **
 8. Enables Lite mode automatically
 9. **Todas as interações subsequentes seguem o idioma escolhido**
 
-### `/devflow-sync [scope]`
+### `/devflow:sync [scope]`
 1. Invoke `devflow:context-sync` skill
 2. Atualiza `.context/` existente com o estado atual do projeto
 3. Scope opcional: `docs`, `agents`, `skills` (default: tudo)

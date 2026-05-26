@@ -58,7 +58,7 @@ skills/prd-generation/SKILL.md           — Add stack interview + ADR recommend
 skills/prevc-planning/SKILL.md           — Read ADRs in Step 1 context gathering
 skills/prevc-validation/SKILL.md         — Add ADR compliance check
 skills/context-awareness/SKILL.md        — Include .context/docs/adrs/ in scope
-skills/context-sync/SKILL.md             — Sync ADR index on /devflow-sync docs
+skills/context-sync/SKILL.md             — Sync ADR index on /devflow:sync docs
 ```
 
 ---
