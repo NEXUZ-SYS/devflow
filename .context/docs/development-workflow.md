@@ -27,7 +27,7 @@ DevFlow uses a **trunk-based** approach on `main`:
 ### Naming Conventions
 - Skills: `kebab-case` directory with `SKILL.md` inside (e.g., `skills/prevc-flow/SKILL.md`)
 - Agents: `kebab-case.md` in `agents/` (e.g., `agents/backend-specialist.md`)
-- Commands: `kebab-case.md` in `commands/` (e.g., `commands/devflow-status.md`)
+- Commands: `kebab-case.md` in `commands/` (e.g., `commands/status.md`)
 - Hooks: no extension, executable bash scripts in `hooks/`
 
 ### Content Quality

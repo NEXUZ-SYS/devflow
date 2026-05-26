@@ -1,23 +1,23 @@
 ---
-name: devflow-dispatch
+name: dispatch
 description: Dispatch a specialist agent or get a recommendation for the current task
 user_invocable: true
 ---
 
-# /devflow-dispatch
+# /devflow:dispatch
 
 Dispatch a specialist agent or get a recommendation based on the current context.
 
 ## Usage
 
 ```
-/devflow-dispatch                      # Recommend best agent for current task
-/devflow-dispatch <role>               # Dispatch a specific agent
+/devflow:dispatch                      # Recommend best agent for current task
+/devflow:dispatch <role>               # Dispatch a specific agent
 ```
 
 ## Behavior
 
-### `/devflow-dispatch` (no args — recommend)
+### `/devflow:dispatch` (no args — recommend)
 Analyze current task and phase, then recommend agents:
 
 ```
@@ -28,10 +28,10 @@ Recommended sequence:
   2. test-writer           → generate test suite
   3. security-auditor      → review token handling
 
-Dispatch one with: /devflow-dispatch backend-specialist
+Dispatch one with: /devflow:dispatch backend-specialist
 ```
 
-### `/devflow-dispatch <role>`
+### `/devflow:dispatch <role>`
 1. Invoke `devflow:agent-dispatch` skill
 2. Load the specified agent's playbook from `.context/agents/` or bundled `agents/`
 3. Apply agent's workflow to current task

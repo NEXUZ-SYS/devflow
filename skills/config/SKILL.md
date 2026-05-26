@@ -208,7 +208,7 @@ AskUserQuestion:
     - label: "1000 tokens"
       description: "Contexto rico — usa mais do context window"
     - label: "Desativar auto-recall"
-      description: "Apenas busca manual via /devflow-recall"
+      description: "Apenas busca manual via /devflow:recall"
 ```
 
 **Se `HAS_MEMPALACE=false`:**

@@ -210,10 +210,10 @@ describe("using-devflow: existing project documentation", () => {
     );
   });
 
-  it("should list /devflow-sync workflow command", () => {
+  it("should list /devflow:sync workflow command", () => {
     assert.ok(
-      usingDevflow.includes("devflow-sync workflow"),
-      "must list /devflow-sync workflow in slash commands"
+      usingDevflow.includes("devflow:sync workflow"),
+      "must list /devflow:sync workflow in slash commands"
     );
   });
 

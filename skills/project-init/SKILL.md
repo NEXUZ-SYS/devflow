@@ -18,7 +18,7 @@ Fluxo:
 
 Após o scaffold inicial (primeira execução), nunca sobrescrever arquivos com `status: filled`.
 Apenas preencher arquivos MISSING ou com `status: unfilled`.
-Para atualizar docs existentes, o usuário deve usar `/devflow-sync`.
+Para atualizar docs existentes, o usuário deve usar `/devflow:sync`.
 </HARD-GATE>
 
 **Announce at start:** "I'm using the devflow:project-init skill to initialize this project."
@@ -608,7 +608,7 @@ Present a summary:
 
 ### Next steps
 - Run `/devflow <task>` to start your first PREVC workflow
-- [If green-field] Comece a escrever código primeiro; rode `/devflow-sync` depois para enriquecer agents e skills com contexto real
+- [If green-field] Comece a escrever código primeiro; rode `/devflow:sync` depois para enriquecer agents e skills com contexto real
 - [If Tier 3] Install dotcontext (`npm i -g @dotcontext/cli && dotcontext mcp:install claude --local`) for Full mode
 ```
 

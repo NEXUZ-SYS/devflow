@@ -32,7 +32,7 @@ Manage MemPalace integration within DevFlow workflows. Write agent diaries durin
 
 - `.context/.devflow.yaml` — MemPalace config (palace path, wing, budget, auto_diary, auto_recall)
 - `skills/memory-recall/SKILL.md` — On-demand search skill
-- `commands/devflow-recall.md` — User-facing recall command
+- `commands/recall.md` — User-facing recall command
 - `hooks/session-start` — Auto-recall injection point
 - `hooks/pre-compact` — Diary flush point
 - `hooks/post-tool-use` — Hand-off diary trigger

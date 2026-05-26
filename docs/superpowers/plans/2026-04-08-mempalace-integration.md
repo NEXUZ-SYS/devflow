@@ -19,7 +19,7 @@
 | File | Responsibility |
 |------|---------------|
 | `skills/memory-recall/SKILL.md` | On-demand memory search skill (query → MemPalace MCP → formatted results) |
-| `commands/devflow-recall.md` | `/devflow-recall <query>` command definition |
+| `commands/recall.md` | `/devflow:recall <query>` command definition |
 | `agents/memory-specialist.md` | Agent playbook for memory operations |
 
 ### Modified files
@@ -33,7 +33,7 @@
 | `skills/project-init/SKILL.md` | Add mempalace setup step in init interview |
 | `skills/config/SKILL.md` | Add mempalace config questions (P6-P8) |
 | `skills/using-devflow/SKILL.md` | Add memory-recall to skill tables |
-| `commands/devflow.md` | Add `/devflow-recall` to help text |
+| `commands/devflow.md` | Add `/devflow:recall` to help text |
 | `references/skills-map.md` | Add memory-recall entry |
 
 ---
@@ -561,28 +561,28 @@ git commit -m "feat(skills): add memory-recall skill for on-demand mempalace sea
 ### Task 7: Recall command
 
 **Files:**
-- Create: `commands/devflow-recall.md`
+- Create: `commands/recall.md`
 
 - [ ] **Step 1: Create the command file**
 
-Create `commands/devflow-recall.md`:
+Create `commands/recall.md`:
 
 ```markdown
 ---
-name: devflow-recall
+name: recall
 description: Search MemPalace for project memories
 user_invocable: true
 ---
 
-# /devflow-recall
+# /devflow:recall
 
 Search MemPalace for project memories — agent diaries, PREVC decisions, and historical context.
 
 ## Usage
 
 ```
-/devflow-recall <query>            # Search within project wing
-/devflow-recall --global <query>   # Search across all projects
+/devflow:recall <query>            # Search within project wing
+/devflow:recall --global <query>   # Search across all projects
 ```
 
 ## Behavior
@@ -599,17 +599,17 @@ Search MemPalace for project memories — agent diaries, PREVC decisions, and hi
 ## Examples
 
 ```
-/devflow-recall o que decidimos sobre auth
-/devflow-recall architect diary última sessão
-/devflow-recall --global caching strategy
+/devflow:recall o que decidimos sobre auth
+/devflow:recall architect diary última sessão
+/devflow:recall --global caching strategy
 ```
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add commands/devflow-recall.md
-git commit -m "feat(commands): add /devflow-recall command"
+git add commands/recall.md
+git commit -m "feat(commands): add /devflow:recall command"
 ```
 
 ---
@@ -658,7 +658,7 @@ Manage MemPalace integration within DevFlow workflows. Write agent diaries durin
 
 - `.context/.devflow.yaml` — MemPalace config (palace path, wing, budget, auto_diary, auto_recall)
 - `skills/memory-recall/SKILL.md` — On-demand search skill
-- `commands/devflow-recall.md` — User-facing recall command
+- `commands/recall.md` — User-facing recall command
 - `hooks/session-start` — Auto-recall injection point
 - `hooks/pre-compact` — Diary flush point
 - `hooks/post-tool-use` — Hand-off diary trigger
@@ -789,7 +789,7 @@ AskUserQuestion:
     - label: "1000 tokens"
       description: "Contexto rico — usa mais do context window"
     - label: "Desativar auto-recall"
-      description: "Apenas busca manual via /devflow-recall"
+      description: "Apenas busca manual via /devflow:recall"
 ```
 
 **Se `HAS_MEMPALACE=false`:**
@@ -918,19 +918,19 @@ In `skills/using-devflow/SKILL.md`, in the "On-Demand Skills" table (line ~83), 
 | `devflow:memory-recall` | Searching MemPalace for project memories, agent diaries, and historical decisions |
 ```
 
-- [ ] **Step 2: Add /devflow-recall to Slash Commands table**
+- [ ] **Step 2: Add /devflow:recall to Slash Commands table**
 
 In the "Slash Commands" table, add:
 
 ```markdown
-| `/devflow-recall <query>` | Search MemPalace for project memories |
+| `/devflow:recall <query>` | Search MemPalace for project memories |
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add skills/using-devflow/SKILL.md
-git commit -m "feat(using-devflow): add memory-recall skill and /devflow-recall command"
+git commit -m "feat(using-devflow): add memory-recall skill and /devflow:recall command"
 ```
 
 ---
@@ -940,18 +940,18 @@ git commit -m "feat(using-devflow): add memory-recall skill and /devflow-recall 
 **Files:**
 - Modify: `commands/devflow.md` (help text block)
 
-- [ ] **Step 1: Add /devflow-recall to the help text**
+- [ ] **Step 1: Add /devflow:recall to the help text**
 
 In `commands/devflow.md`, in the COMMANDS section of the help text, add:
 
 ```
-  /devflow-recall <query>   Search MemPalace for project memories
+  /devflow:recall <query>   Search MemPalace for project memories
 ```
 
 In the QUICK REFERENCE section, add:
 
 ```
-  Search project memories      /devflow-recall <query>
+  Search project memories      /devflow:recall <query>
 ```
 
 In the ON-DEMAND CAPABILITIES section, add:
@@ -964,7 +964,7 @@ In the ON-DEMAND CAPABILITIES section, add:
 
 ```bash
 git add commands/devflow.md
-git commit -m "feat(commands): add /devflow-recall to devflow help text"
+git commit -m "feat(commands): add /devflow:recall to devflow help text"
 ```
 
 ---
@@ -987,7 +987,7 @@ In `references/skills-map.md`, in the "Bridge Skills" table, add a new row after
 In the "Quick Reference" table at the bottom, add:
 
 ```markdown
-| Search project memories | `devflow:memory-recall` or `/devflow-recall` |
+| Search project memories | `devflow:memory-recall` or `/devflow:recall` |
 ```
 
 - [ ] **Step 3: Commit**
@@ -1022,7 +1022,7 @@ Expected: All print "OK".
 head -5 skills/memory-recall/SKILL.md
 
 # Check command has frontmatter
-head -5 commands/devflow-recall.md
+head -5 commands/recall.md
 
 # Check agent has 11 sections
 grep "^## " agents/memory-specialist.md | wc -l

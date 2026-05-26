@@ -199,7 +199,7 @@ Camada 100% aditiva — como ter dotcontext ou não ter.
 | Arquivo | Descrição |
 |---------|-----------|
 | `skills/memory-recall/SKILL.md` | Skill de busca on-demand no MemPalace |
-| `commands/devflow-recall.md` | Comando `/devflow-recall <query>` |
+| `commands/recall.md` | Comando `/devflow:recall <query>` |
 | `agents/memory-specialist.md` | Agent playbook para operações de memória |
 
 ### Modificados
@@ -213,7 +213,7 @@ Camada 100% aditiva — como ter dotcontext ou não ter.
 | `skills/project-init/SKILL.md` | Passo de MemPalace na entrevista do init |
 | `skills/config/SKILL.md` | Perguntas de MemPalace na config |
 | `skills/using-devflow/SKILL.md` | Referência ao memory-recall na tabela de skills |
-| `commands/devflow.md` | Referência ao /devflow-recall no help |
+| `commands/devflow.md` | Referência ao /devflow:recall no help |
 | `.context/.devflow.yaml` | Seção mempalace: (template) |
 | `references/skills-map.md` | Nova entrada memory-recall |
 | `templates/devflow-yaml/scaffold.yaml` | Seção mempalace: no template |

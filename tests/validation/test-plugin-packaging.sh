@@ -34,7 +34,7 @@ REQUIRED_PATHS=(
   "scripts/lib/adr-frontmatter.mjs"
   "scripts/lib/adr-graph.mjs"
   "scripts/lib/adr-semver.mjs"
-  "commands/devflow-adr.md"
+  "commands/adr.md"
   "skills/prevc-planning/SKILL.md"
   "skills/prevc-validation/SKILL.md"
   "skills/adr-filter/SKILL.md"

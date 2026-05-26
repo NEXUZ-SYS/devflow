@@ -242,7 +242,7 @@ Liste o que **se aplica**, nunca o que se exclui.
 Há duas interfaces. No dia a dia, **converse com o Claude** (dispara as skills);
 a **CLI** é para scripts e automação.
 
-**ADR** — skill `devflow:adr-builder` / comando `/devflow-adr`
+**ADR** — skill `devflow:adr-builder` / comando `/devflow:adr`
 
 | Quero… | Diga ao Claude |
 |---|---|

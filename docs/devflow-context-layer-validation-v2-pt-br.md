@@ -1374,7 +1374,7 @@ Mudanças em outros artefatos:
 - `skills/adr-filter/SKILL.md` — atualizar Step 1 (load ADRs) para dual-read
 - `skills/prevc-validation/SKILL.md` — Step 2.6 (ADR Audit Gate) atualizado
 - `skills/prevc-planning/SKILL.md` — Step 3.5 (ADR opportunity check) atualizado
-- `commands/devflow-adr.md` — atualizar exemplos de path
+- `commands/adr.md` — atualizar exemplos de path
 
 Bumpa para `v0.14.0` (minor — quebra path canônico mas mantém API; dual-read mitiga).
 

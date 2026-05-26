@@ -1,18 +1,18 @@
 ---
-name: devflow-recall
+name: recall
 description: Search MemPalace for project memories
 user_invocable: true
 ---
 
-# /devflow-recall
+# /devflow:recall
 
 Search MemPalace for project memories — agent diaries, PREVC decisions, and historical context.
 
 ## Usage
 
 ```
-/devflow-recall <query>            # Search within project wing
-/devflow-recall --global <query>   # Search across all projects
+/devflow:recall <query>            # Search within project wing
+/devflow:recall --global <query>   # Search across all projects
 ```
 
 ## Behavior
@@ -29,7 +29,7 @@ Search MemPalace for project memories — agent diaries, PREVC decisions, and hi
 ## Examples
 
 ```
-/devflow-recall o que decidimos sobre auth
-/devflow-recall architect diary última sessão
-/devflow-recall --global caching strategy
+/devflow:recall o que decidimos sobre auth
+/devflow:recall architect diary última sessão
+/devflow:recall --global caching strategy
 ```
