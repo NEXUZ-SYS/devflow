@@ -320,15 +320,18 @@ git:
   ```yaml
   mempalace:
     enabled: true
+    autoMine: post-merge   # auto-mine no git hook post-merge (off desativa)
   ```
 - Se habilitado com customizações:
   ```yaml
   mempalace:
     enabled: true
+    autoMine: post-merge             # post-merge (default) | off
     palace: <caminho personalizado>  # só se diferente do default
     budget: <valor>                  # só se diferente de 500
     auto_recall: false               # só se desativado
   ```
+- `autoMine: post-merge` é o default — o hook `post-merge` (instalado via `/devflow:memory install-hook`) só minera quando este valor é `post-merge`; `off` desativa sem desinstalar o hook
 - `wing: auto` é o default — só incluir se o usuário informar um nome customizado
 - `auto_diary: true` é o default — só incluir se desativado
 

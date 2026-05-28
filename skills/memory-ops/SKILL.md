@@ -43,8 +43,18 @@ A wing escopa as operações ao projeto atual (evita misturar memórias entre re
 | `sweep` | `mempalace sweep <project-root>` |
 | `sync` | `mempalace sync --wing <wing> --dry-run` |
 | `sync --apply` | `mempalace sync --wing <wing> --apply` |
+| `install-hook` | `bash "$CLAUDE_PLUGIN_ROOT/scripts/install-git-hook.sh" <repo-root>` |
 
 Combine flags conforme passadas (ex.: `mine --convos --dry-run`).
+
+### `install-hook` — auto-mine no post-merge
+
+Instala o git hook `post-merge` que minera o projeto automaticamente sempre que um merge/pull aterrissa numa branch protegida (pega tanto `gh pr merge`+`git pull` do autoFinish quanto `git merge`/`git pull` no terminal).
+
+1. Rodar `bash "$CLAUDE_PLUGIN_ROOT/scripts/install-git-hook.sh" "$(git rev-parse --show-toplevel)"`.
+2. Se o instalador avisar que já existe um hook `post-merge` **alheio**, NÃO sobrescrever — repassar ao usuário as instruções de encadeamento que o script imprime.
+3. Informar que o comportamento é controlado por `mempalace.autoMine` no `.devflow.yaml` (`post-merge` = ativo/default; `off` = desativa sem precisar desinstalar). Para remover de vez: `rm <repo>/.git/hooks/post-merge`.
+4. O hook é **não-bloqueante** (roda em background) e **fail-safe** (nunca quebra o git); minera incrementalmente + `sync --apply` na wing do projeto.
 
 ## Step 3: Salvaguardas (antes de executar)
 
