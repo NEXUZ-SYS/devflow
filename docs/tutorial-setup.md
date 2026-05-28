@@ -151,22 +151,38 @@ dotcontext --version
 
 MemPalace habilita **memória semântica persistente entre sessões** — os agentes conseguem recuperar decisões passadas, convenções, bugs já investigados, evitando retrabalho.
 
-**Instalar (canônico — pacote Python via pipx):**
+**Instalar (pacote Python nativo):**
 ```bash
-pipx install mempalace
-# ou, sem pipx: pip install --user mempalace
-mempalace mcp:install claude --local
+uv tool install mempalace      # canônico — isola o CLI no PATH
+# ou: pipx install mempalace
+# ou, sem uv/pipx: pip install --user mempalace
 ```
 
 > ⚠️ Não use `npm install -g @mempalace/cli` — o pacote npm é legado e está desatualizado. MemPalace é projeto Python nativo.
 
-**Ou via MCP direto no projeto** (recomendado — respeita escopo por projeto):
+**Registrar o MCP no projeto:**
 ```bash
 cd meu-projeto
-mempalace mcp:install claude --local
+claude mcp add mempalace -- mempalace-mcp
+```
+
+Ou adicione manualmente ao `.mcp.json` do projeto, dentro de `mcpServers`:
+```json
+"mempalace": { "command": "mempalace-mcp", "args": [] }
+```
+
+> ⚠️ Use o console script `mempalace-mcp` — **não** use `python -m mempalace.mcp_server`. O binário `python` pode não existir (em muitos sistemas só há `python3`), enquanto `mempalace-mcp` é o entry point canônico e portável.
+
+**Ativar o palace (processo de ativação):**
+```bash
+mempalace init <project-root>     # detecta rooms/wings pela estrutura de pastas
+/devflow:memory mine              # minera os arquivos do projeto atual
+/devflow:memory mine --convos     # minera sessões do Claude Code (~/.claude/projects/)
+/devflow:memory wake-up           # carrega o contexto numa nova sessão
 ```
 
 **O que ativa:**
+- Comando `/devflow:memory <sub>` — `mine`, `mine --convos`, `wake-up`, `status`, `sweep`, `sync`
 - Skill `devflow:memory-recall` — busca na memória persistente
 - Comando `/devflow:recall <query>` — consulta rápida de memórias
 - Agente `memory-specialist` — curador/consultor da memória
@@ -178,6 +194,7 @@ mempalace mcp:install claude --local
 ```bash
 cat .mcp.json | grep mempalace
 # Deve aparecer a entry; se sim, /devflow:status mostra "MemPalace: true"
+mempalace status                  # mostra wings/rooms já minerados
 ```
 
 > **MemPalace vs Napkin:** Napkin é local (`.context/napkin.md`, curado manualmente), MemPalace é semântico (vector DB, busca por similaridade). Use ambos — Napkin para runbooks curados, MemPalace para histórico automático.
@@ -1731,9 +1748,10 @@ rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/0.4.0
 # 1. Verifique o .mcp.json do projeto
 cat .mcp.json | grep mempalace
 
-# 2. Se ausente, reinstale por projeto:
+# 2. Se ausente, registre o MCP por projeto:
 cd meu-projeto
-mempalace mcp:install claude --local
+claude mcp add mempalace -- mempalace-mcp
+# (ou adicione manualmente: "mempalace": { "command": "mempalace-mcp", "args": [] })
 
 # 3. Reinicie o Claude Code (MCPs carregam no SessionStart)
 exit

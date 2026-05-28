@@ -12,15 +12,16 @@
       "env": {}
     },
     "mempalace": {
-      "command": "python",
-      "args": [
-        "-m",
-        "mempalace.mcp_server"
-      ]
+      "command": "mempalace-mcp",
+      "args": []
     },
     "docs-mcp-server": {
       "type": "sse",
       "url": "http://localhost:6280/sse"
+    },
+    "odoo": {
+      "type": "http",
+      "url": "https://skioba-teste.saas.nexuz.app/mcp"
     }
   }
 }

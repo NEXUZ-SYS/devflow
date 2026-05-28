@@ -20,14 +20,17 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
 1. Instalar (canônico — pacote Python via pipx): `pipx install mempalace`
    - Fallback sem pipx: `pip install --user mempalace`
    - **Não use `npm`** — o pacote npm antigo (`@mempalace/cli`, `mempalace`) está obsoleto e desatualizado.
-2. Adicionar ao `.mcp.json`:
+2. Adicionar ao `.mcp.json` (console script canônico — **não** use `python -m mempalace.mcp_server`):
    ```json
    "mempalace": {
-     "command": "python",
-     "args": ["-m", "mempalace.mcp_server"]
+     "command": "mempalace-mcp",
+     "args": []
    }
    ```
-3. Reiniciar sessão do Claude Code
+   Alternativa via CLI: `claude mcp add mempalace -- mempalace-mcp`
+3. Inicializar o palace: `mempalace init <project-root>`
+4. Ativar conteúdo (via comandos DevFlow): `/devflow:memory mine` (projeto) e `/devflow:memory mine --convos` (sessões do Claude Code). Carregar contexto com `/devflow:memory wake-up`.
+5. Reiniciar sessão do Claude Code
 
 **Se configurado mas não customizado:**
 - Editar `.context/.devflow.yaml` para personalizar:
