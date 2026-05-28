@@ -353,6 +353,27 @@ Após gerar o arquivo, mostrar ao usuário:
 Para reconfigurar: /devflow config
 ```
 
+### 4.5 Oferecer instalação do hook de auto-mine (opt-in)
+
+**Só executar se** mempalace foi ativado **e** `autoMine` é `post-merge` (default).
+
+O flag `autoMine: post-merge` sozinho **não faz nada** até o git hook `post-merge` ser instalado — instalar mexe no `.git/` do projeto, então é opt-in explícito. Para fechar esse gap sem ser intrusivo, **oferecer** a instalação agora:
+
+```
+AskUserQuestion:
+  question: "Ativar o auto-mine do MemPalace agora? Instala um git hook post-merge que sincroniza a memória do projeto a cada merge/pull na branch protegida."
+  header: "Auto-mine"
+  multiSelect: false
+  options:
+    - label: "Sim, instalar o hook"
+      description: "Roda /devflow:memory install-hook (não-bloqueante, fail-safe, não sobrescreve hook existente)"
+    - label: "Agora não"
+      description: "Deixa só o flag em .devflow.yaml. Instale depois com /devflow:memory install-hook"
+```
+
+- **Se sim:** rodar `bash "$CLAUDE_PLUGIN_ROOT/scripts/install-git-hook.sh" "$(git rev-parse --show-toplevel)"`. Se o instalador avisar sobre um hook `post-merge` alheio, **não** sobrescrever — repassar as instruções de encadeamento que ele imprime.
+- **Se não:** informar que o auto-mine fica inativo até rodar `/devflow:memory install-hook` (ou que `autoMine: off` desativa o flag).
+
 ### 5. Se `.context/.devflow.yaml` já existe
 
 Se o arquivo já existir ao iniciar o skill:
