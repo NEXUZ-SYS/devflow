@@ -49,6 +49,23 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
 
 ---
 
+## Context Doctor & Routines — Manutenção do contexto
+
+**O que é:** `/devflow:doctor` diagnostica e repara a saúde do contexto (config de MCP, MCP desconectados, wings órfãs e drift do MemPalace). `/devflow:routines` agenda manutenção recorrente; o SessionStart sugere rodar quando vence.
+
+**Detecção:** Verificar se `.context/routines.json` existe
+```bash
+test -f .context/routines.json
+```
+
+**Se NÃO configurado:**
+1. Diagnóstico imediato: `/devflow:doctor`
+2. Semear rotinas: rode `/devflow config` (cria `.context/routines.json` com a routine `context-maintenance` = doctor a cada 7d) — ou copie `templates/routines.json` para `.context/`.
+
+**Verificação:** `/devflow:routines list` mostra `context-maintenance`; o SessionStart sugere quando vencida.
+
+---
+
 ## dotcontext MCP (Full Mode)
 
 **O que é:** Habilita agent orchestration, workflow PREVC, análise semântica e sync multi-ferramenta.
