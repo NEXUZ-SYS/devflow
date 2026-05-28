@@ -208,6 +208,25 @@ mempalace status                  # mostra wings/rooms já minerados
 
 > **MemPalace vs Napkin:** Napkin é local (`.context/napkin.md`, curado manualmente), MemPalace é semântico (vector DB, busca por similaridade). Use ambos — Napkin para runbooks curados, MemPalace para histórico automático.
 
+### 2.5.1 Manutenção do contexto — Doctor & Routines
+
+`/devflow:doctor` faz um health-check do contexto e propõe/roda repairs (com confirmação):
+
+```bash
+/devflow:doctor          # diagnostica (read-only)
+/devflow:doctor --fix    # propõe e aplica repairs, com confirmação (destrutivo nunca auto)
+```
+
+Checks: `.mcp.json` válido + comandos resolvíveis no PATH (pega o bug `python`→`mempalace-mcp`), MCP conectados, saúde do MemPalace (**wings órfãs**, **drift de índice** → `mempalace repair`), `.devflow.yaml` presente, e hook `post-merge` instalado se `autoMine: post-merge`.
+
+**Rotinas agendadas** (`/devflow:routines`) automatizam a lembrança: a routine `context-maintenance` (semeada pelo `/devflow config` em `.context/routines.json`) roda `/devflow:doctor` a cada 7 dias. O SessionStart **sugere** rodar quando vence (1x/dia, com snooze) — nunca executa sozinho.
+
+```bash
+/devflow:routines list                       # estado das rotinas
+/devflow:routines run context-maintenance    # roda os prompts da routine
+/devflow:routines snooze context-maintenance 7
+```
+
 ### 2.6 Verificar instalação
 
 ```bash

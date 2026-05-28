@@ -76,6 +76,16 @@ exit 0
 MOCK
 chmod +x "$MOCKBIN/mempalace"
 
+# Isolated bin for the "CLI absent" case: symlinks to ONLY the coreutils the
+# hook needs — crucially WITHOUT mempalace. Using the inherited $PATH here would
+# leave the REAL mempalace (~/.local/bin) reachable and mine the tmp repo into
+# the real palace (the isolation incident this test group fixes).
+ISOLBIN="$TMPROOT/isolbin"
+mkdir -p "$ISOLBIN"
+for tool in bash git grep sed awk basename cat rm mkdir date xargs tr head dirname; do
+  src=$(command -v "$tool" 2>/dev/null) && ln -sf "$src" "$ISOLBIN/$tool"
+done
+
 # Create a throwaway git repo on a given branch with a given .devflow.yaml body.
 # Usage: make_repo <branch> <devflow_yaml_or_empty>
 make_repo() {
@@ -100,8 +110,13 @@ run_hook() {
   local repo="$1" with_mock="$2"
   local calls="$repo/.git/mock-calls.log"
   rm -f "$calls"
-  local path="$PATH"
-  [ "$with_mock" = "yes" ] && path="$MOCKBIN:$PATH"
+  local path
+  if [ "$with_mock" = "yes" ]; then
+    path="$MOCKBIN:$PATH"
+  else
+    # Truly isolated: only coreutils, NO mempalace anywhere on PATH.
+    path="$ISOLBIN"
+  fi
   ( cd "$repo" && MOCK_CALLS_FILE="$calls" PATH="$path" bash "$HOOK_SCRIPT" ) >/dev/null 2>&1
   # Wait up to ~1s for the backgrounded miner to write (positive cases finish in ms).
   local t=0
@@ -128,6 +143,14 @@ out=$(run_hook "$repo" yes)
 assert_empty "no mining on non-protected branch" "$out"
 
 # 3. mempalace not on PATH → no-op, must still exit 0
+# Guard: prove the isolated PATH truly has no mempalace (else the test would
+# silently mine the real palace — the incident this group fixes).
+TESTS_TOTAL=$((TESTS_TOTAL + 1))
+if PATH="$ISOLBIN" command -v mempalace >/dev/null 2>&1; then
+  echo -e "  ${RED}✗${NC} isolated PATH must NOT expose mempalace"; TESTS_FAILED=$((TESTS_FAILED + 1))
+else
+  echo -e "  ${GREEN}✓${NC} isolated PATH has no mempalace (real palace safe)"; TESTS_PASSED=$((TESTS_PASSED + 1))
+fi
 repo=$(make_repo main "$DEVFLOW_ON")
 out=$(run_hook "$repo" no)
 assert_empty "no-op when mempalace CLI is absent" "$out"

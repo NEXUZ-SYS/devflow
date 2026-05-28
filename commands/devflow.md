@@ -42,6 +42,8 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow:adr [new|audit|evolve] <...>  # ADR system
 /devflow:recall <query>                # Search MemPalace
 /devflow:memory <mine|wake-up|status|sweep|sync>  # MemPalace ingest & maintenance
+/devflow:doctor [--fix]                # Diagnose & repair context health (MCP, MemPalace)
+/devflow:routines <list|run|snooze>    # Scheduled maintenance routines
 ```
 
 ## Behavior
@@ -92,6 +94,8 @@ COMMANDS
   /devflow:adr <sub> <args>   ADR system (new/audit/evolve)
   /devflow:recall <query>     Search MemPalace for project memories
   /devflow:memory <sub>       MemPalace ops (mine/wake-up/status/sweep/sync)
+  /devflow:doctor [--fix]     Diagnose & repair context health (MCP, MemPalace)
+  /devflow:routines <sub>     Scheduled maintenance routines (list/run/snooze)
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -239,6 +243,8 @@ QUICK REFERENCE
   Break down a big feature      "break down the X feature"
   Search project memories       /devflow:recall <query>
   Mine/maintain MemPalace        /devflow:memory <mine|wake-up|status|sweep|sync>
+  Check context health           /devflow:doctor [--fix]
+  Schedule maintenance           /devflow:routines <list|run|snooze>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   DevFlow v1.2.0 — https://github.com/NEXUZ-SYS/devflow

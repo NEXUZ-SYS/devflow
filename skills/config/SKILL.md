@@ -374,6 +374,16 @@ AskUserQuestion:
 - **Se sim:** rodar `bash "$CLAUDE_PLUGIN_ROOT/scripts/install-git-hook.sh" "$(git rev-parse --show-toplevel)"`. Se o instalador avisar sobre um hook `post-merge` alheio, **não** sobrescrever — repassar as instruções de encadeamento que ele imprime.
 - **Se não:** informar que o auto-mine fica inativo até rodar `/devflow:memory install-hook` (ou que `autoMine: off` desativa o flag).
 
+### 4.6 Semear rotinas de manutenção (`.context/routines.json`)
+
+Se ainda não existir `.context/routines.json`, criar a partir do template para habilitar o health-check periódico do contexto (`/devflow:doctor` via routine `context-maintenance`):
+
+```bash
+[ -f .context/routines.json ] || cp "$CLAUDE_PLUGIN_ROOT/templates/routines.json" .context/routines.json
+```
+
+O SessionStart passa a **sugerir** rodar `/devflow:routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:routines`.
+
 ### 5. Se `.context/.devflow.yaml` já existe
 
 Se o arquivo já existir ao iniciar o skill:

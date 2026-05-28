@@ -62,6 +62,8 @@ Complete index of all skills across DevFlow, superpowers, and dotcontext. Each s
 | parallel-dispatch | devflow | `devflow:parallel-dispatch` | E | Minimal | Coordinate parallel agent execution |
 | memory-recall | devflow | `devflow:memory-recall` | any | Full | On-demand MemPalace search for project memories and agent diaries |
 | memory-ops | devflow | `devflow:memory-ops` | any | Lite | MemPalace ingest & maintenance (mine, wake-up, status, sweep, sync) scoped to the project wing |
+| doctor | devflow | `devflow:doctor` | any | Lite | Diagnose & repair context health — MCP config/connectivity, MemPalace wings & index — with consent-gated repairs |
+| routines | devflow | `devflow:routines` | any | Lite | Manage & execute scheduled maintenance routines (list/run/snooze); SessionStart suggests when due |
 | skill-creation | devflow | `devflow:skill-creation` | any | Minimal | Create new devflow skills with TDD methodology |
 | prd-generation | devflow | `devflow:prd-generation` | P | Minimal | Generate Product Requirements Documents with product-manager agent |
 
