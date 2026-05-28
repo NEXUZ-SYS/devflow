@@ -21,6 +21,7 @@ Operações do MemPalace (memória semântica persistente): minerar conteúdo no
 /devflow:memory sweep               # minerador tandem — pega transcripts que o mine primário perdeu
 /devflow:memory sync                # prévia de drawers órfãos (gitignored/deletados/movidos)
 /devflow:memory sync --apply        # remove de fato os drawers órfãos da wing do projeto
+/devflow:memory install-hook        # instala o git hook post-merge de auto-mine neste projeto
 ```
 
 ## Behavior
@@ -36,6 +37,7 @@ Operações do MemPalace (memória semântica persistente): minerar conteúdo no
 - `status` — inventário do palace
 - `sweep` — minerador tandem (captura o que o mine primário deixou passar)
 - `sync` — poda drawers órfãos (dry-run por padrão; `--apply` executa a remoção)
+- `install-hook` — instala o git hook `post-merge` que minera o projeto automaticamente a cada merge/pull na branch protegida (cobertura de merges via terminal E via DevFlow). Opt-in explícito (mexe no `.git/` do projeto). Controlado por `mempalace.autoMine` no `.devflow.yaml` (`post-merge` = ativo, default; `off` = desativa sem desinstalar)
 
 ## Examples
 

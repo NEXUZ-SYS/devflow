@@ -16,3 +16,7 @@ Thumbs.db
 .context/harness/
 .context/workflow/.checkpoint/*
 tests/validation/tmp/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json

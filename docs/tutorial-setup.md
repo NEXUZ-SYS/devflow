@@ -181,8 +181,17 @@ mempalace init <project-root>     # detecta rooms/wings pela estrutura de pastas
 /devflow:memory wake-up           # carrega o contexto numa nova sessão
 ```
 
+**Auto-mine contínuo (opcional):** para manter a memória sempre em sincronia com a `main` sem rodar `mine` na mão, instale o git hook `post-merge`:
+```bash
+/devflow:memory install-hook      # minera a wing a cada merge/pull na branch protegida
+```
+- Cobre merges via terminal **e** via DevFlow (autoFinish). Roda em background (não bloqueia o git) e é fail-safe.
+- Controlado por `mempalace.autoMine` no `.devflow.yaml`: `post-merge` (default) ativa, `off` desativa sem desinstalar. Remoção total: `rm .git/hooks/post-merge`.
+- Opt-in explícito: o instalador nunca sobrescreve um hook `post-merge` já existente.
+
 **O que ativa:**
-- Comando `/devflow:memory <sub>` — `mine`, `mine --convos`, `wake-up`, `status`, `sweep`, `sync`
+- Comando `/devflow:memory <sub>` — `mine`, `mine --convos`, `wake-up`, `status`, `sweep`, `sync`, `install-hook`
+- Auto-mine no `post-merge` (opt-in via `install-hook`)
 - Skill `devflow:memory-recall` — busca na memória persistente
 - Comando `/devflow:recall <query>` — consulta rápida de memórias
 - Agente `memory-specialist` — curador/consultor da memória

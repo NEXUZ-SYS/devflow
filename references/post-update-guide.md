@@ -30,13 +30,15 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
    Alternativa via CLI: `claude mcp add mempalace -- mempalace-mcp`
 3. Inicializar o palace: `mempalace init <project-root>`
 4. Ativar conteúdo (via comandos DevFlow): `/devflow:memory mine` (projeto) e `/devflow:memory mine --convos` (sessões do Claude Code). Carregar contexto com `/devflow:memory wake-up`.
-5. Reiniciar sessão do Claude Code
+5. (Opcional) Auto-mine contínuo: `/devflow:memory install-hook` instala o git hook `post-merge` que minera a wing a cada merge/pull na branch protegida (background, fail-safe). Controlado por `mempalace.autoMine` no `.devflow.yaml`.
+6. Reiniciar sessão do Claude Code
 
 **Se configurado mas não customizado:**
 - Editar `.context/.devflow.yaml` para personalizar:
   ```yaml
   mempalace:
     enabled: true
+    autoMine: post-merge # auto-mine no git hook post-merge (off desativa)
     wing: auto          # auto = nome do repo como wing
     budget: 500         # max tokens injetados por sessão
     auto_diary: true    # escrever diário em handoffs de agentes
