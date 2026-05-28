@@ -41,6 +41,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow:sync [docs|agents|skills]     # Update .context/ with current project state
 /devflow:adr [new|audit|evolve] <...>  # ADR system
 /devflow:recall <query>                # Search MemPalace
+/devflow:memory <mine|wake-up|status|sweep|sync>  # MemPalace ingest & maintenance
 ```
 
 ## Behavior
@@ -90,6 +91,7 @@ COMMANDS
   /devflow:sync <scope>       Update only docs, agents, or skills
   /devflow:adr <sub> <args>   ADR system (new/audit/evolve)
   /devflow:recall <query>     Search MemPalace for project memories
+  /devflow:memory <sub>       MemPalace ops (mine/wake-up/status/sweep/sync)
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -236,6 +238,7 @@ QUICK REFERENCE
   Debug a tricky issue          "debug the X issue"
   Break down a big feature      "break down the X feature"
   Search project memories       /devflow:recall <query>
+  Mine/maintain MemPalace        /devflow:memory <mine|wake-up|status|sweep|sync>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   DevFlow v1.2.0 — https://github.com/NEXUZ-SYS/devflow

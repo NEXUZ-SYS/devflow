@@ -232,15 +232,20 @@ AskUserQuestion:
    {
      "mcpServers": {
        "mempalace": {
-         "command": "python",
-         "args": ["-m", "mempalace.mcp_server"]
+         "command": "mempalace-mcp",
+         "args": []
        }
      }
    }
    ```
    Se `.mcp.json` já existe, merge a entry dentro de `mcpServers`. Se não existe, criar com a estrutura completa.
-4. Inicializar palace: `mempalace init ~/.mempalace/palace`
-5. Seguir para P7 e P8
+   (Alternativa equivalente via CLI: `claude mcp add mempalace -- mempalace-mcp`. Não use `python -m mempalace.mcp_server` — o console script `mempalace-mcp` é o entry point canônico e portável.)
+4. Inicializar o palace para o projeto: `mempalace init <project-root>` (detecta rooms/wings pela estrutura de pastas)
+5. Próximos passos de ativação (documentar ao usuário — **não rodar automaticamente**, pois `mine` é lento e grava no palace global `~/.mempalace`):
+   - Minerar o projeto: `/devflow:memory mine` (ou `mempalace mine <project-root>`)
+   - Minerar conversas do Claude Code: `/devflow:memory mine --convos` (ou `mempalace mine ~/.claude/projects/ --mode convos --wing <repo>`)
+   - Carregar contexto numa nova sessão: `/devflow:memory wake-up` (ou `mempalace wake-up --wing <repo>`)
+6. Seguir para P7 e P8
 
 ### 2.4 (opcional) docs-mcp-server — referência de stacks via MCP
 
