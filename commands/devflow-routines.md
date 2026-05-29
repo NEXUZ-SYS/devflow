@@ -1,21 +1,21 @@
 ---
-name: routines
+name: devflow-routines
 description: Manage and run scheduled DevFlow maintenance routines (doctor, custom prompt chains)
 user_invocable: true
 ---
 
-# /devflow:routines
+# /devflow:devflow-routines
 
 Rotinas de manutenção agendadas (file-based). Cada routine tem uma frequência e uma sequência de prompts que acionam commands/skills/agents. O SessionStart **sugere** rodar quando uma routine vence — este comando lista, executa e gerencia.
 
 ## Usage
 
 ```
-/devflow:routines list             # mostra rotinas e estado (vencida / próxima data / off)
-/devflow:routines run <id>         # executa os prompts da routine em sequência
-/devflow:routines snooze <id> <n>  # adia a sugestão por n dias
-/devflow:routines enable <id>      # ativa
-/devflow:routines disable <id>     # desativa (sem remover)
+/devflow:devflow-routines list             # mostra rotinas e estado (vencida / próxima data / off)
+/devflow:devflow-routines run <id>         # executa os prompts da routine em sequência
+/devflow:devflow-routines snooze <id> <n>  # adia a sugestão por n dias
+/devflow:devflow-routines enable <id>      # ativa
+/devflow:devflow-routines disable <id>     # desativa (sem remover)
 ```
 
 ## Behavior
@@ -34,7 +34,7 @@ Rotinas de manutenção agendadas (file-based). Cada routine tem uma frequência
 ## Examples
 
 ```
-/devflow:routines list
-/devflow:routines run context-maintenance
-/devflow:routines snooze context-maintenance 7
+/devflow:devflow-routines list
+/devflow:devflow-routines run context-maintenance
+/devflow:devflow-routines snooze context-maintenance 7
 ```

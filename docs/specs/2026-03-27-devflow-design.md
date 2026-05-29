@@ -136,10 +136,10 @@ Sections: Mission, Responsibilities, Workflow Steps, Skills Integration, Handoff
 
 - `/devflow [description]` — Start a new PREVC workflow (auto-scales)
 - `/devflow scale:X [description]` — Start with explicit scale
-- `/devflow:status` — Show current phase and progress
-- `/devflow:next` — Attempt to advance to next phase (checks gates)
-- `/devflow:dispatch` — List available agents for current phase
-- `/devflow:dispatch <role>` — Dispatch specific agent
+- `/devflow:devflow-status` — Show current phase and progress
+- `/devflow:devflow-next` — Attempt to advance to next phase (checks gates)
+- `/devflow:devflow-dispatch` — List available agents for current phase
+- `/devflow:devflow-dispatch <role>` — Dispatch specific agent
 
 ## 8. File Structure
 

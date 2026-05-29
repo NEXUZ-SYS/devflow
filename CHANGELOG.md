@@ -5,6 +5,34 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] — 2026-05-28
+
+### Changed (breaking, command surface only — reverte o #24)
+
+Restaura o prefixo `devflow-` nos arquivos de comando. Os nomes curtos
+introduzidos na 1.2.0 (`/devflow:status`, `/devflow:sync`, `/devflow:doctor`,
+`/devflow:next`, etc.) colidiam com comandos nativos do Claude Code e de
+outros plugins. Voltando a `commands/devflow-*.md`, a invocação fica
+globalmente única.
+
+**Mapping antigo → novo:**
+
+| 1.5.x | 1.6.0 |
+|-------|-------|
+| `/devflow:adr` | `/devflow:devflow-adr` |
+| `/devflow:dispatch` | `/devflow:devflow-dispatch` |
+| `/devflow:next` | `/devflow:devflow-next` |
+| `/devflow:recall` | `/devflow:devflow-recall` |
+| `/devflow:status` | `/devflow:devflow-status` |
+| `/devflow:sync` | `/devflow:devflow-sync` |
+| `/devflow:memory` | `/devflow:devflow-memory` |
+| `/devflow:doctor` | `/devflow:devflow-doctor` |
+| `/devflow:routines` | `/devflow:devflow-routines` |
+
+O dispatcher principal `/devflow <...>` (init/config/update/prd/language/scale)
+não muda. Atualiza ~43 arquivos (commands, skills, docs, specs, tests, README)
+e o texto de sugestão de routines no hook SessionStart.
+
 ## [1.2.0] — 2026-05-26
 
 ### Changed (breaking, command surface only — no data/config migration needed)
@@ -15,16 +43,16 @@ Mapping:
 
 | Old (until v1.1.1) | New (v1.2.0) |
 |---|---|
-| `/devflow:devflow-dispatch` | `/devflow:dispatch` |
-| `/devflow:devflow-next` | `/devflow:next` |
-| `/devflow:devflow-status` | `/devflow:status` |
-| `/devflow:devflow-sync` | `/devflow:sync` |
-| `/devflow:devflow-adr` | `/devflow:adr` |
-| `/devflow:devflow-recall` | `/devflow:recall` |
+| `/devflow:devflow-dispatch` | `/devflow:devflow-dispatch` |
+| `/devflow:devflow-next` | `/devflow:devflow-next` |
+| `/devflow:devflow-status` | `/devflow:devflow-status` |
+| `/devflow:devflow-sync` | `/devflow:devflow-sync` |
+| `/devflow:devflow-adr` | `/devflow:devflow-adr` |
+| `/devflow:devflow-recall` | `/devflow:devflow-recall` |
 
 `/devflow:devflow` (the help/entry command) is unchanged — only the verb-style commands were renamed.
 
-ADR subcommand syntax updated from `/devflow adr:new` to `/devflow:adr new` (space instead of colon) to match standard plugin command pattern.
+ADR subcommand syntax updated from `/devflow adr:new` to `/devflow:devflow-adr new` (space instead of colon) to match standard plugin command pattern.
 
 Files renamed via `git mv` (history preserved):
 - `commands/devflow-dispatch.md` → `commands/dispatch.md`
@@ -40,7 +68,7 @@ Files renamed via `git mv` (history preserved):
 
 No project state to migrate. Users running v1.1.1 should:
 1. Run `/devflow update` (or the equivalent `claude plugin update`) to fetch the new plugin
-2. Replace any muscle-memory shortcuts: `/devflow:devflow-status` → `/devflow:status`, etc.
+2. Replace any muscle-memory shortcuts: `/devflow:devflow-status` → `/devflow:devflow-status`, etc.
 
 ---
 

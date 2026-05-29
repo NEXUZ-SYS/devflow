@@ -3,7 +3,7 @@
 > **DevFlow workflow:** context-doctor-routines | **Scale:** LARGE | **Phase:** P→R
 > **Spec:** docs/superpowers/specs/2026-05-28-context-doctor-routines.md
 
-**Goal:** Entregar `/devflow:doctor` (diagnóstico + repair guiado da saúde do contexto) e um subsistema de routines file-based que o SessionStart sugere quando vencidas.
+**Goal:** Entregar `/devflow:devflow-doctor` (diagnóstico + repair guiado da saúde do contexto) e um subsistema de routines file-based que o SessionStart sugere quando vencidas.
 
 **Architecture:** Lib de checks plugáveis (bash) + comando/skill doctor; engine de routines (bash) + comando/skill routines + `.context/routines.yaml`; injeção condicional no `hooks/session-start`. Zero deps de runtime; i18n em `locales/`; testes em `tests/hooks/` com mocks e data mockada.
 
@@ -39,7 +39,7 @@
 - [ ] Teste `mempalace-health`: mock `mempalace status` com wing presente / wing `repo.*` órfã / mensagem de drift → repairs R3 (destrutivo) e R4. RED→GREEN.
 - [ ] Teste `devflow-config` + `git-hooks` (R5: autoMine sem hook). RED→GREEN.
 
-## Task Group 4: Comando + skill `/devflow:doctor`
+## Task Group 4: Comando + skill `/devflow:devflow-doctor`
 **Agent:** devops-specialist · **Tests:** unit (bash) + E2E (CLI)
 - [ ] Teste E2E: doctor roda todos os checks num repo tmp e imprime relatório agrupado; `--fix` aplica repair não-destrutivo após confirmação (mock de input); destrutivo exige confirmação e nunca roda em modo não-interativo. RED.
 - [ ] Implementar `skills/doctor/SKILL.md` (orquestra checks, dry-run + confirmação, modelo de consentimento C) e `commands/doctor.md` (thin, `user_invocable`).
@@ -51,7 +51,7 @@
 - [ ] Implementar `scripts/lib/routines.sh` (parse + agenda + record). GREEN.
 - [ ] Template `templates/routines.yaml` com a routine default `context-maintenance` (doctor a cada 7d).
 
-## Task Group 6: Comando + skill `/devflow:routines`
+## Task Group 6: Comando + skill `/devflow:devflow-routines`
 **Agent:** devops-specialist · **Tests:** E2E (CLI)
 - [ ] Teste: `list` mostra estado/vencidas; `run <id>` executa os `prompts[]` em sequência (mock dos alvos command/skill/agent); `snooze`/`enable`/`disable`. RED.
 - [ ] Implementar `skills/routines/SKILL.md` + `commands/routines.md`. GREEN.
@@ -69,7 +69,7 @@
 
 ## Task Group 9: Docs + registro
 **Agent:** documentation-writer · **Tests:** n/a (docs)
-- [ ] `commands/devflow.md` (Related Commands + help + QUICK REFERENCE): `/devflow:doctor` e `/devflow:routines`.
+- [ ] `commands/devflow.md` (Related Commands + help + QUICK REFERENCE): `/devflow:devflow-doctor` e `/devflow:devflow-routines`.
 - [ ] `references/skills-map.md`: skills `doctor` e `routines`.
 - [ ] `docs/tutorial-setup.md` + `references/post-update-guide.md`: seção de manutenção do contexto (doctor + routines + catálogo de repairs).
 - [ ] (Opcional) abrir ADR a partir do spec (decisão do agendador file-based).
@@ -77,7 +77,7 @@
 ## Validação (V) — quando implementar
 - Suíte `tests/hooks/test-doctor.sh`, `test-routines.sh`, `test-session-start-routines.sh` + a correção do TG1, todas verdes.
 - `bash -n` em todos os scripts; revisão de segurança dos repairs destrutivos (R3) pelo security-auditor.
-- E2E real: rodar `/devflow:doctor` neste repo e confirmar que ele detecta os 5 casos canônicos (incl. wings órfãs e drift) sem aplicar nada destrutivo sem confirmação.
+- E2E real: rodar `/devflow:devflow-doctor` neste repo e confirmar que ele detecta os 5 casos canônicos (incl. wings órfãs e drift) sem aplicar nada destrutivo sem confirmação.
 
 ## Confirmação (C) — quando implementar
 - README (histórico de versões) + bump **minor** (nova capability) + PR via `gh` + merge (autoFinish).

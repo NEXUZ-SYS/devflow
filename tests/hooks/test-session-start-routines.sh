@@ -32,7 +32,7 @@ run_hook() { # $1 = workdir, $2 = today
   ( cd "$1" && DEVFLOW_TODAY="$2" CLAUDE_PLUGIN_ROOT="$PROJECT_ROOT" bash "${PROJECT_ROOT}/hooks/session-start" 2>/dev/null || true )
 }
 
-DUE='{"routines":[{"id":"context-maintenance","description":"doctor","enabled":true,"frequency":"7d","nextRun":null,"prompts":[{"type":"command","value":"/devflow:doctor"}]}]}'
+DUE='{"routines":[{"id":"context-maintenance","description":"doctor","enabled":true,"frequency":"7d","nextRun":null,"prompts":[{"type":"command","value":"/devflow:devflow-doctor"}]}]}'
 SNOOZED='{"routines":[{"id":"context-maintenance","enabled":true,"frequency":"7d","nextRun":null,"snoozeUntil":"2026-12-31"}]}'
 FUTURE='{"routines":[{"id":"context-maintenance","enabled":true,"frequency":"7d","nextRun":"2026-12-31"}]}'
 

@@ -1,17 +1,17 @@
 ---
-name: status
+name: devflow-status
 description: Show current PREVC phase, progress, operating mode, and available actions
 user_invocable: true
 ---
 
-# /devflow:status
+# /devflow:devflow-status
 
 Show the current state of the PREVC workflow at a glance.
 
 ## Usage
 
 ```
-/devflow:status
+/devflow:devflow-status
 ```
 
 ## Behavior

@@ -34,7 +34,7 @@ Para cada resultado FAIL/WARN com `repair` não-vazio, em ordem de severidade:
    - `mcp-connectivity` → instruir reconnect no menu `/mcp` (ação do usuário).
    - `mempalace-health` (drift) → rodar `mempalace repair`.
    - `mempalace-health` (wings órfãs) → **DESTRUTIVO**: listar drawers (tools MCP `mempalace_list_drawers`) e remover com `mempalace_delete_drawer` **só após confirmação explícita** de quais wings.
-   - `git-hooks` → `/devflow:memory install-hook`.
+   - `git-hooks` → `/devflow:devflow-memory install-hook`.
 
 ## Step 3: Salvaguardas
 
@@ -45,10 +45,10 @@ Para cada resultado FAIL/WARN com `repair` não-vazio, em ordem de severidade:
 
 ## Step 4: Fechar
 
-Resuma o que foi reparado e o que ficou pendente (ex.: reconnect manual de MCP, restart do Claude Code). Sugira `/devflow:routines` para agendar o doctor periodicamente.
+Resuma o que foi reparado e o que ficou pendente (ex.: reconnect manual de MCP, restart do Claude Code). Sugira `/devflow:devflow-routines` para agendar o doctor periodicamente.
 
 ## Guidelines
 
 - Diagnóstico primeiro, repair depois — sempre com o usuário no controle.
-- Este skill é o motor do check `mempalace-health` que detecta o tipo de problema visto em `/devflow:memory status` (wings órfãs, drift) e propõe `mempalace repair`/limpeza.
+- Este skill é o motor do check `mempalace-health` que detecta o tipo de problema visto em `/devflow:devflow-memory status` (wings órfãs, drift) e propõe `mempalace repair`/limpeza.
 - Novos checks entram em `scripts/lib/doctor.mjs` (array `CHECKS`) — sem tocar este skill.

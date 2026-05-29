@@ -1,6 +1,6 @@
 ---
 name: context-sync
-description: "Use to update existing .context/ docs, agents, and skills with current project state — called by /devflow:sync or automatically by /devflow init when .context/ already exists"
+description: "Use to update existing .context/ docs, agents, and skills with current project state — called by /devflow:devflow-sync or automatically by /devflow init when .context/ already exists"
 ---
 
 # Context Sync
@@ -11,7 +11,7 @@ Atualiza o `.context/` existente com o estado atual do projeto. Diferente do `pr
 
 ## Quando é chamado
 
-- Diretamente via `/devflow:sync`
+- Diretamente via `/devflow:devflow-sync`
 - Automaticamente pelo `/devflow init` quando `.context/docs/` já existe
 
 ## Checklist

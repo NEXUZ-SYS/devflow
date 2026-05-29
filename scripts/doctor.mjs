@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/doctor.mjs — CLI for /devflow:doctor.
+// scripts/doctor.mjs — CLI for /devflow:devflow-doctor.
 // Runs the context-health checks and prints a report (human or --json).
 // Diagnose-only: NEVER applies repairs (the skill drives repairs with consent).
 //

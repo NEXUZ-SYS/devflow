@@ -25,7 +25,7 @@ function repo() {
   writeFileSync(join(dir, ".context", "routines.json"), JSON.stringify({
     routines: [
       { id: "context-maintenance", description: "doctor", enabled: true, frequency: "7d", nextRun: null,
-        prompts: [{ type: "command", value: "/devflow:doctor" }] },
+        prompts: [{ type: "command", value: "/devflow:devflow-doctor" }] },
     ],
   }, null, 2));
   return dir;
