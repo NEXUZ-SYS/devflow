@@ -30,7 +30,7 @@ The plugin provides 32 skills, 16 specialist agent playbooks, 6 CLI commands, an
 | Plugin deps | superpowers (required), dotcontext (optional for Full mode) |
 | Skills | 32 (PREVC phases + bridge + on-demand) |
 | Agents | 16 specialist playbooks |
-| Commands | 6 (`/devflow`, `/devflow:sync`, `/devflow:status`, `/devflow:next`, `/devflow:dispatch`, `/devflow:recall`) |
+| Commands | 6 (`/devflow`, `/devflow:devflow-sync`, `/devflow:devflow-status`, `/devflow:devflow-next`, `/devflow:devflow-dispatch`, `/devflow:devflow-recall`) |
 
 ## Entry Points
 
@@ -53,7 +53,7 @@ DevFlow exports no runtime code. It provides:
 
 ```
 devflow/
-├── commands/           — 6 slash command definitions (/devflow, /devflow:sync, etc.)
+├── commands/           — 6 slash command definitions (/devflow, /devflow:devflow-sync, etc.)
 ├── skills/             — 32 skill directories, each with SKILL.md
 ├── agents/             — 16 specialist agent playbooks (architect, backend, security, memory, etc.)
 ├── templates/          — Scaffold templates for agents, skills, and docs
@@ -100,5 +100,5 @@ Since v0.13.0, DevFlow ships an ADR (Architecture Decision Records) subsystem (t
 - Use `/devflow <description>` to start a PREVC workflow
 - Use `/devflow prd` to generate a product roadmap
 - Use `/devflow adr:new` to register an architectural decision
-- Use `/devflow:dispatch` to see available specialist agents
-- Use `/devflow:sync` to update `.context/` after significant changes
+- Use `/devflow:devflow-dispatch` to see available specialist agents
+- Use `/devflow:devflow-sync` to update `.context/` after significant changes

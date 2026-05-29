@@ -1,11 +1,11 @@
-# Spec — `/devflow:doctor` (Context Health Doctor) + Routines
+# Spec — `/devflow:devflow-doctor` (Context Health Doctor) + Routines
 
 > **Status:** Aprovado (Planning) · **Data:** 2026-05-28 · **Escala:** LARGE
 > **Workflow:** context-doctor-routines · **Entregável deste ciclo:** spec + plano (sem implementação)
 
 ## Objetivo
 
-Dar ao DevFlow um **health-check do contexto** (`/devflow:doctor`) que diagnostica e repara problemas de manutenção (config de MCP, MCP desconectados, saúde do MemPalace), e um **subsistema de routines** file-based que agenda execuções recorrentes e, via SessionStart, **sugere** (nunca executa sozinho) rodar quando vencidas.
+Dar ao DevFlow um **health-check do contexto** (`/devflow:devflow-doctor`) que diagnostica e repara problemas de manutenção (config de MCP, MCP desconectados, saúde do MemPalace), e um **subsistema de routines** file-based que agenda execuções recorrentes e, via SessionStart, **sugere** (nunca executa sozinho) rodar quando vencidas.
 
 ## Problema (motivado por incidentes reais desta sessão)
 
@@ -49,7 +49,7 @@ destructive   # true => exige confirmação extra, nunca auto
 - `devflow-config` — `.context/.devflow.yaml` presente e parseável; chaves essenciais.
 - `git-hooks` — se `mempalace.autoMine: post-merge`, confere se `.git/hooks/post-merge` está instalado (marker DevFlow).
 
-### Componente 2 — `/devflow:doctor` (comando + skill `devflow:doctor`)
+### Componente 2 — `/devflow:devflow-doctor` (comando + skill `devflow:doctor`)
 - `commands/doctor.md` (thin, `user_invocable`) → skill `devflow:doctor`.
 - Roda todos os checks; imprime relatório agrupado por severidade (✓/⚠/✗).
 - Para cada FAIL/WARN com `repair`: mostra diagnóstico + repair proposto, **dry-run**, pede confirmação; **destrutivo nunca auto**.
@@ -66,17 +66,17 @@ destructive   # true => exige confirmação extra, nunca auto
       lastRun: null
       nextRun: 2026-06-04      # calculado; null => vencida já
       prompts:
-        - { type: command, value: "/devflow:doctor" }
+        - { type: command, value: "/devflow:devflow-doctor" }
       # prompts podem encadear: command | skill | agent
   ```
 - Engine: calcula `nextRun = lastRun + frequency`; marca vencidas (`nextRun <= hoje`); grava `lastRun`/recalcula ao rodar.
-- Comando `/devflow:routines [list|run <id>|snooze <id> <dias>|enable/disable <id>]`. `run` executa os `prompts[]` em sequência (cada um aciona o command/skill/agent correspondente).
+- Comando `/devflow:devflow-routines [list|run <id>|snooze <id> <dias>|enable/disable <id>]`. `run` executa os `prompts[]` em sequência (cada um aciona o command/skill/agent correspondente).
 - Default: ships com a routine `context-maintenance` (doctor a cada 7d) ao `/devflow init`/`config`.
 
 ### Componente 4 — SessionStart (`hooks/session-start`)
 - Lê `.context/routines.yaml`; acha rotinas com `nextRun <= hoje` e `enabled`.
 - Respeita **1x/dia** (`lastSuggested` por routine) e **snooze** (`snoozeUntil`).
-- Emite bloco `<DEVFLOW_ROUTINES_DUE>` (i18n) sugerindo `/devflow:routines run <id>`. **Nunca executa.**
+- Emite bloco `<DEVFLOW_ROUTINES_DUE>` (i18n) sugerindo `/devflow:devflow-routines run <id>`. **Nunca executa.**
 - Data atual injetada/mockável (sem `Date.now()` em libs JS; em bash, `date` — nos testes, via variável de ambiente override).
 
 ### Componente 5 — Catálogo de repairs (casos canônicos)
@@ -86,7 +86,7 @@ destructive   # true => exige confirmação extra, nunca auto
 | R2 | MCP desconectado | sugerir reconnect / revisar command/url | não |
 | R3 | wings órfãs `repo.*` no palace | listar + sugerir remoção | **sim** (confirma) |
 | R4 | drift HNSW | sugerir `mempalace repair` | não |
-| R5 | `autoMine` setado sem hook | sugerir `/devflow:memory install-hook` | não |
+| R5 | `autoMine` setado sem hook | sugerir `/devflow:devflow-memory install-hook` | não |
 
 ### i18n
 Mensagens (títulos de check, diagnósticos, bloco de sugestão) em `locales/{en,pt,es}` seguindo o padrão dos hooks existentes.

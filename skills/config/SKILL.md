@@ -208,7 +208,7 @@ AskUserQuestion:
     - label: "1000 tokens"
       description: "Contexto rico — usa mais do context window"
     - label: "Desativar auto-recall"
-      description: "Apenas busca manual via /devflow:recall"
+      description: "Apenas busca manual via /devflow:devflow-recall"
 ```
 
 **Se `HAS_MEMPALACE=false`:**
@@ -242,9 +242,9 @@ AskUserQuestion:
    (Alternativa equivalente via CLI: `claude mcp add mempalace -- mempalace-mcp`. Não use `python -m mempalace.mcp_server` — o console script `mempalace-mcp` é o entry point canônico e portável.)
 4. Inicializar o palace para o projeto: `mempalace init <project-root>` (detecta rooms/wings pela estrutura de pastas)
 5. Próximos passos de ativação (documentar ao usuário — **não rodar automaticamente**, pois `mine` é lento e grava no palace global `~/.mempalace`):
-   - Minerar o projeto: `/devflow:memory mine` (ou `mempalace mine <project-root>`)
-   - Minerar conversas do Claude Code: `/devflow:memory mine --convos` (ou `mempalace mine ~/.claude/projects/ --mode convos --wing <repo>`)
-   - Carregar contexto numa nova sessão: `/devflow:memory wake-up` (ou `mempalace wake-up --wing <repo>`)
+   - Minerar o projeto: `/devflow:devflow-memory mine` (ou `mempalace mine <project-root>`)
+   - Minerar conversas do Claude Code: `/devflow:devflow-memory mine --convos` (ou `mempalace mine ~/.claude/projects/ --mode convos --wing <repo>`)
+   - Carregar contexto numa nova sessão: `/devflow:devflow-memory wake-up` (ou `mempalace wake-up --wing <repo>`)
 6. Seguir para P7 e P8
 
 ### 2.4 (opcional) docs-mcp-server — referência de stacks via MCP
@@ -331,7 +331,7 @@ git:
     budget: <valor>                  # só se diferente de 500
     auto_recall: false               # só se desativado
   ```
-- `autoMine: post-merge` é o default — o hook `post-merge` (instalado via `/devflow:memory install-hook`) só minera quando este valor é `post-merge`; `off` desativa sem desinstalar o hook
+- `autoMine: post-merge` é o default — o hook `post-merge` (instalado via `/devflow:devflow-memory install-hook`) só minera quando este valor é `post-merge`; `off` desativa sem desinstalar o hook
 - `wing: auto` é o default — só incluir se o usuário informar um nome customizado
 - `auto_diary: true` é o default — só incluir se desativado
 
@@ -366,23 +366,23 @@ AskUserQuestion:
   multiSelect: false
   options:
     - label: "Sim, instalar o hook"
-      description: "Roda /devflow:memory install-hook (não-bloqueante, fail-safe, não sobrescreve hook existente)"
+      description: "Roda /devflow:devflow-memory install-hook (não-bloqueante, fail-safe, não sobrescreve hook existente)"
     - label: "Agora não"
-      description: "Deixa só o flag em .devflow.yaml. Instale depois com /devflow:memory install-hook"
+      description: "Deixa só o flag em .devflow.yaml. Instale depois com /devflow:devflow-memory install-hook"
 ```
 
 - **Se sim:** rodar `bash "$CLAUDE_PLUGIN_ROOT/scripts/install-git-hook.sh" "$(git rev-parse --show-toplevel)"`. Se o instalador avisar sobre um hook `post-merge` alheio, **não** sobrescrever — repassar as instruções de encadeamento que ele imprime.
-- **Se não:** informar que o auto-mine fica inativo até rodar `/devflow:memory install-hook` (ou que `autoMine: off` desativa o flag).
+- **Se não:** informar que o auto-mine fica inativo até rodar `/devflow:devflow-memory install-hook` (ou que `autoMine: off` desativa o flag).
 
 ### 4.6 Semear rotinas de manutenção (`.context/routines.json`)
 
-Se ainda não existir `.context/routines.json`, criar a partir do template para habilitar o health-check periódico do contexto (`/devflow:doctor` via routine `context-maintenance`):
+Se ainda não existir `.context/routines.json`, criar a partir do template para habilitar o health-check periódico do contexto (`/devflow:devflow-doctor` via routine `context-maintenance`):
 
 ```bash
 [ -f .context/routines.json ] || cp "$CLAUDE_PLUGIN_ROOT/templates/routines.json" .context/routines.json
 ```
 
-O SessionStart passa a **sugerir** rodar `/devflow:routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:routines`.
+O SessionStart passa a **sugerir** rodar `/devflow:devflow-routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:devflow-routines`.
 
 ### 5. Se `.context/.devflow.yaml` já existe
 

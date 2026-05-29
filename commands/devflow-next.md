@@ -1,17 +1,17 @@
 ---
-name: next
+name: devflow-next
 description: Advance to the next PREVC phase after checking gate requirements
 user_invocable: true
 ---
 
-# /devflow:next
+# /devflow:devflow-next
 
 Advance the workflow to the next phase.
 
 ## Usage
 
 ```
-/devflow:next
+/devflow:devflow-next
 ```
 
 ## Behavior

@@ -1,5 +1,5 @@
 // scripts/lib/doctor.mjs
-// Context-health check registry for /devflow:doctor.
+// Context-health check registry for /devflow:devflow-doctor.
 //
 // Each check is { id, title, severity, destructive, run(ctx) } where run returns
 // { status: OK|WARN|FAIL, diagnosis, repair }. `repair` is a human-runnable
@@ -187,7 +187,7 @@ const gitHooks = {
       return {
         status: "WARN",
         diagnosis: "mempalace.autoMine: post-merge está setado, mas o hook post-merge não está instalado (auto-mine inativo).",
-        repair: "/devflow:memory install-hook",
+        repair: "/devflow:devflow-memory install-hook",
       };
     }
     return { status: "OK", diagnosis: "Hooks coerentes com a configuração.", repair: "" };

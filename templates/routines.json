@@ -10,7 +10,7 @@
       "lastSuggested": null,
       "snoozeUntil": null,
       "prompts": [
-        { "type": "command", "value": "/devflow:doctor" }
+        { "type": "command", "value": "/devflow:devflow-doctor" }
       ]
     }
   ]

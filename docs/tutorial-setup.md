@@ -176,24 +176,24 @@ Ou adicione manualmente ao `.mcp.json` do projeto, dentro de `mcpServers`:
 **Ativar o palace (processo de ativação):**
 ```bash
 mempalace init <project-root>     # detecta rooms/wings pela estrutura de pastas
-/devflow:memory mine              # minera os arquivos do projeto atual
-/devflow:memory mine --convos     # minera sessões do Claude Code (~/.claude/projects/)
-/devflow:memory wake-up           # carrega o contexto numa nova sessão
+/devflow:devflow-memory mine              # minera os arquivos do projeto atual
+/devflow:devflow-memory mine --convos     # minera sessões do Claude Code (~/.claude/projects/)
+/devflow:devflow-memory wake-up           # carrega o contexto numa nova sessão
 ```
 
 **Auto-mine contínuo (opcional):** para manter a memória sempre em sincronia com a `main` sem rodar `mine` na mão, instale o git hook `post-merge`:
 ```bash
-/devflow:memory install-hook      # minera a wing a cada merge/pull na branch protegida
+/devflow:devflow-memory install-hook      # minera a wing a cada merge/pull na branch protegida
 ```
 - Cobre merges via terminal **e** via DevFlow (autoFinish). Roda em background (não bloqueia o git) e é fail-safe.
 - Controlado por `mempalace.autoMine` no `.devflow.yaml`: `post-merge` (default) ativa, `off` desativa sem desinstalar. Remoção total: `rm .git/hooks/post-merge`.
 - Opt-in explícito: o instalador nunca sobrescreve um hook `post-merge` já existente.
 
 **O que ativa:**
-- Comando `/devflow:memory <sub>` — `mine`, `mine --convos`, `wake-up`, `status`, `sweep`, `sync`, `install-hook`
+- Comando `/devflow:devflow-memory <sub>` — `mine`, `mine --convos`, `wake-up`, `status`, `sweep`, `sync`, `install-hook`
 - Auto-mine no `post-merge` (opt-in via `install-hook`)
 - Skill `devflow:memory-recall` — busca na memória persistente
-- Comando `/devflow:recall <query>` — consulta rápida de memórias
+- Comando `/devflow:devflow-recall <query>` — consulta rápida de memórias
 - Agente `memory-specialist` — curador/consultor da memória
 - Auto-recall no SessionStart (injeta memórias relevantes)
 - Diary flush no PreCompact / rehydration no PostCompact
@@ -202,7 +202,7 @@ mempalace init <project-root>     # detecta rooms/wings pela estrutura de pastas
 **Verificar ativação:**
 ```bash
 cat .mcp.json | grep mempalace
-# Deve aparecer a entry; se sim, /devflow:status mostra "MemPalace: true"
+# Deve aparecer a entry; se sim, /devflow:devflow-status mostra "MemPalace: true"
 mempalace status                  # mostra wings/rooms já minerados
 ```
 
@@ -210,21 +210,21 @@ mempalace status                  # mostra wings/rooms já minerados
 
 ### 2.5.1 Manutenção do contexto — Doctor & Routines
 
-`/devflow:doctor` faz um health-check do contexto e propõe/roda repairs (com confirmação):
+`/devflow:devflow-doctor` faz um health-check do contexto e propõe/roda repairs (com confirmação):
 
 ```bash
-/devflow:doctor          # diagnostica (read-only)
-/devflow:doctor --fix    # propõe e aplica repairs, com confirmação (destrutivo nunca auto)
+/devflow:devflow-doctor          # diagnostica (read-only)
+/devflow:devflow-doctor --fix    # propõe e aplica repairs, com confirmação (destrutivo nunca auto)
 ```
 
 Checks: `.mcp.json` válido + comandos resolvíveis no PATH (pega o bug `python`→`mempalace-mcp`), MCP conectados, saúde do MemPalace (**wings órfãs**, **drift de índice** → `mempalace repair`), `.devflow.yaml` presente, e hook `post-merge` instalado se `autoMine: post-merge`.
 
-**Rotinas agendadas** (`/devflow:routines`) automatizam a lembrança: a routine `context-maintenance` (semeada pelo `/devflow config` em `.context/routines.json`) roda `/devflow:doctor` a cada 7 dias. O SessionStart **sugere** rodar quando vence (1x/dia, com snooze) — nunca executa sozinho.
+**Rotinas agendadas** (`/devflow:devflow-routines`) automatizam a lembrança: a routine `context-maintenance` (semeada pelo `/devflow config` em `.context/routines.json`) roda `/devflow:devflow-doctor` a cada 7 dias. O SessionStart **sugere** rodar quando vence (1x/dia, com snooze) — nunca executa sozinho.
 
 ```bash
-/devflow:routines list                       # estado das rotinas
-/devflow:routines run context-maintenance    # roda os prompts da routine
-/devflow:routines snooze context-maintenance 7
+/devflow:devflow-routines list                       # estado das rotinas
+/devflow:devflow-routines run context-maintenance    # roda os prompts da routine
+/devflow:devflow-routines snooze context-maintenance 7
 ```
 
 ### 2.6 Verificar instalação
@@ -339,7 +339,7 @@ Ou diretamente:
 ### 3.5 Verificar o modo ativo
 
 ```
-/devflow:status
+/devflow:devflow-status
 ```
 
 ```
@@ -502,7 +502,7 @@ O DevFlow tem **16 agentes**, cada um com um papel definido:
 | **mobile-specialist** | iOS/Android, offline, bateria, guidelines de plataforma | Execution |
 | **memory-specialist** | Curador/consultor da memória semântica (MemPalace) — recall, diary, handoff | SessionStart, PreCompact, on-demand |
 
-Os agentes são despachados **automaticamente** durante o workflow ou **manualmente** via `/devflow:dispatch`.
+Os agentes são despachados **automaticamente** durante o workflow ou **manualmente** via `/devflow:devflow-dispatch`.
 
 ### 4.6 TDD obrigatório (HARD-GATE)
 
@@ -630,7 +630,7 @@ Isso significa que conversas longas não perdem contexto — quando o Claude com
 **Onde são usados:**
 - **Planning (P)** — `devflow:context-awareness` lê ADRs e injeta no contexto do brainstorming
 - **Validation (V)** — compliance check verifica se o código segue cada ADR ativo
-- **`/devflow:sync`** — re-sincroniza ADRs com estado atual do projeto
+- **`/devflow:devflow-sync`** — re-sincroniza ADRs com estado atual do projeto
 
 ### 4.11 MemPalace — memória semântica persistente
 
@@ -638,8 +638,8 @@ Isso significa que conversas longas não perdem contexto — quando o Claude com
 
 **Comandos:**
 ```
-/devflow:recall <query>        # Busca semântica nas memórias
-/devflow:recall auth decisions # Ex: recupera todas decisões sobre auth
+/devflow:devflow-recall <query>        # Busca semântica nas memórias
+/devflow:devflow-recall auth decisions # Ex: recupera todas decisões sobre auth
 ```
 
 **Auto-recall (SessionStart):**
@@ -655,7 +655,7 @@ Isso significa que conversas longas não perdem contexto — quando o Claude com
 **Agente memory-specialist:**
 - Curador da memória — decide o que indexar (decisões, bugs, convenções)
 - Consultor — agentes consultam antes de decidir (ex: "como resolvemos X antes?")
-- Invocável via `/devflow:dispatch memory-specialist`
+- Invocável via `/devflow:devflow-dispatch memory-specialist`
 
 **Security:** valores YAML sanitizados (sem secrets em memória), config encriptada em repouso quando possível.
 
@@ -878,7 +878,7 @@ O DevFlow verifica que o plano tem steps de teste ANTES de steps de implementaç
 **Gate para avançar:** Spec aprovada + plano escrito + ordenação test-first validada.
 
 ```
-/devflow:next
+/devflow:devflow-next
 → Verificação do gate aprovada. Avançando para R (Review)...
 ```
 
@@ -920,7 +920,7 @@ Prosseguir para Execution? (o AVISO pode ser tratado durante a implementação)
 **Gate:** Todas as revisões passam, nenhum BLOCK finding.
 
 ```
-/devflow:next
+/devflow:devflow-next
 → Avançando para E (Execution)...
 ```
 
@@ -967,7 +967,7 @@ Tarefa 10:   documentation-writer (documentação da API)
 **Gate:** Todas as tasks completas, todos os testes passando, código commitado.
 
 ```
-/devflow:status
+/devflow:devflow-status
 
 Workflow: "Autenticação Completa" (MEDIUM)
   P Planning      ✓ Concluído
@@ -978,7 +978,7 @@ Workflow: "Autenticação Completa" (MEDIUM)
 ```
 
 ```
-/devflow:next
+/devflow:devflow-next
 → Avançando para V (Validation)...
 ```
 
@@ -1053,7 +1053,7 @@ Resultados da auditoria de segurança:
 **Gate:** Tudo passa, incluindo adequação de tipos de teste e ordenação TDD.
 
 ```
-/devflow:next
+/devflow:devflow-next
 → Avançando para C (Confirmation)...
 ```
 
@@ -1447,40 +1447,40 @@ Durante a Execution (fase E), você pode pedir capabilities extras sem sair do w
 
 | Comando | O que faz | Quando usar |
 |---------|-----------|-------------|
-| `/devflow:status` | Mostra fase, progresso, modo e PRD | A qualquer momento |
-| `/devflow:next` | Valida gates e avança de fase | Quando terminar uma fase |
-| `/devflow:dispatch` | Recomenda agente(s) para o contexto | Para ver quem deveria estar trabalhando |
-| `/devflow:dispatch <role>` | Despacha um agente específico | Para forçar um especialista |
-| `/devflow:sync` | Atualiza `.context/` com estado atual | Após mudanças grandes |
-| `/devflow:sync workflow` | Valida e sincroniza `.context/workflow/` | Validar stories.yaml, detectar referências órfãs |
+| `/devflow:devflow-status` | Mostra fase, progresso, modo e PRD | A qualquer momento |
+| `/devflow:devflow-next` | Valida gates e avança de fase | Quando terminar uma fase |
+| `/devflow:devflow-dispatch` | Recomenda agente(s) para o contexto | Para ver quem deveria estar trabalhando |
+| `/devflow:devflow-dispatch <role>` | Despacha um agente específico | Para forçar um especialista |
+| `/devflow:devflow-sync` | Atualiza `.context/` com estado atual | Após mudanças grandes |
+| `/devflow:devflow-sync workflow` | Valida e sincroniza `.context/workflow/` | Validar stories.yaml, detectar referências órfãs |
 | `/devflow prd --status` | Mostra progresso das fases do PRD | Para acompanhar roadmap |
 | `/devflow language` | Configura idioma (en-US, pt-BR, es-ES) | Para mudar idioma das interações |
 | `/devflow update` | Atualiza marketplace + plugins + dotcontext + mostra próximos passos | Manutenção semanal |
-| `/devflow:recall <query>` | Busca semântica na memória (MemPalace) | Recuperar decisões passadas |
+| `/devflow:devflow-recall <query>` | Busca semântica na memória (MemPalace) | Recuperar decisões passadas |
 | `/devflow help` | Referência completa de comandos | Quando esquecer algo |
 
 **Exemplos de navegação durante um workflow:**
 
 ```bash
 # "Em que fase estou?"
-/devflow:status
+/devflow:devflow-status
 → E Execution ● Em Progresso (7/12 tarefas)
 
 # "Posso avançar?"
-/devflow:next
+/devflow:devflow-next
 → ✗ Gate não atendido: 5 tarefas restantes, 2 testes falhando
 
 # (corrige os testes, completa as tarefas)
 
-/devflow:next
+/devflow:devflow-next
 → ✓ Gate aprovado. Avançando para V (Validation)...
 
 # "Quem deveria estar trabalhando agora?"
-/devflow:dispatch
+/devflow:devflow-dispatch
 → Recomendado: test-writer → security-auditor (fase V)
 
 # "Quero o security-auditor especificamente"
-/devflow:dispatch security-auditor
+/devflow:devflow-dispatch security-auditor
 → Carregando playbook: security-auditor.md
 → Executando avaliação OWASP Top 10...
 ```
@@ -1541,32 +1541,32 @@ C (Confirmation):
 
 ```bash
 # Ver recomendação
-/devflow:dispatch
+/devflow:devflow-dispatch
 → Recomendado: backend-specialist → test-writer
 
 # Despachar específico
-/devflow:dispatch database-specialist
+/devflow:devflow-dispatch database-specialist
 → Carregando: database-specialist.md
 → Missão: Design de schema, otimização de queries, migrations seguras
 → Iniciando workflow...
 
 # Disponíveis:
-/devflow:dispatch architect
-/devflow:dispatch product-manager
-/devflow:dispatch feature-developer
-/devflow:dispatch bug-fixer
-/devflow:dispatch code-reviewer
-/devflow:dispatch test-writer
-/devflow:dispatch documentation-writer
-/devflow:dispatch refactoring-specialist
-/devflow:dispatch performance-optimizer
-/devflow:dispatch security-auditor
-/devflow:dispatch backend-specialist
-/devflow:dispatch frontend-specialist
-/devflow:dispatch database-specialist
-/devflow:dispatch devops-specialist
-/devflow:dispatch mobile-specialist
-/devflow:dispatch memory-specialist
+/devflow:devflow-dispatch architect
+/devflow:devflow-dispatch product-manager
+/devflow:devflow-dispatch feature-developer
+/devflow:devflow-dispatch bug-fixer
+/devflow:devflow-dispatch code-reviewer
+/devflow:devflow-dispatch test-writer
+/devflow:devflow-dispatch documentation-writer
+/devflow:devflow-dispatch refactoring-specialist
+/devflow:devflow-dispatch performance-optimizer
+/devflow:devflow-dispatch security-auditor
+/devflow:devflow-dispatch backend-specialist
+/devflow:devflow-dispatch frontend-specialist
+/devflow:devflow-dispatch database-specialist
+/devflow:devflow-dispatch devops-specialist
+/devflow:devflow-dispatch mobile-specialist
+/devflow:devflow-dispatch memory-specialist
 ```
 
 ---
@@ -1578,16 +1578,16 @@ C (Confirmation):
 Após mudanças significativas (novo módulo, mudança de stack, refactoring grande):
 
 ```bash
-/devflow:sync                   # Tudo (docs + agents + skills)
-/devflow:sync docs              # Apenas docs
-/devflow:sync agents            # Apenas agents
-/devflow:sync skills            # Apenas skills
-/devflow:sync workflow          # Validar stories.yaml e .context/workflow/
+/devflow:devflow-sync                   # Tudo (docs + agents + skills)
+/devflow:devflow-sync docs              # Apenas docs
+/devflow:devflow-sync agents            # Apenas agents
+/devflow:devflow-sync skills            # Apenas skills
+/devflow:devflow-sync workflow          # Validar stories.yaml e .context/workflow/
 ```
 
 O sync relê o projeto e atualiza os playbooks com paths, classes e padrões atuais.
 
-**`/devflow:sync workflow`** faz:
+**`/devflow:devflow-sync workflow`** faz:
 - Cria `.context/workflow/` se não existir
 - Valida estrutura do `stories.yaml` (campos obrigatórios, status válidos)
 - Detecta referências órfãs em `blocked_by` (IDs que não existem)
@@ -1609,7 +1609,7 @@ Isso executa em sequência:
    - MemPalace não instalado? → mostra comando de ativação
    - Idioma não definido? → sugere `/devflow language`
    - Git strategy não configurada? → sugere `/devflow config`
-   - `.context/` desatualizado? → sugere `/devflow:sync`
+   - `.context/` desatualizado? → sugere `/devflow:devflow-sync`
 6. Mostra resumo e pede para reiniciar o Claude Code
 
 <details>
@@ -1635,7 +1635,7 @@ claude plugin install devflow@NEXUZ-SYS --scope user
 
 **Após atualizar, sincronize o contexto:**
 ```
-/devflow:sync
+/devflow:devflow-sync
 ```
 
 ---
@@ -1770,7 +1770,7 @@ ls ~/.claude/plugins/cache/NEXUZ-SYS/devflow/
 rm -rf ~/.claude/plugins/cache/NEXUZ-SYS/devflow/0.4.0
 ```
 
-### MemPalace instalado mas `/devflow:recall` não funciona
+### MemPalace instalado mas `/devflow:devflow-recall` não funciona
 
 ```bash
 # 1. Verifique o .mcp.json do projeto
@@ -1786,7 +1786,7 @@ exit
 claude
 
 # 4. Verifique
-/devflow:status   # Deve mostrar "MemPalace: true"
+/devflow:devflow-status   # Deve mostrar "MemPalace: true"
 ```
 
 ### ADRs não aparecem em `.context/adrs/`
@@ -1794,7 +1794,7 @@ claude
 ADRs só são instanciados se você responder "sim" na entrevista do `/devflow init` ou `/devflow prd`. Para instanciar depois:
 
 ```bash
-/devflow:sync adrs
+/devflow:devflow-sync adrs
 # Re-executa a entrevista de guardrails sem refazer o scaffold completo
 ```
 
@@ -1820,14 +1820,14 @@ ADRs só são instanciados se você responder "sim" na entrevista do `/devflow i
 /devflow autonomy:assisted <desc>      # Workflow com execução automática
 /devflow autonomy:autonomous <desc>    # Loop autônomo completo
 /devflow autonomy:autonomous --from-prd  # Autônomo a partir do PRD existente
-/devflow:status                        # Fase atual e progresso
-/devflow:next                          # Avançar de fase
-/devflow:dispatch                      # Recomendar agente
-/devflow:dispatch <role>               # Despachar agente
-/devflow:sync                          # Atualizar .context/
-/devflow:sync docs|agents|skills       # Atualizar parcial
-/devflow:sync workflow                 # Validar workflow e stories.yaml
-/devflow:recall <query>                # Busca semântica na memória (MemPalace)
+/devflow:devflow-status                        # Fase atual e progresso
+/devflow:devflow-next                          # Avançar de fase
+/devflow:devflow-dispatch                      # Recomendar agente
+/devflow:devflow-dispatch <role>               # Despachar agente
+/devflow:devflow-sync                          # Atualizar .context/
+/devflow:devflow-sync docs|agents|skills       # Atualizar parcial
+/devflow:devflow-sync workflow                 # Validar workflow e stories.yaml
+/devflow:devflow-recall <query>                # Busca semântica na memória (MemPalace)
 /napkin "<aprendizado>"                # Adicionar ao runbook de aprendizado
 ```
 
@@ -1844,7 +1844,7 @@ pipx install mempalace                  # opcional, habilita memória semântica
 # Em cada projeto
 cd meu-projeto && claude
 /devflow init
-/devflow:status
+/devflow:devflow-status
 ```
 
 ### Primeiro workflow
@@ -1852,8 +1852,8 @@ cd meu-projeto && claude
 ```bash
 /devflow prd                           # Roadmap (se projeto grande)
 /devflow add minha feature             # Workflow direto
-/devflow:status                        # Acompanhar
-/devflow:next                          # Avançar
+/devflow:devflow-status                        # Acompanhar
+/devflow:devflow-next                          # Avançar
 ```
 
 ### Primeiro loop autônomo
@@ -1861,5 +1861,5 @@ cd meu-projeto && claude
 ```bash
 /devflow prd                                    # Gerar roadmap
 /devflow autonomy:autonomous --from-prd         # Converter PRD em stories e executar
-/devflow:status                                 # Acompanhar progresso
+/devflow:devflow-status                                 # Acompanhar progresso
 ```

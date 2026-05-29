@@ -72,5 +72,5 @@ Instala o git hook `post-merge` que minera o projeto automaticamente sempre que 
 
 - Sempre escope por `--wing` (exceto `status`, que é global por natureza).
 - Não rode `mine --convos` "por garantia" — só quando a flag for passada.
-- Este skill não faz busca semântica — para isso, use `devflow:memory-recall` / `/devflow:recall`.
+- Este skill não faz busca semântica — para isso, use `devflow:memory-recall` / `/devflow:devflow-recall`.
 - Se a wing ainda não existe no palace, oriente rodar `mempalace init <project-root>` primeiro.

@@ -29,8 +29,8 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
    ```
    Alternativa via CLI: `claude mcp add mempalace -- mempalace-mcp`
 3. Inicializar o palace: `mempalace init <project-root>`
-4. Ativar conteúdo (via comandos DevFlow): `/devflow:memory mine` (projeto) e `/devflow:memory mine --convos` (sessões do Claude Code). Carregar contexto com `/devflow:memory wake-up`.
-5. (Opcional) Auto-mine contínuo: `/devflow:memory install-hook` instala o git hook `post-merge` que minera a wing a cada merge/pull na branch protegida (background, fail-safe). Controlado por `mempalace.autoMine` no `.devflow.yaml`.
+4. Ativar conteúdo (via comandos DevFlow): `/devflow:devflow-memory mine` (projeto) e `/devflow:devflow-memory mine --convos` (sessões do Claude Code). Carregar contexto com `/devflow:devflow-memory wake-up`.
+5. (Opcional) Auto-mine contínuo: `/devflow:devflow-memory install-hook` instala o git hook `post-merge` que minera a wing a cada merge/pull na branch protegida (background, fail-safe). Controlado por `mempalace.autoMine` no `.devflow.yaml`.
 6. Reiniciar sessão do Claude Code
 
 **Se configurado mas não customizado:**
@@ -51,7 +51,7 @@ grep -q "mempalace" .mcp.json 2>/dev/null || grep -q "mempalace" ~/.config/claud
 
 ## Context Doctor & Routines — Manutenção do contexto
 
-**O que é:** `/devflow:doctor` diagnostica e repara a saúde do contexto (config de MCP, MCP desconectados, wings órfãs e drift do MemPalace). `/devflow:routines` agenda manutenção recorrente; o SessionStart sugere rodar quando vence.
+**O que é:** `/devflow:devflow-doctor` diagnostica e repara a saúde do contexto (config de MCP, MCP desconectados, wings órfãs e drift do MemPalace). `/devflow:devflow-routines` agenda manutenção recorrente; o SessionStart sugere rodar quando vence.
 
 **Detecção:** Verificar se `.context/routines.json` existe
 ```bash
@@ -59,10 +59,10 @@ test -f .context/routines.json
 ```
 
 **Se NÃO configurado:**
-1. Diagnóstico imediato: `/devflow:doctor`
+1. Diagnóstico imediato: `/devflow:devflow-doctor`
 2. Semear rotinas: rode `/devflow config` (cria `.context/routines.json` com a routine `context-maintenance` = doctor a cada 7d) — ou copie `templates/routines.json` para `.context/`.
 
-**Verificação:** `/devflow:routines list` mostra `context-maintenance`; o SessionStart sugere quando vencida.
+**Verificação:** `/devflow:devflow-routines list` mostra `context-maintenance`; o SessionStart sugere quando vencida.
 
 ---
 

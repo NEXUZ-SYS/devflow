@@ -1,20 +1,20 @@
 ---
-name: sync
+name: devflow-sync
 description: Sync and update .context/ docs, agents, and skills with current project state
 user_invocable: true
 ---
 
-# /devflow:sync
+# /devflow:devflow-sync
 
 Atualiza o `.context/` existente com o estado atual do projeto. Usa dotcontext MCP quando disponível, ou scan standalone.
 
 ## Usage
 
 ```
-/devflow:sync                          # Sync completo (docs + agents + skills)
-/devflow:sync docs                     # Sync apenas docs
-/devflow:sync agents                   # Sync apenas agents
-/devflow:sync skills                   # Sync apenas skills
+/devflow:devflow-sync                          # Sync completo (docs + agents + skills)
+/devflow:devflow-sync docs                     # Sync apenas docs
+/devflow:devflow-sync agents                   # Sync apenas agents
+/devflow:devflow-sync skills                   # Sync apenas skills
 ```
 
 ## Behavior

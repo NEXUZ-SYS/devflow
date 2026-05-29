@@ -262,7 +262,7 @@ if [ -f "${project_root}/.context/routines.json" ] && command -v node >/dev/null
   due_ids=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/routines.mjs" due --ids 2>/dev/null || true)
   if [ -n "$due_ids" ]; then
     due_list=$(printf '%s' "$due_ids" | tr '\n' ' ')
-    rt_text="Rotinas de manutenção DevFlow vencidas: ${due_list}. Sugira ao usuário rodar \`/devflow:routines run <id>\` (a routine context-maintenance roda \`/devflow:doctor\`). Apenas sugira — não execute automaticamente. Para adiar: \`/devflow:routines snooze <id> <dias>\`."
+    rt_text="Rotinas de manutenção DevFlow vencidas: ${due_list}. Sugira ao usuário rodar \`/devflow:devflow-routines run <id>\` (a routine context-maintenance roda \`/devflow:devflow-doctor\`). Apenas sugira — não execute automaticamente. Para adiar: \`/devflow:devflow-routines snooze <id> <dias>\`."
     rt_escaped=$(escape_for_json "$rt_text")
     routines_due_ctx="\\n<DEVFLOW_ROUTINES_DUE>\\n${rt_escaped}\\n</DEVFLOW_ROUTINES_DUE>\\n"
     # Mark each as suggested so it's not re-surfaced again today (1x/day guard).

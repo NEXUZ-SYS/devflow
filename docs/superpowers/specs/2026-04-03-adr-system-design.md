@@ -405,7 +405,7 @@ O README do scaffold inclui instrucoes para o time contribuir com novos template
 | `skills/prevc-planning/SKILL.md` | Step 1 le `.context/docs/adrs/README.md` e aplica guardrails como restricoes |
 | `skills/prevc-validation/SKILL.md` | Adicionar check de compliance com guardrails das ADRs ativas |
 | `skills/context-awareness/SKILL.md` | Incluir `.context/docs/adrs/` no escopo de context gathering |
-| `skills/context-sync/SKILL.md` | Sincronizar indice de ADRs ao rodar `/devflow:sync docs` |
+| `skills/context-sync/SKILL.md` | Sincronizar indice de ADRs ao rodar `/devflow:devflow-sync docs` |
 
 ## Arquivos novos
 

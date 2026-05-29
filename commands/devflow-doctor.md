@@ -1,19 +1,19 @@
 ---
-name: doctor
+name: devflow-doctor
 description: Diagnose and repair the health of the DevFlow context (MCP config, connectivity, MemPalace)
 user_invocable: true
 ---
 
-# /devflow:doctor
+# /devflow:devflow-doctor
 
 Health-check do contexto DevFlow: diagnostica erros de configuração de MCP, servidores MCP desconectados, e problemas de manutenção do MemPalace (wings órfãs, drift de índice) — e propõe/roda os repairs com confirmação.
 
 ## Usage
 
 ```
-/devflow:doctor                # diagnostica tudo e mostra o relatório
-/devflow:doctor --fix          # modo interativo: propõe e aplica repairs (com confirmação)
-/devflow:doctor --check <id>   # roda só um check (ex.: mcp-config-valid)
+/devflow:devflow-doctor                # diagnostica tudo e mostra o relatório
+/devflow:devflow-doctor --fix          # modo interativo: propõe e aplica repairs (com confirmação)
+/devflow:devflow-doctor --check <id>   # roda só um check (ex.: mcp-config-valid)
 ```
 
 ## Behavior
@@ -30,7 +30,7 @@ Health-check do contexto DevFlow: diagnostica erros de configuração de MCP, se
 ## Examples
 
 ```
-/devflow:doctor
-/devflow:doctor --fix
-/devflow:doctor --check mempalace-health
+/devflow:devflow-doctor
+/devflow:devflow-doctor --fix
+/devflow:devflow-doctor --check mempalace-health
 ```

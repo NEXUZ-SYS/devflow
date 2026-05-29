@@ -26,7 +26,7 @@ Apresentar cada routine com estado (VENCIDA / próxima data / off) e seus prompt
    node "$CLAUDE_PLUGIN_ROOT/scripts/routines.mjs" list --json
    ```
 2. Para cada item de `prompts[]` **em ordem**, executar conforme o `type`:
-   - `command` → invocar o slash-command em `value` (ex.: `/devflow:doctor`) com `args`.
+   - `command` → invocar o slash-command em `value` (ex.: `/devflow:devflow-doctor`) com `args`.
    - `skill` → invocar o skill via Skill tool.
    - `agent` → despachar o agente (Agent tool) com a tarefa em `value`/`args`.
 3. Ao concluir todos os prompts, registrar a execução:

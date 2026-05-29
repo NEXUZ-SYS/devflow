@@ -1,27 +1,27 @@
 ---
-name: memory
+name: devflow-memory
 description: Run MemPalace operations — mine, wake-up, status, sweep, sync
 user_invocable: true
 ---
 
-# /devflow:memory
+# /devflow:devflow-memory
 
 Operações do MemPalace (memória semântica persistente): minerar conteúdo no palace, carregar contexto, inspecionar e manter os drawers.
 
-> A **busca** semântica fica em `/devflow:recall <query>`. Este comando cobre as operações de ingestão e manutenção.
+> A **busca** semântica fica em `/devflow:devflow-recall <query>`. Este comando cobre as operações de ingestão e manutenção.
 
 ## Usage
 
 ```
-/devflow:memory mine                # minera os arquivos do projeto atual (wing = repo)
-/devflow:memory mine --convos       # minera sessões do Claude Code (~/.claude/projects/, --mode convos)
-/devflow:memory mine --dry-run      # prévia, sem gravar no palace
-/devflow:memory wake-up             # carrega o contexto L0+L1 da wing do projeto
-/devflow:memory status              # inventário do palace (wings/rooms/drawers)
-/devflow:memory sweep               # minerador tandem — pega transcripts que o mine primário perdeu
-/devflow:memory sync                # prévia de drawers órfãos (gitignored/deletados/movidos)
-/devflow:memory sync --apply        # remove de fato os drawers órfãos da wing do projeto
-/devflow:memory install-hook        # instala o git hook post-merge de auto-mine neste projeto
+/devflow:devflow-memory mine                # minera os arquivos do projeto atual (wing = repo)
+/devflow:devflow-memory mine --convos       # minera sessões do Claude Code (~/.claude/projects/, --mode convos)
+/devflow:devflow-memory mine --dry-run      # prévia, sem gravar no palace
+/devflow:devflow-memory wake-up             # carrega o contexto L0+L1 da wing do projeto
+/devflow:devflow-memory status              # inventário do palace (wings/rooms/drawers)
+/devflow:devflow-memory sweep               # minerador tandem — pega transcripts que o mine primário perdeu
+/devflow:devflow-memory sync                # prévia de drawers órfãos (gitignored/deletados/movidos)
+/devflow:devflow-memory sync --apply        # remove de fato os drawers órfãos da wing do projeto
+/devflow:devflow-memory install-hook        # instala o git hook post-merge de auto-mine neste projeto
 ```
 
 ## Behavior
@@ -42,9 +42,9 @@ Operações do MemPalace (memória semântica persistente): minerar conteúdo no
 ## Examples
 
 ```
-/devflow:memory mine
-/devflow:memory mine --convos
-/devflow:memory wake-up
-/devflow:memory status
-/devflow:memory sync --apply
+/devflow:devflow-memory mine
+/devflow:devflow-memory mine --convos
+/devflow:devflow-memory wake-up
+/devflow:devflow-memory status
+/devflow:devflow-memory sync --apply
 ```

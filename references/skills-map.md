@@ -131,7 +131,7 @@ User runs /devflow "add caching layer"
 | I want to... | Use this skill |
 |--------------|---------------|
 | Initialize DevFlow in a project | `devflow:project-init` or `/devflow init` |
-| Update project context (.context/) | `devflow:context-sync` or `/devflow:sync` |
+| Update project context (.context/) | `devflow:context-sync` or `/devflow:devflow-sync` |
 | Start a new feature | `devflow:prevc-flow` → auto-routes |
 | Fix a bug | `devflow:prevc-flow` scale:QUICK or `devflow:bug-investigation` |
 | Design an API | `devflow:api-design` |
@@ -146,6 +146,6 @@ User runs /devflow "add caching layer"
 | Create a new skill | `devflow:skill-creation` |
 | Generate a PRD / product roadmap | `devflow:prd-generation` or `/devflow prd` |
 | Check git strategy / branch safety | `devflow:git-strategy` |
-| Search project memories | `devflow:memory-recall` or `/devflow:recall` |
+| Search project memories | `devflow:memory-recall` or `/devflow:devflow-recall` |
 | Debug a tricky issue | `superpowers:systematic-debugging` + `devflow:bug-investigation` |
 | Break down a big feature | `devflow:feature-breakdown` |
