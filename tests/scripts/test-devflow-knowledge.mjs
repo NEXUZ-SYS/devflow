@@ -17,10 +17,17 @@ test("devflow-knowledge new: cria doc scaffold a partir do tipo", () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("devflow-knowledge audit: reporta K2 placeholder", () => {
+test("devflow-knowledge audit: reporta K2 placeholder e sai !=0", () => {
   const root = mkdtempSync(join(tmpdir(), "dk-audit-"));
   execFileSync("node", [SCRIPT, "new", "--type=business-vision", "--name=vision", `--project=${root}`], { stdio: "pipe" });
-  const out = execFileSync("node", [SCRIPT, "audit", "--name=vision", `--project=${root}`], { encoding: "utf-8", stdio: "pipe" });
-  assert.match(out, /K2/);
+  let stdout = "", code = 0;
+  try {
+    stdout = execFileSync("node", [SCRIPT, "audit", "--name=vision", `--project=${root}`], { encoding: "utf-8", stdio: "pipe" });
+  } catch (e) {
+    code = e.status;
+    stdout = (e.stdout || "").toString();
+  }
+  assert.equal(code, 1);          // doc com placeholder reprova
+  assert.match(stdout, /K2/);
   rmSync(root, { recursive: true, force: true });
 });

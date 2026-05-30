@@ -123,14 +123,14 @@ function cmdAudit({ flags }) {
   const src = readFileSync(found, "utf-8");
   const { ok, failures } = auditKnowledge(src);
 
-  if (failures.length > 0) {
+  if (!ok) {
     process.stdout.write(failures.join("\n") + "\n");
+    process.exit(1);
   } else {
-    process.stdout.write("ok\n");
+    const docName = flags.name;
+    process.stdout.write(`OK: ${docName} passa K1-K5\n`);
+    process.exit(0);
   }
-
-  // Exit 0 when audit ran successfully (even with failures reported).
-  // Exit 1 only on fatal errors (file not found, parse error — handled above).
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
