@@ -9,7 +9,10 @@ import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { validateSubset } from "./glob.mjs";
+import { contextPaths } from "./context-paths.mjs";
 
+// Legacy constant kept for internal use within this module (refs are still
+// relative to .context/stacks/ regardless of layout version).
 const STACKS_DIR = ".context/stacks";
 const MANIFEST_FILE = "manifest.yaml";
 
@@ -36,7 +39,13 @@ function parseYamlAsManifest(yamlContent) {
 }
 
 export function loadManifest(projectRoot) {
-  const path = join(projectRoot, STACKS_DIR, MANIFEST_FILE);
+  // Canonical manifest location: .context/engineering/stacks/manifest.yaml
+  // Legacy fallback: .context/stacks/manifest.yaml (tolerated during transition).
+  const canonicalPath = join(contextPaths(projectRoot).stacks, MANIFEST_FILE);
+  const legacyPath = join(projectRoot, STACKS_DIR, MANIFEST_FILE);
+  const path = existsSync(canonicalPath) ? canonicalPath
+    : existsSync(legacyPath) ? legacyPath
+    : canonicalPath;  // default to canonical for freshEmpty stub
   if (!existsSync(path)) return freshEmpty();
   let parsed;
   try {
@@ -117,7 +126,12 @@ export function validateManifest(manifest) {
 }
 
 export function hashRef(projectRoot, refRelative) {
-  const path = join(projectRoot, STACKS_DIR, refRelative);
+  // Try canonical path first, then legacy.
+  const canonicalPath = join(contextPaths(projectRoot).stacks, refRelative);
+  const legacyPath = join(projectRoot, STACKS_DIR, refRelative);
+  const path = existsSync(canonicalPath) ? canonicalPath
+    : existsSync(legacyPath) ? legacyPath
+    : canonicalPath;
   if (!existsSync(path)) return null;
   const content = readFileSync(path);
   return createHash("sha256").update(content).digest("hex");
@@ -220,7 +234,8 @@ function serializeManifest(manifest) {
 }
 
 function writeManifest(projectRoot, manifest) {
-  const path = join(projectRoot, STACKS_DIR, MANIFEST_FILE);
+  // Always write to the canonical engineering/stacks path (DDC layout v2).
+  const path = join(contextPaths(projectRoot).stacks, MANIFEST_FILE);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, serializeManifest(manifest));
 }
@@ -228,11 +243,14 @@ function writeManifest(projectRoot, manifest) {
 export function findMissingRefs(projectRoot) {
   const m = loadManifest(projectRoot);
   const missing = [];
+  const stacksCanonical = contextPaths(projectRoot).stacks;
   for (const [name, fw] of Object.entries(m.frameworks || {})) {
     if (fw.skipDocs) continue;
     if (!fw.artisanalRef) continue;
-    const refPath = join(projectRoot, STACKS_DIR, fw.artisanalRef);
-    if (!existsSync(refPath)) {
+    // Check canonical path first, then legacy location.
+    const canonicalRef = join(stacksCanonical, fw.artisanalRef);
+    const legacyRef = join(projectRoot, STACKS_DIR, fw.artisanalRef);
+    if (!existsSync(canonicalRef) && !existsSync(legacyRef)) {
       missing.push({ framework: name, version: fw.version, expected: fw.artisanalRef });
     }
   }

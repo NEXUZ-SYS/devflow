@@ -178,3 +178,26 @@ supersededBy: std-runtime-validation
   assert.deepEqual(result, [], "deprecated:true must be skipped regardless of filename");
   cleanup();
 });
+
+test("loadStandards: finds standard in canonical engineering/standards path", () => {
+  // RED: canonical DDC location is .context/engineering/standards/,
+  // not the legacy .context/standards/. loadStandards must resolve via
+  // resolveReadPaths(root, "standards") so the canonical path is tried.
+  const { root, cleanup } = fixture();
+  const canonicalDir = join(root, ".context", "engineering", "standards");
+  mkdirSync(canonicalDir, { recursive: true });
+  writeFileSync(join(canonicalDir, "std-x.md"), `---
+id: std-x
+description: Canonical engineering standard
+version: 1.0.0
+applyTo: ["src/**/*.ts"]
+weakStandardWarning: true
+---
+
+# std-x
+`);
+  const result = loadStandards(root);
+  assert.equal(result.length, 1, "should find standard at canonical engineering/standards path");
+  assert.equal(result[0].id, "std-x");
+  cleanup();
+});

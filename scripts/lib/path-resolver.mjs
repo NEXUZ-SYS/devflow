@@ -1,23 +1,27 @@
-// scripts/lib/path-resolver.mjs — Semana 0 dual-read helper.
+// scripts/lib/path-resolver.mjs — DDC-aware ADR path resolver.
 //
-// Resolves the canonical ADR save path (.context/adrs/) AND legacy path
-// (.context/docs/adrs/) for transitional dual-read support during v1.0.x
-// and v1.1.x. v1.2 removes legacy support — projects must migrate before then.
+// Resolves the canonical ADR save path (.context/engineering/adrs/) AND all
+// known legacy paths (.context/adrs, .context/docs/adrs) for transitional
+// dual-read support during v1.0.x and v1.1.x.  v1.2 removes legacy support —
+// projects must migrate before then.
+//
+// Uses context-paths.mjs as the single source of truth for the canonical path
+// and the legacy fallback list.
 //
 // All scripts that scan ADRs (adr-update-index, adr-audit, adr-evolve) and
 // hooks/session-start MUST use this helper instead of hardcoded paths.
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { contextPaths, resolveReadPaths } from "./context-paths.mjs";
 
 export function resolveAdrPath(projectRoot) {
-  const newPath = join(projectRoot, ".context", "adrs");
-  const legacyPath = join(projectRoot, ".context", "docs", "adrs");
-  const newExists = existsSync(newPath);
-  const legacyExists = existsSync(legacyPath);
+  const write = contextPaths(projectRoot).adrs;  // .context/engineering/adrs
+  const readPaths = resolveReadPaths(projectRoot, "adrs");  // canonical first, then existing legacies
+  const canonicalExists = existsSync(write);
+  const hasLegacy = readPaths.some(p => p !== write && existsSync(p));
   return {
-    write: newPath,
-    readPaths: [newPath, legacyPath].filter(existsSync),
-    isLegacy: legacyExists && !newExists,
+    write,
+    readPaths,
+    isLegacy: !canonicalExists && hasLegacy,
   };
 }

@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
 import { deriveFirstRefForStandard } from "./standard-refs.mjs";
+import { contextPaths, resolveReadPaths } from "./context-paths.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -40,12 +41,30 @@ export function validateLinterPath(linter, projectRoot) {
 }
 
 function resolveAndCheckSandbox(linterRel, projectRoot) {
+  // SI-4: Allowlist confinement. The canonical machine root is
+  // .context/engineering/standards/machine/ (DDC layout v2). During transition,
+  // the legacy .context/standards/machine/ is also accepted as a valid allowlist
+  // root so that existing linters continue to run without migration.
+  //
   // Linter path is relative to .context/. So linter "standards/machine/foo.js"
   // resolves to <projectRoot>/.context/standards/machine/foo.js.
-  const machineRoot = resolve(projectRoot, ".context", "standards", "machine");
+  const canonicalMachineRoot = resolve(contextPaths(projectRoot).standardsMachine);
+  // Legacy machine root: first resolved read-path for "standards" + "/machine".
+  const standardsReadPaths = resolveReadPaths(projectRoot, "standards");
+  const legacyMachineRoot = resolve(standardsReadPaths.find(p => p !== contextPaths(projectRoot).standards) ?? "", "machine");
+
+  // Determine which allowlist roots are applicable (canonical always; legacy only if it differs).
+  const allowedRoots = [canonicalMachineRoot];
+  if (legacyMachineRoot && legacyMachineRoot !== canonicalMachineRoot) {
+    allowedRoots.push(legacyMachineRoot);
+  }
+
   const candidate = resolve(projectRoot, ".context", linterRel);
 
-  if (!candidate.startsWith(machineRoot + "/") && candidate !== machineRoot) {
+  const withinAllowlist = allowedRoots.some(
+    root => candidate.startsWith(root + "/") || candidate === root
+  );
+  if (!withinAllowlist) {
     return { ok: false, reason: `linter escapes machine/ allowlist: ${candidate}` };
   }
   if (!existsSync(candidate)) {
@@ -57,7 +76,10 @@ function resolveAndCheckSandbox(linterRel, projectRoot) {
   } catch (err) {
     return { ok: false, reason: `realpath failed: ${err.message}` };
   }
-  if (!real.startsWith(machineRoot + "/") && real !== machineRoot) {
+  const realWithinAllowlist = allowedRoots.some(
+    root => real.startsWith(root + "/") || real === root
+  );
+  if (!realWithinAllowlist) {
     return { ok: false, reason: `linter symlink escapes machine/: ${real}` };
   }
   return { ok: true, real };
