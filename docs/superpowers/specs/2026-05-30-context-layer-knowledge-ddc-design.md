@@ -40,10 +40,11 @@ Trazer a camada de conhecimento de 4 níveis do DDC para o DevFlow, com: estrutu
 | D3 | Migração | **Explícita** via `/devflow update migration` (= `/devflow migration`), idempotente — sem dual-read perpétuo |
 | D4 | Escopo do spec | End-to-end: estrutura + migração + loading + produtores |
 | D5 | `.context/docs/` + dotcontext | `docs/` **intocado** (compat); camadas são aditivas e DevFlow-native |
-| D6 | Padrões de engenharia | **Consolidar em Standards** (`devflow:standards`); NÃO criar dirs `architecture/practices/contracts/processes` |
+| D6 | Padrões de engenharia ENFORÇÁVEIS | **Consolidar em Standards** (`devflow:standards`); NÃO criar dirs `architecture/practices/contracts/processes` como mecanismos paralelos |
 | D7 | Mecanismo `knowledge` | **Espelho completo do Standards** (builder `devflow:knowledge` + taxonomia + CREATE/AUDIT + loader) |
 | D8 | Produtores | **Agentes-curadores dedicados** (front door), portados do DDC |
 | D9 | Hooks de enforcement DDC | **Follow-up separado** (out of scope) |
+| D10 | Narrativa de engenharia (descritiva, não-lintável) | **`knowledge` também cobre `engineering/`** — simetria com as 4 camadas; preenche o tipo "descritivo" que a D6 não cobriu, sem mecanismo novo |
 
 ---
 
@@ -66,12 +67,15 @@ Trazer a camada de conhecimento de 4 níveis do DDC para o DevFlow, com: estrutu
 │   ├── incident-response.md  secret-rotation.md  backups.md
 │
 └── engineering/                         ← container · curador/roteador: engineering-context
-    ├── adrs/        (← .context/adrs)        → devflow:adr-builder
-    ├── standards/   (← .context/standards)   → devflow:standards   [absorve rules+contracts+architecture+practices-lintáveis]
+    ├── adrs/        (← .context/adrs)        → devflow:adr-builder        [decisão]
+    ├── standards/   (← .context/standards)   → devflow:standards          [regra enforçável; absorve rules+contracts+architecture+practices-lintáveis]
     │   └── machine/ (linters + archTests)
-    ├── stacks/      (← .context/stacks)      → devflow:scrape-stack-batch
-    └── templates/   (← .context/templates)
+    ├── stacks/      (← .context/stacks)      → devflow:scrape-stack-batch [ref de tecnologia]
+    ├── templates/   (← .context/templates)
+    └── architecture-overview.md  methodology.md   → devflow:knowledge     [narrativa descritiva (D10) · curador: engineering-context]
 ```
+
+> **Os quatro subsistemas DevFlow-native (`adrs/`, `standards/`, `stacks/`, `templates/`) movem para dentro de `engineering/`** — não apenas `adrs` e `stacks`. Além deles, `engineering/` ganha **docs narrativos** (`architecture-overview.md`, `methodology.md`, …) geridos pelo mecanismo `knowledge`, tornando as 4 camadas simétricas: toda camada tem narrativa via `knowledge`; engineering tem, adicionalmente, os mecanismos enforçáveis (Standards/ADRs/Stacks).
 
 ### Regra de ouro de compatibilidade (invariante)
 
@@ -90,21 +94,23 @@ Cada padrão tem **um** jeito consistente de criar e usar — sem sobreposição
 | **Standards** | rules + contracts + architecture + practices-lintáveis + commits | `devflow:standards` | linter PostToolUse + audit S1–S7 |
 | **ADRs** | decisões (por que X sobre Y) | `devflow:adr-builder` | audit 12 checks + gate V |
 | **Stacks** | refs de tecnologia versionada | `devflow:scrape-stack-batch` | pipeline scrape + SI-6 |
-| **Knowledge** (novo) | narrativa business/product/operations | `devflow:knowledge` (espelha standards) | audit de completude + `knowledge-loader` |
+| **Knowledge** (novo) | narrativa de domínio: business + product + operations + **engineering descritivo** (D10) | `devflow:knowledge` (espelha standards) | audit de completude + `knowledge-loader` |
 
 ### 5.1 Consolidação dos padrões de engenharia em Standards (D6)
 
-Os 7 grupos de engenharia do DDC mapeiam para os mecanismos existentes — **não** para novos dirs de conhecimento:
+Os 7 grupos de engenharia do DDC mapeiam para os mecanismos **existentes** — não para novos dirs-mecanismo paralelos. Cada grupo cai numa das três naturezas: **enforçável** (→ Standards), **decisão** (→ ADR), **referência de tecnologia** (→ Stack) ou **narrativa descritiva** (→ knowledge, D10). Os quatro subsistemas (`adrs/`, `standards/`, `stacks/`, `templates/`) vivem em `engineering/`; a narrativa vive como docs `knowledge` em `engineering/`.
 
-| Grupo DDC | É regra operacional lintável? | Home no DevFlow | Ação |
+| Grupo DDC | Natureza | Home no DevFlow | Ação |
 |---|---|---|---|
-| rules | ✅ | Standards (já é) | — |
-| contracts (api, events, schemas, secrets) | ✅ doutrina prescritiva | Standards `category: contracts` | mesclar (taxonomia) |
-| architecture (fsd, hexagonal, ddd) | ✅ via `enforcement.archTest` | Standards `category: architecture` | mesclar (nova categoria) |
-| practices (tdd, bdd, clean-code) | ⚠️ parcial | lintável → Standards (`test-discipline`); disciplina → superpowers + gates PREVC | mesclar o lintável |
-| processes (commits, ci, deploy) | ⚠️ parcial | commits/hygiene → Standards; deploy/release → `operations/` | mesclar o lintável |
-| decisions | ❌ decisão imutável | `engineering/adrs/` | subsistema próprio |
-| stacks | ❌ doc de referência | `engineering/stacks/` | subsistema próprio |
+| rules | enforçável | `engineering/standards/` (já é) | — |
+| contracts (api, events, schemas, secrets) | enforçável (doutrina prescritiva) | `engineering/standards/` `category: contracts` | mesclar (taxonomia) |
+| architecture (fsd, hexagonal, ddd) | **mista** | enforçável → `standards/` `category: architecture` (`archTest`); **descritivo → `engineering/architecture-overview.md` (knowledge)** | mesclar lintável + narrar descritivo |
+| practices (tdd, bdd, clean-code) | **mista** | lintável → `standards/` (`test-discipline`); disciplina execução → superpowers; **adoção descritiva → `engineering/methodology.md` (knowledge)** | mesclar lintável + narrar adoção |
+| processes (commits, ci, deploy) | mista | commits/hygiene → `standards/`; deploy/release → `operations/` | mesclar o lintável |
+| decisions | decisão imutável | `engineering/adrs/` | subsistema próprio |
+| stacks | referência de tecnologia | `engineering/stacks/` | subsistema próprio |
+
+> O que a **D6** matou foi criar `architecture/`+`practices/`+`contracts/`+`processes/` como **4 dirs-mecanismo paralelos** competindo com Standards. A **D10** adiciona apenas a dimensão **descritiva** (o que o DDC chamava de tom "descritivo-contextual") via o mecanismo `knowledge` já existente — sem reabrir a fragmentação. Regra: *enforça* = Standard, *justifica* = ADR, *ensina* = knowledge.
 
 A taxonomia `taxonomy-of-concerns.yaml` já tem o eixo `category` (ex.: `runtime-validation` é `category: contracts`, `test-discipline` é `category: testing`). **Ação:** expandir a taxonomia com a categoria `architecture` e os concerns de contracts/process faltantes (api, events, secrets, commit-hygiene). O usuário cria qualquer padrão de engenharia com `/devflow standards new <concern>` — caminho único.
 
@@ -125,7 +131,7 @@ Frontmatter de um doc de conhecimento:
 ```yaml
 ---
 type: knowledge
-layer: business        # business | product | operations
+layer: business        # business | product | operations | engineering
 name: vision
 description: <1 linha — usada no índice Stage-1>
 activation: always     # always | on-demand
@@ -134,7 +140,7 @@ version: 1.0.0
 ---
 ```
 
-**Defaults sempre-ativas** (herdado do DDC): `business/{vision,glossary,compliance}`, `product/{vision,tone-of-voice,design-system,persona}`. O restante é `on-demand`.
+**Defaults sempre-ativas** (herdado do DDC): `business/{vision,glossary,compliance}`, `product/{vision,tone-of-voice,design-system,persona}`. O restante — incluindo a narrativa de `engineering/` (`architecture-overview`, `methodology`) — é `on-demand` (carregada por relevância de task no PREVC Planning, não a todo turn).
 
 `devflow:knowledge` — builder com modos:
 - **CREATE** — resolve o tipo de doc na `taxonomy-of-knowledge.yaml`, scaffolda o artefato (frontmatter + `sectionTemplate`).
@@ -162,18 +168,21 @@ Portados do DDC (`framework_ddc/.claude/agents/ddc-*`), **genericizados** e adap
 |---|---|---|
 | **business-context** | `business/` | cadeia de coerência vision→icp→business-model→metrics→compliance; ubiquitous language (glossary) |
 | **product-context** | `product/` | ancorado no business como north-star; disciplina de dependências (`Depende de` / `É referenciado por`) |
-| **engineering-context** | `engineering/` (ROTEADOR) | classifica briefing em 1 de 7 tipos e despacha para o mecanismo correto |
+| **engineering-context** | `engineering/` (ROTEADOR + curador da narrativa) | classifica briefing e despacha para o mecanismo correto; **cura diretamente a narrativa de engenharia** (`architecture-overview`, `methodology`) via `devflow:knowledge` |
 | **operations-context** | `operations/` | runbooks de produção; coerência com `processes` de engenharia |
 
 **O roteador `engineering-context`** classifica "quero documentar X" e despacha:
 
 | Tipo classificado | Despacha para |
 |---|---|
-| decisão entre alternativas | `devflow:adr-builder` |
-| regra/contract/architecture/practice-lintável | `devflow:standards` |
-| tecnologia versionada | `devflow:scrape-stack-batch` |
+| decisão entre alternativas ("X em vez de Y porque…") | `devflow:adr-builder` |
+| regra/contract/architecture/practice **lintável** ("sempre/nunca…") | `devflow:standards` |
+| tecnologia versionada ("Next 16") | `devflow:scrape-stack-batch` |
 | disciplina (TDD/BDD execução) | superpowers (ponteiro, não produz artefato) |
+| **narrativa descritiva** ("como o sistema se organiza") | **`devflow:knowledge` → `engineering/`** (cura direta) |
 | fluxo de produção (deploy/release) | `operations-context` |
+
+A árvore de decisão usa o teste das três naturezas (§5.1): *enforça PR* → Standard; *registra trade-off* → ADR; *só ensina a navegar o sistema* → knowledge. Regras de desambiguação herdadas do `ddc-engineering` (ex.: "convenções de modelagem para Firestore" → Standard/contracts, **não** knowledge).
 
 O roteador **não inventa artefato novo** — é o front door que unifica a UX preservando os mecanismos consolidados. Complementa o `devflow:agent-dispatch` (que roteia *tasks de trabalho*, não documentação de contexto).
 
@@ -265,7 +274,7 @@ Validação do lado executor (verificado no repo):
 | `scripts/lib/context-paths.mjs` | lib | keystone — paths canônicos centralizados |
 | `scripts/lib/knowledge-loader.mjs` | lib | carrega/filtra docs de conhecimento |
 | `skills/knowledge-filter/SKILL.md` | skill | injeta conhecimento no PREVC Planning (espelha adr-filter) |
-| `skills/knowledge/SKILL.md` + `references/taxonomy-of-knowledge.yaml` + `scripts/lib/knowledge-from-type.mjs` + `knowledge-audit.mjs` | builder | CREATE/AUDIT de docs de conhecimento |
+| `skills/knowledge/SKILL.md` + `references/taxonomy-of-knowledge.yaml` + `scripts/lib/knowledge-from-type.mjs` + `knowledge-audit.mjs` | builder | CREATE/AUDIT de docs de conhecimento; taxonomia cobre os tipos das 4 camadas (business/product/operations + **engineering narrativo**: `architecture-overview`, `methodology`) |
 | `scripts/devflow-migrate.mjs` + `skills/migration/SKILL.md` | runner | migração idempotente de layout |
 | `agents/{business,product,engineering,operations}-context.md` | agentes | curadores (front door) |
 | expansão `taxonomy-of-concerns.yaml` | dados | categoria `architecture` + concerns faltantes |
