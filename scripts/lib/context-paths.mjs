@@ -41,6 +41,7 @@ const LEGACY = {
   templates: [["templates"]],
 };
 
+// Only keys present in LEGACY get fallback resolution; other keys return [canonical].
 export function resolveReadPaths(projectRoot, key) {
   const p = contextPaths(projectRoot);
   const canonical = p[key];

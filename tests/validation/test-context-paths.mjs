@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
@@ -48,4 +49,8 @@ test("resolveReadPaths: só canonical quando legados ausentes", () => {
   const reads = resolveReadPaths(root, "standards");
   assert.deepEqual(reads, [join(root, ".context", "engineering", "standards")]);
   cleanup();
+});
+
+test("resolveReadPaths: chave desconhecida lança erro", () => {
+  assert.throws(() => resolveReadPaths("/tmp", "nonexistent"), /unknown key 'nonexistent'/);
 });
