@@ -240,6 +240,19 @@ if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context
   fi
 fi
 
+# --- Knowledge index (Stage-1: list knowledge-layer docs for the LLM) ---
+# SI-1 compliant: projectRoot passed as a positional argument to the helper,
+# never interpolated into a `node -e` string.
+
+knowledge_index_context=""
+if command -v node >/dev/null 2>&1; then
+  knowledge_index_raw=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/print-knowledge-index.mjs" "${project_root}" 2>/dev/null || true)
+  if [ -n "$knowledge_index_raw" ]; then
+    ki_escaped=$(escape_for_json "$knowledge_index_raw")
+    knowledge_index_context="\\n${ki_escaped}\\n"
+  fi
+fi
+
 # --- docs-mcp-server recommendation (when project has stacks but MCP not configured) ---
 # When .context/stacks/manifest.yaml exists (project declares libs) but
 # docs-mcp-server is NOT in .mcp.json, emit a recommendation so the user
@@ -408,7 +421,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${docs_mcp_recommendation}\n${routines_due_ctx}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${routines_due_ctx}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
