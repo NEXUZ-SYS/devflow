@@ -100,11 +100,11 @@ test("adr-audit does NOT emit LEGACY warning when ADR is in canonical path", () 
 });
 
 test("adr-audit does NOT emit LEGACY warning when both paths exist", () => {
-  // When .context/adrs/ exists, isLegacy is false even if legacy also exists.
-  // Only "stuck on legacy" projects get the warning.
+  // When .context/engineering/adrs/ (canonical v2) exists, isLegacy is false
+  // even if legacy paths also exist. Only projects with NO canonical dir get the warning.
   const root = mkdtempSync(join(tmpdir(), "adr-both-"));
   try {
-    mkdirSync(join(root, ".context", "adrs"), { recursive: true });
+    mkdirSync(join(root, ".context", "engineering", "adrs"), { recursive: true });
     const adrDir = join(root, ".context", "docs", "adrs");
     mkdirSync(adrDir, { recursive: true });
     const adrFile = join(adrDir, "001-foo-v1.0.0.md");

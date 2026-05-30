@@ -1,17 +1,14 @@
 {
   "active": [
     {
-      "slug": "context-layer-v2",
-      "path": "plans/context-layer-v2.md",
-      "title": "Context Layer v2 Implementation",
-      "summary": "**For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.",
-      "linkedAt": "2026-05-06T21:27:53.920Z",
-      "status": "active",
-      "approval_status": "approved",
-      "approved_at": "2026-05-06T22:53:54.414Z",
-      "approved_by": "reviewer"
+      "slug": "context-layer-knowledge-ddc",
+      "path": "plans/context-layer-knowledge-ddc.md",
+      "title": "Context Layer de Conhecimento DDC",
+      "summary": "Trazer a camada de conhecimento de 4 níveis do DDC (business/product/engineering/operations) para o .context/ do DevFlow: engineering/ como container dos subsistemas (adrs/standards/stacks/templates), consolidação dos padrões de engenharia em Standards, mecanismo knowledge (incl. narrativa de engenharia D10), 4 agentes-curadores como produtores, migração explícita via /devflow update migration, e wiring de carregamento no PREVC — sem quebrar a compatibilidade com o dotcontext. Spec: docs/superpowers/specs/2026-05-30-context-layer-knowledge-ddc-design.md. Plano: docs/superpowers/plans/2026-05-30-context-layer-knowledge-ddc.md.",
+      "linkedAt": "2026-05-30T05:37:14.675Z",
+      "status": "active"
     }
   ],
   "completed": [],
-  "primary": "context-layer-v2"
+  "primary": "context-layer-knowledge-ddc"
 }

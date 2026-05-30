@@ -1,18 +1,24 @@
-// scripts/lib/standards-loader.mjs — load and filter standards from .context/standards/.
+// scripts/lib/standards-loader.mjs — load and filter standards from the
+// canonical .context/engineering/standards/ path (DDC layout v2), with
+// transparent fallback to the legacy .context/standards/ during transition.
 //
 // Used by:
 //   - hooks/post-tool-use (Task 1.3) to find applicable standards for an Edit/Write event
 //   - scripts/devflow-standards.mjs verify (Task 1.4) for static validation
 //
-// Pure node:* — uses scripts/lib/{glob,frontmatter}.mjs primitives. No npm deps.
+// Pure node:* — uses scripts/lib/{glob,frontmatter,context-paths}.mjs primitives. No npm deps.
 
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { matchGlob, validateSubset } from "./glob.mjs";
+import { resolveReadPaths } from "./context-paths.mjs";
 
 export function loadStandards(projectRoot) {
-  const dir = join(projectRoot, ".context", "standards");
+  // Use canonical path first; fall back to legacy locations still present on disk.
+  const readPaths = resolveReadPaths(projectRoot, "standards");
+  // Use the first path that actually exists on disk; default to canonical.
+  const dir = readPaths.find(p => existsSync(p)) ?? readPaths[0];
   if (!existsSync(dir)) return [];
 
   const standards = [];

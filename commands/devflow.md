@@ -58,6 +58,8 @@ Parse the first argument and route to the matching section below. Do NOT treat k
 | `init` | `/devflow init` section | Yes → `devflow:project-init` |
 | `config` | `/devflow config` section | Yes → `devflow:config` |
 | `update` | `/devflow update` section | **No** — runs bash commands directly |
+| `update migration` | `/devflow update` → invoke `devflow:migration` | Yes → `devflow:migration` |
+| `migration` | Alias for `update migration` | Yes → `devflow:migration` |
 | `language` | `/devflow language` section | Yes → `devflow:language` |
 | `prd` | `/devflow prd` section | Yes → `devflow:prd-generation` |
 | `auto` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
@@ -66,6 +68,8 @@ Parse the first argument and route to the matching section below. Do NOT treat k
 | anything else | `/devflow [description]` section | Yes → `devflow:prevc-flow` |
 
 **Critical:** `update` is NOT a task description. It MUST route to the `/devflow update` section and execute shell commands directly. Never invoke `context-sync` or any other skill for `update`.
+
+**Exception:** `update migration` (and the alias `migration`) are special sub-commands that invoke `devflow:migration` directly — they do NOT run through the bash update pipeline.
 
 ### `/devflow help`
 Display the help text below. Output it **exactly as-is** (formatted for terminal). Do not invoke any other skill — just print the help and stop.
@@ -357,6 +361,25 @@ Then show a consolidated "Next Steps" section with only the features that are **
 - Read the guide file from the plugin directory, NOT from the project directory
 
 **If any step fails:** Report the error, continue with the remaining steps, and include the failure in the summary. Do NOT stop on the first failure.
+
+**Step 7 — Structural drift detection:**
+
+After Step 6, read `.context/.layout-version` in the current project directory (if `.context/` exists):
+
+```bash
+LAYOUT_VERSION=""
+[ -f ".context/.layout-version" ] && LAYOUT_VERSION=$(cat ".context/.layout-version" | tr -d '[:space:]')
+```
+
+- If `.context/` does **not** exist: skip this step (no layout to check).
+- If `.context/` exists **and** `LAYOUT_VERSION` is missing or `< 2`: include the following entry in the "Available features" section of the Step 6 output (alongside any other unconfigured features). **Never execute this automatically** — it is always opt-in.
+
+```
+▸ Migração de layout de contexto (v1 → v2) — 4 camadas de conhecimento DDC
+  Para ativar:  /devflow update migration
+```
+
+- If `LAYOUT_VERSION` is already `2`: this entry does NOT appear (already migrated).
 
 **Important:** This command runs shell commands directly. It does NOT invoke any skill.
 

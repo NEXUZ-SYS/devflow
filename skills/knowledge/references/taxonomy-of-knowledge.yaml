@@ -1,0 +1,136 @@
+version: 1.0.0
+generated: 2026-05-30
+license: project-internal
+
+# Catálogo de tipos de doc de conhecimento narrativo por camada (DDC).
+# Usado por devflow:knowledge (CREATE) para scaffold e (AUDIT) para validar layer/owner.
+# Projetos estendem via .context/knowledge.local.yaml.
+
+entries:
+  # ---- business ----
+  - id: business-vision
+    layer: business
+    summary: North-star estratégico — problema, para quem, a aposta, sucesso
+    activation: always
+    owner: business-context
+    sectionTemplate: ["## Por que existimos", "## Para quem", "## A aposta", "## Como é o sucesso"]
+  - id: business-glossary
+    layer: business
+    summary: Ubiquitous language — termo canônico por conceito
+    activation: always
+    owner: business-context
+    sectionTemplate: ["## Termos canônicos", "## Sinônimos depreciados"]
+  - id: business-compliance
+    layer: business
+    summary: Restrições regulatórias/legais que vinculam o produto
+    activation: always
+    owner: business-context
+    sectionTemplate: ["## Regimes aplicáveis", "## Restrições vinculantes", "## Retenção e consentimento"]
+  - id: business-model
+    layer: business
+    summary: Como o valor é criado e capturado
+    activation: on-demand
+    owner: business-context
+    sectionTemplate: ["## Fontes de receita", "## Estrutura de custos", "## Unit economics"]
+  - id: business-metrics
+    layer: business
+    summary: North-star metric + métricas de apoio com fórmulas e metas
+    activation: on-demand
+    owner: business-context
+    sectionTemplate: ["## North-star", "## Métricas de apoio", "## Fórmulas e metas"]
+  - id: business-icp
+    layer: business
+    summary: Ideal Customer Profile + personas (JTBD)
+    activation: on-demand
+    owner: business-context
+    sectionTemplate: ["## Segmentos", "## Jobs-to-be-done", "## Dores e ganhos"]
+
+  # ---- product ----
+  - id: product-vision
+    layer: product
+    summary: North-star de produto — pra que serve, o que faz, o que NÃO faz
+    activation: always
+    owner: product-context
+    sectionTemplate: ["## Visão", "## O que faz", "## O que explicitamente não faz", "## Depende de"]
+  - id: product-design-system
+    layer: product
+    summary: Princípios de UX/visual e tokens
+    activation: always
+    owner: product-context
+    sectionTemplate: ["## Princípios de UX", "## Tokens", "## Acessibilidade"]
+  - id: product-tone-of-voice
+    layer: product
+    summary: Como o produto fala — vocabulário, do/don't
+    activation: always
+    owner: product-context
+    sectionTemplate: ["## Princípios de voz", "## Do / Don't", "## Exemplos de copy"]
+  - id: product-persona
+    layer: product
+    summary: Quem usa, contexto, JTBD, dores
+    activation: always
+    owner: product-context
+    sectionTemplate: ["## Persona", "## Contexto de uso", "## Momento de valor"]
+  - id: product-policies
+    layer: product
+    summary: Regras/restrições de produto (privacidade, termos resumidos)
+    activation: on-demand
+    owner: product-context
+    sectionTemplate: ["## Política", "## O que o produto pode/não pode"]
+
+  # ---- operations ----
+  - id: operations-environments
+    layer: operations
+    summary: Ambientes (dev/staging/prod) — URLs, diferenças, paridade
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Ambientes", "## Paridade", "## Configuração"]
+  - id: operations-deploy
+    layer: operations
+    summary: Pipeline de deploy em produção
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Fluxo de deploy", "## Gates e aprovações"]
+  - id: operations-monitoring
+    layer: operations
+    summary: Observabilidade, dashboards, SLOs, alertas
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Dashboards", "## SLOs", "## Alertas"]
+  - id: operations-rollback
+    layer: operations
+    summary: Procedimento de rollback
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Quando", "## Como", "## Saúde pós-rollback"]
+  - id: operations-incident-response
+    layer: operations
+    summary: Como reagir a incidentes — severidades, comunicação, post-mortem
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Severidades", "## Comunicação", "## Post-mortem"]
+  - id: operations-secret-rotation
+    layer: operations
+    summary: Rotação de credenciais
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Periodicidade", "## Automação", "## Validação"]
+  - id: operations-backups
+    layer: operations
+    summary: Estratégia de backup, RTO/RPO
+    activation: on-demand
+    owner: operations-context
+    sectionTemplate: ["## Periodicidade", "## Retenção", "## Teste de restore"]
+
+  # ---- engineering (narrativa descritiva — D10) ----
+  - id: engineering-architecture-overview
+    layer: engineering
+    summary: Como o sistema se organiza (descritivo) — aponta via @ para Standards que enforçam
+    activation: on-demand
+    owner: engineering-context
+    sectionTemplate: ["## Visão geral da arquitetura", "## Bounded contexts / módulos", "## Fluxos de dados", "## Standards que enforçam"]
+  - id: engineering-methodology
+    layer: engineering
+    summary: Quais disciplinas o projeto adota e onde (aponta p/ superpowers)
+    activation: on-demand
+    owner: engineering-context
+    sectionTemplate: ["## Disciplinas adotadas", "## Onde se aplicam / exceções", "## Skills de apoio"]
