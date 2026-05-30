@@ -14,7 +14,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Loop autônomo** — execução story-by-story com contexto fresco, escalação automática e retry inteligente
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
-- **18 agentes especialistas** — architect, product-manager, business-context, product-context, backend, frontend, security-auditor, memory-specialist e mais
+- **20 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
 - **32 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, memory-recall...
 - **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
 - **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
@@ -38,7 +38,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 │    (disciplina)     │    (contexto + workflow)         │
 ├────────────────────┼─────────────────────────────────┤
 │ brainstorming       │ fases PREVC                     │
-│ TDD iron law        │ 17 agentes via MCP              │
+│ TDD iron law        │ 20 agentes via MCP              │
 │ SDD (subagents)     │ análise semântica               │
 │ code review 2x      │ gestão de planos                │
 │ anti-racional.      │ sync multi-tool                 │
@@ -138,6 +138,90 @@ de design e cobertura de testes (55 tests, 27 novos arquivos).
 
 ---
 
+## Camada de Conhecimento DDC (v1.8)
+
+A partir da v1.8, o `.context/` adota um layout DDC de 4 níveis que transforma o
+contexto de projeto em **memória narrativa consultável** durante o PREVC.
+
+### Árvore `.context/` com DDC
+
+```
+.context/
+├── business/         # visão, ICP, métricas, glossário, compliance, modelo de negócio
+├── product/          # visão, persona, tom de voz, design system, políticas
+├── operations/       # runbooks, on-call, SLOs, infra configs
+└── engineering/      # container único dos subsistemas técnicos
+    ├── adrs/         # ADRs (path canônico re-canonicalizado de .context/adrs/ por ADR-006)
+    ├── standards/    # standards tripla-camada (ADR-002)
+    ├── stacks/       # pipeline artesanal de docs (ADR-003)
+    └── templates/    # templates de scaffolding
+```
+
+**Por que `engineering/` como container:** garante que hooks e scripts lêem um
+path determinístico; `context-paths.mjs` é o keystone — nenhum script hardcoda
+paths, sempre consulta esse módulo.
+
+### Os 4 mecanismos de contexto
+
+| Mecanismo | Como usar | Quando usar |
+|---|---|---|
+| **Standards** | `devflow standards new <concern>` | Guardrails LLM para concerns operacionais (ex: `runtime-validation`) |
+| **ADRs** | `/devflow:devflow-adr new` | Decisões de arquitetura com impacto duradouro |
+| **Stacks** | `devflow stacks scrape-batch --from-package` | Docs de libraries consultáveis offline |
+| **Knowledge** | `devflow:knowledge` skill (CREATE/AUDIT) | Narrativa de domínio (visão, ICP, personas, infra) |
+
+O mecanismo **Knowledge** é novo na v1.8: a skill `devflow:knowledge` scaffolda
+e audita docs narrativos em `.context/<layer>/` via CLI:
+
+```bash
+node scripts/devflow-knowledge.mjs new --type=<type-id> --name=<name> --project=<path>
+node scripts/devflow-knowledge.mjs audit --name=<name> --project=<path>
+```
+
+### Os 4 agentes-curadores
+
+Cada camada tem um agente responsável pela sua manutenção. Eles são o _front
+door_ para escrita no `.context/` — nunca escreva nas pastas de camada
+diretamente sem passar por um curador.
+
+| Agente | Camada | Responsabilidade |
+|---|---|---|
+| `business-context` | `.context/business/` | Visão estratégica, ICP, métricas, glossário, compliance |
+| `product-context` | `.context/product/` | Visão de produto, persona, tom de voz, design system, políticas |
+| `operations-context` | `.context/operations/` | Runbooks, on-call, SLOs, configurações de infra |
+| `engineering-context` | `.context/engineering/` | Arquitetura, subsistemas, roteamento de briefings técnicos |
+
+### Migração do layout legado
+
+Se o projeto usa o layout anterior (`.context/adrs/`, `.context/standards/`,
+`.context/stacks/` na raiz do `.context/`), migre para o container `engineering/`:
+
+```bash
+/devflow update migration
+# ou equivalente:
+/devflow migration
+```
+
+O comando invoca `devflow:migration`, que reloca os subsistemas para
+`.context/engineering/` e reescreve todas as cross-references sem perder histórico.
+
+### Integração com PREVC e hooks
+
+- **SessionStart** injeta `KNOWLEDGE_INDEX` — mapa de cross-references das camadas
+  gerado por `scripts/lib/print-knowledge-index.mjs` — carregado 1x por sessão.
+- **PreToolUse** injeta os corpos de knowledge relevantes ao arquivo em edição
+  (`scripts/lib/print-knowledge-bodies.mjs`) — recuperação on-demand.
+- **prevc-planning Step 1** usa o `devflow:knowledge-filter` para selecionar
+  apenas os docs de camada relevantes à task antes de entrar no brainstorming.
+
+**Compatibilidade com dotcontext:** os diretórios gerenciados pelo dotcontext
+(`docs/`, `agents/`, `skills/`, `plans/`) não são tocados pelo DDC.
+
+Ver `.context/engineering/adrs/006-context-layer-knowledge-ddc-v1.0.0.md` para
+o design completo e rationale.
+
+---
+
 ## Histórico de Versões
 
 | Versão | Data | Destaques |
@@ -192,7 +276,7 @@ de design e cobertura de testes (55 tests, 27 novos arquivos).
 devflow/
 ├── commands/         # 6 commands: /devflow, /devflow:devflow-sync, /devflow:devflow-status, /devflow:devflow-next, /devflow:devflow-dispatch, /devflow:devflow-recall
 ├── skills/           # 32 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
-├── agents/           # 18 playbooks de agentes (inclui memory-specialist, business-context, product-context)
+├── agents/           # 20 playbooks de agentes (inclui memory-specialist, business-context, product-context, engineering-context, operations-context)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n

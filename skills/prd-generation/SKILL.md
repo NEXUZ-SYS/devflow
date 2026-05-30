@@ -450,9 +450,7 @@ Invoke `devflow:knowledge` to trigger the `business-context` curator, which writ
 
 Pass the PRD content as input context so the curator does not re-interview the user.
 
-```
-knowledge({ action: "fill", curator: "business-context", source: ".context/plans/<project>-prd.md" })
-```
+Invoke the `business-context` agent, which uses the `devflow:knowledge` skill (CLI: `node scripts/devflow-knowledge.mjs new --type=<id> --name=<name> --project=<path>`) to scaffold and populate the layer docs from the PRD source.
 
 ### product-context curator
 
@@ -463,9 +461,7 @@ Invoke `devflow:knowledge` to trigger the `product-context` curator, which write
 - `.context/product/tone-of-voice.md` — communication and brand guidelines (infer from context; leave as draft if not enough signal)
 - `.context/product/policies.md` — product policies and constraints collected during the interview
 
-```
-knowledge({ action: "fill", curator: "product-context", source: ".context/plans/<project>-prd.md" })
-```
+Invoke the `product-context` agent, which uses the `devflow:knowledge` skill (CLI: `node scripts/devflow-knowledge.mjs new --type=<id> --name=<name> --project=<path>`) to scaffold and populate the layer docs from the PRD source.
 
 ### Fallback (Lite/Minimal mode)
 

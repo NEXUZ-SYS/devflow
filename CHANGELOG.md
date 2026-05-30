@@ -5,6 +5,47 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-05-30
+
+### Added — Camada de Conhecimento DDC (4 níveis, mecanismo knowledge, 4 curadores)
+
+**Layout DDC no `.context/`** — O `.context/` adota 4 dimensões de conhecimento narrativo
+(`business/`, `product/`, `operations/`, `engineering/`) separadas dos diretórios gerenciados
+pelo dotcontext (`docs/`, `agents/`, `skills/`, `plans/`, que permanecem intactos).
+
+**`engineering/` como container** — Os subsistemas técnicos (`adrs/`, `standards/`, `stacks/`,
+`templates/`) migram para `.context/engineering/`, garantindo path determinístico para hooks e
+scripts. `context-paths.mjs` é o keystone: nenhum script hardcoda paths. ADR-006 re-canonicaliza
+o path de ADRs de `.context/adrs/` para `.context/engineering/adrs/` (refina ADR-001).
+
+**Mecanismo Knowledge** — Nova skill `devflow:knowledge` (modos CREATE e AUDIT) scaffolda e
+audita docs narrativos de domínio (visão, ICP, personas, infra). CLI:
+`devflow-knowledge.mjs new --type=<id> --name=<name> --project=<path>` e
+`devflow-knowledge.mjs audit --name=<name> --project=<path>`.
+
+**4 agentes-curadores** — `business-context`, `product-context`, `operations-context` e
+`engineering-context` são os front doors de escrita nas camadas de conhecimento. Os dois últimos
+são novos (18 → 20 agentes). Os orquestradores `prd-generation`, `project-init` e `context-sync`
+delegam para esses agentes em vez de invocar APIs inexistentes.
+
+**Migração explícita** — `/devflow update migration` (alias `/devflow migration`) invoca
+`devflow:migration` para relocar subsistemas legados para `engineering/` e reescrever
+cross-references. É um comando explícito opt-in — nenhum hook move arquivos automaticamente.
+
+**Integração PREVC + hooks:**
+- SessionStart injeta `KNOWLEDGE_INDEX` via `print-knowledge-index.mjs` (1x/sessão, cache-friendly).
+- PreToolUse injeta corpos de knowledge relevantes ao arquivo em edição via `print-knowledge-bodies.mjs` (Stage-2, on-demand).
+- `prevc-planning` Step 1 usa `devflow:knowledge-filter` para selecionar docs relevantes à task.
+
+**ADR-006** — `.context/engineering/adrs/006-context-layer-knowledge-ddc-v1.0.0.md` documenta
+a decisão completa com guardrails SEMPRE/NUNCA/QUANDO.
+
+**Não afetado:** diretórios dotcontext (`docs/`, `agents/`, `skills/`, `plans/`), hooks de
+branch protection, pipeline PREVC de finalização, sistema de ADRs e standards existentes.
+
+**Follow-up conhecido (T20):** hook anti-bypass que detecta edições diretas nas pastas de camada
+sem passar pelo curador correspondente — registrado como plan futuro.
+
 ## [1.6.0] — 2026-05-28
 
 ### Changed (breaking, command surface only — reverte o #24)

@@ -603,12 +603,12 @@ Do not attempt the move inline — `devflow:migration` handles rewriting all cro
 
 After creating the directories, delegate initial content filling via `devflow:knowledge`:
 
-```
-knowledge({ action: "init", curator: "business-context" })
-knowledge({ action: "init", curator: "product-context" })
-knowledge({ action: "init", curator: "operations-context" })
-knowledge({ action: "init", curator: "engineering-context" })
-```
+Invoke each curator agent in sequence. Each agent uses the `devflow:knowledge` skill (CLI: `node scripts/devflow-knowledge.mjs new --type=<id> --name=<name> --project=<path>`) to scaffold its layer docs:
+
+- `business-context` agent — scaffolds `.context/business/` docs
+- `product-context` agent — scaffolds `.context/product/` docs
+- `operations-context` agent — scaffolds `.context/operations/` docs
+- `engineering-context` agent — scaffolds `.context/engineering/` docs
 
 Each curator will scaffold its own files with `status: unfilled` if no source context is available, or attempt to fill from existing project signals (README, package.json, existing docs, git history).
 

@@ -215,12 +215,12 @@ Re-sync each knowledge layer by delegating to its curator agent via `devflow:kno
 
 ### Delegação por curador
 
-```
-knowledge({ action: "refresh", curator: "business-context" })
-knowledge({ action: "refresh", curator: "product-context" })
-knowledge({ action: "refresh", curator: "operations-context" })
-knowledge({ action: "refresh", curator: "engineering-context" })
-```
+Invoke each curator agent to refresh its layer. Each agent uses the `devflow:knowledge` skill in AUDIT mode (CLI: `node scripts/devflow-knowledge.mjs audit --name=<name> --project=<path>`) to detect stale docs and re-scaffold or prompt for update:
+
+- `business-context` agent — refreshes `.context/business/` docs
+- `product-context` agent — refreshes `.context/product/` docs
+- `operations-context` agent — refreshes `.context/operations/` docs
+- `engineering-context` agent — refreshes `.context/engineering/` docs
 
 Cada curador é responsável por:
 
@@ -237,11 +237,9 @@ Os curadores devem ler sinais atuais do projeto (commits recentes, PRDs, specs, 
 
 Após todos os curadores concluírem, regenerar o índice centralizado:
 
-```
-knowledge({ action: "index" })
-```
+O índice de conhecimento é gerado automaticamente pelo hook SessionStart via `scripts/lib/print-knowledge-index.mjs` (função `loadKnowledgeIndex`) e injetado como `KNOWLEDGE_INDEX` no contexto da sessão. Não há MCP tool para essa operação — o índice reflete o estado atual do `.context/` em tempo real a cada sessão.
 
-Isso atualiza `.context/knowledge-index.md` — um mapa de cross-referências entre camadas que agentes PREVC consultam durante o Planning phase.
+`.context/knowledge-index.md` pode ser mantido como artefato conceitual de referência, mas seu conteúdo efetivo é o KNOWLEDGE_INDEX injetado no SessionStart — agentes PREVC consultam esse índice durante o Planning phase.
 
 ### Fallback (Lite/Minimal mode)
 
