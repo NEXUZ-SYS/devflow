@@ -68,6 +68,24 @@ After gathering base context, check for active ADRs:
 
 **Hierarchy:** Project ADRs (`scope: project`) override Organizational ADRs (`scope: organizational`) for the same topic.
 
+### All Modes — Knowledge Layer Loading (filtered by task)
+
+After loading ADR guardrails, check for a knowledge layer:
+
+1. Check if any of the following directories exist: `.context/business/`, `.context/product/`, `.context/operations/`, or engineering narrative docs in `.context/engineering/`. If none exist, continue without knowledge context (the knowledge layer is opt-in).
+
+2. If yes, **invoke `devflow:knowledge-filter`** passing the current task description. That skill:
+   - Loads the knowledge index
+   - Always includes docs with `activation: always` (business/product vision, glossary, compliance, tone, design-system, persona)
+   - Adds `on-demand` docs whose layer or keywords match the task description
+   - Emits a focused `<KNOWLEDGE filtered="true">` block with the selected docs' bodies
+
+3. Collect the filtered knowledge as context for the brainstorming process. Announce: "Loaded N knowledge docs (M always-active + K task-relevant)."
+
+**Note:** Knowledge docs inform the design — they provide the "why we exist / what the product promises / how it runs" context. They are descriptive, not hard constraints like ADR guardrails. Use them to ground proposals in business reality, not to block options.
+
+**Fallback:** If `devflow:knowledge-filter` is unavailable (e.g., installation incomplete), fall back to loading only docs with `activation: always` — correctness over optimization.
+
 ## Step 2: Brainstorming
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:brainstorming`
