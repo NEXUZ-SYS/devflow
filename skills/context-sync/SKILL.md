@@ -17,8 +17,9 @@ Atualiza o `.context/` existente com o estado atual do projeto. Diferente do `pr
 ## Checklist
 
 1. **Detectar modo** — Full (MCP), Lite (.context/), ou Minimal
-2. **Identificar escopo** — sync completo ou parcial (docs/agents/skills)
+2. **Identificar escopo** — sync completo ou parcial (docs/agents/skills/knowledge)
 3. **Executar sync** — atualizar usando dotcontext MCP ou scan standalone
+3e. **Re-sync camadas de conhecimento** — delegar a cada curador (business-context, product-context, operations-context, engineering-context) e regenerar índice de conhecimento
 4. **Reportar** — listar o que foi atualizado
 
 ## Step 1: Detectar Modo
@@ -37,11 +38,12 @@ O argumento do comando define o escopo:
 
 | Argumento | Escopo | Diretórios |
 |-----------|--------|------------|
-| (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/` |
+| (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/`, + todas as camadas de conhecimento |
 | `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/adrs/` |
 | `agents` | Apenas agents | `.context/agents/` |
 | `skills` | Apenas skills | `.context/skills/` |
 | `workflow` | Apenas workflow | `.context/workflow/` |
+| `knowledge` | Apenas camadas de conhecimento | `.context/business/`, `.context/product/`, `.context/operations/`, `.context/engineering/` |
 
 ## Step 3a: Sync via dotcontext MCP (Full Mode)
 
@@ -201,6 +203,64 @@ Update `.context/adrs/README.md` to reflect current ADR state.
 - Total guardrails: [count]
 ```
 
+## Step 3e: Re-sync Knowledge Layers
+
+Re-sync each knowledge layer by delegating to its curator agent via `devflow:knowledge`. Execute when the scope is `knowledge` or `(nenhum)` (sync completo).
+
+### Quando executar
+
+- Sync completo (`(nenhum)` argumento) → sempre incluir esta etapa
+- Argumento `knowledge` → executar apenas esta etapa
+- Argumentos `docs`, `agents`, `skills`, `workflow` → pular (escopo não inclui knowledge layers)
+
+### Delegação por curador
+
+```
+knowledge({ action: "refresh", curator: "business-context" })
+knowledge({ action: "refresh", curator: "product-context" })
+knowledge({ action: "refresh", curator: "operations-context" })
+knowledge({ action: "refresh", curator: "engineering-context" })
+```
+
+Cada curador é responsável por:
+
+| Curador | Diretório | Arquivos mantidos |
+|---|---|---|
+| `business-context` | `.context/business/` | vision.md, icp.md, metrics.md |
+| `product-context` | `.context/product/` | vision.md, persona.md, tone-of-voice.md, policies.md |
+| `operations-context` | `.context/operations/` | runbooks, on-call, SLOs, infra configs |
+| `engineering-context` | `.context/engineering/` | architecture.md, standards/, subsystems/ |
+
+Os curadores devem ler sinais atuais do projeto (commits recentes, PRDs, specs, ADRs, docs existentes) para atualizar seus respectivos arquivos sem re-entrevistar o usuário, a menos que detectem lacunas críticas.
+
+### Regenerar índice de conhecimento
+
+Após todos os curadores concluírem, regenerar o índice centralizado:
+
+```
+knowledge({ action: "index" })
+```
+
+Isso atualiza `.context/knowledge-index.md` — um mapa de cross-referências entre camadas que agentes PREVC consultam durante o Planning phase.
+
+### Fallback (Lite/Minimal mode)
+
+Se `devflow:knowledge` não estiver disponível:
+1. Para cada diretório de camada existente, fazer scan dos arquivos `.md`
+2. Comparar `generated:` date com data atual — se defasado mais de 30 dias, marcar como `status: stale`
+3. Listar no relatório os arquivos stale com sugestão: "Run `/devflow:knowledge refresh` to update."
+
+### Report para knowledge scope
+
+```markdown
+### Knowledge Layers
+- .context/business/  — [N arquivos atualizados | stale | não encontrado]
+- .context/product/   — [N arquivos atualizados | stale | não encontrado]
+- .context/operations/— [N arquivos atualizados | stale | não encontrado]
+- .context/engineering/— [N arquivos atualizados | stale | não encontrado]
+- .context/knowledge-index.md — [regenerado | atualizado | não disponível]
+```
+
 ## Anti-Patterns
 
 | Pattern | Problema |
@@ -209,3 +269,5 @@ Update `.context/adrs/README.md` to reflect current ADR state.
 | Apagar e recriar | Perde customizações manuais no frontmatter |
 | Sync parcial sem reportar | Usuário não sabe o que mudou |
 | Ignorar erros de fillSingle | Arquivo fica com conteúdo stale sem aviso |
+| Re-sintetizar knowledge layers inline | Delegar sempre ao curador correto — ele conhece o esquema e as regras de cada camada |
+| Mover diretórios dotcontext-gerenciados | `docs/`, `agents/`, `skills/`, `plans/` são intocáveis pelo sync — apenas knowledge layers e subsystems engineering/ são reposicionáveis via `devflow:migration` |

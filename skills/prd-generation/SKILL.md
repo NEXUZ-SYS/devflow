@@ -29,8 +29,9 @@ You MUST create a task for each of these items and complete them in order:
 8. **Decompose into phases** — invoke `devflow:feature-breakdown`
 9. **Present for approval** — section by section
 10. **Save PRD** — write to `.context/plans/<project>-prd.md`
-11. **Interview ADRs** — recommend and instantiate organizational ADRs
-12. **Handoff** — announce readiness for PREVC of first pending phase
+11. **Delegate knowledge production** — feed business/product curators via `devflow:knowledge`
+12. **Interview ADRs** — recommend and instantiate organizational ADRs
+13. **Handoff** — announce readiness for PREVC of first pending phase
 
 ## Step 1: Detect Mode
 
@@ -431,7 +432,63 @@ Save the approved PRD to `.context/plans/<project>-prd.md`.
 
 If `.context/plans/` doesn't exist, create it.
 
-## Step 9.5: Entrevista ADRs
+## Step 9.5: Delegate Knowledge Production to Curators
+
+After saving the PRD, delegate production of the business and product knowledge layers to the curator agents via the `devflow:knowledge` mechanism. The PRD interview already captured the raw signals — this step persists them as structured, reusable knowledge.
+
+<HARD-GATE>
+The PRD document in `.context/plans/` is a **derived view** — a snapshot of the roadmap at generation time. The business and product knowledge layers are the **source of truth**. Never treat `.context/plans/*-prd.md` as the authoritative record for vision, ICP, metrics, or product policies. Those live in the knowledge layer and must be kept in sync via the curators.
+</HARD-GATE>
+
+### business-context curator
+
+Invoke `devflow:knowledge` to trigger the `business-context` curator, which writes/refreshes:
+
+- `.context/business/vision.md` — company/product vision extracted from the PRD Executive Summary and Product Vision sections
+- `.context/business/icp.md` — Ideal Customer Profile built from the interview's target user answers
+- `.context/business/metrics.md` — North Star and success metrics from the PRD Success Metrics section
+
+Pass the PRD content as input context so the curator does not re-interview the user.
+
+```
+knowledge({ action: "fill", curator: "business-context", source: ".context/plans/<project>-prd.md" })
+```
+
+### product-context curator
+
+Invoke `devflow:knowledge` to trigger the `product-context` curator, which writes/refreshes:
+
+- `.context/product/vision.md` — product vision and differentiation (derived from PRD Product Vision)
+- `.context/product/persona.md` — user persona synthesized from ICP + interview answers
+- `.context/product/tone-of-voice.md` — communication and brand guidelines (infer from context; leave as draft if not enough signal)
+- `.context/product/policies.md` — product policies and constraints collected during the interview
+
+```
+knowledge({ action: "fill", curator: "product-context", source: ".context/plans/<project>-prd.md" })
+```
+
+### Fallback (Lite/Minimal mode)
+
+If `devflow:knowledge` is not available, write the knowledge files directly from the PRD content:
+1. Create `.context/business/` and `.context/product/` directories
+2. Write each file with the extracted content, using frontmatter `status: filled` and `generated: YYYY-MM-DD`
+3. Note in the report which files were written manually vs by curator
+
+### Report
+
+After delegation:
+```markdown
+### Knowledge Layers Populated
+- .context/business/vision.md — [filled by business-context | written manually]
+- .context/business/icp.md   — [filled by business-context | written manually]
+- .context/business/metrics.md — [filled by business-context | written manually]
+- .context/product/vision.md — [filled by product-context | written manually]
+- .context/product/persona.md — [filled by product-context | written manually]
+- .context/product/tone-of-voice.md — [filled | draft — not enough signal]
+- .context/product/policies.md — [filled by product-context | written manually]
+```
+
+## Step 9.6: Entrevista ADRs
 
 Apos salvar o PRD, oferecer adocao de ADRs organizacionais.
 
@@ -456,7 +513,7 @@ Apos salvar o PRD, oferecer adocao de ADRs organizacionais.
    → Apos criar, usar o scaffold como fonte
 
 **(D)** Nao quero usar ADRs neste projeto
-   → Pular para Step 10 (Handoff)
+   → Pular para Step 11 (Handoff)
 
 ### Recomendacao
 
