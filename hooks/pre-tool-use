@@ -120,6 +120,16 @@ ti = d.get('tool_input', {})
 print(ti.get('file_path', ti.get('file', '')))
 " 2>/dev/null || echo "")
 
+# --- Stage-2: inject on-demand knowledge bodies relevant to the edited file ---
+# Emits a <KNOWLEDGE_ONDEMAND> block with bodies of relevant on-demand knowledge docs.
+# Guard with || true — never blocks the hook. Runs before branch-protection checks
+# so context is always surfaced even when the hook later denies/asks on the edit.
+
+PROJECT_ROOT="${CWD:-$PWD}"
+if [ -n "$FILE_PATH" ] && [ -f "${PLUGIN_ROOT}/scripts/lib/print-knowledge-bodies.mjs" ]; then
+  node "${PLUGIN_ROOT}/scripts/lib/print-knowledge-bodies.mjs" "${PROJECT_ROOT}" "${FILE_PATH}" 2>/dev/null || true
+fi
+
 # --- Allow workflow/infrastructure files on any branch ---
 # These are operational files, not project code.
 
