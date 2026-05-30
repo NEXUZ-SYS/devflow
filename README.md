@@ -14,7 +14,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Loop autônomo** — execução story-by-story com contexto fresco, escalação automática e retry inteligente
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
-- **16 agentes especialistas** — architect, product-manager, backend, frontend, security-auditor, memory-specialist e mais
+- **18 agentes especialistas** — architect, product-manager, business-context, product-context, backend, frontend, security-auditor, memory-specialist e mais
 - **32 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, memory-recall...
 - **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
 - **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
@@ -38,7 +38,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 │    (disciplina)     │    (contexto + workflow)         │
 ├────────────────────┼─────────────────────────────────┤
 │ brainstorming       │ fases PREVC                     │
-│ TDD iron law        │ 15 agentes via MCP              │
+│ TDD iron law        │ 17 agentes via MCP              │
 │ SDD (subagents)     │ análise semântica               │
 │ code review 2x      │ gestão de planos                │
 │ anti-racional.      │ sync multi-tool                 │
@@ -142,6 +142,7 @@ de design e cobertura de testes (55 tests, 27 novos arquivos).
 
 | Versão | Data | Destaques |
 |--------|------|-----------|
+| **1.7.0** | 2026-05-30 | Feat(agents): porta dois agentes curadores DDC para o DevFlow — `business-context` (curador da camada `.context/business/`: vision, glossary, compliance, business-model, metrics, icp) e `product-context` (curador da camada `.context/product/`: vision, persona, tone-of-voice, design-system, policies). Memória via MemPalace (não file-based por agente); paths corrigidos para `.context/` (singular DevFlow); referências a projetos específicos DDC removidas; seção "Memória Persistente do Agente" substituída por seção "Memória" com MemPalace + napkin. Total de agentes: 16 → 18. |
 | **1.6.0** | 2026-05-28 | Refactor (breaking, superfície de comando): **reverte o #24** e restaura o prefixo `devflow-` nos arquivos de comando. Os nomes curtos da 1.2.0 (`/devflow:status`, `/devflow:sync`, `/devflow:doctor`, etc.) colidiam com comandos nativos do Claude Code e de outros plugins; voltando a `commands/devflow-*.md` a invocação fica única (`/devflow:devflow-status`, `/devflow:devflow-doctor`, …). Dispatcher `/devflow <...>` inalterado. ~43 arquivos atualizados + texto de sugestão de routines no SessionStart. Mapping antigo→novo no CHANGELOG. |
 | **1.5.0** | 2026-05-28 | Feat: **Context Doctor + Routines** — manutenção da saúde do contexto. `/devflow:devflow-doctor` (skill `doctor` + `scripts/doctor.mjs` + lib de checks plugáveis `scripts/lib/doctor.mjs`) diagnostica config de MCP inválida/comando fora do PATH, MCP desconectados, e saúde do MemPalace (wings órfãs `repo.*`, drift de índice HNSW) — propõe repairs com **dry-run + confirmação** (destrutivos nunca auto). Subsistema de **routines** file-based (`scripts/lib/routines.mjs` + `/devflow:devflow-routines` + `.context/routines.json`): agenda `Nd/Nw/Nm`, routine default `context-maintenance` (doctor a cada 7d); SessionStart **sugere** rodar quando vencida (1x/dia + snooze, espelhando `DOCS_MCP_RECOMMENDATION`) sem executar. `config` semeia `routines.json`. 31 testes novos (doctor/routines unit+CLI+session-start, com mocks/data injetada — nunca tocam palace/`.mcp.json` reais). **Fix herdado:** isolamento do teste post-merge (PATH só-coreutils, sem mempalace real) + limpeza das wings órfãs `repo.*` do palace. |
 | **1.4.1** | 2026-05-28 | Fix(UX): o `config` skill agora **oferece** instalar o git hook de auto-mine ao final da configuração (Step 4.5, opt-in sim/não) quando mempalace está ativo com `autoMine: post-merge` — fecha o gap em que o flag default ficava setado mas inerte até o usuário rodar `/devflow:devflow-memory install-hook`. Continua não-intrusivo (pergunta antes de tocar no `.git/`). |
@@ -191,7 +192,7 @@ de design e cobertura de testes (55 tests, 27 novos arquivos).
 devflow/
 ├── commands/         # 6 commands: /devflow, /devflow:devflow-sync, /devflow:devflow-status, /devflow:devflow-next, /devflow:devflow-dispatch, /devflow:devflow-recall
 ├── skills/           # 32 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
-├── agents/           # 16 playbooks de agentes (inclui memory-specialist)
+├── agents/           # 18 playbooks de agentes (inclui memory-specialist, business-context, product-context)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n
