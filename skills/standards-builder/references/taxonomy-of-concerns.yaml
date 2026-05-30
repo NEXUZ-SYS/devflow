@@ -211,3 +211,167 @@ entries:
       - bff
       - backend
       - qualidade-testes
+
+  - id: layer-boundaries
+    summary: Import boundaries e dependency rule entre camadas (FSD/hexagonal/clean)
+    category: architecture
+    defaultApplyTo:
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+    inverseHints:
+      - fsd
+      - feature-sliced
+      - hexagonal
+      - clean-architecture
+      - ddd
+      - ports-adapters
+    principleTemplate: |
+      Imports respeitam a direção da camada: domínio não importa infra; slice não
+      importa slice irmão diretamente (usa public API da camada); infra implementa
+      portas definidas pelo domínio. Cada camada expõe um index público — imports
+      internos são proibidos entre camadas. A regra de dependência flui para dentro
+      (UI → App → Domain; Infra implementa Domain).
+    antiPatternTemplate:
+      - rule: "Domínio importa adapter de infra diretamente"
+        correct: "Domínio define porta (interface); infra implementa; IoC resolve"
+      - rule: "Slice A importa módulo interno de Slice B (fora do index público)"
+        correct: "Importar apenas via public API do slice (index.ts da feature)"
+      - rule: "Camada de UI chama repositório de dados diretamente"
+        correct: "UI chama use-case/service; use-case acessa repositório"
+    linterHints:
+      - "AST: import de camada externa dentro de src/domain (ex: src/infra → src/domain)"
+      - "ESLint eslint-plugin-boundaries ou @feature-sliced/eslint-config para FSD"
+      - "Detectar import de path interno (não-index) entre features distintas"
+    relatedAdrCategories:
+      - arquitetura
+      - frontend
+      - backend
+      - bff
+
+  - id: api-conventions
+    summary: Convenções de design de API REST (verbos, status codes, error envelope, paginação, versionamento)
+    category: contracts
+    defaultApplyTo:
+      - "src/**/*.ts"
+    inverseHints:
+      - rest
+      - openapi
+      - fastify
+      - express
+      - nestjs
+    principleTemplate: |
+      Endpoints usam verbos HTTP semânticos (GET/POST/PUT/PATCH/DELETE). Status codes
+      seguem RFC 9110: 2xx sucesso, 4xx erro do cliente, 5xx erro do servidor. Erros
+      retornam envelope padronizado `{ error: { code, message, details } }`. Paginação
+      via cursor (preferido) ou offset com metadados `{ data, meta: { total, page } }`.
+      Versionamento por path prefix (/v1/) ou header Accept. Nunca quebrar contrato
+      sem deprecação e prazo anunciados.
+    antiPatternTemplate:
+      - rule: "Retornar 200 OK com corpo de erro (ex: { error: 'not found' })"
+        correct: "Retornar 404 com envelope de erro padronizado"
+      - rule: "Usar POST para todas as operações (RPC-style sobre REST)"
+        correct: "Usar verbo semântico correto (GET lê, PUT/PATCH atualiza, DELETE remove)"
+      - rule: "Paginação sem metadados de total ou cursor de próxima página"
+        correct: "Incluir meta com cursor/total; documentar no OpenAPI"
+    linterHints:
+      - "Verificar definição de OpenAPI/Swagger (openapi.yaml ou swagger decorators)"
+      - "AST: response.status(200) seguido de corpo com campo 'error'"
+      - "Detectar rotas sem versionamento em path ou header"
+    relatedAdrCategories:
+      - backend
+      - bff
+      - contratos
+
+  - id: domain-events
+    summary: Naming, payload e versionamento de eventos de domínio
+    category: contracts
+    defaultApplyTo:
+      - "src/**/*.ts"
+    inverseHints:
+      - eventbridge
+      - kafka
+      - pubsub
+      - rabbitmq
+    principleTemplate: |
+      Eventos de domínio têm nome no passado e formato `<Domínio>.<Entidade><Ação>Ocorreu`
+      (ex: Pagamento.CobrancaAprovadaOcorreu). Payload inclui `eventId`, `occurredAt`,
+      `version`, `aggregateId` e dados imutáveis do momento do fato. Schemas são
+      versionados (v1, v2) e consumidores antigos suportados por período de deprecação.
+      Eventos nunca carregam referências mutáveis — apenas dados do momento da ocorrência.
+    antiPatternTemplate:
+      - rule: "Evento com nome no imperativo ou presente (ex: ProcessarPagamento)"
+        correct: "Nome no passado descrevendo fato ocorrido (ex: PagamentoProcessadoOcorreu)"
+      - rule: "Payload sem version ou sem occurredAt"
+        correct: "Incluir campos obrigatórios: eventId, version, occurredAt, aggregateId"
+      - rule: "Quebrar schema de evento sem compatibilidade retroativa"
+        correct: "Publicar v2 em paralelo; deprecar v1 com prazo; manter consumidores antigos"
+    linterHints:
+      - "AST: publicação de evento sem campo 'version' no payload"
+      - "Detectar nome de evento sem sufixo 'Ocorreu' ou 'Happened' (naming convention)"
+      - "Verificar registro de schema no registry (ex: AWS Glue, Confluent Schema Registry)"
+    relatedAdrCategories:
+      - backend
+      - contratos
+      - arquitetura
+
+  - id: secret-conventions
+    summary: Naming, escopo e rotação de secrets; nunca em código ou log
+    category: contracts
+    defaultApplyTo:
+      - "**/*.ts"
+      - "**/*.env*"
+    inverseHints:
+      - dotenv
+      - secret-manager
+      - vault
+    principleTemplate: |
+      Secrets são lidos exclusivamente de variáveis de ambiente ou secret manager;
+      NUNCA hardcoded em código, config files versionados ou logs. Nomes seguem
+      SCREAMING_SNAKE_CASE com prefixo de escopo (ex: DB_PASSWORD, STRIPE_API_KEY).
+      Rotação é automatizada; TTL máximo por tipo de secret definido em runbook.
+      Logs nunca imprimem valores de secrets — mascarar antes de qualquer output.
+    antiPatternTemplate:
+      - rule: "Secret hardcoded em código ou arquivo de config versionado"
+        correct: "Ler de process.env ou secret manager; .env nunca commitado"
+      - rule: "Secret logado em debug ou trace sem mascaramento"
+        correct: "Mascarar valor antes de logar: 'sk_****' ou omitir completamente"
+      - rule: "Secret sem TTL ou rotação manual ad-hoc"
+        correct: "Rotação automatizada via secret manager; TTL documentado no runbook"
+    linterHints:
+      - "regex: (password|secret|api_key|token)\\s*=\\s*['\"][^'\"]{8,}"
+      - "Verificar .gitignore contém .env* e secrets/"
+      - "AST: console.log com variável cujo nome contém 'secret', 'key', 'password', 'token'"
+    relatedAdrCategories:
+      - backend
+      - bff
+      - seguranca
+
+  - id: commit-hygiene
+    summary: Conventional Commits — tipo, escopo e descrição imperativa
+    category: process
+    defaultApplyTo:
+      - "**/*"
+    inverseHints:
+      - commitlint
+      - husky
+      - conventional-commits
+    principleTemplate: |
+      Todo commit segue Conventional Commits: `<tipo>(<escopo>): <descrição imperativa>`.
+      Tipos válidos: feat, fix, chore, docs, refactor, test, ci, perf, revert.
+      Descrição no imperativo presente (adiciona, corrige, remove — não adicionado/corrigido).
+      Corpo do commit explica o porquê, não o quê. Breaking changes marcados com `!`
+      ou footer `BREAKING CHANGE:`. Um commit = uma unidade lógica de mudança.
+    antiPatternTemplate:
+      - rule: "Mensagem de commit sem tipo (ex: 'arruma bug')"
+        correct: "fix(auth): corrige validação de token expirado"
+      - rule: "Descrição no passado ou substantivo ('adicionado X', 'adição de X')"
+        correct: "Imperativo presente: 'adiciona X', 'corrige Y', 'remove Z'"
+      - rule: "Commit gigante misturando feature + fix + refactor"
+        correct: "Um commit por unidade lógica; refactor separado de feature"
+    linterHints:
+      - "commitlint com @commitlint/config-conventional"
+      - "Hook commit-msg valida formato antes de aceitar o commit"
+      - "Detectar commits sem tipo ou com tipo fora do enum permitido"
+    relatedAdrCategories:
+      - qualidade-testes
+      - processo
