@@ -172,6 +172,37 @@ print(ti.get('file_path') or ti.get('path') or '')
   fi
 fi
 
+# --- PREVC handoff bypass guard (T20, ADR-006) ---
+# When a plan file is written/edited without an active PREVC workflow, emit
+# a non-blocking reminder nudging the developer to register the dotcontext
+# handoff or enter via /devflow. Fires on the artifact (plan file path) so it
+# catches bypass regardless of entry path.
+# Per SI-1: invoked as a separate file with argv args, never via node -e.
+
+if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+  BYPASS_FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+ti = d.get('tool_input', {})
+print(ti.get('file_path') or ti.get('path') or '')
+" 2>/dev/null || echo "")
+
+  # Use cwd from event input (same pattern as TaskUpdate block); fall back to $PWD
+  BYPASS_PROJECT_ROOT=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('cwd', ''))
+" 2>/dev/null || echo "")
+  [ -z "$BYPASS_PROJECT_ROOT" ] && BYPASS_PROJECT_ROOT="${PWD}"
+
+  if [ -n "$BYPASS_FILE_PATH" ]; then
+    BYPASS_OUTPUT=$(node "${PLUGIN_ROOT}/scripts/lib/check-prevc-bypass.mjs" "${BYPASS_PROJECT_ROOT}" "${BYPASS_FILE_PATH}" 2>/dev/null || true)
+    if [ -n "$BYPASS_OUTPUT" ]; then
+      reminder="${reminder}\n\n${BYPASS_OUTPUT}"
+    fi
+  fi
+fi
+
 # --- Check if Bash tool is running a merge command ---
 
 if [ "$TOOL_NAME" = "Bash" ]; then
