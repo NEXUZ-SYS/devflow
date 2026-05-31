@@ -37,15 +37,25 @@ const SUBSYSTEMS = ["adrs", "standards", "stacks", "templates"];
 const report = { moved: [], skipped: [], errors: [] };
 
 for (const key of SUBSYSTEMS) {
-  const source = join(projectRoot, ".context", key);   // v1 top-level location
-  const dest = paths[key];                              // canonical engineering/ location
+  const dest = paths[key]; // canonical engineering/ location
+
+  if (existsSync(dest)) {
+    report.skipped.push(`${key} (dest already exists)`);
+    continue;
+  }
+
+  // Determine source: for "adrs", also check .context/docs/adrs (v0.x legacy location)
+  // when the primary v1 source (.context/adrs) is absent.
+  let source = join(projectRoot, ".context", key); // v1 top-level location
+  if (!existsSync(source) && key === "adrs") {
+    const legacyDocsAdrs = join(projectRoot, ".context", "docs", "adrs");
+    if (existsSync(legacyDocsAdrs)) {
+      source = legacyDocsAdrs;
+    }
+  }
 
   if (!existsSync(source)) {
     report.skipped.push(`${key} (source absent)`);
-    continue;
-  }
-  if (existsSync(dest)) {
-    report.skipped.push(`${key} (dest already exists)`);
     continue;
   }
 
@@ -53,15 +63,12 @@ for (const key of SUBSYSTEMS) {
   mkdirSync(dirname(dest), { recursive: true });
 
   // Prefer git mv to preserve history; fall back to renameSync
-  let moved = false;
   try {
     execFileSync("git", ["mv", source, dest], { cwd: projectRoot, stdio: "pipe" });
-    moved = true;
     report.moved.push(`${key} (git mv)`);
   } catch {
     try {
       renameSync(source, dest);
-      moved = true;
       report.moved.push(`${key} (renameSync)`);
     } catch (err) {
       report.errors.push(`${key}: ${err.message}`);

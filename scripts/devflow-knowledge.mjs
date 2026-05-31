@@ -3,7 +3,7 @@
 // CLI dispatcher: `devflow-knowledge new|audit` — dependency-free (node:* only).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { scaffoldKnowledge } from "./lib/knowledge-from-type.mjs";
@@ -34,6 +34,60 @@ function loadKnowledgeTaxonomy() {
   return entries;
 }
 
+// ── Input validation guards ──────────────────────────────────────────────────
+
+/**
+ * Reject path components that could escape the target directory.
+ * - No forward slashes, backslashes, or ".." segments.
+ * - No newline/carriage-return characters (prevents YAML frontmatter injection).
+ */
+function validateName(name) {
+  if (typeof name !== "string" || name.length === 0) {
+    process.stderr.write("Error: --name must be a non-empty string\n");
+    process.exit(1);
+  }
+  if (/[/\\]/.test(name) || name.split(/[/\\]/).some((seg) => seg === "..")) {
+    process.stderr.write(
+      `Error: invalid --name '${name}' — path traversal characters (/, \\, ..) are not allowed\n`,
+    );
+    process.exit(1);
+  }
+  if (/[\n\r]/.test(name)) {
+    process.stderr.write(
+      `Error: invalid --name '${name}' — newline characters are not allowed (YAML injection prevention)\n`,
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * Validate the final resolved path stays within the expected parent directory.
+ * Secondary containment: catches edge cases that validateName might miss on unusual OSes.
+ */
+function assertWithinDir(filePath, parentDir) {
+  const rel = resolve(filePath);
+  const par = resolve(parentDir);
+  if (!rel.startsWith(par + "/") && rel !== par) {
+    process.stderr.write(
+      `Error: path traversal detected — resolved path escapes the layer directory\n` +
+        `  resolved: ${rel}\n  layer dir: ${par}\n`,
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * Reject description values containing newlines (YAML frontmatter injection).
+ */
+function validateDescription(desc) {
+  if (desc !== undefined && /[\n\r]/.test(desc)) {
+    process.stderr.write(
+      `Error: invalid --description — newline characters are not allowed (YAML injection prevention)\n`,
+    );
+    process.exit(1);
+  }
+}
+
 // ── argv parsing ─────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
@@ -60,6 +114,10 @@ function cmdNew({ flags }) {
   if (!type) { process.stderr.write("Error: --type is required\n"); process.exit(1); }
   if (!name) { process.stderr.write("Error: --name is required\n"); process.exit(1); }
 
+  // Security: reject path traversal and newline injection attempts
+  validateName(name);
+  validateDescription(description);
+
   const entries = loadKnowledgeTaxonomy();
   const entry = entries.find((e) => e.id === type);
   if (!entry) {
@@ -76,6 +134,8 @@ function cmdNew({ flags }) {
   }
 
   const destFile = join(layerDir, `${name}.md`);
+  // Secondary containment: verify resolved path stays within layer dir
+  assertWithinDir(destFile, layerDir);
   if (existsSync(destFile) && !force) {
     process.stderr.write(`Error: file already exists: ${destFile}\n  Use --force to overwrite.\n`);
     process.exit(1);
@@ -93,6 +153,9 @@ function cmdAudit({ flags }) {
   const project = flags.project ?? process.cwd();
 
   if (!name) { process.stderr.write("Error: --name is required\n"); process.exit(1); }
+
+  // Security: reject path traversal in audit --name
+  validateName(name);
 
   const paths = contextPaths(project);
   const layerKeys = ["business", "product", "operations", "engineering"];
