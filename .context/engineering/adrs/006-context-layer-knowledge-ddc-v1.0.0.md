@@ -10,7 +10,7 @@ status: Proposto
 version: 0.1.0
 created: 2026-05-30
 supersedes: []
-refines: []
+refines: ["001-adr-path-migration-to-context-root-v1.0.0"]
 protocol_contract: null
 decision_kind: firm
 summary: "O .context/ adota layout DDC em 4 níveis: engineering/ como container dos subsistemas (adrs/standards/stacks/templates), mecanismo knowledge para narrativa de domínio e D10, 4 agentes-curadores como front door, migração via /devflow update migration. Path canônico de ADRs re-canonicaliza para .context/engineering/adrs/ (refina ADR-001)."
