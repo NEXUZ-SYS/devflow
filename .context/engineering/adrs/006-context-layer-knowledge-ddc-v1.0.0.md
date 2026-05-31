@@ -86,11 +86,12 @@ Compatibilidade dotcontext preservada: `docs/`, `agents/`, `skills/`, `plans/` i
 - [ ] Script: `scripts/devflow-migrate.mjs` idempotente — move artefatos legacy, atualiza índices, exit code não-zero em falha; invocado por `/devflow update migration`
 - [ ] Hook: session-start Stage-1 injeta `KNOWLEDGE_INDEX` via `context-paths.mjs`; pre-tool-use Stage-2 injeta bodies on-demand
 - [ ] Code review: PRs que tocam `scripts/` ou `hooks/` com paths ADR devem usar `resolveAdrPath()` de `path-resolver.mjs`
-- [ ] Gate CI/PREVC: adr-audit check-1 falha se `refines` ausente nesta ADR (relação com ADR-001 declarada em frontmatter)
+
+**Nota sobre `refines` (estado de transição):** A relação desta ADR com ADR-001 está documentada no campo `summary` e na seção Decisão (ponto 1). O campo `refines: []` está intencionalmente vazio durante a transição v1.0–v1.2: o validador `adr-graph.mjs` resolve referências apenas dentro do mesmo diretório, e ADR-001 ainda reside em `.context/adrs/` (path legado). Preencher `refines` neste estado causaria falha do gate de grafo. O campo será populado com `["001-adr-path-migration-to-context-root"]` após a consolidação de ADR-001 em `.context/engineering/adrs/` pela migração explícita.
 
 ## Evidências / Anexos
 
 - Plano de implementação: `.context/plans/context-layer-v2.md` (Task Groups Stage-1 e Stage-2)
-- ADR que esta refina: `.context/adrs/001-adr-path-migration-to-context-root-v1.0.0.md`
+- ADR que esta refina (prosa): `.context/adrs/001-adr-path-migration-to-context-root-v1.0.0.md` (path legado — pendente migração para `.context/engineering/adrs/`)
 - SSOT de paths: `scripts/lib/context-paths.mjs`
 - Resolver de compatibilidade: `scripts/lib/path-resolver.mjs`

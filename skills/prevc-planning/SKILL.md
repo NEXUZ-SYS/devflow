@@ -39,7 +39,7 @@ Read these files and incorporate into brainstorming:
 - `.context/docs/codebase-map.json` — file structure, dependencies
 - `.context/docs/development-workflow.md` — existing conventions
 - `.context/docs/testing-strategy.md` — testing approach
-- `.context/adrs/README.md` — active ADR guardrails (canonical since v1.0; fallback to `.context/docs/adrs/README.md` via dual-read transitório até v1.2)
+- `.context/engineering/adrs/README.md` — active ADR guardrails (canonical since DDC v1.0; dual-read fallback to `.context/adrs/` e `.context/docs/adrs/` durante transição v1.0–v1.2)
 
 ### Minimal Mode
 Explore project files, docs, and recent git commits directly.
@@ -48,7 +48,7 @@ Explore project files, docs, and recent git commits directly.
 
 After gathering base context, check for active ADRs:
 
-1. Check if `.context/adrs/README.md` exists (canonical since v1.0). If not, fallback to `.context/docs/adrs/README.md` (legacy, dual-read until v1.2). If neither exists, continue without ADR constraints (ADRs are opt-in).
+1. Check if `.context/engineering/adrs/README.md` exists (canonical since DDC v1.0). If not, fallback to `.context/adrs/README.md`, then `.context/docs/adrs/README.md` (legacy paths, dual-read during v1.0–v1.2 transition). `adr-filter` resolves the path programmatically via `resolveAdrPath()`. If neither exists, continue without ADR constraints (ADRs are opt-in).
 
 2. If yes, **invoke `devflow:adr-filter`** passing the current task description. That skill:
    - Reads the README index

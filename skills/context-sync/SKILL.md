@@ -39,7 +39,7 @@ O argumento do comando define o escopo:
 | Argumento | Escopo | Diretórios |
 |-----------|--------|------------|
 | (nenhum) | Completo | `.context/docs/`, `.context/agents/`, `.context/skills/`, `.context/workflow/`, + todas as camadas de conhecimento |
-| `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/adrs/` |
+| `docs` | Apenas docs + ADRs | `.context/docs/`, `.context/engineering/adrs/` |
 | `agents` | Apenas agents | `.context/agents/` |
 | `skills` | Apenas skills | `.context/skills/` |
 | `workflow` | Apenas workflow | `.context/workflow/` |
@@ -181,23 +181,25 @@ Scaffold and validate `.context/workflow/` for autonomous loop readiness.
 
 ## Step 3d: Sync ADR Index
 
-Update `.context/adrs/README.md` to reflect current ADR state.
+Update `.context/engineering/adrs/README.md` to reflect current ADR state.
+
+O path canônico desde DDC v1.0 é `.context/engineering/adrs/`. Durante a transição v1.0–v1.2, dual-read tolera os paths legados `.context/adrs/` e `.context/docs/adrs/` — `resolveAdrPath()` em `path-resolver.mjs` resolve programaticamente; o sync sempre escreve no path canônico.
 
 ### When running full sync or `docs` scope:
 
-1. Check if `.context/adrs/` exists
-2. If yes:
-   a. Scan all `.md` files in `.context/adrs/` (excluding README.md)
+1. Resolve ADR directory via `resolveAdrPath()` (canonical: `.context/engineering/adrs/`; dual-read fallback: `.context/adrs/`, `.context/docs/adrs/`)
+2. If found:
+   a. Scan all `.md` files in the resolved directory (excluding README.md)
    b. Parse frontmatter of each ADR (name, status, scope, stack, category)
    c. Count guardrails rules (lines matching `^- (SEMPRE|NUNCA|QUANDO)`)
-   d. Regenerate README.md index table with current data
+   d. Regenerate `.context/engineering/adrs/README.md` index table with current data
    e. Report changes
-3. If no: skip (ADRs are opt-in)
+3. If not found: skip (ADRs are opt-in)
 
 ### Report for ADR scope:
 ```markdown
 ### ADRs
-- .context/adrs/ — [exists | not found]
+- .context/engineering/adrs/ — [exists | not found (legacy fallback used | not found)]
 - README.md — [regenerated | up-to-date | created]
 - Active ADRs: [count]
 - Total guardrails: [count]

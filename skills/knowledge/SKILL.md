@@ -140,11 +140,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/devflow-knowledge.mjs audit --name=<name> --p
 
 Cinco checks determinísticos:
 
-- **K1** Frontmatter completo (`type`, `layer`, `name`, `activation`, `owner`)
-- **K2** Nenhum placeholder `<!-- TODO: preencher -->` nas seções obrigatórias
-- **K3** Layer coerente com a localização do arquivo
-- **K4** Owner é um dos curadores canônicos
-- **K5** Sem cross-referências duplicadas (conteúdo não replicado — use `@.context/...` para referências)
+- **K1** Frontmatter completo — todos os campos obrigatórios presentes e não-vazios: `type`, `layer`, `name`, `description`, `activation`, `owner`, `version`
+- **K2** Nenhum placeholder `<!-- TODO` de scaffold presente no corpo
+- **K3** `activation` válida — deve ser `always` ou `on-demand`
+- **K4** `layer` válida — deve ser `business`, `product`, `operations` ou `engineering`
+- **K5** Referências `@.context/...` apontam para arquivos reais (verificado quando `knownRefs` é fornecido ao auditor)
 
 ### Step A3 — Apresentar + recomendar
 
