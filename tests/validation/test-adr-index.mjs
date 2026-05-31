@@ -28,7 +28,7 @@ function runIndex(project, ...flags) {
 test('countGuardrails returns total bullets, not just first line (regression)', () => {
   const tmp = setupTmpProject();
   execFileSync('node', ['scripts/adr-update-index.mjs', `--project=${tmp}`]);
-  const readme = readFileSync(join(tmp, '.context/docs/adrs/README.md'), 'utf-8');
+  const readme = readFileSync(join(tmp, '.context/engineering/adrs/README.md'), 'utf-8');
   // valid-01 fixture has 3 guardrails (SEMPRE+NUNCA+QUANDO format).
   // Count column should reflect that, not 1.
   const lines = readme.split('\n').filter((l) => l.startsWith('| 001'));
@@ -43,7 +43,7 @@ test('countGuardrails returns total bullets, not just first line (regression)', 
 test('regenerates README with 14 columns', () => {
   const tmp = setupTmpProject();
   runIndex(tmp);
-  const readme = readFileSync(join(tmp, '.context/docs/adrs/README.md'), 'utf-8');
+  const readme = readFileSync(join(tmp, '.context/engineering/adrs/README.md'), 'utf-8');
   for (const col of [
     '#',
     'Título',
@@ -69,9 +69,9 @@ test('regenerates README with 14 columns', () => {
 test('idempotent: second run identical', () => {
   const tmp = setupTmpProject();
   runIndex(tmp);
-  const a = readFileSync(join(tmp, '.context/docs/adrs/README.md'), 'utf-8');
+  const a = readFileSync(join(tmp, '.context/engineering/adrs/README.md'), 'utf-8');
   runIndex(tmp);
-  const b = readFileSync(join(tmp, '.context/docs/adrs/README.md'), 'utf-8');
+  const b = readFileSync(join(tmp, '.context/engineering/adrs/README.md'), 'utf-8');
   assert.equal(a, b);
   rmSync(tmp, { recursive: true });
 });

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-const README = ".context/standards/README.md";
+const README = ".context/engineering/standards/README.md";
 
 test("standards/README.md exists at canonical path", () => {
   assert.ok(existsSync(README), `${README} must exist`);
@@ -33,8 +33,8 @@ test("standards/README.md has required H2 sections", () => {
 
 test("standards/machine/ directory exists with .gitkeep", () => {
   assert.ok(
-    existsSync(".context/standards/machine/.gitkeep"),
-    ".context/standards/machine/.gitkeep must exist (committed empty dir)"
+    existsSync(".context/engineering/standards/machine/.gitkeep"),
+    ".context/engineering/standards/machine/.gitkeep must exist (committed empty dir)"
   );
 });
 

@@ -1,6 +1,6 @@
 // scripts/lib/knowledge-loader.mjs
 // Carrega o índice de docs de conhecimento (Stage-1) e os corpos sempre-ativos.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { contextPaths } from "./context-paths.mjs";
@@ -11,12 +11,18 @@ function* walkMd(dir) {
   if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
+    // Use lstatSync so symlinks are never followed — a symlink is detected and skipped
+    // regardless of whether it points to a directory or a file. This prevents:
+    //   - circular symlinks (→ infinite recursion / ELOOP)
+    //   - directory escape (symlink pointing outside .context/ is read-through via statSync)
+    const lst = lstatSync(full, { throwIfNoEntry: false });
+    if (!lst) continue;
+    if (lst.isSymbolicLink()) continue; // skip all symlinks
+    if (lst.isDirectory()) {
       // não descer em subsistemas mecanizados de engineering (adrs/standards/stacks/templates)
       if (["adrs", "standards", "stacks", "templates", "machine"].includes(entry)) continue;
       yield* walkMd(full);
-    } else if (entry.endsWith(".md") && entry !== "README.md") {
+    } else if (lst.isFile() && entry.endsWith(".md") && entry !== "README.md") {
       yield full;
     }
   }

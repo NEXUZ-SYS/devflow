@@ -187,6 +187,7 @@ You MUST create a task for each of these items and complete them in order:
 4. **Fill gaps** — add any agents/skills/docs that dotcontext didn't generate
 5. **Ensure skills README** — create `.context/skills/README.md` explaining plugin vs project skills (green-field clarity)
 6. **Scaffold plans directory** — empty, ready for PREVC plans
+6.5. **Scaffold knowledge layers** — create 4-layer tree; delegate initial fill to curators; surface migration path if legacy layout detected
 7. **Verify compatibility** — all frontmatter matches dotcontext v2 format
 8. **Configure MemPalace** — detect and optionally set up MemPalace integration (via devflow:config)
 9. **Enable Lite/Full mode** — `.context/` now exists, DevFlow auto-detects
@@ -563,6 +564,66 @@ The config skill interview includes git strategy (P1-P5), MemPalace integration 
 This ensures every project initialized with DevFlow has a git strategy configured, plus optional opt-in for semantic memory (MemPalace) and stack documentation indexing (docs-mcp-server).
 
 **docs-mcp-server note:** when the user opts in, the config skill writes the MCP entry to `.mcp.json`. The new server requires a **Claude Code restart** to register — the skill must surface this explicitly so the user knows the `mcp__docs-mcp-server__*` tools won't be available in the current session.
+
+## Step 5.5: Scaffold Knowledge Layers
+
+After scaffolding plans, scaffold the 4-layer knowledge tree that curator agents maintain. These directories are **DevFlow-native** — they sit outside the dotcontext-managed directories (`docs/`, `agents/`, `skills/`, `plans/`) and are never touched, moved, or relocated by dotcontext.
+
+<HARD-GATE>
+Dotcontext-managed directories (`docs/`, `agents/`, `skills/`, `plans/`) are NEVER moved or reorganized by this step. Only additive layers and DevFlow-native subsystems are created here. Violating this corrupts dotcontext compatibility.
+</HARD-GATE>
+
+### Create the 4-layer knowledge tree
+
+```bash
+mkdir -p .context/business
+mkdir -p .context/product
+mkdir -p .context/operations
+mkdir -p .context/engineering
+```
+
+Each directory receives a minimal `README.md` placeholder (in the user's selected language) explaining which curator owns it and what it contains. Use `status: unfilled` — the curators will fill them.
+
+| Directory | Curator agent | Owns |
+|---|---|---|
+| `.context/business/` | `business-context` | vision, ICP, metrics |
+| `.context/product/` | `product-context` | vision, persona, tone-of-voice, policies |
+| `.context/operations/` | `operations-context` | runbooks, on-call, SLOs, infra |
+| `.context/engineering/` | `engineering-context` | architecture, standards, subsystems |
+
+### Engineering subsystems relocation (migration guard)
+
+If a **legacy `.context/` layout (v1)** is detected — identified by subsystem directories sitting directly under `.context/` instead of under `.context/engineering/` (e.g., `.context/standards/`, `.context/architecture/`, `.context/subsystems/`) — do NOT relocate them manually. Instead, surface the migration path:
+
+> "Legacy .context/ layout detected. Subsystem directories (`standards/`, `architecture/`, etc.) should live under `.context/engineering/`. Run `devflow:migration` to relocate them safely without breaking existing references."
+
+Do not attempt the move inline — `devflow:migration` handles rewriting all cross-references.
+
+### Delegate initial knowledge filling to curators
+
+After creating the directories, delegate initial content filling via `devflow:knowledge`:
+
+Invoke each curator agent in sequence. Each agent uses the `devflow:knowledge` skill (CLI: `node scripts/devflow-knowledge.mjs new --type=<id> --name=<name> --project=<path>`) to scaffold its layer docs:
+
+- `business-context` agent — scaffolds `.context/business/` docs
+- `product-context` agent — scaffolds `.context/product/` docs
+- `operations-context` agent — scaffolds `.context/operations/` docs
+- `engineering-context` agent — scaffolds `.context/engineering/` docs
+
+Each curator will scaffold its own files with `status: unfilled` if no source context is available, or attempt to fill from existing project signals (README, package.json, existing docs, git history).
+
+**Fallback (Lite/Minimal mode):** If `devflow:knowledge` is not available, create bare README.md files in each directory with `status: unfilled` and a note that the user should run `/devflow:knowledge` to populate them.
+
+### Add knowledge layers to checklist output
+
+When reporting (Step 7), include:
+```markdown
+### Knowledge Layers
+- .context/business/   — [scaffolded | filled by business-context]
+- .context/product/    — [scaffolded | filled by product-context]
+- .context/operations/ — [scaffolded | filled by operations-context]
+- .context/engineering/— [scaffolded | filled by engineering-context]
+```
 
 ## Step 6: Verify Compatibility
 

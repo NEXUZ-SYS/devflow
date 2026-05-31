@@ -39,7 +39,7 @@ Read these files and incorporate into brainstorming:
 - `.context/docs/codebase-map.json` — file structure, dependencies
 - `.context/docs/development-workflow.md` — existing conventions
 - `.context/docs/testing-strategy.md` — testing approach
-- `.context/adrs/README.md` — active ADR guardrails (canonical since v1.0; fallback to `.context/docs/adrs/README.md` via dual-read transitório até v1.2)
+- `.context/engineering/adrs/README.md` — active ADR guardrails (canonical since DDC v1.0; dual-read fallback to `.context/adrs/` e `.context/docs/adrs/` durante transição v1.0–v1.2)
 
 ### Minimal Mode
 Explore project files, docs, and recent git commits directly.
@@ -48,7 +48,7 @@ Explore project files, docs, and recent git commits directly.
 
 After gathering base context, check for active ADRs:
 
-1. Check if `.context/adrs/README.md` exists (canonical since v1.0). If not, fallback to `.context/docs/adrs/README.md` (legacy, dual-read until v1.2). If neither exists, continue without ADR constraints (ADRs are opt-in).
+1. Check if `.context/engineering/adrs/README.md` exists (canonical since DDC v1.0). If not, fallback to `.context/adrs/README.md`, then `.context/docs/adrs/README.md` (legacy paths, dual-read during v1.0–v1.2 transition). `adr-filter` resolves the path programmatically via `resolveAdrPath()`. If neither exists, continue without ADR constraints (ADRs are opt-in).
 
 2. If yes, **invoke `devflow:adr-filter`** passing the current task description. That skill:
    - Reads the README index
@@ -67,6 +67,24 @@ After gathering base context, check for active ADRs:
 **Fallback:** If `devflow:adr-filter` is unavailable (e.g., installation incomplete), fall back to loading **all** ADRs with `status: Aprovado` — correctness over optimization.
 
 **Hierarchy:** Project ADRs (`scope: project`) override Organizational ADRs (`scope: organizational`) for the same topic.
+
+### All Modes — Knowledge Layer Loading (filtered by task)
+
+After loading ADR guardrails, check for a knowledge layer:
+
+1. Check if any of the following directories exist: `.context/business/`, `.context/product/`, `.context/operations/`, or engineering narrative docs in `.context/engineering/`. If none exist, continue without knowledge context (the knowledge layer is opt-in).
+
+2. If yes, **invoke `devflow:knowledge-filter`** passing the current task description. That skill:
+   - Loads the knowledge index
+   - Always includes docs with `activation: always` (business/product vision, glossary, compliance, tone, design-system, persona)
+   - Adds `on-demand` docs whose layer or keywords match the task description
+   - Emits a focused `<KNOWLEDGE filtered="true">` block with the selected docs' bodies
+
+3. Collect the filtered knowledge as context for the brainstorming process. Announce: "Loaded N knowledge docs (M always-active + K task-relevant)."
+
+**Note:** Knowledge docs inform the design — they provide the "why we exist / what the product promises / how it runs" context. They are descriptive, not hard constraints like ADR guardrails. Use them to ground proposals in business reality, not to block options.
+
+**Fallback:** If `devflow:knowledge-filter` is unavailable (e.g., installation incomplete), fall back to loading only docs with `activation: always` — correctness over optimization.
 
 ## Step 2: Brainstorming
 

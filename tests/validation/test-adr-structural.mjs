@@ -12,7 +12,7 @@ import { resolve, basename, join } from "node:path";
 const ROOT = resolve(import.meta.dirname, "../..");
 const read = (rel) => readFileSync(resolve(ROOT, rel), "utf-8");
 
-const ADRS_DIR = ".context/templates/adrs";
+const ADRS_DIR = ".context/engineering/templates/adrs";
 const VALID_CATEGORIES = [
   "principios-codigo",
   "qualidade-testes",
