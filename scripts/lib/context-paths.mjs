@@ -29,6 +29,8 @@ export function contextPaths(projectRoot) {
     templates: c("engineering", "templates"),
     // metadados
     layoutVersionFile: c(".layout-version"),
+    // user config (deliberately outside engineering/ — user-editable, not versionable as a std)
+    standardsLocalYaml: c("standards.local.yaml"),
   };
 }
 
