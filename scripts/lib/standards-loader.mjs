@@ -203,12 +203,26 @@ export function loadStandardsMerged(
   const pluginDefaultsDir = pluginRoot
     ? join(pluginRoot, "assets", "standards")
     : null;
-  const projectStandardsDir = contextPaths(projectRoot).standards;
+
+  // Use resolveReadPaths to include the legacy .context/standards/ fallback
+  // (same as loadStandards), so projects not yet migrated to DDC v2 are covered.
+  const projectStandardsDirs = resolveReadPaths(projectRoot, "standards");
 
   const defaults = pluginDefaultsDir
     ? readStandardsFromDir(pluginDefaultsDir, "default")
     : [];
-  const projectStds = readStandardsFromDir(projectStandardsDir, "project");
+
+  // Read from all resolved paths (canonical first, then legacy).
+  // De-duplicate by id: first occurrence wins (canonical takes precedence).
+  const projectStdsById = new Map();
+  for (const dir of projectStandardsDirs) {
+    for (const std of readStandardsFromDir(dir, "project")) {
+      if (!projectStdsById.has(std.id)) {
+        projectStdsById.set(std.id, std);
+      }
+    }
+  }
+  const projectStds = Array.from(projectStdsById.values());
 
   // Merge: project overrides default by id
   const merged = new Map();

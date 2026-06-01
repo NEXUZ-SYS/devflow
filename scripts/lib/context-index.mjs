@@ -20,11 +20,18 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { loadStandards } from "./standards-loader.mjs";
+import { loadStandardsMerged } from "./standards-loader.mjs";
 import { loadManifest } from "./manifest-stacks.mjs";
 
-export function buildContextIndex(projectRoot) {
-  const standards = collectStandards(projectRoot);
+/**
+ * Build the context index for Camada 1.
+ *
+ * @param {string} projectRoot  — absolute path to the project root
+ * @param {string} [pluginRoot] — optional plugin root; defaults to
+ *   process.env.CLAUDE_PLUGIN_ROOT (R9 env fallback in loadStandardsMerged)
+ */
+export function buildContextIndex(projectRoot, pluginRoot) {
+  const standards = collectStandards(projectRoot, pluginRoot);
   const refs = collectRefs(projectRoot);
   return {
     standards,
@@ -38,14 +45,18 @@ export function buildContextIndex(projectRoot) {
   };
 }
 
-function collectStandards(projectRoot) {
-  const stds = loadStandards(projectRoot);
+function collectStandards(projectRoot, pluginRoot) {
+  // loadStandardsMerged handles env fallback (CLAUDE_PLUGIN_ROOT) internally
+  // when pluginRoot is undefined.
+  const stds = loadStandardsMerged(projectRoot, pluginRoot);
   return stds.map(s => ({
     id: s.id,
     description: s.description,
     version: s.version,
     applyTo: s.applyTo,
     hasLinter: !!(s.enforcement && s.enforcement.linter),
+    // origin: "default" | "project" — exposed so renderer can tag [default]
+    origin: s.origin || "project",
   }));
 }
 
@@ -113,7 +124,9 @@ export function renderContextIndexText(idx) {
       const applyToText = apply.length === 0
         ? "(manual — sem auto-trigger)"
         : apply.join(", ");
-      lines.push(`  - ${s.id} — ${applyToText} (${linter})`);
+      // Origin tag: [default] for plugin-bundled defaults, blank for project.
+      const originTag = s.origin === "default" ? "[default] " : "";
+      lines.push(`  - ${originTag}${s.id} — ${applyToText} (${linter})`);
     }
   }
   lines.push("");
