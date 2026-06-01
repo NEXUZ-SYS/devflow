@@ -475,8 +475,8 @@ entries:
     antiPatternTemplate:
       - rule: "Comentário que repete literalmente o código ou a assinatura"
         correct: "Comentar o porquê da decisão; renomear função se o quê não é óbvio"
-      - rule: "TODO/FIXME sem dono e sem issue rastreável"
-        correct: "// TODO(handle): corrigir após #123 — ou remover e abrir issue"
+      - rule: "Marcador de tarefa (FIXME/pendência) sem dono e sem issue rastreável"
+        correct: "// PENDENCIA(handle): corrigir após #123 — ou remover e abrir issue"
       - rule: "JSDoc em função privada de uma linha com nome autoexplicativo"
         correct: "TSDoc apenas em APIs públicas exportadas entre módulos"
       - rule: "Wiki externa como fonte de verdade desconectada do código"
@@ -649,7 +649,7 @@ entries:
     principleTemplate: |
       PR focado em um objetivo, máximo 400 linhas de diff efetivo (exceto lockfiles,
       snapshots, migrations declarativas). Autor: lint + typecheck + testes locais antes
-      de abrir; self-review do diff; sem console.log, TODO órfão ou código comentado.
+      de abrir; self-review do diff; sem console.log, marcador de tarefa pendente órfão ou código comentado.
       Reviewer: classificar comentários com prefixo blocker/issue/suggestion/nit; propor
       alternativa ao criticar; nunca aprovar com blocker aberto. Gates: sem secret no repo,
       sem dependência com CVE high/critical, sem teste desabilitado sem issue rastreando.
