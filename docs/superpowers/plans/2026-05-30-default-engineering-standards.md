@@ -14,6 +14,24 @@
 
 ---
 
+## Revisões da fase R (incorporadas — ler junto com as tasks citadas)
+
+Review multi-agente (architect + security-auditor) na fase R produziu estas emendas **obrigatórias** ao plano. O executor aplica cada uma na task indicada.
+
+- **R1 (T4 — bloqueante):** `.context/standards.local.yaml` é YAML **bare** (sem fences `---`) → `frontmatter.mjs` NÃO serve. Implementar um reader dedicado linha-a-linha para o array `disable: [...]` (ou `disable:\n  - x`). Adicionar key `standardsLocalYaml` em `scripts/lib/context-paths.mjs` (resolve `.context/standards.local.yaml`, deliberadamente fora de `engineering/` por ser config de usuário). Adicionar teste isolado do reader.
+- **R2 (T7 — bloqueante):** ponto de wiring concreto = `scripts/lib/context-index.mjs` (`collectStandards`, ~linha 42) passa a chamar `loadStandardsMerged(projectRoot, pluginRoot)`; `scripts/lib/context-index-cli.mjs` aceita `--plugin=<path>` e repassa; o `hooks/session-start` (~linha 234) só dispara o índice quando existe `.context/standards` ou `.context/stacks/manifest.yaml` — **adicionar condição:** disparar também quando `CLAUDE_PLUGIN_ROOT` setado e `<plugin>/assets/standards/` existe (senão projeto sem std-local nunca vê os defaults). Teste shell cobrindo o caso "projeto sem std-local + defaults do plugin no índice".
+- **R3 (T6 — alto):** antes de buscar os ~20 arquivos, `update-default-standards.sh` faz `curl -fsSI` (HEAD) no `MANIFEST.txt` remoto; se falhar (404/rede), emite **uma** linha `[devflow] standards repo not yet live — using bundled snapshot` no stderr e `exit 0` (não tenta os 20). Base URL **hardcoded** (`https://raw.githubusercontent.com/NEXUZ-SYS/devflow-standards/`); rejeitar override. Teste do caminho "repo offline".
+- **R4 (T6 — HIGH security):** validar cada linha lida do `MANIFEST.txt` contra `^std-[a-z][a-z0-9-]+\.md$`; usar só o `basename` validado para montar o path de escrita (nunca a linha crua). Anti path-traversal/supply-chain.
+- **R5 (T5 — MED security):** `eject <id>` valida `<id>` contra `^[a-z][a-z0-9-]*$` (mesmo do `cmdNew`) + `assertWithinDir(src, <plugin>/assets/standards)` e `assertWithinDir(dest, contextPaths(project).standards)` antes de ler/escrever (padrão de `scripts/devflow-knowledge.mjs`).
+- **R6 (T6/T8 — MED security):** corpos buscados são injetados no contexto do agente (Stage-2) → aplicar strip SI-6 (`scripts/lib/sanitize-snippet.mjs`: role markers + "ignore previous instructions") em cada corpo antes de escrever em `assets/standards/`. Registrar a decisão de trust-boundary (first-party repo + sanitização defense-in-depth) na ADR-007.
+- **R7 (T4 — LOW security):** `loadStandardsMerged` faz `realpathSync` + containment (resolvido fica dentro do dir-fonte) antes de ler cada `.md` — anti symlink-escape, espelhando o SI-4 de `run-linter.mjs`.
+- **R8 (T7 — feasibility):** corrigir ordem TDD — escrever o teste (RED) ANTES de tocar `context-index.mjs`.
+- **R9 (T4 — feasibility):** adicionar teste do fallback `loadStandardsMerged(root)` (sem 2º arg) lendo de `CLAUDE_PLUGIN_ROOT` — é o codepath de produção (hook).
+- **R10 (T2 — feasibility):** o assert "sem `<!-- TODO`" é invariante **estrutural** (placeholder de scaffold), não content-check de prosa — manter, rotular como estrutural (ver memória `feedback_tdd_always`).
+- **R11 (T8 — feasibility):** ADR-007 — rodar `adr-audit.mjs` como step de teste (assert exit 0 / Gate PASSED), não verificação manual.
+
+---
+
 ## Convenções
 - pt-BR na prosa; identificadores/código em inglês.
 - TDD: RED→GREEN→REFACTOR. Testes reais; fixtures tmpdir; nunca mutar dir versionado in-place.
