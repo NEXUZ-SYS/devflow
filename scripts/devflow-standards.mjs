@@ -1,20 +1,22 @@
 #!/usr/bin/env node
-// scripts/devflow-standards.mjs — CLI dispatcher for `devflow standards new|verify`.
+// scripts/devflow-standards.mjs — CLI dispatcher for `devflow standards new|verify|eject`.
 //
 // Usage:
 //   devflow standards new <id>          Scaffold .context/standards/std-<id>.md + linter template
 //   devflow standards verify             Validate all standards (warnings on weak)
 //   devflow standards verify --strict    Exit non-zero if any weak standards found
 //   devflow standards verify <id>        Validate a single standard
+//   devflow standards eject <id>         Copy plugin default std-<id>.md into project (customizable)
 //
 // Per Dependency Policy: pure node:* — uses scripts/lib/{glob,frontmatter,standards-loader}.mjs.
 
-import { mkdir, writeFile, readFile, access } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdir, writeFile, readFile, access, copyFile } from "node:fs/promises";
+import { existsSync, mkdirSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { loadStandards } from "./lib/standards-loader.mjs";
 import { validateSubset } from "./lib/glob.mjs";
+import { contextPaths } from "./lib/context-paths.mjs";
 
 const SCAFFOLD_TEMPLATE = (id) => `---
 id: std-${id}
@@ -499,6 +501,74 @@ async function cmdVerify(targetId, strict, projectRoot) {
   return 0;
 }
 
+// ── R5 path-containment helpers (replicated from devflow-knowledge.mjs) ──────
+
+/**
+ * Validate the final resolved path stays within the expected parent directory.
+ * Secondary containment: catches edge cases that id-regex might miss.
+ */
+function assertWithinDir(filePath, parentDir) {
+  const rel = resolve(filePath);
+  const par = resolve(parentDir);
+  if (!rel.startsWith(par + sep) && rel !== par) {
+    process.stderr.write(
+      `Error: path traversal detected — resolved path escapes the target directory\n` +
+        `  resolved: ${rel}\n  dir: ${par}\n`,
+    );
+    process.exit(1);
+  }
+}
+
+// eject <id> --project=<path> [--force]
+// Copies <pluginRoot>/assets/standards/std-<id>.md → <project>/.context/engineering/standards/std-<id>.md.
+async function cmdEject(rawId, projectRoot, opts = {}) {
+  // Strip leading 'std-' prefix if passed (accept both 'security' and 'std-security').
+  let id = typeof rawId === "string" && rawId.startsWith("std-") ? rawId.slice(4) : rawId;
+
+  // R5 validation: id must match /^[a-z][a-z0-9-]*$/ — rejects /, \, .., etc.
+  if (!id || !/^[a-z][a-z0-9-]*$/.test(id)) {
+    process.stderr.write(
+      `Error: id inválido '${rawId}' — deve corresponder a /^[a-z][a-z0-9-]*$/ (sem /, \\, ..)\n`,
+    );
+    process.exit(1);
+  }
+
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.cwd();
+  const assetsStandardsDir = resolve(pluginRoot, "assets", "standards");
+  const src = resolve(assetsStandardsDir, `std-${id}.md`);
+
+  // R5 containment: src must be inside pluginRoot/assets/standards
+  assertWithinDir(src, assetsStandardsDir);
+
+  if (!existsSync(src)) {
+    process.stderr.write(`Error: default não encontrado: std-${id}\n  Caminho: ${src}\n`);
+    process.exit(1);
+  }
+
+  const standardsDir = contextPaths(projectRoot).standards;
+  const dest = resolve(standardsDir, `std-${id}.md`);
+
+  // R5 containment: dest must be inside project standards dir
+  assertWithinDir(dest, standardsDir);
+
+  if (existsSync(dest) && !opts.force) {
+    process.stderr.write(
+      `Error: ${dest} já existe (use --force para sobrescrever)\n`,
+    );
+    process.exit(1);
+  }
+
+  // mkdir -p the standards dir
+  mkdirSync(standardsDir, { recursive: true });
+
+  await copyFile(src, dest);
+
+  process.stdout.write(`${dest}\n`);
+  process.stdout.write(
+    `(edite à vontade; adicione um linter em machine/std-${id}.js para enforce real)\n`,
+  );
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   // Honor --project=<path>, --from-adr=<csv>, --force before consuming
@@ -578,7 +648,12 @@ async function main() {
     process.exit(code);
   }
 
-  console.error("Usage: devflow standards <new|verify|audit|search> [args]");
+  if (sub === "eject") {
+    await cmdEject(args[1], projectRoot, { force });
+    return;
+  }
+
+  console.error("Usage: devflow standards <new|verify|audit|search|eject> [args]");
   console.error("  new --concern=<id>                    Generate std from concern taxonomy (concern-first — preferred)");
   console.error("  new --concern=<id> --enrich-from-adr=<csv>  Concern std enriched with ADR guardrails");
   console.error("  new <id>                              Scaffold std-<id>.md + machine/std-<id>.js (TODO markers)");
@@ -588,6 +663,7 @@ async function main() {
   console.error("  audit <id>                            Deep audit (5 checks: scaffold/linter/refs/...)");
   console.error("  search --by-guardrail=<adr-slug>      List stds referencing an ADR (JSON)");
   console.error("  search --by-concern=<concern-id>      List ADRs matching a concern (JSON)");
+  console.error("  eject <id> [--force]                  Copy plugin default std-<id>.md → project");
   console.error("");
   console.error("  Common: --project=<path> to operate on a fixture/sub-project.");
   process.exit(2);
