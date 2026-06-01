@@ -318,6 +318,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/update-external-skill.sh" \
   SKILL.md README.md LICENSE
 ```
 
+**Step 4d — Refresh default standards (fail-safe, offline-safe):**
+
+Fetches the latest `assets/standards/*.md` snapshot from the standalone standards repo. If the repo is not yet live or the network is unavailable, this step is a clean no-op — the bundled snapshot is preserved and the update pipeline continues. Uses the local `assets/standards/MANIFEST.txt` (trusted) as the file list; each entry is validated before fetch. Fetched bodies are sanitized (SI-6) before writing.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/update-default-standards.sh"
+```
+
 **Step 5 — Report update results:**
 
 After all steps complete, show a summary table with what was updated and their versions.
