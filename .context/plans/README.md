@@ -8,7 +8,8 @@ This directory contains plans for coordinating work across documentation and pla
 3. [Autonomous Loop](./autonomous-loop.md)
 4. [Context Layer Knowledge Ddc](./context-layer-knowledge-ddc.md)
 5. [Context Layer V2](./context-layer-v2.md)
-6. [Mempalace Integration](./mempalace-integration.md)
+6. [Default Engineering Standards](./default-engineering-standards.md)
+7. [Mempalace Integration](./mempalace-integration.md)
 
 ## How To Create Or Update Plans
 - Run "dotcontext plan <name>" to scaffold a new plan template.

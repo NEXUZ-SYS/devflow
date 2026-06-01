@@ -261,6 +261,38 @@ User: "Audita std-zod"
 
 ---
 
+## Modo EJECT
+
+Copia um standard padrão do plugin para o projeto, permitindo customização local sem modificar o plugin.
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs eject <id> --project=<path> [--force]
+```
+
+### E1 — Resolver o id
+
+Aceita tanto `security` quanto `std-security` (o prefixo `std-` é removido automaticamente). O id resultante é validado contra `/^[a-z][a-z0-9-]*$/` — barras, pontos duplos e barras invertidas são rejeitados com exit 1 (R5 path containment).
+
+### E2 — Copiar com containment
+
+Dois checks de containment são aplicados antes da cópia:
+1. `src` (`<pluginRoot>/assets/standards/std-<id>.md`) deve estar dentro de `<pluginRoot>/assets/standards`.
+2. `dest` (`.context/engineering/standards/std-<id>.md`) deve estar dentro do diretório de standards do projeto.
+
+Se o arquivo de destino já existir, a operação falha com exit 1 a menos que `--force` seja passado. O diretório de destino é criado automaticamente (`mkdir -p`).
+
+### E3 — Sugerir linter em machine/
+
+Após a cópia bem-sucedida, o CLI emite o path do destino e a dica:
+
+```
+(edite à vontade; adicione um linter em machine/std-<id>.js para enforce real)
+```
+
+O arquivo ejected é um ponto de partida — edite-o livremente. Para enforcement via CI, crie `machine/std-<id>.js` seguindo o padrão dos linters existentes (recebe `process.argv[2]` como filePath, emite `VIOLATION: ...` + exit 1 em caso de falha).
+
+---
+
 ## Reference files
 
 - `references/taxonomy-of-concerns.yaml` — catálogo curado de concerns operacionais (~30 entries; projeto estende via `.context/standards/concerns.local.yaml`).

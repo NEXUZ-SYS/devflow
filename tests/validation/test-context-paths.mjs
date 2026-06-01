@@ -24,6 +24,7 @@ test("contextPaths: canonical paths sob engineering/", () => {
   assert.equal(p.operations, join(root, ".context", "operations"));
   assert.equal(p.engineering, join(root, ".context", "engineering"));
   assert.equal(p.layoutVersionFile, join(root, ".context", ".layout-version"));
+  assert.equal(p.standardsLocalYaml, join(root, ".context", "standards.local.yaml"));
   cleanup();
 });
 

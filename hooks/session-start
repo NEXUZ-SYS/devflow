@@ -231,9 +231,16 @@ fi
 # new conversation (cache is time-TTL'd at 6h, but sessions can overlap).
 
 context_index_context=""
-if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context/stacks/manifest.yaml" ]; then
+# R2 gate: fire when project has standards/stacks OR when the plugin ships
+# default standards (CLAUDE_PLUGIN_ROOT set and assets/standards/ exists).
+# SI-1: plugin path passed as a CLI argument, never interpolated into node -e.
+_plugin_has_defaults="false"
+if [ -n "${PLUGIN_ROOT:-}" ] && [ -d "${PLUGIN_ROOT}/assets/standards" ]; then
+  _plugin_has_defaults="true"
+fi
+if [ -d "${project_root}/.context/standards" ] || [ -f "${project_root}/.context/stacks/manifest.yaml" ] || [ "$_plugin_has_defaults" = "true" ]; then
   (cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --clear 2>/dev/null) || true
-  index_text=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/context-index-cli.mjs" --format=text 2>/dev/null || echo "")
+  index_text=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/lib/context-index-cli.mjs" --format=text --plugin="${PLUGIN_ROOT}" 2>/dev/null || echo "")
   if [ -n "$index_text" ]; then
     index_escaped=$(escape_for_json "$index_text")
     context_index_context="\\n<DEVFLOW_CONTEXT_INDEX>\\n${index_escaped}\\n</DEVFLOW_CONTEXT_INDEX>\\n"

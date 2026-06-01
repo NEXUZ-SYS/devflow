@@ -1,0 +1,14 @@
+{
+  "active": [
+    {
+      "slug": "context-layer-knowledge-ddc",
+      "path": "plans/context-layer-knowledge-ddc.md",
+      "title": "Context Layer de Conhecimento DDC",
+      "summary": "Trazer a camada de conhecimento de 4 níveis do DDC (business/product/engineering/operations) para o .context/ do DevFlow: engineering/ como container dos subsistemas (adrs/standards/stacks/templates), consolidação dos padrões de engenharia em Standards, mecanismo knowledge (incl. narrativa de engenharia D10), 4 agentes-curadores como produtores, migração explícita via /devflow update migration, e wiring de carregamento no PREVC — sem quebrar a compatibilidade com o dotcontext. Spec: docs/superpowers/specs/2026-05-30-context-layer-knowledge-ddc-design.md. Plano: docs/superpowers/plans/2026-05-30-context-layer-knowledge-ddc.md.",
+      "linkedAt": "2026-05-30T05:37:14.675Z",
+      "status": "active"
+    }
+  ],
+  "completed": [],
+  "primary": "context-layer-knowledge-ddc"
+}

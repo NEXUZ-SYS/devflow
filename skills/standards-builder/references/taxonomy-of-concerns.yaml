@@ -375,3 +375,451 @@ entries:
     relatedAdrCategories:
       - qualidade-testes
       - processo
+
+  - id: security
+    summary: Higiene de segurança transversal — authn/authz, secrets, output escaping, rate-limit e dependências
+    category: seguranca
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - firebase-admin
+      - bcrypt
+      - argon2
+      - helmet
+      - csp
+      - cors
+      - zod
+      - crypto
+    principleTemplate: |
+      Todo input externo é hostil até validado. Defense in depth: validação na borda +
+      authn/authz na primeira linha do handler + output escapado para o sink + secrets
+      exclusivamente via env/secret-manager + rate-limit em endpoints sensíveis.
+      Least privilege em service accounts e tokens. Nunca logar PII, secrets ou headers
+      de autenticação. Dependências com CVE high/critical bloqueiam CI.
+    antiPatternTemplate:
+      - rule: "Handler acessa recurso sem verificar authn/authz primeiro"
+        correct: "requireUser(req) na primeira linha; verificar ownership antes de mutar"
+      - rule: "Secret hardcoded em código ou arquivo de config versionado"
+        correct: "Ler de process.env ou secret manager; .env jamais commitado"
+      - rule: "dangerouslySetInnerHTML com output de LLM sem sanitização"
+        correct: "Tratar output de IA como untrusted; sanitizar antes de render HTML"
+      - rule: "SQL montado por concatenação de string"
+        correct: "Queries parametrizadas ($1, $2) ou query builder com bind"
+    linterHints:
+      - "regex: (password|secret|api_key|token)\\s*=\\s*['\"][^'\"]{8,}"
+      - "Verificar .gitignore contém .env* e secrets/"
+      - "ESLint no-secrets ou horusec para scan de credentials"
+      - "npm audit / pip-audit em CI: bloquear high/critical sem mitigação"
+    relatedAdrCategories:
+      - seguranca
+      - backend
+      - bff
+      - frontend
+
+  - id: performance
+    summary: Rendering, bundle size, data fetching, queries e latência percebida
+    category: performance
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - next/dynamic
+      - react-query
+      - prisma
+      - pg-pool
+      - p-limit
+      - bundle-analyzer
+    principleTemplate: |
+      Operações independentes correm em paralelo (Promise.all, não await em loop).
+      Sem N+1: joins, getAll ou DataLoader em vez de query dentro de loop. Fetches
+      acontecem no Server Component mais próximo de quem usa o dado; bundle client
+      não inclui SDKs server-only. Medir antes de otimizar — p99 é o SLO real.
+      LCP < 2.5s, INP < 200ms, TTFB < 600ms em p75 mobile são metas mínimas.
+    antiPatternTemplate:
+      - rule: "await sequencial em loop sobre itens independentes"
+        correct: "Promise.all([...items.map(fn)]) ou p-limit para batch controlado"
+      - rule: "SELECT * em código de produção"
+        correct: "Listar colunas explicitamente; reduz I/O e evita quebra silenciosa"
+      - rule: "Import de lib pesada em Client Component"
+        correct: "next/dynamic com ssr:false ou manter no servidor; import 'server-only'"
+      - rule: "Query sem índice em coluna filtrada"
+        correct: "Criar índice antes de promover a produção; EXPLAIN ANALYZE confirma"
+    linterHints:
+      - "Detectar await dentro de for/forEach (await-in-loop)"
+      - "AST: SELECT * em queries SQL"
+      - "@next/bundle-analyzer para regressão de bundle em CI"
+      - "ESLint no-restricted-imports: proibir dayjs/moment quando Intl resolve"
+    relatedAdrCategories:
+      - performance
+      - frontend
+      - backend
+      - bff
+
+  - id: documentation
+    summary: Quando documentar, quando não documentar e como redigir docs que sobrevivem ao tempo
+    category: docs
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - tsdoc
+      - jsdoc
+      - typedoc
+      - mkdocs
+      - storybook
+    principleTemplate: |
+      Código autoexplicativo vence comentário. Documentar o PORQUÊ, não o quê.
+      APIs públicas consumidas fora do módulo têm TSDoc com @throws e @example.
+      Workarounds levam comentário // HACK: com link para issue. READMEs existem
+      em pacotes publicáveis e apps executáveis com estrutura mínima: propósito,
+      pré-requisitos, como rodar, como testar, referências. Changelogs automatizados
+      a partir de Conventional Commits; docs desatualizadas são bugs.
+    antiPatternTemplate:
+      - rule: "Comentário que repete literalmente o código ou a assinatura"
+        correct: "Comentar o porquê da decisão; renomear função se o quê não é óbvio"
+      - rule: "Marcador de tarefa (FIXME/pendência) sem dono e sem issue rastreável"
+        correct: "// PENDENCIA(handle): corrigir após #123 — ou remover e abrir issue"
+      - rule: "JSDoc em função privada de uma linha com nome autoexplicativo"
+        correct: "TSDoc apenas em APIs públicas exportadas entre módulos"
+      - rule: "Wiki externa como fonte de verdade desconectada do código"
+        correct: "Docs vivem em .contexts/ ou ao lado do código; wiki é espelho, não origem"
+    linterHints:
+      - "ESLint valid-jsdoc ou eslint-plugin-jsdoc para checar TSDoc incompleto"
+      - "Detectar código comentado com regex /* ou // seguido de código TS/JS"
+      - "Verificar existência de README.md em pacotes com package.json publicável"
+    relatedAdrCategories:
+      - processo
+      - qualidade-testes
+      - arquitetura
+
+  - id: grounding
+    summary: Disciplina anti-alucinação — verificar existência real de arquivos, símbolos e APIs antes de referenciar
+    category: qualidade
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - glob
+      - grep
+      - ast-grep
+      - typescript
+    principleTemplate: |
+      Toda referência a arquivo, símbolo, endpoint, versão de lib ou comportamento de
+      sistema é verificada no código real antes de afirmar ou agir. Nunca assumir por
+      plausibilidade. Verificação precede geração: listar símbolos externos, confirmar
+      existência via Read/Glob/Grep, checar versão de lib no lockfile antes de citar API.
+      Incerteza é declarada ("não encontrei"), nunca disfarçada com palpite plausível.
+    antiPatternTemplate:
+      - rule: "Chamar função cujo nome 'parece certo' sem confirmar exportação"
+        correct: "Grep por declaração da função antes de invocar; ler o arquivo se necessário"
+      - rule: "Importar de path que segue convenção sem confirmar que o arquivo existe"
+        correct: "Glob ou Read para confirmar existência antes de gerar o import"
+      - rule: "Usar opção de config porque 'framework X normalmente tem isso'"
+        correct: "Checar type definitions da versão instalada (package.json + node_modules)"
+      - rule: "Env var lida sem confirmar que está no schema de config"
+        correct: "Grep em env.ts ou .env.example antes de referenciar a var"
+    linterHints:
+      - "TypeScript strict mode: noImplicitAny, strictNullChecks detectam referências fantasmas"
+      - "ts-prune ou ts-unused-exports detectam exports que não existem"
+      - "Verificar que todos os imports resolvem (tsc --noEmit)"
+    relatedAdrCategories:
+      - qualidade-testes
+      - processo
+
+  - id: migration
+    summary: Mudanças de schema e dados em fases — expand, migrate, contract — com idempotência e zero-downtime
+    category: data
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - prisma
+      - flyway
+      - alembic
+      - knex
+      - drizzle
+      - sequelize
+    principleTemplate: |
+      Toda migração não-trivial segue expand → migrate → contract: adicionar nova forma,
+      mover dados/tráfego, depois remover a antiga. Código tolera schema velho e novo
+      durante transição. Backfills são idempotentes, batched (1k-10k linhas) com checkpoint.
+      Índices criados com CONCURRENTLY (sem lock). Nunca rodar migration no boot de app;
+      sempre como job dedicado no pipeline. Plano de rollback documentado antes do deploy.
+    antiPatternTemplate:
+      - rule: "Renomear ou dropar coluna em um único passo de deploy"
+        correct: "Adicionar nova coluna, dual-write, backfill, migrar leitura, depois dropar"
+      - rule: "NOT NULL sem default em tabela com dados existentes"
+        correct: "Adicionar nullable, backfill em batches, aplicar NOT NULL em release separada"
+      - rule: "Migration no startup da aplicação (ORM synchronize: true em produção)"
+        correct: "Migration como step explícito do pipeline, auditável e com exit code verificado"
+      - rule: "Backfill UPDATE sem WHERE filtrando apenas rows não processadas"
+        correct: "WHERE new_col IS NULL ou marker de checkpoint; idempotente por design"
+    linterHints:
+      - "Verificar ausência de 'synchronize: true' em config de ORM de produção"
+      - "Detectar CREATE INDEX sem CONCURRENTLY em migrations Postgres"
+      - "Verificar existência de migration down correspondente a cada migration up"
+    relatedAdrCategories:
+      - data
+      - backend
+      - arquitetura
+
+  - id: data-modeling
+    summary: Modelagem de entidades, identificadores, nullability, normalização e invariantes de domínio
+    category: data
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - prisma
+      - typeorm
+      - drizzle
+      - mongoose
+      - sqlalchemy
+      - zod
+    principleTemplate: |
+      Entidades têm identidade própria (ULID/UUID v4, gerado no domínio). Value objects
+      são imutáveis e comparados por valor. Nullability é decisão explícita: null significa
+      "ausente por design"; string vazia e -1 jamais representam "ausente". Dinheiro em
+      inteiro (centavos) + moeda como value object. Timestamps em UTC, ISO 8601 com offset.
+      Normalização por padrão; desnormalizar só com motivo mensurável e declarado.
+    antiPatternTemplate:
+      - rule: "Float para armazenar dinheiro"
+        correct: "bigint de centavos + campo currency: string (ISO 4217)"
+      - rule: "Auto-increment numérico como identificador externo"
+        correct: "ULID ou UUID v4 gerado no domínio antes de persistir"
+      - rule: "Boolean flags múltiplos para estado mutuamente exclusivo (isActive, isPending)"
+        correct: "Enum union literal: status: 'active' | 'pending' | 'cancelled'"
+      - rule: "Campo nullable sem semântica documentada"
+        correct: "Documentar: null = 'usuário não informou' vs campo ausente = 'não carregado'"
+    linterHints:
+      - "TypeScript: branded types para UserId, OrderId (ts-brand ou zod .brand())"
+      - "Detectar uso de float/number para campos de dinheiro em schemas Zod/Prisma"
+      - "ESLint custom: proibir auto-increment (serial/identity) em entidades com API pública"
+    relatedAdrCategories:
+      - data
+      - backend
+      - arquitetura
+      - contratos
+
+  - id: schemas
+    summary: Schema-first — tipos derivam do schema, evolução compatível, IDs brandados, sem duplicação
+    category: contracts
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - zod
+      - valibot
+      - yup
+      - io-ts
+      - typebox
+      - openapi
+      - json-schema
+    principleTemplate: |
+      Schema é fonte de verdade do shape dos dados. Tipos TS derivam do schema (z.infer),
+      nunca declarados em paralelo. Schemas vivem em arquivos dedicados (*.schema.ts)
+      reutilizáveis entre client e server. Evolução é aditiva: campo opcional sim;
+      tornar obrigatório ou renomear exige versionamento. IDs semânticos usam branded
+      types (.brand<"UserId">()). Refinements (regex, range, regra de negócio) vivem
+      no schema, não no handler.
+    antiPatternTemplate:
+      - rule: "type interface Foo declarado manualmente paralelo a z.object existente"
+        correct: "type Foo = z.infer<typeof FooSchema> — único source of truth"
+      - rule: "Adicionar campo obrigatório a schema existente sem migração"
+        correct: "Novo campo opcional (z.optional()) + backfill + constraint em release separada"
+      - rule: "z.any() em campo crítico de payload"
+        correct: "Declarar shape exato ou z.unknown() + refinement com parse explícito"
+      - rule: "Schema inline no handler de 200 linhas"
+        correct: "Extrair para arquivo *.schema.ts, exportar e reutilizar"
+    linterHints:
+      - "ESLint custom: proibir `type X = { ... }` quando existe `XSchema` no mesmo pacote"
+      - "Detectar z.any() em schemas de boundary (rotas, eventos, webhooks)"
+      - "Verificar que schemas de API têm correspondente em openapi.yaml ou equivalente"
+    relatedAdrCategories:
+      - contratos
+      - backend
+      - frontend
+      - bff
+
+  - id: code-review
+    summary: Escopo de PR, checklists de autor e reviewer, severidade de comentários e gates obrigatórios
+    category: process
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - github
+      - gitlab
+      - pull-request
+      - codeowners
+      - danger
+    principleTemplate: |
+      PR focado em um objetivo, máximo 400 linhas de diff efetivo (exceto lockfiles,
+      snapshots, migrations declarativas). Autor: lint + typecheck + testes locais antes
+      de abrir; self-review do diff; sem console.log, marcador de tarefa pendente órfão ou código comentado.
+      Reviewer: classificar comentários com prefixo blocker/issue/suggestion/nit; propor
+      alternativa ao criticar; nunca aprovar com blocker aberto. Gates: sem secret no repo,
+      sem dependência com CVE high/critical, sem teste desabilitado sem issue rastreando.
+    antiPatternTemplate:
+      - rule: "PR misturando refatoração, feature e bugfix"
+        correct: "Um PR por objetivo; separe refactor de feature em commits ou PRs distintos"
+      - rule: "Comentário de review sem severidade e sem alternativa"
+        correct: "blocker: validar input antes de passar ao domínio — sugestão: usar OrderSchema.parse()"
+      - rule: "Aprovar PR de IA sem revisar cada linha"
+        correct: "Aplicar o mesmo rigor de PR humano: grounding de APIs, testes reais, lógica correta"
+      - rule: "Resolver thread de outro reviewer sem resposta"
+        correct: "Quem abriu o thread o resolve; autor responde com commit referenciado"
+    linterHints:
+      - "Danger.js ou equivalente: verificar tamanho do PR, presença de testes, CODEOWNERS"
+      - "Detectar it.skip / describe.skip sem comentário inline e issue linkada"
+      - "Verificar que PR description não está vazia (CI check)"
+    relatedAdrCategories:
+      - processo
+      - qualidade-testes
+      - seguranca
+
+  - id: accessibility
+    summary: WCAG 2.2 AA — HTML semântico, ARIA como último recurso, foco, contraste e live regions
+    category: ui
+    defaultApplyTo:
+      - "**/*.{tsx,jsx}"
+    inverseHints:
+      - radix-ui
+      - shadcn
+      - axe-core
+      - vitest-axe
+      - aria
+      - wcag
+    principleTemplate: |
+      Baseline obrigatório: WCAG 2.2 nível AA em todo fluxo público. HTML semântico primeiro:
+      usar o elemento nativo correto antes de ARIA. Todo elemento interativo tem nome acessível
+      (texto visível, aria-label ou label). Foco visível em todos os interativos; focus trap
+      em modais bloqueantes (nunca em popovers). Contraste mínimo 4.5:1 texto normal, 3:1
+      texto grande e componentes UI. live regions anunciam mudanças dinâmicas. axe-core em
+      testes automatizados + rodada manual com teclado por feature.
+    antiPatternTemplate:
+      - rule: "div onClick como botão sem role e sem handler de teclado"
+        correct: "<button> nativo — traz foco, teclado, role e estados grátis"
+      - rule: "outline: none sem substituição visível via :focus-visible"
+        correct: "focus-visible:ring-2 do Tailwind ou CSS equivalente com contraste >= 3:1"
+      - rule: "placeholder como única indicação de label de campo"
+        correct: "<label for> ou <label> envolvendo o input; placeholder apenas complementa"
+      - rule: "Mensagem de erro sem aria-describedby no campo afetado"
+        correct: "aria-describedby='error-id' no input + aria-invalid='true' + role='alert' na msg"
+    linterHints:
+      - "eslint-plugin-jsx-a11y: jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions"
+      - "Detectar img sem atributo alt (jsx-a11y/alt-text)"
+      - "axe-core em testes Vitest via vitest-axe para componentes de UI"
+      - "Detectar tabindex com valor positivo (jsx-a11y/tabindex-no-positive)"
+    relatedAdrCategories:
+      - ui
+      - frontend
+      - qualidade-testes
+
+  - id: internationalization
+    summary: i18n e l10n — strings via t(), ICU MessageFormat, Intl nativa, UTC no backend, locale negociado
+    category: ui
+    defaultApplyTo:
+      - "**/*.{tsx,jsx,ts}"
+    inverseHints:
+      - next-intl
+      - react-i18next
+      - i18next
+      - formatjs
+      - intl
+      - icu
+    principleTemplate: |
+      Toda string user-facing passa por t('chave.semantica'). Chaves namespaced por feature;
+      nunca a string em inglês como chave. Plurais e seleção via ICU MessageFormat (não if/else
+      manual). Formatação de datas, números e moedas via Intl nativo com locale explícito.
+      Timestamps armazenados em UTC; convertidos para fuso do usuário apenas na apresentação.
+      Layout usa CSS logical properties (margin-inline-start) para suporte a RTL.
+      Locale negociado: URL subpath > perfil do usuário > Accept-Language > default.
+    antiPatternTemplate:
+      - rule: "String user-facing hardcoded em JSX ou código"
+        correct: "t('feature.context.key') com chave semantica e namespaced"
+      - rule: "Plural via if (count === 1) ? t('item') : t('items')"
+        correct: "ICU plural: t('items', { count }) com categorias zero/one/other"
+      - rule: "Intl.DateTimeFormat sem locale explícito"
+        correct: "new Intl.DateTimeFormat(locale, options) — nunca confiar no default do runtime"
+      - rule: "margin-left/right em layout que precisa suportar RTL"
+        correct: "margin-inline-start / margin-inline-end (CSS logical properties)"
+    linterHints:
+      - "eslint-plugin-i18n-json ou i18next-parser para detectar strings não extraídas"
+      - "Detectar hardcoded strings em JSX (eslint-plugin-react/jsx-no-literals customizado)"
+      - "Detectar Date.toLocaleString() sem locale explícito"
+      - "Verificar que todos os locales em produção têm 100% das chaves traduzidas no CI"
+    relatedAdrCategories:
+      - ui
+      - frontend
+      - contratos
+
+  - id: caching
+    summary: Estratégia de cache por camada — chaves determinísticas, TTL explícito, invalidação por evento e escopo seguro
+    category: performance
+    defaultApplyTo:
+      - "src/**/*.{ts,tsx}"
+    inverseHints:
+      - redis
+      - memcached
+      - unstable_cache
+      - revalidateTag
+      - stale-while-revalidate
+      - cache-control
+    principleTemplate: |
+      Menor escopo viável: cachear no nível mais próximo do consumidor que preserva
+      correção. Chaves determinísticas namespaced com versão: users:v2:profile:{userId}.
+      TTL explícito em toda entrada; TTL infinito proibido sem invalidação por evento.
+      Invalidação por evento é mecanismo primário; TTL é rede de segurança. Jitter no TTL
+      evita stampede. Nunca cachear tokens, secrets, PII em cache compartilhado, ou respostas
+      de autorização com TTL longo. Medir hit rate em produção; cache sem observabilidade é dívida.
+    antiPatternTemplate:
+      - rule: "Chave de cache com email ou CPF em texto claro"
+        correct: "Usar userId interno ou hash(email); PII nunca na chave"
+      - rule: "TTL infinito sem mecanismo de invalidação por evento"
+        correct: "TTL como rede de segurança + revalidateTag ou cache.del() em escrita"
+      - rule: "Cache compartilhado servindo dados de tenants distintos pela mesma chave"
+        correct: "Incluir tenantId na chave: tenant:{tenantId}:resource:{id}"
+      - rule: "Cachear resposta de LLM com temperature > 0 esperando reuso"
+        correct: "Só cachear com temperature=0; hashe prompt completo (SHA-256) na chave"
+    linterHints:
+      - "Detectar cache.set sem TTL explícito"
+      - "Verificar namespacing de chave (prefixo de domínio + versão obrigatórios)"
+      - "Instrumentar hit/miss rate por namespace (Prometheus, Datadog) — alerta se cair"
+    relatedAdrCategories:
+      - performance
+      - backend
+      - bff
+      - seguranca
+
+  - id: state-management
+    summary: Categorização de estado, source of truth única, escopo mínimo e imutabilidade no frontend
+    category: frontend
+    defaultApplyTo:
+      - "**/*.{tsx,jsx}"
+    inverseHints:
+      - zustand
+      - redux
+      - jotai
+      - valtio
+      - recoil
+      - context
+      - useState
+    principleTemplate: |
+      Classificar cada pedaço de estado antes de decidir onde armazenar: server state
+      (fetch layer/RSC), URL state (filtros, paginação), form state (form library), UI local
+      (useState), client global (store por domínio), derived (computar, não armazenar).
+      Escopo mínimo: elevar apenas até o ancestral comum necessário. Imutabilidade estrita:
+      concat/spread/filter em vez de push/splice/sort in-place. Server state nunca duplicado
+      em store cliente — usar cache do fetch layer. Store global dividida por domínio, com
+      método reset explícito.
+    antiPatternTemplate:
+      - rule: "Copiar resposta de fetch para Zustand/Context 'para evitar refetch'"
+        correct: "Usar cache do fetch layer (React Query, Next fetch, RSC) como fonte canônica"
+      - rule: "useEffect sincronizando um state com outro state"
+        correct: "Substituir por derivação direta no render ou useMemo"
+      - rule: "Mega-store global única contendo todo estado da aplicação"
+        correct: "Stores separadas por domínio (userStore, cartStore) com reset explícito"
+      - rule: "Boolean flags acumulados (isLoading + isError + isSuccess)"
+        correct: "Enum de status: 'idle' | 'loading' | 'error' | 'success'"
+    linterHints:
+      - "Detectar push/splice/sort direto em variável de state (mutation proibida)"
+      - "ESLint react-hooks/exhaustive-deps para evitar closures stale em useEffect"
+      - "Detectar useState inicializado com prop e nunca sincronizado (prop drilling bug)"
+    relatedAdrCategories:
+      - frontend
+      - performance
+      - arquitetura
