@@ -591,6 +591,8 @@ Each directory receives a minimal `README.md` placeholder (in the user's selecte
 | `.context/operations/` | `operations-context` | runbooks, on-call, SLOs, infra |
 | `.context/engineering/` | `engineering-context` | architecture, standards, subsystems |
 
+**Standards default:** o DevFlow já disponibiliza ~20 standards default de engenharia (warn-only, concern-first) via plugin — não precisam ser scaffoldados. Eles aparecem no índice do SessionStart e são filtrados por `applyTo`/task. Para customizar um, use `/devflow standards eject <id>` (copia para `.context/engineering/standards/`, editável, com linter opcional em `machine/`).
+
 ### Engineering subsystems relocation (migration guard)
 
 If a **legacy `.context/` layout (v1)** is detected — identified by subsystem directories sitting directly under `.context/` instead of under `.context/engineering/` (e.g., `.context/standards/`, `.context/architecture/`, `.context/subsystems/`) — do NOT relocate them manually. Instead, surface the migration path:
