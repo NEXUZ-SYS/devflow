@@ -5,6 +5,20 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] — 2026-05-31
+
+### Added — Biblioteca de Standards Default de Engenharia
+
+**Defaults plugin-bundled (warn-only, concern-first)** — O DevFlow passa a shippar ~20 standards default de engenharia vendorizados em `assets/standards/` (16 universais + 4 condicionais), portados das rules/contracts genéricas. `source: devflow-default`, `enforcement.linter: null` (warn-only) — guidance injetada just-in-time, sem complicar o sandbox SI-4. Contracts DB-específicos ficam de fora (vão para o subsistema de stacks).
+
+**Carregamento just-in-time** — `standards-loader.mjs` ganha `loadStandardsMerged(projectRoot, pluginRoot)`: merge de 2 fontes (plugin-defaults + projeto, projeto vence por `id`), `disable:` via `.context/standards.local.yaml`, symlink-safe. Defaults entram no índice Stage-1 (`context-index.mjs` + gate do `session-start`) marcados `[default]`; o filtro por `applyTo`/task seleciona só os relevantes.
+
+**Override por projeto** — `/devflow standards eject <id>` copia um default para `.context/engineering/standards/` (editável, linter opcional em `machine/`), com path-containment. Override por mesmo `id`; desligar via `disable:`.
+
+**Manutenção ao vivo** — `/devflow update` Step 4d (`update-default-standards.sh`) refresca o snapshot via fetch https do repo standalone `NEXUZ-SYS/devflow-standards` (à la napkin), com HEAD-guard + host hardcoded + validação de MANIFEST (anti-traversal) + sanitização SI-6 dos corpos buscados + fail-safe offline. **Não** usa git submodule (quebra o install do plugin).
+
+**Taxonomia** — +12 concerns em `taxonomy-of-concerns.yaml` (security, performance, documentation, grounding, migration, data-modeling, schemas, code-review, accessibility, i18n, caching, state-management). **ADR-007** registra a decisão (plugin-bundled + fetch, warn-only, eject; trust-boundary SI-6). dotcontext intocado.
+
 ## [1.8.0] — 2026-05-30
 
 ### Added — Camada de Conhecimento DDC (4 níveis, mecanismo knowledge, 4 curadores)
