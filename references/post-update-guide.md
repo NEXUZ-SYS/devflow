@@ -149,3 +149,22 @@ test -f .context/workflow/stories.yaml
 - Ou executar `/devflow prd` primeiro para gerar um PRD, depois decompor em stories
 
 **Verificação:** SessionStart mostra seção `AUTONOMOUS WORKFLOW ACTIVE`.
+
+---
+
+## Standards Default de Engenharia
+
+**O que é:** ~20 standards default de engenharia (warn-only, concern-first) shippados pelo plugin — sempre disponíveis, filtrados por `applyTo`/task. Não precisam ser scaffoldados.
+
+**Detecção:** Verificar se o projeto já tem standards próprios (overrides/ejects)
+```bash
+ls .context/engineering/standards/std-*.md >/dev/null 2>&1
+```
+
+**Se NÃO configurado (sem overrides do projeto):**
+- Os defaults já estão ativos via plugin (warn-only) — aparecem no índice do SessionStart marcados `[default]` e são injetados por relevância de task.
+- Para customizar um default: `/devflow standards eject <id>` (copia para `.context/engineering/standards/`, editável, com linter opcional em `machine/`).
+- Para desligar um default: adicione `disable: [std-<id>]` em `.context/standards.local.yaml`.
+- (Opcional) Manutenção ao vivo: `/devflow update` (Step 4d) refresca os defaults via fetch do repo standalone.
+
+**Verificação:** SessionStart lista os standards default `[default]` no índice de contexto.
