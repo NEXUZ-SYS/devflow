@@ -5,7 +5,7 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.9.0] — 2026-05-31
+## [1.9.5] — 2026-05-31
 
 ### Added — Biblioteca de Standards Default de Engenharia
 
