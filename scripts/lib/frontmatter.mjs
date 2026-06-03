@@ -28,13 +28,36 @@ function unquote(s) {
   return s;
 }
 
+function splitTopLevelCommas(inner) {
+  // Split on commas that are NOT inside quotes or brace-globs ({a,b}).
+  // Needed because applyTo values like "**/*.{ts,tsx,js}" carry commas that
+  // are part of the value, not item separators.
+  const parts = [];
+  let buf = "";
+  let quote = null;   // "'" or '"' when inside a quoted string
+  let brace = 0;      // brace-glob nesting depth
+  for (const ch of inner) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; buf += ch; continue; }
+    if (ch === "{") { brace++; buf += ch; continue; }
+    if (ch === "}") { if (brace > 0) brace--; buf += ch; continue; }
+    if (ch === "," && brace === 0) { parts.push(buf); buf = ""; continue; }
+    buf += ch;
+  }
+  parts.push(buf);
+  return parts;
+}
+
 function parseInlineArray(v) {
-  // v is "[item1, item2, ...]" — strip brackets, split on commas, unquote each
+  // v is "[item1, item2, ...]" — strip brackets, split on TOP-LEVEL commas
+  // (ignoring commas inside quotes or brace-globs), unquote each.
   const inner = v.slice(1, -1).trim();
   if (inner === "") return [];
-  // Naive split by comma — sufficient for ADR/standard frontmatter use cases
-  // (no nested arrays, no quoted commas in standards).
-  return inner.split(",").map(s => unquote(s.trim()));
+  return splitTopLevelCommas(inner).map(s => unquote(s.trim()));
 }
 
 function parseScalar(raw) {

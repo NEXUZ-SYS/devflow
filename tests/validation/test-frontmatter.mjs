@@ -52,6 +52,26 @@ test("parseFrontmatter: handles quoted strings with special chars", () => {
   assert.equal(r.data.title, "single quoted");
 });
 
+test("parseFrontmatter: inline array preserves brace-glob (comma inside {})", () => {
+  // Regression: applyTo globs like "**/*.{ts,tsx,js}" were shattered on the
+  // commas INSIDE the braces, breaking standards enforcement for ~19/20 defaults.
+  const src = '---\napplyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]\n---\nbody\n';
+  const r = parseFrontmatter(src);
+  assert.deepEqual(r.data.applyTo, ["**/*.{ts,tsx,js,jsx,py,go}"]);
+});
+
+test("parseFrontmatter: inline array splits only top-level commas", () => {
+  const src = '---\napplyTo: ["src/**/*.{ts,tsx}", "**/*.py"]\n---\nbody\n';
+  const r = parseFrontmatter(src);
+  assert.deepEqual(r.data.applyTo, ["src/**/*.{ts,tsx}", "**/*.py"]);
+});
+
+test("parseFrontmatter: inline array respects quoted commas", () => {
+  const src = '---\nlist: ["a,b", "c"]\n---\nbody\n';
+  const r = parseFrontmatter(src);
+  assert.deepEqual(r.data.list, ["a,b", "c"]);
+});
+
 test("parseFrontmatter: handles null and boolean values", () => {
   const src = "---\nprotocol_contract: null\nautonomous: true\nweakStandardWarning: false\n---\nbody\n";
   const r = parseFrontmatter(src);
