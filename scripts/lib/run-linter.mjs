@@ -70,10 +70,13 @@ export function resolveAndCheckSandbox(linterRel, opts = {}) {
     const canonicalMachineRoot = resolve(contextPaths(projectRoot).standardsMachine);
     // Legacy machine root: first resolved read-path for "standards" + "/machine".
     const standardsReadPaths = resolveReadPaths(projectRoot, "standards");
-    const legacyMachineRoot = resolve(standardsReadPaths.find(p => p !== contextPaths(projectRoot).standards) ?? "", "machine");
     allowedRoots = [canonicalMachineRoot];
-    if (legacyMachineRoot && legacyMachineRoot !== canonicalMachineRoot) {
-      allowedRoots.push(legacyMachineRoot);
+    // T1 hardening: only add a legacy root when a real legacy standards dir
+    // exists — never fabricate a cwd-relative `resolve("", "machine")` root.
+    const legacyStandards = standardsReadPaths.find(p => p !== contextPaths(projectRoot).standards);
+    if (legacyStandards) {
+      const legacyMachineRoot = resolve(legacyStandards, "machine");
+      if (legacyMachineRoot !== canonicalMachineRoot) allowedRoots.push(legacyMachineRoot);
     }
   }
 
