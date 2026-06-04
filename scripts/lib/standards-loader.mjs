@@ -171,13 +171,28 @@ function readStandardsFromDir(dir, origin) {
     if (!fm.id) continue;
     if (fm.deprecated === true) continue;
 
+    // R11 — validate applyTo globs (SI-5 subset) just like loadStandards, so the
+    // merged loader and the linter runner can't be fed an invalid/unsafe glob.
+    const applyTo = Array.isArray(fm.applyTo) ? fm.applyTo : [];
+    let validApplyTo = true;
+    for (const pattern of applyTo) {
+      try {
+        validateSubset(pattern);
+      } catch (err) {
+        console.error(`[standards-loader] ${fm.id}: invalid glob '${pattern}': ${err.message}`);
+        validApplyTo = false;
+        break;
+      }
+    }
+    if (!validApplyTo) continue;
+
     standards.push({
       id: fm.id,
       file: entry,
       filePath,
       description: fm.description || "",
       version: fm.version || "0.0.0",
-      applyTo: Array.isArray(fm.applyTo) ? fm.applyTo : [],
+      applyTo,
       relatedAdrs: fm.relatedAdrs || [],
       enforcement: fm.enforcement || {},
       body: parsed.body || "",

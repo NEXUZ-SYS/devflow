@@ -14,7 +14,7 @@ import { resolve, isAbsolute, relative } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
+import { loadStandardsMerged, findApplicableStandards } from "./standards-loader.mjs";
 import { deriveFirstRefForStandard } from "./standard-refs.mjs";
 import { contextPaths, resolveReadPaths } from "./context-paths.mjs";
 
@@ -115,7 +115,9 @@ export async function runLintersFor(event, projectRoot, pluginRoot) {
   }
   if (!event.path) return result;
 
-  const standards = loadStandards(projectRoot);
+  // Merged: project standards + plugin defaults (origin-stamped). Defaults with a
+  // bundled linter are now enforced even without eject; project overrides by id.
+  const standards = loadStandardsMerged(projectRoot, pluginRoot);
   const applicable = findApplicableStandards(event.path, standards);
 
   for (const std of applicable) {
