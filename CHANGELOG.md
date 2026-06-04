@@ -5,6 +5,20 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] — 2026-06-04
+
+### Changed — Enforcement nativo de standards default sem eject (ADR-007 v2.0.0)
+
+**Reversão consciente da postura warn-only.** A ADR-007 evolui para **v2.0.0** (major): defaults PODEM trazer linter executável **bundlado no plugin** (`assets/standards/machine/std-<id>.js`), executado pelo sandbox **SI-4 origin-aware** (2º allowlist root `<pluginRoot>/assets/standards/machine/`). Um projeto que usa os defaults agora recebe enforcement **sem eject**.
+
+**Conjunto curado inicial (baixo falso-positivo, security-reviewed):** `security` (dangerouslySetInnerHTML), `error-handling` (catch vazio — regex sem ReDoS), `test-discipline` (it/describe/test `.only|.skip`), `secret-conventions` (formatos de chave conhecidos: sk-/ghp_/AKIA/xox/AIza). Os demais seguem warn-only.
+
+**Segurança.** `run-linter.mjs` usa `loadStandardsMerged(projectRoot, pluginRoot)` e resolve o linter pela **origem carimbada pelo loader** (project→`.context`, default→plugin), nunca `fm.origin`. `pluginRoot` é **trust-anchored** por marker `.claude-plugin/plugin.json` (preferindo `--plugin` do `BASH_SOURCE` do hook sobre o env `CLAUDE_PLUGIN_ROOT` envenenável; fail-closed se não-verificado). Linters são **bundled-only**: `update-default-standards.sh` busca só `.md`, nunca `.js` (invariante TCB anti-RCE, fixado por teste de regressão). As 5 verificações SI-4 valem para ambos os roots.
+
+**`eject` repensado.** `eject <id> --with-linter` traz/cria o linter no `machine/` do projeto e religa `enforcement.linter` no caminho canônico; o plain `eject` **anula** o `enforcement.linter` (sem referência pendurada). O hook PostToolUse não gateia mais em `.context/standards`.
+
+**Testes.** +8 suites (SI-4 origin-aware, runner merged, trust-anchor, CLI/hook wiring, linters default + FP bar + ReDoS guard, anti-RCE fetch, eject --with-linter, E2E pelo hook real). dotcontext intocado.
+
 ## [1.9.5] — 2026-05-31
 
 ### Added — Biblioteca de Standards Default de Engenharia

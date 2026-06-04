@@ -154,7 +154,7 @@ test -f .context/workflow/stories.yaml
 
 ## Standards Default de Engenharia
 
-**O que é:** ~20 standards default de engenharia (warn-only, concern-first) shippados pelo plugin — sempre disponíveis, filtrados por `applyTo`/task. Não precisam ser scaffoldados.
+**O que é:** ~20 standards default de engenharia (concern-first) shippados pelo plugin — sempre disponíveis, filtrados por `applyTo`/task. Não precisam ser scaffoldados. **Desde a 1.10.0 (ADR-007 v2.0.0):** 4 deles trazem **linter bundlado** e são **enforçados nativamente, sem eject** — `security` (dangerouslySetInnerHTML), `error-handling` (catch vazio), `test-discipline` (it.only/skip), `secret-conventions` (chaves hard-coded). Os demais seguem warn-only.
 
 **Detecção:** Verificar se o projeto já tem standards próprios (overrides/ejects)
 ```bash
@@ -162,8 +162,8 @@ ls .context/engineering/standards/std-*.md >/dev/null 2>&1
 ```
 
 **Se NÃO configurado (sem overrides do projeto):**
-- Os defaults já estão ativos via plugin (warn-only) — aparecem no índice do SessionStart marcados `[default]` e são injetados por relevância de task.
-- Para customizar um default: `/devflow standards eject <id>` (copia para `.context/engineering/standards/`, editável, com linter opcional em `machine/`).
+- Os defaults já estão ativos via plugin — aparecem no índice do SessionStart marcados `[default]` e são injetados por relevância de task. Os 4 enforçados rodam o linter no PostToolUse automaticamente.
+- Para customizar um default: `/devflow standards eject <id>` (copia para `.context/engineering/standards/`; o linter é **anulado** na cópia). Use `/devflow standards eject <id> --with-linter` para trazer/criar também o linter no `machine/` do projeto.
 - Para desligar um default: adicione `disable: [std-<id>]` em `.context/standards.local.yaml`.
 - (Opcional) Manutenção ao vivo: `/devflow update` (Step 4d) refresca os defaults via fetch do repo standalone.
 
