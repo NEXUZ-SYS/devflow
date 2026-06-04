@@ -40,26 +40,44 @@ export function validateLinterPath(linter, projectRoot) {
   return { ok: true };
 }
 
-function resolveAndCheckSandbox(linterRel, projectRoot) {
-  // SI-4: Allowlist confinement. The canonical machine root is
-  // .context/engineering/standards/machine/ (DDC layout v2). During transition,
-  // the legacy .context/standards/machine/ is also accepted as a valid allowlist
-  // root so that existing linters continue to run without migration.
-  //
-  // Linter path is relative to .context/. So linter "standards/machine/foo.js"
-  // resolves to <projectRoot>/.context/standards/machine/foo.js.
-  const canonicalMachineRoot = resolve(contextPaths(projectRoot).standardsMachine);
-  // Legacy machine root: first resolved read-path for "standards" + "/machine".
-  const standardsReadPaths = resolveReadPaths(projectRoot, "standards");
-  const legacyMachineRoot = resolve(standardsReadPaths.find(p => p !== contextPaths(projectRoot).standards) ?? "", "machine");
+export function resolveAndCheckSandbox(linterRel, opts = {}) {
+  // SI-4 (origin-aware): Allowlist confinement keyed off the LOADER-STAMPED
+  // origin (never frontmatter). Two disjoint, trusted roots:
+  //   - origin "project" (and undefined, for back-compat): base <projectRoot>/.context,
+  //     allowlist .context/engineering/standards/machine/ (+ legacy .context/standards/machine).
+  //     Linter path is relative to .context/ (e.g. "engineering/standards/machine/foo.js").
+  //   - origin "default": base <pluginRoot>/assets/standards, allowlist
+  //     <pluginRoot>/assets/standards/machine/. Linter path is relative to
+  //     assets/standards/ (e.g. "machine/std-foo.js"). Bundled-only, plugin TCB.
+  const { projectRoot, pluginRoot, origin = "project" } = opts;
 
-  // Determine which allowlist roots are applicable (canonical always; legacy only if it differs).
-  const allowedRoots = [canonicalMachineRoot];
-  if (legacyMachineRoot && legacyMachineRoot !== canonicalMachineRoot) {
-    allowedRoots.push(legacyMachineRoot);
+  // S1 — fail-closed: only loader-stamped origins are accepted.
+  if (origin !== "project" && origin !== "default") {
+    return { ok: false, reason: `unknown origin '${origin}' (must be project|default)` };
   }
 
-  const candidate = resolve(projectRoot, ".context", linterRel);
+  let base;
+  let allowedRoots;
+  if (origin === "default") {
+    // S7 — default-origin requires a (verified) pluginRoot; never fall back to .context.
+    if (!pluginRoot) {
+      return { ok: false, reason: "default-origin linter requires pluginRoot (fail-closed)" };
+    }
+    base = resolve(pluginRoot, "assets", "standards");
+    allowedRoots = [resolve(pluginRoot, "assets", "standards", "machine")];
+  } else {
+    base = resolve(projectRoot, ".context");
+    const canonicalMachineRoot = resolve(contextPaths(projectRoot).standardsMachine);
+    // Legacy machine root: first resolved read-path for "standards" + "/machine".
+    const standardsReadPaths = resolveReadPaths(projectRoot, "standards");
+    const legacyMachineRoot = resolve(standardsReadPaths.find(p => p !== contextPaths(projectRoot).standards) ?? "", "machine");
+    allowedRoots = [canonicalMachineRoot];
+    if (legacyMachineRoot && legacyMachineRoot !== canonicalMachineRoot) {
+      allowedRoots.push(legacyMachineRoot);
+    }
+  }
+
+  const candidate = resolve(base, linterRel);
 
   const withinAllowlist = allowedRoots.some(
     root => candidate.startsWith(root + "/") || candidate === root
@@ -85,7 +103,7 @@ function resolveAndCheckSandbox(linterRel, projectRoot) {
   return { ok: true, real };
 }
 
-export async function runLintersFor(event, projectRoot) {
+export async function runLintersFor(event, projectRoot, pluginRoot) {
   const result = { violations: [], rejected: [] };
 
   // Only Edit/Write tools trigger linter execution
@@ -108,7 +126,12 @@ export async function runLintersFor(event, projectRoot) {
       continue;
     }
 
-    const sandbox = resolveAndCheckSandbox(linter, projectRoot);
+    // origin is the LOADER-STAMPED provenance (project|default); never fm.origin.
+    const sandbox = resolveAndCheckSandbox(linter, {
+      projectRoot,
+      pluginRoot,
+      origin: std.origin === "default" ? "default" : "project",
+    });
     if (!sandbox.ok) {
       result.rejected.push({ id: std.id, reason: sandbox.reason });
       console.error(`[SI-4] Standard ${std.id}: ${sandbox.reason}`);
