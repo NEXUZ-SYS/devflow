@@ -242,6 +242,57 @@ assert_file_not_contains "test4: USER marker line stripped" \
 
 echo ""
 
+# ─── Test 5: anti-RCE — fetch NUNCA grava .js nem toca machine/ (S4, TG5) ────
+#
+# Defense-in-depth além do ENTRY_RE: MANIFEST local hostil com entradas .js,
+# traversal para ../machine, e subpath machine/. O script deve rejeitar TODAS
+# (só std-*.md passa), não gravar nenhum .js em lugar nenhum, e deixar o dir
+# machine/ (com linters bundlados) byte-idêntico.
+
+echo "=== Test 5: anti-RCE — .js rejeitado, machine/ intacto byte-a-byte ==="
+
+upstream5="${TMP_DIR}/upstream5"
+mkdir -p "$upstream5"
+printf 'std-security.md\n' > "${upstream5}/MANIFEST.txt"
+cat > "${upstream5}/std-security.md" <<'STDEOF'
+# Security standard (mock)
+conteúdo legítimo
+STDEOF
+
+workdir5=$(make_workdir "test5")
+standards5="${workdir5}/assets/standards"
+
+# machine/ com um linter bundlado sentinela (deve ficar intocado)
+mkdir -p "${standards5}/machine"
+printf 'console.log("KEEP");\n' > "${standards5}/machine/std-keep.js"
+machine_before=$(find "${standards5}/machine" -type f -exec sha256sum {} \; | sort)
+
+# MANIFEST local (fonte confiável) ENVENENADO com entradas .js / traversal / subpath
+cat > "${standards5}/MANIFEST.txt" <<'MANEOF'
+std-security.md
+std-evil.js
+../machine/std-traverse.js
+machine/std-sub.js
+MANEOF
+
+exit_code5=0
+DEVFLOW_STANDARDS_BASE_TEST="file://${upstream5}" \
+  bash "$HELPER" --standards-dir "$standards5" \
+  2>/dev/null || exit_code5=$?
+
+machine_after=$(find "${standards5}/machine" -type f -exec sha256sum {} \; | sort)
+
+assert_true "test5: exits 0 com MANIFEST hostil" '[ "$exit_code5" -eq 0 ]'
+assert_true "test5: NENHUM .js gravado em todo o workdir (exceto o sentinela)" \
+  '[ "$(find "$workdir5" -name "*.js" | grep -v "/machine/std-keep.js" | wc -l)" -eq 0 ]'
+assert_true "test5: machine/ byte-idêntico antes/depois" \
+  '[ "$machine_before" = "$machine_after" ]'
+assert_file_not_exists "test5: std-evil.js não criado" "${standards5}/std-evil.js"
+assert_true "test5: nenhum std-traverse.js / std-sub.js em lugar nenhum" \
+  '[ -z "$(find "$workdir5" -name "std-traverse.js" -o -name "std-sub.js" 2>/dev/null)" ]'
+
+echo ""
+
 # ─── Report ──────────────────────────────────────────────────────────────────
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
