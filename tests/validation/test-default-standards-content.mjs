@@ -17,13 +17,21 @@ test("todos os defaults universais + condicionais existem", () => {
     assert.ok(existsSync(join(DIR, `${id}.md`)), `falta ${id}.md`);
 });
 
-test("cada default é concern-first, warn-only, frontmatter completo (estrutural)", () => {
+test("cada default é concern-first, frontmatter completo (estrutural)", () => {
   for (const f of readdirSync(DIR).filter((x) => x.endsWith(".md"))) {
     const { data, body } = parseFrontmatter(readFileSync(join(DIR, f), "utf-8"));
     assert.ok(data.id?.startsWith("std-"), `${f}: id deve começar com std-`);
     assert.ok(!/^std-(zod|postgres|firebase|react|next|express)\b/.test(data.id), `${f}: id lib-centric (ADR-002 S7)`);
     assert.equal(data.source, "devflow-default", `${f}: source deve ser devflow-default`);
-    assert.equal(data.enforcement?.linter ?? null, null, `${f}: default é warn-only (linter null)`);
+    // ADR-007 v2.0.0: default é warn-only (linter null) OU traz linter BUNDLADO no
+    // plugin (machine/<id>.js, que deve existir). Nunca um caminho fora de machine/.
+    const linter = data.enforcement?.linter ?? null;
+    if (linter !== null) {
+      assert.equal(linter, `machine/${data.id}.js`,
+        `${f}: linter default deve ser bundlado em machine/${data.id}.js`);
+      assert.ok(existsSync(join(DIR, "machine", `${data.id}.js`)),
+        `${f}: linter bundlado declarado mas ausente em ${DIR}/machine/`);
+    }
     assert.ok(Array.isArray(data.applyTo) && data.applyTo.length, `${f}: applyTo obrigatório`);
     assert.ok(data.description && data.version, `${f}: description+version obrigatórios`);
     assert.ok(/## Princípios|## Anti-patterns/.test(body), `${f}: corpo sem seções`);
