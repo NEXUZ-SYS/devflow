@@ -11,7 +11,7 @@
 // Per Dependency Policy: pure node:* — uses scripts/lib/{glob,frontmatter,standards-loader}.mjs.
 
 import { mkdir, writeFile, readFile, access, copyFile } from "node:fs/promises";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { loadStandards } from "./lib/standards-loader.mjs";
@@ -563,10 +563,63 @@ async function cmdEject(rawId, projectRoot, opts = {}) {
 
   await copyFile(src, dest);
 
+  const canonicalLinterRel = `engineering/standards/machine/std-${id}.js`;
+
+  if (opts.withLinter) {
+    // --with-linter (R15): traz/cria o linter no machine/ do projeto e religa
+    // enforcement.linter para o caminho CANÔNICO do projeto (allowlist SI-4 project).
+    const machineDir = contextPaths(projectRoot).standardsMachine;
+    const linterDest = resolve(machineDir, `std-${id}.js`);
+    assertWithinDir(linterDest, machineDir); // SI-5 containment
+    if (existsSync(linterDest) && !opts.force) {
+      process.stderr.write(`Error: ${linterDest} já existe (use --force para sobrescrever)\n`);
+      process.exit(1);
+    }
+    mkdirSync(machineDir, { recursive: true });
+
+    const bundledLinter = resolve(assetsStandardsDir, "machine", `std-${id}.js`);
+    if (existsSync(bundledLinter)) {
+      await copyFile(bundledLinter, linterDest); // default enforçado: copia o linter real
+    } else {
+      await writeFile(linterDest, ejectLinterStub(id)); // warn-only: scaffolda stub TDD-ready
+    }
+
+    const wired = readFileSync(dest, "utf-8").replace(/^(\s*)linter:\s*.*$/m, `$1linter: ${canonicalLinterRel}`);
+    await writeFile(dest, wired);
+
+    process.stdout.write(`${dest}\n${linterDest}\n`);
+    process.stdout.write(`(enforcement.linter religado para ${canonicalLinterRel})\n`);
+    return;
+  }
+
+  // plain eject: NÃO traz o machine file, então anula enforcement.linter para não
+  // deixar uma referência pendurada caso o default seja um std já enforçado.
+  const orig = readFileSync(dest, "utf-8");
+  const nulled = orig.replace(/^(\s*)linter:\s*.*$/m, `$1linter: null`);
+  if (nulled !== orig) await writeFile(dest, nulled);
+
   process.stdout.write(`${dest}\n`);
   process.stdout.write(
-    `(edite à vontade; adicione um linter em machine/std-${id}.js para enforce real)\n`,
+    `(edite à vontade; use --with-linter para também trazer/criar o linter em machine/std-${id}.js)\n`,
   );
+}
+
+// Stub de linter TDD-ready para `eject --with-linter` de um default warn-only.
+function ejectLinterStub(id) {
+  return `#!/usr/bin/env node
+// .context/engineering/standards/machine/std-${id}.js
+// Linter para std-${id}. Contrato SI-4: filePath em process.argv[2];
+// em violação imprime 'VIOLATION: <msg>' + exit 1; senão exit 0.
+import { readFileSync } from "node:fs";
+const filePath = process.argv[2];
+if (!filePath) process.exit(0);
+const content = readFileSync(filePath, "utf-8");
+// TODO: implemente a regra do concern.
+//   const m = content.match(/badPattern/g);
+//   if (m) { console.log(\`VIOLATION: \${m.length} ... \`); process.exit(1); }
+void content;
+process.exit(0);
+`;
 }
 
 async function main() {
@@ -576,6 +629,7 @@ async function main() {
   let projectRoot = process.cwd();
   let fromAdr = null;
   let force = false;
+  let withLinter = false;
   let concern = null;
   let enrichFromAdr = null;
   let taxonomy = null;
@@ -609,6 +663,8 @@ async function main() {
       keepOld = true;
     } else if (a === "--force") {
       force = true;
+    } else if (a === "--with-linter") {
+      withLinter = true;
     } else if (a === "--yes") {
       yes = true;
     } else {
@@ -649,7 +705,7 @@ async function main() {
   }
 
   if (sub === "eject") {
-    await cmdEject(args[1], projectRoot, { force });
+    await cmdEject(args[1], projectRoot, { force, withLinter });
     return;
   }
 
@@ -663,7 +719,8 @@ async function main() {
   console.error("  audit <id>                            Deep audit (5 checks: scaffold/linter/refs/...)");
   console.error("  search --by-guardrail=<adr-slug>      List stds referencing an ADR (JSON)");
   console.error("  search --by-concern=<concern-id>      List ADRs matching a concern (JSON)");
-  console.error("  eject <id> [--force]                  Copy plugin default std-<id>.md → project");
+  console.error("  eject <id> [--force]                  Copy plugin default std-<id>.md → project (linter anulado)");
+  console.error("  eject <id> --with-linter [--force]    Eject + traz/cria o linter no machine/ do projeto e religa enforcement");
   console.error("");
   console.error("  Common: --project=<path> to operate on a fixture/sub-project.");
   process.exit(2);
