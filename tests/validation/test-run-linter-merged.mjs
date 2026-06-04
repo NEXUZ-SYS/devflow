@@ -39,6 +39,9 @@ ${extra}---
 before(() => {
   // Plugin fake: 1 default (std-obs) com linter bundlado que pega "console.log".
   plugin = mkdtempSync(join(tmpdir(), "tg2-plugin-"));
+  // Marker do plugin (trust-anchor S3) — sem ele o runner degrada para project-only.
+  mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+  writeFileSync(join(plugin, ".claude-plugin/plugin.json"), '{"name":"devflow"}\n');
   const pStd = join(plugin, "assets/standards");
   mkdirSync(join(pStd, "machine"), { recursive: true });
   writeFileSync(join(pStd, "std-obs.md"), STD("std-obs", "machine/std-obs.js"));

@@ -27,8 +27,14 @@ process.stdin.on("end", async () => {
     process.exit(0);
   }
   const projectRoot = process.cwd();
+  // S3: prefer the hook-derived --plugin=<path> (from BASH_SOURCE, trusted) over
+  // the poisonable CLAUDE_PLUGIN_ROOT env. The flag wins; env is the fallback.
+  const flagPlugin = process.argv.slice(2).find(a => a.startsWith("--plugin="));
+  const pluginRoot = flagPlugin
+    ? flagPlugin.slice("--plugin=".length)
+    : (process.env.CLAUDE_PLUGIN_ROOT || undefined);
   try {
-    const { violations, rejected } = await runLintersFor(event, projectRoot);
+    const { violations, rejected } = await runLintersFor(event, projectRoot, pluginRoot);
     if (violations.length === 0) {
       process.exit(0);
     }

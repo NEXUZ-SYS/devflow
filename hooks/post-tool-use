@@ -139,10 +139,14 @@ ti = d.get('tool_input', {})
 print(ti.get('file_path') or ti.get('path') or '')
 " 2>/dev/null || echo "")
 
-  if [ -n "$EDITED_PATH" ] && [ -d "${PWD}/.context/standards" ]; then
+  # R1: do NOT gate on .context/standards — plugin DEFAULT linters apply even to
+  # projects without any project std. The trusted pluginRoot (S3, derived from
+  # this hook's BASH_SOURCE) is passed as --plugin; the runner verifies its marker
+  # and degrades to project-only if unverified.
+  if [ -n "$EDITED_PATH" ]; then
     # Pass event as JSON via stdin; node script reads + runs linters.
     LINTER_OUTPUT=$(printf '{"tool":"%s","path":%s}' "$TOOL_NAME" "$(printf '%s' "$EDITED_PATH" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')" \
-      | node "${PLUGIN_ROOT}/scripts/lib/run-linter-cli.mjs" 2>/dev/null || echo "")
+      | node "${PLUGIN_ROOT}/scripts/lib/run-linter-cli.mjs" --plugin="${PLUGIN_ROOT}" 2>/dev/null || echo "")
     if [ -n "$LINTER_OUTPUT" ]; then
       reminder="${reminder}\n\n${LINTER_OUTPUT}"
     fi

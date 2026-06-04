@@ -10,7 +10,7 @@
 //
 // Linters that fail any check are silently skipped (with stderr log) — never executed.
 
-import { resolve, isAbsolute, relative } from "node:path";
+import { resolve, isAbsolute, relative, join } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -19,6 +19,21 @@ import { deriveFirstRefForStandard } from "./standard-refs.mjs";
 import { contextPaths, resolveReadPaths } from "./context-paths.mjs";
 
 const execFileP = promisify(execFile);
+
+/**
+ * S3 trust-anchor: a pluginRoot is trusted only if it carries the plugin marker
+ * (.claude-plugin/plugin.json). The hook derives pluginRoot from BASH_SOURCE (its
+ * own on-disk path); the env CLAUDE_PLUGIN_ROOT is poisonable, so default-origin
+ * linters are NEVER executed from an unverified dir. Unverified → project-only.
+ */
+export function verifyPluginRoot(pluginRoot) {
+  if (!pluginRoot || typeof pluginRoot !== "string") return false;
+  try {
+    return existsSync(join(pluginRoot, ".claude-plugin", "plugin.json"));
+  } catch {
+    return false;
+  }
+}
 
 // SI-4 — only relative paths ending in .js, no traversal/abs/metachars/whitespace
 const SAFE_LINTER_RE = /^[A-Za-z0-9_\-./]+\.js$/;
@@ -115,9 +130,13 @@ export async function runLintersFor(event, projectRoot, pluginRoot) {
   }
   if (!event.path) return result;
 
+  // S3 trust-anchor: only a marker-verified pluginRoot enables default linters;
+  // otherwise degrade to project-only (never run default linters from an
+  // unverified/poisoned dir).
+  const trustedPlugin = verifyPluginRoot(pluginRoot) ? pluginRoot : undefined;
   // Merged: project standards + plugin defaults (origin-stamped). Defaults with a
   // bundled linter are now enforced even without eject; project overrides by id.
-  const standards = loadStandardsMerged(projectRoot, pluginRoot);
+  const standards = loadStandardsMerged(projectRoot, trustedPlugin);
   const applicable = findApplicableStandards(event.path, standards);
 
   for (const std of applicable) {
@@ -134,7 +153,7 @@ export async function runLintersFor(event, projectRoot, pluginRoot) {
     // origin is the LOADER-STAMPED provenance (project|default); never fm.origin.
     const sandbox = resolveAndCheckSandbox(linter, {
       projectRoot,
-      pluginRoot,
+      pluginRoot: trustedPlugin,
       origin: std.origin === "default" ? "default" : "project",
     });
     if (!sandbox.ok) {
