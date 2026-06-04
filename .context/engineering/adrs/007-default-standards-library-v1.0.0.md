@@ -6,8 +6,8 @@ scope: organizational
 source: local
 stack: universal
 category: principios-codigo
-status: Proposto
-version: 0.1.0
+status: Substituido
+version: 1.0.0
 created: 2026-06-01
 supersedes: []
 refines: ["002-adopt-standards-triple-layer-v1.0.0"]
