@@ -57,6 +57,9 @@ const CURATED = [
   { id: "std-runtime-validation",
     bad: 'const k = process.env.API_KEY!;\n',
     good: 'const k = requireEnv("API_KEY");\nif (process.env.NODE_ENV !== "prod" && process.env.X != null) {}\n' },
+  { id: "std-api-conventions",
+    bad: 'app.post("/v1/createOrder", handler);\n',
+    good: 'app.post("/v1/orders", handler);\n' },
 ];
 
 function runLinter(linterPath, content) {

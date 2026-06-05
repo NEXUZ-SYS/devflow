@@ -1,14 +1,13 @@
 ---
 id: std-api-conventions
 description: APIs HTTP com contrato previsível, versionadas e com status codes corretos
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-api-conventions.js
 ---
 ## Princípios
 
