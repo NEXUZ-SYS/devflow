@@ -336,6 +336,33 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
 
 echo ""
 
+# ─── Test 7: migração — plugin ANTIGO (root-targeting) vira no-op limpo (AC2) ──
+#
+# F2: a claim de migração mais arriscada — um usuário do plugin ANTIGO (que
+# busca do root) rodando contra o repo JÁ reestruturado (MANIFEST/std só no
+# subpath, root vazio). O oráculo é a cópia congelada pré-retarget. Esperado:
+# HEAD no root 404 → exit 0 → snapshot intacto (sem reversão, sem erro).
+
+echo "=== Test 7: migração — plugin ANTIGO (root-targeting) vira no-op limpo ==="
+OLD_SCRIPT="${PROJECT_ROOT}/tests/fixtures/update-default-standards-pre-ddc.sh"
+upstream7="${TMP_DIR}/upstream7"
+up7_std="${upstream7}/.context/engineering/standards"
+mkdir -p "$up7_std"
+# Repo reestruturado: MANIFEST/std SÓ no subpath; root VAZIO (sem MANIFEST.txt)
+printf 'std-security.md\n' > "${up7_std}/MANIFEST.txt"
+printf '# novo conteúdo subpath\n' > "${up7_std}/std-security.md"
+workdir7=$(make_workdir "test7")
+standards7="${workdir7}/assets/standards"
+original7=$(cat "${standards7}/std-security.md")
+exit_code7=0
+DEVFLOW_STANDARDS_BASE_TEST="file://${upstream7}" \
+  bash "$OLD_SCRIPT" --standards-dir "$standards7" 2>/dev/null || exit_code7=$?
+assert_true "test7: script antigo exits 0 (no-op)" '[ "$exit_code7" -eq 0 ]'
+assert_true "test7: snapshot NÃO revertido (root 404 → no-op)" \
+  '[ "$(cat "${standards7}/std-security.md")" = "$original7" ]'
+
+echo ""
+
 # ─── Report ──────────────────────────────────────────────────────────────────
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
