@@ -39,6 +39,9 @@ const CURATED = [
   { id: "std-data-modeling",
     bad: 'CREATE TABLE orders (created_at TIMESTAMP, price FLOAT, name VARCHAR(255));\n',
     good: 'CREATE TABLE orders (created_at TIMESTAMPTZ NOT NULL, price NUMERIC(18,4), name TEXT);\n' },
+  { id: "std-schemas",
+    bad: 'export const S = z.object({ payload: z.any() }).passthrough();\n',
+    good: 'export const S = z.object({ payload: z.unknown() });\n' },
 ];
 
 function runLinter(linterPath, content) {

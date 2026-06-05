@@ -1,14 +1,13 @@
 ---
 id: std-schemas
 description: Schema é fonte da verdade do shape dos dados; tipos são sempre derivados
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-schemas.js
 ---
 ## Princípios
 
