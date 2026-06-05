@@ -3,7 +3,7 @@ id: std-performance
 description: Decisões de performance mensuradas, não intuitivas — meça antes de otimizar
 version: 1.0.0
 source: devflow-default
-applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
+applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:

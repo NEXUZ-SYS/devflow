@@ -3,7 +3,7 @@ id: std-migration
 description: Migrações de schema em passos aditivos, idempotentes e reversíveis
 version: 1.0.0
 source: devflow-default
-applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
+applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:

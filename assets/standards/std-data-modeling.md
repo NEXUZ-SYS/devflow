@@ -3,7 +3,7 @@ id: std-data-modeling
 description: Modelos com identidade explícita, nullability intencional e tipos fortes
 version: 1.0.0
 source: devflow-default
-applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
+applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
