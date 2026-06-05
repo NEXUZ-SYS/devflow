@@ -1,18 +1,18 @@
 ---
 id: std-observability
 description: Todo evento relevante emite log estruturado, métrica ou span rastreável
-version: 1.0.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-observability.js
 ---
 ## Princípios
 
-- Logs são JSON estruturado; nunca `console.log` com concatenação ou template literal em produção
+- Logs são JSON estruturado via logger central (`logger.info/warn/error`); nunca importe `console` em código de runtime
+- Nunca use `console.log`/`console.debug`/`console.info` em runtime — apenas em scripts locais e testes (exceção explícita)
 - Campos obrigatórios em todo log: `timestamp`, `level`, `message`, `service`, `env`; adicione `traceId`/`requestId` quando disponível
 - Níveis: `debug` (dev/troubleshooting), `info` (evento de negócio), `warn` (condição tratada), `error` (falha que requer investigação)
 - Propague `traceId` e `spanId` cruzando toda fronteira (HTTP, fila, função) via W3C Trace Context (`traceparent`)
@@ -32,4 +32,4 @@ weakStandardWarning: true
 | Mensagem template-literal (`"user ${id} did X"`) | Campo separado `{ userId }` no objeto de log |
 | Logar request body inteiro | Logar apenas metadados não-sensíveis |
 | Métrica com label de alta cardinalidade (`userId`) | Usar em exemplars ou logs, nunca em label |
-| `console.log` em runtime de produção | Logger configurado com serialização JSON |
+| `console.log`/`debug`/`info` em runtime (exceto testes/scripts) | `logger` estruturado com serialização JSON |

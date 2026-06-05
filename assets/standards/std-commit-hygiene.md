@@ -1,7 +1,7 @@
 ---
 id: std-commit-hygiene
 description: Commits atômicos com mensagem imperativa e intenção clara (Conventional Commits)
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Nunca commite secrets, tokens, arquivos `.env` ou binários grandes
 - `.gitignore` cobre artifacts (`node_modules`, `dist`, `.env`); `.env.example` versionado, `.env` nunca
 - Branches de feature têm vida curta; squash de fixups antes de mergear se houver commits de "wip"
+
+> Enforcement via hook commit-msg (Conventional Commits), não linter de arquivo. Ver hooks/commit-msg-guard.
 
 ## Anti-patterns
 

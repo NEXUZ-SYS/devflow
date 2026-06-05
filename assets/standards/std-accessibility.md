@@ -1,7 +1,7 @@
 ---
 id: std-accessibility
 description: WCAG 2.2 AA em todo fluxo de UI — a11y é requisito funcional, não polimento
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{tsx,jsx}"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Nunca transmita informação apenas por cor — use texto/ícone além da cor
 - `alt` em toda `<img>`; decorativas usam `alt=""` (vazio, sem omitir o atributo)
 - Skip link "Skip to main content" como primeiro elemento focável da página
+- Todo fluxo é operável só por teclado: ordem de foco lógica, sem trap, `Escape` fecha overlays e devolve o foco ao gatilho
+- Mudanças dinâmicas (erro de form, toast, loading) anunciadas via `aria-live`; nunca dependa só de mudança visual
 
 ## Anti-patterns
 

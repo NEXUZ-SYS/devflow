@@ -1,7 +1,7 @@
 ---
 id: std-documentation
 description: Documente o porquê, não o quê — código autoexplicativo vence comentário
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Apague código comentado — confie no git; código morto em comentário não é histórico, é ruído
 - Não documente roadmap futuro dentro do código — use issues ou ADRs
 - Docs de API pública atualizadas no mesmo PR da mudança de contrato
+- Decisão arquitetural relevante mora em ADR, não em comentário de código — o comentário aponta para o ADR
+- README do módulo responde "o que é, por que existe, como usar"; um exemplo executável vale mais que três parágrafos
 
 ## Anti-patterns
 

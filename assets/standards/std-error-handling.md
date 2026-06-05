@@ -1,7 +1,7 @@
 ---
 id: std-error-handling
 description: Erros classificados, propagados com contexto e nunca silenciados
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -21,12 +21,14 @@ enforcement:
 - Retry apenas em erros transitórios idempotentes (timeout, 429, 503, ECONNRESET); nunca para 4xx semânticos
 - Defina `maxAttempts` e `maxElapsedTime` finitos; use backoff exponencial com jitter
 - Defina timeout explícito em toda operação de I/O; propague via `AbortSignal` quando a API suportar
+- Circuit breaker em dependência externa instável: após N falhas consecutivas, abra o circuito e falhe rápido em vez de empilhar timeouts
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
 | `catch (e) { return null; }` | `Result.err` ou rethrow com contexto |
+| `catch (e) { console.log(e) }` | Log estruturado + rethrow/map |
 | `catch (e: any)` sem narrowing | `catch (e: unknown)` + `instanceof` |
 | `throw "string"` ou `throw { code: 1 }` | `throw new Error(...)` ou subclasse |
 | `.catch(console.error)` em produção | Logger estruturado com schema + propagação |

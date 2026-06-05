@@ -1,7 +1,7 @@
 ---
 id: std-security
 description: Higiene mínima de segurança em todo código de produção
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -21,12 +21,15 @@ enforcement:
 - Nunca use `Math.random()` para tokens/IDs; use `crypto.randomUUID()` ou `crypto.randomBytes()`
 - Nunca use MD5, SHA-1, DES ou RC4; use SHA-256+, AES-256-GCM, argon2id ou bcrypt
 - Lockfile (`package-lock.json`) versionado e idêntico entre dev e CI; rode `npm audit` em CI
+- Nunca confie em ID vindo do cliente para identificar o ator; o ator é sempre o `uid` do token validado server-side
+- Trate chaves de OpenAI/Gemini e qualquer SDK de IA como secrets server-side — a chamada ao provedor nunca parte do cliente
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
 | String interpolation em SQL | Queries parametrizadas (`$1`, `$2`) |
+| SQL string-interpolada (template com `${}`) | Query parametrizada |
 | `dangerouslySetInnerHTML` com output de LLM | Sanitize com DOMPurify antes |
 | `NEXT_PUBLIC_OPENAI_KEY` | Env var server-side sem prefixo público |
 | Comitar `.env` mesmo com "fix later" | `.gitignore` + secret manager |

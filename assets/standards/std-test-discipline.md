@@ -1,7 +1,7 @@
 ---
 id: std-test-discipline
 description: Testes testam comportamento observável, não implementação interna
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -21,12 +21,15 @@ enforcement:
 - Teste flaky é bug crítico — quarentena máxima de 7 dias com issue aberta, depois conserta ou apaga
 - Nunca use `await sleep(n)` para sincronizar; use `waitFor`, `expect.poll` ou `waitForSelector`
 - `.only` e `.skip` nunca são commitados em main; remova ou corrija antes do PR
+- Todo teste tem ao menos uma asserção real sobre o comportamento; teste sem assert é falso positivo
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
 | Mock de tudo até o teste verificar apenas si mesmo | Fake in-memory com comportamento real |
+| `waitForTimeout(n)` | `waitFor`/assert determinístico |
+| `expect(true).toBe(true)` | Asserção real sobre o resultado |
 | `expect(spy).toHaveBeenCalled()` quando dá para assertar resultado | Assert sobre o resultado observável |
 | Snapshot gigante que ninguém revisa | Assertar campos relevantes explicitamente |
 | `it.skip` ou `it.only` commitado | Remover ou corrigir antes do PR |

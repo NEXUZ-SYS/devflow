@@ -1,7 +1,7 @@
 ---
 id: std-caching
 description: Cache com chave determinística, TTL explícito e invalidação por evento
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["src/**/*.{ts,tsx}"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Cache stampede: proteja recomputações caras com single-flight; aplique jitter ao TTL (`TTL ± aleatório`)
 - Nunca inclua PII em texto claro dentro da chave de cache; hashe ou use ID interno
 - Cache-aside como padrão: lê do cache; em miss, lê da fonte e popula o cache
+- Camadas têm escopo próprio: invalidar uma (Redis) não invalida as demais (CDN, browser) — coordene explicitamente
+- Nunca implemente cache de query manual sobre o driver do banco; use o cache nativo quando existir
 
 ## Anti-patterns
 

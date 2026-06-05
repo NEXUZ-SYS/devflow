@@ -1,20 +1,20 @@
 ---
 id: std-api-conventions
 description: APIs HTTP com contrato previsível, versionadas e com status codes corretos
-version: 1.0.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-api-conventions.js
 ---
 ## Princípios
 
 - Ordem obrigatória no handler: autenticação → validação → autorização → ação; nunca execute ação antes de verificar quem é o caller
 - Paths em `kebab-case`, plural para coleções (`/orders`), singular para singletons (`/health`, `/me`); aninhamento máximo de 2 níveis
-- `GET` nunca causa side effect; mutações em `POST`, `PUT`, `PATCH`, `DELETE`
+- Endpoints são recursos (substantivos), nunca ações: `POST /orders`, não `POST /createOrder` — verbo no path repete o método HTTP (nudge); reserve verbo só para ações fora de CRUD (`POST /orders/:id/cancel`)
+- `GET` nunca causa side effect nem leva body; query complexa vai em query params ou `POST /resource/search`; mutações em `POST`, `PUT`, `PATCH`, `DELETE`
 - Status codes: `200/201/204` sucesso; `400` input inválido; `401` sem autenticação; `403` sem permissão; `404` não encontrado; `409` conflito; `429` rate-limit; `5xx` falha do servidor
 - Envelope de erro estável: `{ code, message, details?, traceId }` — cliente programa contra `code`, nunca contra `message`
 - Paginação cursor-based (`?cursor=...&limit=N`) para listas grandes; offset apenas para UI com page-jump explícito
@@ -27,6 +27,8 @@ weakStandardWarning: true
 
 | Errado | Corrija para |
 |---|---|
+| `POST /createOrder` (verbo no path) | `POST /orders` (recurso plural) — nudge |
+| `GET` com body | Query params ou `POST /resource/search` |
 | `GET /deleteOrder?id=...` | `DELETE /orders/{orderId}` |
 | `200` com `{ error: "..." }` | Status HTTP apropriado (4xx) |
 | Quebrar v1 em vez de criar v2 | Versionar a breaking change |

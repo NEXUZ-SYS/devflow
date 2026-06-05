@@ -1,14 +1,13 @@
 ---
 id: std-performance
 description: Decisões de performance mensuradas, não intuitivas — meça antes de otimizar
-version: 1.0.0
+version: 1.2.0
 source: devflow-default
-applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
+applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-performance.js
 ---
 ## Princípios
 
@@ -21,15 +20,17 @@ weakStandardWarning: true
 - Crie índice antes de promover query a produção; use `CREATE INDEX CONCURRENTLY` em Postgres
 - Streaming para respostas de LLM que excedem ~500ms de TTFB; nunca acumule resposta inteira no servidor
 - Cancele chamadas upstream via `AbortSignal` quando o cliente sair; desperdício de tokens é custo direto
+- `key` estável e única em listas React; nunca `key={Math.random()}` ou `key={Date.now()}` (força remount a cada render), nem `index` em lista que reordena
 - Prefira o modelo mais barato/rápido que atende ao requisito; custo e latência escalam com o tamanho do modelo
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
-| N+1: query dentro de loop | `WHERE id IN (...)` ou DataLoader batch |
-| `OFFSET 10000` em paginação | Cursor-based (`WHERE id > $last`) |
-| `await` sequencial de operações independentes | `Promise.all([...])` em paralelo |
 | `SELECT *` em produção | Listar colunas usadas explicitamente |
+| `OFFSET 10000` em paginação | Cursor-based (`WHERE id > $last LIMIT N`) |
+| `key={Math.random()}`/`key={Date.now()}` | `key` estável derivada do `id` do item |
+| N+1: query dentro de loop | `WHERE id IN (...)` ou DataLoader batch |
+| `await` sequencial de operações independentes | `Promise.all([...])` em paralelo |
 | Historial completo de conversa em todo LLM call | Janela deslizante ou resumo comprimido |
 | Otimização sem medição prévia | Profiling primeiro, otimizar com dado |

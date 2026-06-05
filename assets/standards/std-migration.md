@@ -1,14 +1,13 @@
 ---
 id: std-migration
 description: Migrações de schema em passos aditivos, idempotentes e reversíveis
-version: 1.0.0
+version: 1.2.0
 source: devflow-default
-applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
+applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-migration.js
 ---
 ## Princípios
 
@@ -21,14 +20,16 @@ weakStandardWarning: true
 - Migrations são passo explícito do pipeline de release, nunca efeito colateral de boot da aplicação
 - Documente o plano de rollback no PR antes do deploy; para migrations irreversíveis, declare explicitamente e registre o motivo
 - Crie índices com `CONCURRENTLY` para evitar lock em tabelas grandes; nunca dentro de transação
+- Nunca `VACUUM FULL`, `REINDEX` sem `CONCURRENTLY` nem `TRUNCATE` em tabela de produção como passo de migration — todos travam a tabela ou destroem dado sem reversão
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
+| `CREATE INDEX` sem `CONCURRENTLY` em produção | `CREATE INDEX CONCURRENTLY` + fora de transação |
+| `UPDATE` sem `WHERE` limitante | `WHERE new_column IS NULL LIMIT 1000` em loop |
+| `VACUUM FULL`/`TRUNCATE` em migração | Janela acordada + backup; evitar em passo automático |
 | Renomear coluna em um passo | Adicionar nova + dual-write + backfill + dropar antiga em releases separadas |
 | `NOT NULL` sem default em tabela com dados | Adicionar nullable, backfill, depois `NOT NULL` |
 | Migration rodada no startup da app | Job dedicado e auditável no pipeline de release |
-| Backfill sem `WHERE` filtro de progresso | `WHERE new_column IS NULL LIMIT 1000` em loop |
-| `CREATE INDEX` sem `CONCURRENTLY` em produção | `CREATE INDEX CONCURRENTLY` + fora de transação |
 | Merge sem plano de rollback documentado | Descrever plano no corpo do PR antes de abrir |

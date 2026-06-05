@@ -1,7 +1,7 @@
 ---
 id: std-internationalization
 description: Strings, formatações e locales tratados de forma locale-aware e sem hard-code
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{tsx,jsx,ts}"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Defina `lang` no elemento `<html>` com o locale BCP 47 ativo; emita `<link rel="alternate" hreflang="...">` para cada variante
 - Use CSS logical properties (`margin-inline-start`, `padding-block-end`) em vez de `left`/`right` para suportar RTL
 - Normalize todo input de usuário para NFC antes de comparar, armazenar ou hashear
+- Nunca assuma largura de texto: traduções expandem (alemão ~+30%); layout não pode quebrar nem truncar sem `title`/tooltip
+- Catálogo de chaves sem tradução faz fallback explícito ao locale default, nunca renderiza a chave crua na UI
 
 ## Anti-patterns
 
