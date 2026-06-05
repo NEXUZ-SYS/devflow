@@ -36,6 +36,9 @@ const CURATED = [
   { id: "std-typescript-strict",
     bad: 'export default function f(x: any) { return x; }\n',
     good: 'export function f(x: unknown) { return x; }\n// nota: any value aqui é prosa, não tipo\n' },
+  { id: "std-data-modeling",
+    bad: 'CREATE TABLE orders (created_at TIMESTAMP, price FLOAT, name VARCHAR(255));\n',
+    good: 'CREATE TABLE orders (created_at TIMESTAMPTZ NOT NULL, price NUMERIC(18,4), name TEXT);\n' },
 ];
 
 function runLinter(linterPath, content) {

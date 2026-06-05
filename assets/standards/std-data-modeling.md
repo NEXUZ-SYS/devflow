@@ -1,14 +1,13 @@
 ---
 id: std-data-modeling
 description: Modelos com identidade explícita, nullability intencional e tipos fortes
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-data-modeling.js
 ---
 ## Princípios
 
