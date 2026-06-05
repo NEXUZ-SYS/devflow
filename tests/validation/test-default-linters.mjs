@@ -51,6 +51,9 @@ const CURATED = [
   { id: "std-performance",
     bad: 'const q = "SELECT * FROM orders OFFSET 100";\n',
     good: 'const q = "SELECT id, total FROM orders WHERE id > $1 LIMIT 20";\n' },
+  { id: "std-naming-conventions",
+    bad: 'enum Status { A, B }\nconst isNotActive = true;\n',
+    good: 'type Status = "A" | "B";\nconst isActive = false;\nclass IOStream {}\ninterface IPAddress {}\n' },
 ];
 
 function runLinter(linterPath, content) {

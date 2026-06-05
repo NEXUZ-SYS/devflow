@@ -1,14 +1,13 @@
 ---
 id: std-naming-conventions
 description: Nomenclatura consistente e expressiva em todo o codebase
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-naming-conventions.js
 ---
 ## Princípios
 
