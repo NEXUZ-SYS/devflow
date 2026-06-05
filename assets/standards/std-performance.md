@@ -1,14 +1,13 @@
 ---
 id: std-performance
 description: Decisões de performance mensuradas, não intuitivas — meça antes de otimizar
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-performance.js
 ---
 ## Princípios
 

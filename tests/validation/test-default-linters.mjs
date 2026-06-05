@@ -48,6 +48,9 @@ const CURATED = [
   { id: "std-migration",
     bad: 'CREATE INDEX idx_orders_tenant ON orders(tenant_id);\nUPDATE orders SET status = 1;\n',
     good: 'CREATE INDEX CONCURRENTLY idx_orders_tenant ON orders(tenant_id);\nUPDATE orders SET status = 1 WHERE id = 1;\n' },
+  { id: "std-performance",
+    bad: 'const q = "SELECT * FROM orders OFFSET 100";\n',
+    good: 'const q = "SELECT id, total FROM orders WHERE id > $1 LIMIT 20";\n' },
 ];
 
 function runLinter(linterPath, content) {
