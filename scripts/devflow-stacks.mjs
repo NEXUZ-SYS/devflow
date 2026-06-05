@@ -91,6 +91,12 @@ async function cmdValidate(targetLib, strict, projectRoot) {
 
 // ─── scrape (single-lib) ───────────────────────────────────────────────────
 
+// Formata a linha de sucesso do scrape a partir do contrato atual de
+// runPipeline ({ library, version, url, indexed }). Pura e exportada p/ teste.
+export function formatScrapeOk(result) {
+  return `OK: indexed ${result.library}@${result.version} from ${result.url}`;
+}
+
 async function cmdScrape(library, version, opts, projectRoot) {
   if (!library || !version) {
     console.error("Usage: devflow stacks scrape <library> <version> --source=<type> --from=<url> [--auto-fallback]");
@@ -135,12 +141,12 @@ async function cmdScrape(library, version, opts, projectRoot) {
         library, version,
         url,
         type: opts.source,
-      }, projectRoot);
+      });
       if (attempts.length > 0) {
         console.log(`Auto-fallback: tried ${attempts.length + 1} URL(s), succeeded with: ${url}`);
         for (const a of attempts) console.log(`  ✗ ${a.url} — ${a.error}`);
       }
-      console.log(`OK: ${result.refPath} (hash ${result.hash}, ${result.snippetCount} snippets, ${result.sanitizationHits} sanitizations)`);
+      console.log(formatScrapeOk(result));
       return 0;
     } catch (err) {
       attempts.push({ url, error: err.message });
@@ -335,7 +341,9 @@ async function cmdAudit(arg, projectRoot) {
   return r.gate === "PASSED" ? 0 : 1;
 }
 
-main().catch(err => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  });
+}

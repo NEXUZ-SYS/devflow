@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { formatScrapeOk } from "../../scripts/devflow-stacks.mjs";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const CLI = new URL("../../scripts/devflow-stacks.mjs", import.meta.url).pathname;
@@ -41,6 +42,13 @@ function writeManifest(root, frameworks) {
   }
   writeFileSync(join(dir, "manifest.yaml"), lines.join("\n") + "\n");
 }
+
+// ─── Unit: formatScrapeOk reflete o contrato atual de runPipeline ──────────
+
+test("formatScrapeOk reflete o contrato atual de runPipeline (sem undefined)", () => {
+  const result = { library: "zod", version: "4.1.0", url: "https://zod.dev/", indexed: true };
+  assert.equal(formatScrapeOk(result), "OK: indexed zod@4.1.0 from https://zod.dev/");
+});
 
 // ─── Sem --auto-fallback: comportamento atual preservado ───────────────────
 
