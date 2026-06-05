@@ -33,6 +33,9 @@ const CURATED = [
   { id: "std-secret-conventions",
     bad: 'export const key = "sk-live-abc123def456ghi789jkl";\n',
     good: 'export const key = process.env.OPENAI_API_KEY;\n' },
+  { id: "std-typescript-strict",
+    bad: 'export default function f(x: any) { return x; }\n',
+    good: 'export function f(x: unknown) { return x; }\n// nota: any value aqui é prosa, não tipo\n' },
 ];
 
 function runLinter(linterPath, content) {
