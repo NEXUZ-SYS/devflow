@@ -7,9 +7,11 @@ const fp = process.argv[2];
 if (!fp) process.exit(0);
 let c = "";
 try { c = readFileSync(fp, "utf-8"); } catch { process.exit(0); }
-const hits = c.match(/\b(it|describe|test)\.(only|skip)\b/g) || [];
+// Além de .only/.skip: sleeps arbitrários em teste (waitForTimeout — flaky) e
+// asserções triviais sempre-verdes (expect(true).toBe(true) — não testa nada).
+const hits = c.match(/\b(it|describe|test)\.(only|skip)\b|\bwaitForTimeout\s*\(|expect\(\s*true\s*\)\.toBe\(\s*true\s*\)/g) || [];
 if (hits.length > 0) {
-  console.log(`VIOLATION: ${hits.length} it/describe/test .only|.skip em ${fp}. Remova foco/skip antes de commitar. Ver std-test-discipline › Anti-patterns.`);
+  console.log(`VIOLATION: ${hits.length} anti-padrão(ões) de teste em ${fp} (.only/.skip, waitForTimeout, ou assert trivial expect(true).toBe(true)). Remova foco/skip, troque sleep por wait determinístico, asserte comportamento real. Ver std-test-discipline › Anti-patterns.`);
   process.exit(1);
 }
 process.exit(0);
