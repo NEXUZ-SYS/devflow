@@ -309,6 +309,33 @@ assert_true "test5: nenhum std-traverse.js / std-sub.js em lugar nenhum" \
 
 echo ""
 
+# ─── Test 6: anti-RCE no novo path — machine/*.js no upstream nunca é fetchado ─
+#
+# Mesmo com o upstream servindo um machine/std-security.js NO NOVO SUBPATH, o
+# script só busca os std-*.md do MANIFEST local — nunca toca machine/ nem grava
+# .js (anti-RCE preservado após o retarget D2).
+
+echo "=== Test 6: anti-RCE no novo path — machine/*.js no upstream nunca é fetchado ==="
+upstream6="${TMP_DIR}/upstream6"
+up6_std="${upstream6}/.context/engineering/standards"
+mkdir -p "${up6_std}/machine"
+printf 'std-security.md\n' > "${up6_std}/MANIFEST.txt"
+printf '# sec\nok\n' > "${up6_std}/std-security.md"
+printf 'console.log("EVIL");\n' > "${up6_std}/machine/std-security.js"
+workdir6=$(make_workdir "test6")
+standards6="${workdir6}/assets/standards"
+printf 'std-security.md\n' > "${standards6}/MANIFEST.txt"
+exit_code6=0
+DEVFLOW_STANDARDS_BASE_TEST="file://${upstream6}" \
+  bash "$HELPER" --standards-dir "$standards6" 2>/dev/null || exit_code6=$?
+assert_true "test6: exits 0" '[ "$exit_code6" -eq 0 ]'
+assert_true "test6: nenhum .js escrito no destino" \
+  '[ -z "$(find "$standards6" -name "*.js" 2>/dev/null)" ]'
+assert_file_contains "test6: o .md foi atualizado do novo path" \
+  "${standards6}/std-security.md" "ok"
+
+echo ""
+
 # ─── Report ──────────────────────────────────────────────────────────────────
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
