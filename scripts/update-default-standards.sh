@@ -62,6 +62,14 @@ else
   BASE_URL="${PROD_BASE}"
 fi
 
+# ─── D2: Standards live under the DDC layout in the standalone repo ──────────
+# The standalone devflow-standards repo adopts the DDC layout; the std-*.md
+# files are served from .context/engineering/standards/ (no longer the repo
+# root). This subdir is a CONSTANT we control — it is NEVER derived from the
+# MANIFEST, so the anti-traversal guarantees (R4) are unaffected. The .js
+# linters under machine/ remain bundled-only and are NEVER fetched (anti-RCE).
+readonly STD_SUBPATH=".context/engineering/standards"
+
 # ─── Argument parsing ────────────────────────────────────────────────────────
 # --standards-dir <path>   override the standards directory (tests only)
 
@@ -90,7 +98,7 @@ fi
 # Send a HEAD request only. If it fails (any non-2xx, network error, timeout),
 # emit exactly one stderr line and exit 0 — never attempt per-file fetches.
 
-manifest_head_url="${BASE_URL}/MANIFEST.txt"
+manifest_head_url="${BASE_URL}/${STD_SUBPATH}/MANIFEST.txt"
 if ! curl -fsSI "$manifest_head_url" -o /dev/null 2>/dev/null; then
   echo "[devflow] standards repo not yet live — using bundled snapshot" >&2
   exit 0
@@ -141,7 +149,7 @@ while IFS= read -r raw_entry || [ -n "$raw_entry" ]; do
 
   # R4: build paths using ONLY the validated basename — never the raw line
   safe_name="$(basename "$entry")"
-  fetch_url="${BASE_URL}/${safe_name}"
+  fetch_url="${BASE_URL}/${STD_SUBPATH}/${safe_name}"
   target="${STANDARDS_DIR}/${safe_name}"
   tmp_target="${target}.new"
 
