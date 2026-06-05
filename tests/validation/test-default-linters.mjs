@@ -11,7 +11,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -164,4 +164,17 @@ describe("Phase 5 — extensões", () => {
     const r = runLinter(join(ASSETS, "machine", "std-test-discipline.js"), 'await expect(page.getByText("x")).toBeVisible();\n');
     assert.equal(r.status, 0, r.stdout);
   });
+});
+
+describe("ReDoS — todos os linters < 2s", () => {
+  const dir = join(ASSETS, "machine");
+  for (const f of readdirSync(dir).filter(n => n.endsWith(".js"))) {
+    it(`${f} lint 200k chars < 2s`, () => {
+      for (const evil of ["x".repeat(200000), "catch".repeat(40000), "CREATE TABLE ".repeat(15000)]) {
+        const t0 = Date.now();
+        runLinter(join(dir, f), evil);
+        assert.ok(Date.now() - t0 < 2000, `${f} > 2s — possível ReDoS`);
+      }
+    });
+  }
 });
