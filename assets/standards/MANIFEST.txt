@@ -18,3 +18,4 @@ std-accessibility.md
 std-internationalization.md
 std-caching.md
 std-state-management.md
+std-typescript-strict.md
