@@ -42,6 +42,9 @@ const CURATED = [
   { id: "std-schemas",
     bad: 'export const S = z.object({ payload: z.any() }).passthrough();\n',
     good: 'export const S = z.object({ payload: z.unknown() });\n' },
+  { id: "std-observability",
+    bad: 'export function f(){ console.log("user", u); }\n',
+    good: 'export function f(){ logger.info({ userId: u.id }, "user_loaded"); }\n' },
 ];
 
 function runLinter(linterPath, content) {
@@ -66,6 +69,14 @@ describe("TG4 — ReDoS guard (security review)", () => {
 });
 
 describe("TG4 — linters default curados + FP bar", () => {
+  it("anti-no-op: TMPDIR é neutro (sem segmento excluído por GATE de path)", () => {
+    // std-observability auto-exclui paths com /tests?/, /scripts/ etc. Se o tmpdir
+    // do harness contiver um desses segmentos, o GATE viraria no-op e o teste do
+    // violador passaria por exit 0 (falso verde). Este assert protege contra isso.
+    assert.doesNotMatch(tmpdir(), /[\\/](tests?|__tests__|scripts)[\\/]/,
+      "TMPDIR contém segmento excluído → observability viraria no-op");
+  });
+
   for (const { id, bad, good } of CURATED) {
     const linterPath = join(ASSETS, "machine", `${id.replace(/^std-/, "std-")}.js`);
 

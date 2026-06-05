@@ -1,14 +1,13 @@
 ---
 id: std-observability
 description: Todo evento relevante emite log estruturado, métrica ou span rastreável
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-observability.js
 ---
 ## Princípios
 
