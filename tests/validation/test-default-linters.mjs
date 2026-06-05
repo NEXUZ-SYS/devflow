@@ -54,6 +54,9 @@ const CURATED = [
   { id: "std-naming-conventions",
     bad: 'enum Status { A, B }\nconst isNotActive = true;\n',
     good: 'type Status = "A" | "B";\nconst isActive = false;\nclass IOStream {}\ninterface IPAddress {}\n' },
+  { id: "std-runtime-validation",
+    bad: 'const k = process.env.API_KEY!;\n',
+    good: 'const k = requireEnv("API_KEY");\nif (process.env.NODE_ENV !== "prod" && process.env.X != null) {}\n' },
 ];
 
 function runLinter(linterPath, content) {

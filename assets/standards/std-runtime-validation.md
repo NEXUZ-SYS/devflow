@@ -1,14 +1,13 @@
 ---
 id: std-runtime-validation
 description: Toda entrada externa cruza um schema de validação antes de entrar no domínio
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-runtime-validation.js
 ---
 ## Princípios
 
