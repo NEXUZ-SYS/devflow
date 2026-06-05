@@ -6,7 +6,7 @@ scope: organizational
 source: local
 stack: universal
 category: principios-codigo
-status: Proposto
+status: Substituido
 version: 2.0.0
 created: 2026-06-04
 supersedes: ["007-default-standards-library-v1.0.0"]

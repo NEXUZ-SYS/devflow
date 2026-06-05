@@ -5,6 +5,20 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] — 2026-06-04
+
+### Added/Changed — Enriquecimento dos standards default + expansão de linters (ADR-007 v2.1.0)
+
+**Enriquecimento.** Os 20 standards default (`assets/standards/std-*.md`) foram enriquecidos a partir da fonte de verdade `framework_ddc/.contexts/engineering/`, restaurando regras determinísticas perdidas na condensação (mantendo o formato operacional ≤ ~70 linhas). Revalidação registrada em `docs/standards-revalidation-22to20.md`: dos 22 `.claude/rules`, 17 viraram std diretamente; 5 ficam em outras camadas (operations/git-strategy/meta); +3 std de outras fontes.
+
+**Expansão de enforcement (4 → 13 linters de arquivo).** Novos linters bundlados curados (baixo FP, ReDoS < 2s, security-reviewed): `data-modeling` (TIMESTAMP sem tz / VARCHAR(n) / FLOAT em DDL), `schemas` (z.any()/.passthrough()), `observability` (console.log em runtime), `migration` (CREATE INDEX sem CONCURRENTLY / UPDATE sem WHERE / VACUUM FULL), `performance` (SELECT */OFFSET/key instável), `naming-conventions` (enum TS / boolean negativo), `runtime-validation` (process.env.X! non-null), `api-conventions` (verbo no path), e **`typescript-strict`** (novo std stack-scoped TS-only: any/enum/default-export). Os 4 linters originais foram **estendidos** (secret: `NEXT_PUBLIC_*KEY`/`console.log(process.env)`; error: catch-só-console.log; security: SQL string-interpolada; test: waitForTimeout/assert trivial).
+
+**applyTo `.sql`.** `data-modeling`/`migration`/`performance` passam a casar `**/*.sql` — sem isso os linters SQL não disparavam em arquivos de migração reais.
+
+**commit-hygiene.** Conventional Commits passa a ser enforçável por um canal **opt-in** `hooks/commit-msg-guard.mjs` (não é linter de arquivo; não conta nos 13).
+
+**Testes.** test-default-linters (CURATED + extensões + ReDoS parametrizado sobre os 13), test-applyto-sql-routing, test-e2e-enriched-linters-hook (hook real sem eject, fixtures `.sql`), test-commit-msg-guard. ADR-007 evolui para **v2.1.0** (Aprovado; v2.0.0 → Substituído).
+
 ## [1.10.0] — 2026-06-04
 
 ### Changed — Enforcement nativo de standards default sem eject (ADR-007 v2.0.0)
