@@ -45,6 +45,9 @@ const CURATED = [
   { id: "std-observability",
     bad: 'export function f(){ console.log("user", u); }\n',
     good: 'export function f(){ logger.info({ userId: u.id }, "user_loaded"); }\n' },
+  { id: "std-migration",
+    bad: 'CREATE INDEX idx_orders_tenant ON orders(tenant_id);\nUPDATE orders SET status = 1;\n',
+    good: 'CREATE INDEX CONCURRENTLY idx_orders_tenant ON orders(tenant_id);\nUPDATE orders SET status = 1 WHERE id = 1;\n' },
 ];
 
 function runLinter(linterPath, content) {
