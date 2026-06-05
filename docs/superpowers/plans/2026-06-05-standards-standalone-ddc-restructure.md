@@ -52,6 +52,8 @@ STDEOF
 ```
 Aplicar o mesmo padrão (criar `${upstreamN}/.context/engineering/standards/` e escrever lá) nos Tests 3, 4, 5. O `--standards-dir` (destino local) e os MANIFEST locais permanecem como estão (o destino no plugin segue `assets/standards/`).
 
+> **Fix Review F1:** Tests 3 e 5 só asseram condições NEGATIVAS (evil.md ausente / nenhum `.js`). Se o upstream deles não for movido para o subpath, o HEAD 404 → no-op faz o código de reject/allowlist **nunca executar** e o teste passa vacuamente. Garantir que o MANIFEST de Tests 3 e 5 vá para o subpath (HEAD-success) e adicionar uma **sentinela positiva** a cada um (ex.: `assert_file_contains "...: o std-security.md foi atualizado (path executou)" "${standardsN}/std-security.md" "<conteúdo do upstream>"`) para provar que o caminho de fetch realmente rodou antes das asserções de segurança.
+
 - [ ] **Step 2: Rodar e ver FALHAR** — `bash tests/scripts/test-update-default-standards.sh` → Tests 2 e 4 FALHAM ("updated with upstream content" / "legitimate content preserved" não acontecem, pois o script busca do root e o upstream agora serve do subpath → HEAD 404 → no-op). Confirme que falham por isso (não por erro de sintaxe).
 
 - [ ] **Step 3: Commit (RED)** — opcional; preferir commitar junto no GREEN. Se commitar: `git add tests/scripts/test-update-default-standards.sh && git commit -m "test(standards): fixtures upstream no layout DDC (.context/engineering/standards) — RED (Phase 1)"`
@@ -118,6 +120,38 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
 - [ ] **Step 2: Rodar** → 6 testes GREEN (Test 6 prova: `.md` busca do novo path, `.js` nunca tocado).
 - [ ] **Step 3: Commit** — `git add tests/scripts/test-update-default-standards.sh && git commit -m "test(standards): anti-RCE no novo path — .js nunca fetchado (Phase 1)"`
 
+### Task 1.4: Teste de migração — plugin ANTIGO vira no-op (AC2, fix Review F2)
+
+**Files:** Create `tests/fixtures/update-default-standards-pre-ddc.sh`; Modify `tests/scripts/test-update-default-standards.sh`
+
+> **Por que (Review F2):** AC2 ("script antigo → no-op limpo após root limpo, sem reversão") é a claim de segurança mais arriscada (janela de migração) e hoje só é provada por raciocínio. Prová-la com um teste executado: congelar uma cópia do script root-targeting (= o que usuários do plugin antigo rodam) e rodá-la contra um upstream que só tem MANIFEST/std no SUBPATH (root vazio) → deve dar HEAD 404 no root → no-op → snapshot intacto.
+
+- [ ] **Step 1:** Congelar o script PRÉ-retarget: `cp scripts/update-default-standards.sh tests/fixtures/update-default-standards-pre-ddc.sh` **ANTES** de aplicar a Task 1.2 (ou recriar a versão root-targeting: HEAD em `${BASE_URL}/MANIFEST.txt`, fetch `${BASE_URL}/${safe_name}`). Este arquivo documenta o comportamento do plugin antigo e é o oráculo do teste.
+- [ ] **Step 2: Adicionar Test 7** ao harness:
+
+```bash
+echo "=== Test 7: migração — plugin ANTIGO (root-targeting) vira no-op limpo ==="
+OLD_SCRIPT="${PROJECT_ROOT}/tests/fixtures/update-default-standards-pre-ddc.sh"
+upstream7="${TMP_DIR}/upstream7"
+up7_std="${upstream7}/.context/engineering/standards"
+mkdir -p "$up7_std"
+# Repo reestruturado: MANIFEST/std SÓ no subpath; root VAZIO (sem MANIFEST.txt)
+printf 'std-security.md\n' > "${up7_std}/MANIFEST.txt"
+printf '# novo conteúdo subpath\n' > "${up7_std}/std-security.md"
+workdir7=$(make_workdir "test7")
+standards7="${workdir7}/assets/standards"
+original7=$(cat "${standards7}/std-security.md")
+exit_code7=0
+DEVFLOW_STANDARDS_BASE_TEST="file://${upstream7}" \
+  bash "$OLD_SCRIPT" --standards-dir "$standards7" 2>/dev/null || exit_code7=$?
+assert_true "test7: script antigo exits 0 (no-op)" '[ "$exit_code7" -eq 0 ]'
+assert_true "test7: snapshot NÃO revertido (root 404 → no-op)" \
+  '[ "$(cat "${standards7}/std-security.md")" = "$original7" ]'
+```
+
+- [ ] **Step 3: Rodar** → 7 testes GREEN (Test 7 prova AC2: HEAD no root 404 → exit 0 → snapshot intacto, sem reversão).
+- [ ] **Step 4: Commit** — `git add tests/fixtures/update-default-standards-pre-ddc.sh tests/scripts/test-update-default-standards.sh && git commit -m "test(standards): migração — plugin antigo vira no-op limpo (AC2, Review F2) (Phase 1)"`
+
 ---
 
 ## Phase 2 — ADR-007 v2.2.0 + doc de sync
@@ -133,7 +167,7 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
   - **Guardrails (manter todos da v2.1.0 + adicionar):** "SEMPRE fetchar `.md` de `.context/engineering/standards/` no repo standalone (subpath constante, nunca derivado do MANIFEST)"; "NUNCA fetchar `machine/*.js` — bundled-only, sync plugin↔repo só no release com revisão".
   - **Enforcement:** referenciar `tests/scripts/test-update-default-standards.sh` (Tests 2/4 retarget + Test 6 anti-RCE no novo path).
 - [ ] **Step 2:** Regenerar o índice: `node scripts/adr-update-index.mjs`. Marcar v2.1.0 como Substituído no seu frontmatter (editar `status: Aprovado`→`Substituido` em `007-...-v2.1.0.md`) e regenerar de novo.
-- [ ] **Step 3: Audit** — `node scripts/adr-audit.mjs` (ou o caminho real) sobre a v2.2.0 → PASSED (o gate BLOCKED de Aprovado-protected é esperado, como na v2.1.0).
+- [ ] **Step 3: Audit** (clarificação Review F6) — rodar `node scripts/adr-audit.mjs` sobre a **nova** v2.2.0 (arquivo novo → caminho `--enforce-gate`): esperar **todos os checks PASS** (12/12). O gate "BLOCKED" só apareceria ao tentar auto-reescrever guardrails de uma ADR já `Aprovado` — não é o caso de um arquivo novo. Para a v2.1.0, a transição `Aprovado`→`Substituido` é histórica (supersedida): confirmar que o audit não a bloqueia por "bump required" (é mudança de status de doc supersedido, não edição de conteúdo aprovado).
 - [ ] **Step 4: Commit** — `git add .context/engineering/adrs/007-default-standards-library-v2.2.0.md .context/engineering/adrs/007-default-standards-library-v2.1.0.md .context/engineering/adrs/README.md && git commit -m "docs(adr): ADR-007 v2.2.0 — layout DDC do standalone + fetch retarget, Aprovado (Phase 2)"`
 
 ### Task 2.2: Doc de sync `.js` release-time (D4)
@@ -157,17 +191,17 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
 - [ ] **Step 1:** Clonar para tmp: `tmp=$(mktemp -d); gh repo clone NEXUZ-SYS/devflow-standards "$tmp"`.
 - [ ] **Step 2:** Montar o layout DDC dentro de `$tmp`:
   - `mkdir -p "$tmp/.context/engineering/standards/machine" "$tmp/.context/business" "$tmp/.context/product" "$tmp/.context/operations"`
-  - Copiar do plugin: os 21 `assets/standards/std-*.md` + `MANIFEST.txt` → `"$tmp/.context/engineering/standards/"`; os 13 `assets/standards/machine/*.js` → `"$tmp/.context/engineering/standards/machine/"`.
+  - Copiar do plugin (**paths absolutos — Review F3**, cwd reseta entre chamadas): `cp "${PROJECT_ROOT}/assets/standards/"std-*.md "${PROJECT_ROOT}/assets/standards/MANIFEST.txt" "$tmp/.context/engineering/standards/"`; `cp "${PROJECT_ROOT}/assets/standards/machine/"*.js "$tmp/.context/engineering/standards/machine/"`. (`PROJECT_ROOT="$(git -C <plugin> rev-parse --show-toplevel)"`.)
   - Escrever `README.md` em `business/`, `product/`, `operations/` (reservado p/ default content futuro) e um `README.md` no root explicando o layout + invariante `.js`-bundled-only.
-  - Remover do **root** do repo qualquer `MANIFEST.txt`/`std-*.md` stale (`git -C "$tmp" rm --quiet MANIFEST.txt std-*.md 2>/dev/null || true`).
-- [ ] **Step 3: Verificação byte-match (D4)** — `diff -r assets/standards/machine "$tmp/.context/engineering/standards/machine"` → vazio (linters idênticos plugin↔repo).
+  - Remover do **root** do repo qualquer `MANIFEST.txt`/`std-*.md` stale — **glob aspado p/ expandir no clone, não no cwd do orquestrador (Review F4)**: `git -C "$tmp" rm --quiet -- 'MANIFEST.txt' 'std-*.md' 2>/dev/null || true`. Conferir antes que o root do clone realmente tinha esses arquivos.
+- [ ] **Step 3: Verificação byte-match (D4)** — `diff -r "${PROJECT_ROOT}/assets/standards/machine" "$tmp/.context/engineering/standards/machine"` → vazio (linters idênticos plugin↔repo).
 - [ ] **Step 4: Revisar o diff** — `git -C "$tmp" add -A && git -C "$tmp" status && git -C "$tmp" diff --cached --stat`. Apresentar o resumo ao usuário ANTES do push.
 
 ### Task 3.2: Commit + push (confirmado)
 
 - [ ] **Step 1:** Commit no clone: `git -C "$tmp" commit -m "restructure: layout DDC (.context/) + standards 1.11.0 enriquecidos + linters como fonte + READMEs"`.
 - [ ] **Step 2: CONFIRMAR com o usuário** o comando de push. Após OK: `git -C "$tmp" push origin main`.
-- [ ] **Step 3: Smoke test do fetch real** — com o repo já reestruturado, rodar `bash scripts/update-default-standards.sh --standards-dir <tmp-destino-cópia>` SEM o seam de teste (usa PROD_BASE real) e confirmar que os `.md` são refrescados do novo path e nenhum `.js` é escrito. (Rodar contra uma cópia tmp do `assets/standards`, nunca in-place.)
+- [ ] **Step 3: Smoke test do fetch real** (após o push — **Review F5**, comando explícito, cópia tmp nunca in-place): `smoke=$(mktemp -d); cp -r "${PROJECT_ROOT}/assets/standards" "$smoke/standards"; bash "${PROJECT_ROOT}/scripts/update-default-standards.sh" --standards-dir "$smoke/standards"` (SEM seam → usa PROD_BASE real). Asserir: `.md` refrescados do novo path **e** `find "$smoke" -name '*.js'` retorna só os `machine/*.js` já existentes na cópia (nenhum `.js` novo fetchado). `rm -rf "$smoke"`.
 - [ ] **Step 4:** `rm -rf "$tmp"`. Registrar o SHA do push do repo standalone no resumo final.
 
 ---
@@ -177,7 +211,7 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
 | Spec AC | Task(s) |
 |---|---|
 | AC1 (fetch do novo path, teste verde, sem .js) | 1.1, 1.2, 1.3 |
-| AC2 (script antigo → no-op após root limpo) | 3.1 Step 2 (remoção root) + D3 (HEAD 404 no-op, já no script) |
+| AC2 (script antigo → no-op após root limpo) | **1.4 (Test 7, provado por execução)** + 3.1 Step 2 (remoção root) |
 | AC3 (repo reestruturado + push) | 3.1, 3.2 |
 | AC4 (ADR v2.2.0 Aprovado) | 2.1 |
 | AC5 (doc de sync .js) | 2.2 |
@@ -186,3 +220,13 @@ assert_file_contains "test6: o .md foi atualizado do novo path" \
 TDD: a única mudança de código (script, Phase 1) é test-first (RED em 1.1 antes do GREEN em 1.2). Phases 2-3 são docs/ADR/ops (sem lógica nova de código além do script). Sem placeholders; paths exatos; o subpath é constante (anti-traversal preservado).
 
 > **Nota outward:** Phase 3 mexe em repo remoto — push só após confirmação explícita do comando. A verificação byte-match (3.1 Step 3) e o smoke real (3.2 Step 3) provam D4 e o retarget ponta-a-ponta.
+
+## Correções aplicadas pós-Review (R phase)
+
+Security-auditor: **PROCEED** (R3/R4/R6/anti-RCE/migração/curl-file/ADR verificados empiricamente, sem must-fix). Code-reviewer: **REVISE leve** — aplicado:
+- **F2** → Task 1.4 nova: Test 7 prova AC2 (plugin antigo → no-op) por execução, com cópia congelada `tests/fixtures/update-default-standards-pre-ddc.sh`.
+- **F1** → Tests 3 e 5 movem MANIFEST p/ subpath + sentinela positiva (não-vacuosos).
+- **F3** → paths absolutos (`${PROJECT_ROOT}`) na Phase 3.
+- **F4** → glob `git rm` aspado (expande no clone).
+- **F5** → smoke com `cp -r` tmp explícito, nunca in-place.
+- **F6** → veredito esperado do audit clarificado (arquivo novo → 12/12 PASS).
