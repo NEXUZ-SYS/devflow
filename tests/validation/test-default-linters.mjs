@@ -115,3 +115,53 @@ describe("TG4 — linters default curados + FP bar", () => {
     });
   }
 });
+
+describe("Phase 5 — extensões", () => {
+  // 5.1 secret-conventions
+  it("secret-conventions: NEXT_PUBLIC_*KEY dispara", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-secret-conventions.js"), 'export const k = process.env.NEXT_PUBLIC_OPENAI_API_KEY;\n');
+    assert.equal(r.status, 1, r.stdout);
+  });
+  it("secret-conventions: NEXT_PUBLIC_API_URL não dispara (FP bar)", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-secret-conventions.js"), 'export const u = process.env.NEXT_PUBLIC_API_URL;\n');
+    assert.equal(r.status, 0, r.stdout);
+  });
+
+  // 5.2 error-handling
+  it("error-handling: catch que só console.log dispara", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-error-handling.js"), 'try { f(); } catch (e) { console.log(e); }\n');
+    assert.equal(r.status, 1, r.stdout);
+  });
+  it("error-handling: catch com log+rethrow não dispara (FP bar)", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-error-handling.js"), 'try { f(); } catch (e) { logger.error(e); throw e; }\n');
+    assert.equal(r.status, 0, r.stdout);
+  });
+
+  // 5.3 security
+  it("security: SQL string-interpolada dispara", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-security.js"), 'const q = `SELECT * FROM u WHERE id = ${id}`;\n');
+    assert.equal(r.status, 1, r.stdout);
+  });
+  it("security: query parametrizada não dispara (FP bar)", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-security.js"), 'const r = db.query("SELECT * FROM u WHERE id = $1", [id]);\n');
+    assert.equal(r.status, 0, r.stdout);
+  });
+  it("security: tagged sql template não dispara (FP bar)", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-security.js"), 'const q = sql`SELECT * FROM u WHERE id = ${id}`;\n');
+    assert.equal(r.status, 0, r.stdout);
+  });
+
+  // 5.4 test-discipline
+  it("test-discipline: waitForTimeout dispara", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-test-discipline.js"), 'await page.waitForTimeout(500);\n');
+    assert.equal(r.status, 1, r.stdout);
+  });
+  it("test-discipline: expect(true).toBe(true) dispara", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-test-discipline.js"), 'expect(true).toBe(true);\n');
+    assert.equal(r.status, 1, r.stdout);
+  });
+  it("test-discipline: assert real não dispara (FP bar)", () => {
+    const r = runLinter(join(ASSETS, "machine", "std-test-discipline.js"), 'await expect(page.getByText("x")).toBeVisible();\n');
+    assert.equal(r.status, 0, r.stdout);
+  });
+});
