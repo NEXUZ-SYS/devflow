@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { formatScrapeOk } from "../../scripts/devflow-stacks.mjs";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const CLI = new URL("../../scripts/devflow-stacks.mjs", import.meta.url).pathname;
@@ -41,6 +42,13 @@ function writeManifest(root, frameworks) {
   }
   writeFileSync(join(dir, "manifest.yaml"), lines.join("\n") + "\n");
 }
+
+// ─── Unit: formatScrapeOk reflete o contrato atual de runPipeline ──────────
+
+test("formatScrapeOk reflete o contrato atual de runPipeline (sem undefined)", () => {
+  const result = { library: "zod", version: "4.1.0", url: "https://zod.dev/", indexed: true };
+  assert.equal(formatScrapeOk(result), "OK: indexed zod@4.1.0 from https://zod.dev/");
+});
 
 // ─── Sem --auto-fallback: comportamento atual preservado ───────────────────
 
@@ -156,45 +164,66 @@ test("scrape --auto-fallback lib não existente no manifest: usa apenas --from",
 // ─── Real pipeline contra URLs sabidamente ruins (smoke; usa rede) ─────────
 // Skippable se variável SKIP_NETWORK_TESTS=1 estiver setada (CI sem rede).
 
-const SKIP_NETWORK = process.env.SKIP_NETWORK_TESTS === "1";
+// Testes que indexam de verdade (rede + docs-mcp-server) são opt-in.
+const RUN_NETWORK = process.env.RUN_NETWORK_TESTS === "1";
 
-test("scrape --auto-fallback recupera de URL ruim para hint válido (real network)", { skip: SKIP_NETWORK }, () => {
-  // URL primária é raw README (sabe falhar no md2llm); fallback é zod.dev
-  // (sabe funcionar). Auto-fallback deve detectar exit 1, tentar próxima,
-  // sucesso final.
+test("scrape --auto-fallback recupera de host inválido para hint válido (real network)", { skip: !RUN_NETWORK }, () => {
+  // Primária é host inválido (falha garantida → força o fallback); o hint
+  // zod.dev sabe indexar. Auto-fallback detecta exit 1, tenta a próxima, sucesso.
   const { root, cleanup } = fixture();
   try {
     writeManifest(root, {
       zod: {
         version: "4.1.0",
         artisanalRef: "refs/zod@4.1.0.md",
-        discoveryHints: ["https://zod.dev/"],  // canonical fallback
+        discoveryHints: ["https://zod.dev/"],  // canonical fallback (funciona)
       },
     });
     const r = spawnSync("node", [
       CLI, "scrape", "zod", "4.1.0",
       "--source=html",
-      "--from=https://raw.githubusercontent.com/colinhacks/zod/main/README.md",
+      "--from=https://nonexistent-host.invalid/",  // falha garantida → força fallback
       "--auto-fallback", `--project=${root}`,
     ], { encoding: "utf-8", timeout: 60000 });
     // Sucesso esperado via fallback
     assert.equal(r.status, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-    assert.match(r.stdout, /OK:/, "deve emitir 'OK:' após sucesso via fallback");
-    assert.match(r.stdout, /tried.*URL/i, "deve mencionar tentativas no resumo");
+    assert.match(r.stdout, /OK: indexed zod@4\.1\.0/, "mensagem OK reflete o novo contrato");
+    assert.match(r.stdout, /Auto-fallback: tried 2 URL\(s\)/, "resumo de tentativas");
   } finally { cleanup(); }
 });
 
-test("scrape sem --auto-fallback: exit 1 em URL ruim (comportamento atual)", { skip: SKIP_NETWORK }, () => {
+test("scrape sem --auto-fallback: host inválido → exit 1 + SCRAPE FAILED (determinístico)", () => {
   const { root, cleanup } = fixture();
   try {
     writeManifest(root, {});
     const r = spawnSync("node", [
       CLI, "scrape", "foo", "1.0.0",
       "--source=html",
-      "--from=https://raw.githubusercontent.com/colinhacks/zod/main/README.md",
+      "--from=https://nonexistent-host.invalid/",
       `--project=${root}`,
     ], { encoding: "utf-8", timeout: 60000 });
-    assert.equal(r.status, 1, "URL ruim sem --auto-fallback: exit 1");
+    assert.equal(r.status, 1, `esperava exit 1; stderr: ${r.stderr}`);
     assert.match(r.stderr, /SCRAPE FAILED:/);
+  } finally { cleanup(); }
+});
+
+test("scrape --auto-fallback: todas URLs inválidas → exit 1 + tried N URLs", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {
+      foo: {
+        version: "1.0.0",
+        artisanalRef: "refs/foo@1.0.0.md",
+        discoveryHints: ["https://also-bad.invalid/"],
+      },
+    });
+    const r = spawnSync("node", [
+      CLI, "scrape", "foo", "1.0.0",
+      "--source=html",
+      "--from=https://nonexistent-host.invalid/",
+      "--auto-fallback", `--project=${root}`,
+    ], { encoding: "utf-8", timeout: 60000 });
+    assert.equal(r.status, 1, `esperava exit 1; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /tried 2 URL\(s\)/);
   } finally { cleanup(); }
 });
