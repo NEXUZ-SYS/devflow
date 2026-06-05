@@ -33,7 +33,8 @@
 | `.context/engineering/adrs/007-default-standards-library-v2.1.0.md` | ADR evoluída | Create |
 | `docs/standards-revalidation-22to20.md` | Registro da revalidação (AC9) | Create |
 | `CHANGELOG.md` / `.claude-plugin/plugin.json` | Version bump | Modify |
-| `scripts/sync-standards-to-standalone.sh` (ou doc do passo) | Sync `.md` → devflow-standards | Create/Run |
+| `tests/validation/test-applyto-sql-routing.mjs` | Prova que `.sql` roteia p/ linters SQL (R1) | Create |
+| Sync `.md` → devflow-standards | Passo manual documentado (não script commitado) | Run |
 
 ---
 
@@ -65,7 +66,7 @@ process.exit(0);
 
 **Adicionar ao harness** `tests/validation/test-default-linters.mjs`: append `{ id: "std-<ID>", bad: <BAD>, good: <GOOD> }` ao array `CURATED` (os 3 testes por entrada já existem: linter existe+religado, violador dispara, conforme não dispara).
 
-**Regra ReDoS-safe:** sem quantificador aninhado (`(a+)+`), sem `[\s\S]*` ganancioso sobre input grande. Cada task inclui um teste de stress (200k chars) que deve lintar em < 2s.
+**Regra ReDoS-safe:** sem quantificador aninhado (`(a+)+`), sem `[\s\S]*` ganancioso sobre input grande. **Em vez de um stress test por task**, a Task 7.0 adiciona **um teste parametrizado único** que roda CADA linter de `assets/standards/machine/*.js` contra 3 inputs patológicos de 200k chars e asserta lint < 2s — cobre todos os linters novos+existentes de uma vez (fix Review code-reviewer WARN). Os stress tests pontuais já existentes (data-modeling, error-handling) permanecem.
 
 ---
 
@@ -115,6 +116,8 @@ git commit -m "docs(standards): revalidação 22→20 das rules do framework_ddc
 **Agent:** documentation-writer + security-auditor (sign-off de cada regra lintável)
 
 > Cada std: comparar com a(s) fonte(s) `.contexts/engineering/`, restaurar regras concretas em **## Princípios** e linhas determinísticas em **## Anti-patterns**, teto ≤ ~70 linhas, pt-BR, frontmatter válido, `version` bump. **Nada inventado** — cada linha rastreável à fonte. As linhas lintáveis da tabela Anti-patterns viram a spec dos linters da Phase 2-4.
+>
+> **Nota de granularidade (Review code-reviewer #8):** Tasks 1.1 e 1.2 são **batch-doc** (8 e 12 arquivos `.md`) — isentas da regra superpowers de 2-5 min por step. Na execução subagent-driven, despachar **um subagent por std** (ou por cluster) para manter cada unidade de trabalho holdável em contexto. As tasks de linter (2.x–6.x) seguem a granularidade fina normal.
 
 ### Task 1.1: Enriquecer os 8 std do tier lintável (ALTA+MÉDIA)
 
@@ -179,6 +182,37 @@ enforcement:
 
 - [ ] **Step 2:** Adicionar `std-typescript-strict.md` ao `assets/standards/MANIFEST.txt`.
 - [ ] **Step 3: Commit** `git commit -am "feat(standards): std-typescript-strict (stack-scoped TS) + MANIFEST (Phase 1)"`
+
+### Task 1.4: Ampliar `applyTo` para `.sql` (BLOCKER — fix da Review R1)
+
+> **Por que (consenso dos 3 reviewers):** `findApplicableStandards` (`scripts/lib/standards-loader.mjs:86`) gateia a execução do linter por `applyTo` via `matchGlob` **antes** de invocar o linter. Com `applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]`, um arquivo `.sql` **nunca** é lintado → `std-data-modeling` e `std-migration` (que lintam DDL `.sql` real) ficam mortos no projeto consumidor, apesar do harness passar (o harness invoca o linter direto, bypassa `applyTo`). A widening é **per-std**: só os std com regra SQL ganham `.sql`.
+
+**Files (Modify):** `assets/standards/std-{data-modeling,migration,performance}.md`; Create `tests/validation/test-applyto-sql-routing.mjs`
+
+- [ ] **Step 1: Teste (RED)** — provar que um `.sql` roteia para o linter via o loader real:
+
+```javascript
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { findApplicableStandards } from "../../scripts/lib/standards-loader.mjs";
+
+describe("applyTo routing — .sql alcança os linters SQL", () => {
+  for (const id of ["std-data-modeling", "std-migration", "std-performance"]) {
+    it(`${id} casa um arquivo .sql`, () => {
+      const stds = findApplicableStandards("db/migrations/001_init.sql");
+      assert.ok(stds.some(s => s.id === id), `${id} deve aplicar a .sql`);
+    });
+  }
+});
+```
+
+> Nota: confirmar a assinatura real de `findApplicableStandards` (pode exigir `(filePath, standards[])` ou `(projectRoot, filePath)`). Ajustar a chamada do teste ao contrato real lido em `standards-loader.mjs` antes do Step 2.
+
+- [ ] **Step 2: Rodar** `node --test tests/validation/test-applyto-sql-routing.mjs` → FAIL (`.sql` não casa).
+- [ ] **Step 3: Ampliar o frontmatter** dos 3 std: `applyTo: ["**/*.{sql,ts,tsx,js,jsx,py,go}"]`. **NÃO** adicionar `.sql` a observability/naming/typescript-strict (regras TS/JS — manter `applyTo` honesto).
+- [ ] **Step 4: Validar SI-5** — o novo glob passa `validateSubset` (sem traversal); rodar a suíte de loader: `node --test tests/validation/test-run-linter-merged.mjs` → verde.
+- [ ] **Step 5: Rodar** → PASS (os 3 `.sql` roteiam).
+- [ ] **Step 6: Commit** `git commit -am "fix(standards): applyTo inclui .sql p/ data-modeling/migration/performance (Review R1)"`
 
 ---
 
@@ -264,7 +298,7 @@ process.exit(0);
 import { readFileSync } from "node:fs";
 const fp = process.argv[2];
 if (!fp) process.exit(0);
-if (/\.(test|spec)\.[tj]sx?$|[\\/](scripts|tests?)[\\/]/.test(fp)) process.exit(0);
+if (/\.(test|spec)\.[tj]sx?$|[\\/](scripts|tests?|__tests__|__mocks__)[\\/]/.test(fp)) process.exit(0);
 let c = "";
 try { c = readFileSync(fp, "utf-8"); } catch { process.exit(0); }
 const re = /\bconsole\.(?:log|debug|info)\s*\(/g;
@@ -277,7 +311,7 @@ process.exit(0);
 ```
 
 - [ ] **Step 4:** Religar `std-observability.md`.
-- [ ] **Step 5:** Rodar → PASS. **Nota:** o harness escreve em `sample.tsx` num tmpdir cujo path contém `tg4-`; confirmar que o GATE não exclui o sample (não casa `test`/`spec`/`scripts`). Se o tmpdir contiver `/tests/`, ajustar o nome do arquivo de sample no harness para um path neutro.
+- [ ] **Step 5:** Rodar → PASS. **Guard anti-no-op (fix Review R5):** adicionar ao harness um assert de que o tmpdir é neutro — `assert.doesNotMatch(tmpdir(), /[\\/](tests?|__tests__|scripts)[\\/]/, "TMPDIR contém segmento excluído → linter vira no-op silencioso")`. Sem isso, o GREEN pode passar com o linter desligado pelo GATE.
 - [ ] **Step 6: Commit** `git commit -am "feat(standards): linter std-observability (console.log runtime) (Phase 2)"`
 
 ---
@@ -352,12 +386,14 @@ process.exit(0);
 
 ```javascript
 { id: "std-naming-conventions",
-  bad: 'interface IUser { id: string }\nenum Status { A, B }\n',
-  good: 'interface User { id: string }\ntype Status = "A" | "B";\n' },
+  bad: 'enum Status { A, B }\nconst isNotActive = true;\n',
+  good: 'type Status = "A" | "B";\nconst isActive = false;\nclass IOStream {}\ninterface IPAddress {}\n' },
 ```
 
+> **Fix Review R2 (HIGH-FP):** o arm `interface I[A-Z]` foi **removido** — falso-positivava em `IOStream`, `IPAddress`, `IServiceProvider` (não distingue `IUser` de `IOStream`). O `good` agora trava essa regressão incluindo `IOStream`/`IPAddress`. Restam 2 arms de baixo-FP: `enum` TS e boolean negativo.
+
 - [ ] **Step 2:** Rodar → FAIL.
-- [ ] **Step 3: Implementar** (regex `/\binterface\s+I[A-Z]\w*|\benum\s+\w+\s*\{|\bis(?:Not|n['’]t)[A-Z]\w*/g`, mensagem "naming (IHungarian/enum/boolean negativo)").
+- [ ] **Step 3: Implementar** (regex `/\benum\s+\w+\s*\{|\bis(?:Not|n['’]t)[A-Z]\w*/g`, mensagem "naming (enum TS / boolean negativo)").
 - [ ] **Step 4:** Religar `std-naming-conventions.md`.
 - [ ] **Step 5:** Rodar → PASS.
 - [ ] **Step 6: Commit** `git commit -am "feat(standards): linter std-naming-conventions (Phase 3)"`
@@ -371,11 +407,13 @@ process.exit(0);
 ```javascript
 { id: "std-runtime-validation",
   bad: 'const k = process.env.API_KEY!;\n',
-  good: 'const k = requireEnv("API_KEY");\n' },
+  good: 'const k = requireEnv("API_KEY");\nif (process.env.NODE_ENV !== "prod" && process.env.X != null) {}\n' },
 ```
 
+> **Fix Review R3 (HIGH-FP):** `process\.env\.\w+\s*!` falso-positivava em `process.env.NODE_ENV !== "prod"` e `!= null` (código idiomático correto). Regex corrigida para casar **só** a non-null assertion (`!` não seguido de `=`). O `good` trava a regressão com `!==` e `!=`.
+
 - [ ] **Step 2:** Rodar → FAIL.
-- [ ] **Step 3: Implementar** (regex `/process\.env\.\w+\s*!/g`, mensagem "process.env.X! sem validação").
+- [ ] **Step 3: Implementar** (regex `/process\.env\.\w+!(?![=])/g`, mensagem "process.env.X! (non-null assertion) sem validação").
 - [ ] **Step 4:** Religar `std-runtime-validation.md`.
 - [ ] **Step 5:** Rodar → PASS.
 - [ ] **Step 6: Commit** `git commit -am "feat(standards): linter std-runtime-validation (Phase 3)"`
@@ -393,7 +431,7 @@ process.exit(0);
 ```
 
 - [ ] **Step 2:** Rodar → FAIL.
-- [ ] **Step 3: Implementar** (regex `/["'`]\/(?:v\d+\/)?(?:[\w-]+\/)*(?:get|create|update|delete|fetch|make|do|set)[A-Z]\w*/g`, mensagem "verbo no path REST").
+- [ ] **Step 3: Implementar** (regex `/["'`]\/(?:v\d+\/)?(?:[\w-]+\/)*(?:get|create|update|delete|fetch|make|do|set)[A-Z]\w*/g`, mensagem "verbo no path REST"). **FP-bar edge (Review architect #3 / security MÉDIO):** pode disparar em literais não-API tipo `/getStarted`. Enquadrar no `.md` como **nudge**, não erro duro. Se o sign-off final de segurança ficar marginal, esta é a regra a **dropar** primeiro (sem afetar as outras).
 - [ ] **Step 4:** Religar `std-api-conventions.md`.
 - [ ] **Step 5:** Rodar → PASS.
 - [ ] **Step 6: Commit** `git commit -am "feat(standards): linter std-api-conventions (verbo no path) (Phase 3)"`
@@ -412,11 +450,13 @@ process.exit(0);
 ```javascript
 { id: "std-typescript-strict",
   bad: 'export default function f(x: any) { return x; }\n',
-  good: 'export function f(x: unknown) { return x; }\n' },
+  good: 'export function f(x: unknown) { return x; }\n// nota: any value aqui é prosa, não tipo\n' },
 ```
 
+> **Fix Review R4 (MÉDIO-FP):** `:\s*any\b` disparava em comentário/string (`// pass: any value`). Ancorar a uma posição de tipo: `:\s*any\b(?=\s*[,;)\]>=}]|$)` casa `x: any`, `x: any)`, `x: any;` e poupa prosa `: any value`. O `good` inclui um comentário com "any value" p/ travar a regressão.
+
 - [ ] **Step 2:** Rodar → FAIL.
-- [ ] **Step 3: Implementar** (regex `/:\s*any\b|\benum\s+\w+\s*\{|\bexport\s+default\s+function\b/g`, mensagem "TS strictness (any/enum/default export)"). O `.md` já aponta `enforcement.linter` (Task 1.3) — sem religar.
+- [ ] **Step 3: Implementar** (regex `/:\s*any\b(?=\s*[,;)\]>=}]|$)|\benum\s+\w+\s*\{|\bexport\s+default\s+function\b/gm`, mensagem "TS strictness (any/enum/default export)"). O `.md` já aponta `enforcement.linter` (Task 1.3) — sem religar.
 - [ ] **Step 4:** Rodar → PASS.
 - [ ] **Step 5: Commit** `git commit -am "feat(standards): linter std-typescript-strict (Phase 4)"`
 
@@ -555,11 +595,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 ## Phase 7 — E2E via hook real, sem eject (TDD)
 **Agent:** test-writer
 
+### Task 7.0: Teste ReDoS parametrizado (todos os linters)
+
+**Files:** Modify `tests/validation/test-default-linters.mjs`
+
+- [ ] **Step 1:** Adicionar um `describe("ReDoS — todos os linters < 2s")` que itera `readdirSync(join(ASSETS,"machine"))` e, para cada `.js`, roda `runLinter` com 3 inputs de 200k chars (`"x".repeat(200000)`, `"catch".repeat(40000)`, `"CREATE TABLE ".repeat(15000)`) assertando `dt < 2000`.
+- [ ] **Step 2: Rodar** → PASS para todos (novos + existentes).
+- [ ] **Step 3: Commit** `git commit -am "test(standards): guard ReDoS parametrizado sobre todos os linters (Phase 7)"`
+
 ### Task 7.1: E2E enriquecido (modelo TG8)
 
 **Files:** Create `tests/integration/test-e2e-enriched-linters-hook.mjs`
 
-- [ ] **Step 1: Escrever o E2E** (espelha `tests/integration/test-e2e-default-enforcement-hook.mjs`): projeto-tmp sem `.context/standards`, invoca `hooks/post-tool-use` real, para cada std novo escreve um arquivo violador e asserta `VIOLATION` + o id do std no stdout. Exemplos de assert: `src/m.sql` com `CREATE TABLE t (a TIMESTAMP)` → `std-data-modeling`; `src/s.ts` com `z.any()` → `std-schemas`; `src/o.ts` com `console.log` → `std-observability`. Mais um arquivo conforme por std → sem VIOLATION.
+- [ ] **Step 1: Escrever o E2E** (espelha `tests/integration/test-e2e-default-enforcement-hook.mjs`): projeto-tmp sem `.context/standards`, invoca `hooks/post-tool-use` real, para cada std novo escreve um arquivo violador e asserta `VIOLATION` + o id do std no stdout. **Fixtures por extensão correta (depende da Task 1.4):** `db/migrations/001.sql` com `CREATE TABLE t (a TIMESTAMP);` → `std-data-modeling` (só roteia se applyTo tem `.sql`); `db/migrations/002.sql` com `CREATE INDEX i ON t(c);` → `std-migration`; `src/s.ts` com `z.any()` → `std-schemas`; `src/o.ts` com `console.log("x")` → `std-observability`; `src/n.ts` com `enum E {A}` → `std-naming-conventions`. Mais um arquivo conforme por std → sem VIOLATION. **Asserts por substring** (`match(/std-<id>/)`) para tolerar que >1 std possa aplicar ao mesmo arquivo (fix Review code-reviewer #2).
 - [ ] **Step 2: Rodar** `node --test tests/integration/test-e2e-enriched-linters-hook.mjs` → PASS (prova enforcement default sem eject ponta-a-ponta).
 - [ ] **Step 3: Suíte completa** — `node --test tests/validation/*.mjs tests/integration/*.mjs` → tudo verde (exceto as 2 falhas de rede pré-existentes).
 - [ ] **Step 4: Commit** `git commit -am "test(standards): E2E enriquecido via hook real sem eject (Phase 7)"`
@@ -573,7 +621,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 **Files:** Create `.context/engineering/adrs/007-default-standards-library-v2.1.0.md`; Modify `.context/engineering/adrs/README.md`
 
-- [ ] **Step 1:** Invocar `devflow:adr-builder` modo EVOLVE minor sobre `007-default-standards-library-v2.0.0`. Mudanças: `status: Aprovado`; `version: 2.1.0`; `supersedes: ["007-...-v2.0.0"]`; Guardrails — enumerar o novo conjunto curado (13: os 4 originais + data-modeling, schemas, observability, migration, performance, naming-conventions, runtime-validation, api-conventions, typescript-strict); reafirmar barra de FP; registrar que commit-hygiene é enforçado por canal commit-msg (não linter de arquivo); registrar std-typescript-strict como única exceção stack-scoped.
+- [ ] **Step 1:** Invocar `devflow:adr-builder` modo EVOLVE **minor** sobre `007-default-standards-library-v2.0.0`, produzindo um **novo arquivo versionado** `007-default-standards-library-v2.1.0.md` com `supersedes: ["007-default-standards-library-v2.0.0"]` (convenção file-per-version já usada no repo — v1.0.0/v2.0.0 são arquivos separados; minor = estende, não reverte). Mudanças: `status: Aprovado`; `version: 2.1.0`; Guardrails — enumerar os **13 linters de arquivo auto-disparados** (os 4 originais + data-modeling, schemas, observability, migration, performance, naming-conventions, runtime-validation, api-conventions, typescript-strict); **registrar que o commit-msg guard é canal opt-in/advisory — NÃO conta nos 13** (não dispara via post-tool-use); reafirmar barra de FP; registrar std-typescript-strict como única exceção stack-scoped. Confirmar que `relatedAdrs: ["007-default-standards-library"]` (slug base, Task 1.3) resolve no README index; alinhar se não.
 - [ ] **Step 2: Audit** — rodar o audit da ADR (S1–S7/12 checks via adr-audit.mjs) → PASSED.
 - [ ] **Step 3: Commit** `git commit -am "docs(adr): ADR-007 v2.1.0 — conjunto curado estendido, Aprovado (Phase 8)"`
 
@@ -586,7 +634,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 **Files:** todos os `assets/standards/*.md` enriquecidos + `MANIFEST.txt`
 
-- [ ] **Step 1:** Push do snapshot `.md` (NUNCA `.js`) para `NEXUZ-SYS/devflow-standards`, conforme memória `project_standards_standalone_sync`. Confirmar que `update-default-standards.sh` (Step 4d) fetcha só `.md` e que o MANIFEST inclui `std-typescript-strict.md`.
+- [ ] **Step 1:** Push do snapshot `.md` (NUNCA `.js`) para `NEXUZ-SYS/devflow-standards`, conforme memória `project_standards_standalone_sync`, como **passo manual documentado** (não criar `scripts/sync-standards-to-standalone.sh` commitado — push once-per-release não justifica script no TCB; architect rec #4). Confirmar que `update-default-standards.sh` (Step 4d) fetcha só `.md` e que o MANIFEST inclui `std-typescript-strict.md`.
 - [ ] **Step 2:** Verificar guard anti-RCE: `node --test tests/scripts/test-update-default-standards.sh`-equivalente ou rodar o script anti-RCE → `machine/*.js` byte-idêntico, fetch nunca grava `.js`.
 - [ ] **Step 3: Commit** (no repo standalone) — fora deste repo; registrar o SHA no PR body.
 
@@ -605,7 +653,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 | Spec AC | Task(s) |
 |---|---|
 | AC1 (20 .md enriquecidos ≤70, audit) | 1.1, 1.2 |
-| AC2 (linters ALTA+MÉDIA TDD + E2E) | 2.x, 3.x, 7.1 |
+| AC2 (linters ALTA+MÉDIA TDD + E2E) | 2.x, 3.x, **1.4 (applyTo .sql)**, 7.0, 7.1 |
 | AC3 (4 extensões) | 5.x |
 | AC4 (std-typescript-strict) | 1.3, 4.1 |
 | AC5 (commit-msg hook) | 6.x |
@@ -614,6 +662,20 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 | AC8 (suíte verde, 4→13) | 7.1, 9.2 |
 | AC9 (revalidação registrada) | 0 |
 
-Sem placeholders de código; regexes ReDoS-safe com teste de stress; nomes de função (`isValidConventionalCommit`) consistentes; cada linter segue o contrato SI-4 verificado nos modelos existentes.
+Sem placeholders de código; regexes ReDoS-safe (Task 7.0 parametrizada); nomes de função (`isValidConventionalCommit`) consistentes; cada linter segue o contrato SI-4 verificado nos modelos existentes.
 
-> **Risco de FP a vigiar na Review:** `std-observability` GATE de path vs tmpdir do harness (Task 2.3 Step 5); `std-data-modeling`/`std-migration` precisam de `applyTo` incluindo `**/*.sql` — confirmar no frontmatter durante a Review antes da Execução.
+## Correções aplicadas pós-Review (R phase)
+
+Consenso dos 3 reviewers (security-auditor, architect, code-reviewer), todos empíricos:
+
+- **R1 (BLOCK) — applyTo `.sql`:** nova **Task 1.4** amplia `applyTo` p/ data-modeling/migration/performance + teste de roteamento. Phase 7 usa fixtures `.sql` reais.
+- **R2 (HIGH-FP) — naming `interface I[A-Z]`:** arm removido (FP em `IOStream`/`IPAddress`); `good` trava regressão (Task 3.3).
+- **R3 (HIGH-FP) — runtime-validation `process.env.X!`:** regex `(?![=])` poupa `!==`/`!=`; `good` com `!==` (Task 3.4).
+- **R4 (MÉDIO) — typescript-strict `: any`:** ancorado p/ poupar comentário/string (Task 4.1).
+- **R5 (MÉDIO) — observability gate:** + `__tests__`/`__mocks__` + assert de TMPDIR neutro (Task 2.3).
+- **ReDoS:** virou teste único parametrizado (Task 7.0).
+- **api-conventions:** enquadrado como nudge; primeiro a dropar se sign-off marginal (Task 3.5).
+- **commit-msg:** decontado dos 13 linters (opt-in/advisory) — spec + ADR ajustados.
+- **ADR v2.1.0:** novo arquivo versionado com supersedes (convenção file-per-version) (Task 8.1).
+- **sync:** passo manual documentado, não script commitado (Task 9.1).
+- **Pushback aceito:** migration `CREATE INDEX IF NOT EXISTS` **não** é FP (índice sem CONCURRENTLY É violação) — regex mantida.

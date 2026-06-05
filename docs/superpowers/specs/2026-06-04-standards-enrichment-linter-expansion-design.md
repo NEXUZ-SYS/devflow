@@ -46,7 +46,9 @@ As regras *headline* lintáveis sobreviveram à condensação (`float`-money, `S
 `OFFSET`, `z.any()`, `200`-com-erro). Mas a condensação **dropou um segundo tier de
 regras determinísticas de baixo-FP** presentes nas tabelas "Incorreto"/anti-pattern
 das fontes ricas. Estimativa: **~20–25 regras lintáveis recuperáveis** + **~6
-extensões** aos 4 linters existentes. Enforcement passaria de **4 → ~12** std.
+extensões** aos 4 linters existentes. Enforcement de **linter de arquivo** passaria de
+**4 → 13** std (4 existentes + 8 novos + std-typescript-strict). O canal commit-msg é
+opt-in/advisory e **não** entra nessa conta (não dispara via post-tool-use).
 
 **Veredito:** a migração foi fiel e completa para o subconjunto standard-worthy; mas
 há enriquecimento lintável legítimo a recuperar das fontes. Isto é uma **evolução**
@@ -123,7 +125,7 @@ reverte o enriquecimento. `MANIFEST.txt` atualizado se houver std novo.
 
 ### D6 — ADR-007 → v2.1.0 (minor, Aprovado)
 A v2.0.0 está `Proposto` apesar de implementada+verde. Evoluir para **v2.1.0**
-(minor: estende o conjunto curado de linters de 4 → ~12 + std-typescript-strict +
+(minor: estende o conjunto curado de linters de 4 → 13 incl. std-typescript-strict +
 canal commit-msg) e marcar **Aprovado**. Guardrails atualizados: enumerar o novo
 conjunto curado; reafirmar a barra de FP; registrar que commit-hygiene é enforçado
 por canal commit-msg, não linter de arquivo.
@@ -157,7 +159,8 @@ Testes reais (unit + E2E), nunca content-checks. E2E destrutivo só em tmpdir.
 5. Conventional Commits enforçado por hook commit-msg; std-commit-hygiene aponta o canal.
 6. ADR-007 v2.1.0 `Aprovado`, audit PASSED, supersedes/refines coerentes.
 7. `.md` enriquecidos sincronizados para devflow-standards (só `.md`); MANIFEST atualizado.
-8. Suíte completa verde (exceto as 2 falhas de rede pré-existentes); enforcement 4 → ~13.
+8. Suíte completa verde (exceto as 2 falhas de rede pré-existentes); enforcement de linter
+   de arquivo 4 → 13 (commit-msg guard contado à parte, opt-in).
 9. Revalidação documentada: os 5 `.claude/rules` não-migrados com decisão registrada.
 
 ## Riscos
