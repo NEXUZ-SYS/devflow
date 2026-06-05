@@ -1,7 +1,7 @@
 ---
 id: std-state-management
 description: Estado classificado, com fonte de verdade única e no menor escopo possível
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{tsx,jsx}"]
 activation: on-demand
@@ -21,6 +21,8 @@ weakStandardWarning: true
 - Nunca mute estado existente; produza novo objeto/array (`spread`, `filter`, `map` — nunca `push`, `splice` in-place sobre o state)
 - Estado relacional normalizado: `{ byId: {...}, allIds: [...] }`; listas filtradas/ordenadas para exibição são derivadas, não armazenadas
 - Mutations no servidor invalidam o cache do fetch layer — não atualize manualmente uma store paralela
+- Estado de form vive no form (lib dedicada ou `useState` local), nunca numa store global compartilhada com o resto do app
+- Optimistic update sempre tem caminho de rollback no erro; nunca deixe a UI divergir do servidor sem reconciliação
 
 ## Anti-patterns
 

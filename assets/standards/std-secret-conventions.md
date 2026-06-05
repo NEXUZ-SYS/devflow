@@ -1,7 +1,7 @@
 ---
 id: std-secret-conventions
 description: Secrets nunca em código ou log; armazenados e acessados via mecanismo dedicado
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -20,12 +20,16 @@ enforcement:
 - Nunca logue valores de secrets, headers `Authorization`, cookies de sessão ou tokens JWT
 - Rotacione chaves imediatamente após qualquer suspeita de vazamento; não confie em "vou apagar depois"
 - Nunca reutilize secrets entre ambientes; cada ambiente tem os seus próprios
+- Nunca logue `process.env` inteiro — qualquer dump de env vaza todos os secrets de uma vez
+- Mantenha `.env.example` com placeholders sincronizado; ele documenta o contrato de env sem expor valores
 
 ## Anti-patterns
 
 | Errado | Corrija para |
 |---|---|
 | `const OPENAI_KEY = "sk-..."` em código | Env var via secret manager injetada em runtime |
+| `NEXT_PUBLIC_*KEY` / `*SECRET` / `*TOKEN` | Env var server-only sem prefixo público |
+| `console.log(process.env)` | Nunca logar env — vaza todos os secrets |
 | Secret commitado em `.env` | `.env.example` com placeholder + `.gitignore` para `.env` |
 | `NEXT_PUBLIC_OPENAI_API_KEY` | Env var server-side sem prefixo `NEXT_PUBLIC_` |
 | Logar o valor do token JWT | Logar apenas `tokenId` ou `sub` do payload |

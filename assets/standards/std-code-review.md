@@ -1,7 +1,7 @@
 ---
 id: std-code-review
 description: Revisão focada, com tom técnico, classificada por severidade
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -22,6 +22,8 @@ weakStandardWarning: true
 - Sempre proponha alternativa ao criticar; comentário que só aponta problema sem direção de solução é incompleto
 - Nunca aprove com comentários `blocker:` não resolvidos; nunca aprove o próprio PR
 - Decisões arquiteturais grandes não são discutidas no thread do PR — abra issue ou ADR e referencie
+- Revise contra o objetivo declarado do PR, não contra preferência pessoal de estilo (estilo é trabalho do linter/formatter)
+- Toda thread de review é resolvida antes do merge: aceita e endereçada, ou rebatida com justificativa registrada
 
 ## Anti-patterns
 

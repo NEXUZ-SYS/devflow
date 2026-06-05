@@ -1,7 +1,7 @@
 ---
 id: std-grounding
 description: Toda referência a arquivo, símbolo ou API é verificada no código real antes de usar
-version: 1.0.0
+version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
 activation: on-demand
@@ -20,6 +20,8 @@ weakStandardWarning: true
 - Incerteza é declarada, não disfarçada: prefira "acho que existe, mas vou verificar" a "existe em X"
 - Env vars e config: confirme no schema de validação ou `.env.example` antes de referenciar
 - Toda referência a `@contexts/...` aponta para arquivo que realmente existe no repo
+- Verificação precede geração: nenhum import, tipo, hook, env var ou path é escrito antes de confirmado por Read/Grep/Glob
+- Ao usar API de uma lib, confirme a versão instalada e o que essa versão suporta — APIs mudam entre majors
 
 ## Anti-patterns
 
