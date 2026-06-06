@@ -173,7 +173,7 @@ Responder, citando a doc/observação do omp:
 1. **Formato de extensão aceito:** `.mjs` puro carrega? Ou exige `.ts`/`index.js`? Campo de manifesto correto (`omp.extensions`)?
 2. **API de injeção de contexto no `session_start`:** qual entrega paridade com o `additionalContext` do Claude Code? (`pi.appendEntry`? evento `context`? `sendMessage`?) Qual `role` evita autoridade de system prompt indevida?
 3. **Nomes exatos dos eventos:** `session_start`, compactação (`session_before_compact`/`session_compact`/`auto_compaction_*`), `tool_call`, `tool_result`.
-4. **Shape do payload de `tool_call`/`tool_result`:** campos de nome de ferramenta e de path (`toolName`/`input.path`?), e se carrega `cwd`/`workspaceRoot`.
+4. **Shape do payload de `tool_call`/`tool_result`:** campos de nome de ferramenta e de path (`toolName`/`input.path`?), e se carrega `cwd`/`workspaceRoot`. **Confirmar também que `tool_call` dispara para `bash`, MCP (`mcp__*`) e tools de rede — não só edição** (a permissions-bridge da Task 9 depende disso para enforçar as categorias exec/net/tool).
 5. **Contrato de bloqueio em `tool_call`:** formato do retorno `{block, reason}`; existe equivalente de `ask`?
 
 - [ ] **Step 3: Gate**
@@ -587,11 +587,11 @@ git add omp/extension.mjs tests/omp/e2e-compact.sh
 git commit -m "feat(omp): handlers de compactação (MemPalace snapshot/rehidratação)"
 ```
 
-### Task 9: Extensão — `tool_call` (pre) e `tool_result` (post) com bloqueio real
+### Task 9: Extensão — permissions vendor-neutral + `tool_call`/`tool_result` com bloqueio real
 
-> Corrige C1/A1/A2: bloqueio via `parse-hook-output`; cwd derivado do `file_path`.
+> Corrige C1/A1/A2 + **compat de `permissions.yaml`**: o handler chama `evaluatePermissions` (Node puro) para **TODAS** as classes de tool (fs/exec/net/tool) antes de qualquer coisa; só `deny` bloqueia. Depois, específico de edição: git-guard + knowledge via `pre-tool-use`. cwd derivado do `file_path`.
 
-**Files:** Modify `omp/extension.mjs`; Create `omp/lib/resolve-cwd.mjs`; Test `tests/omp/test-resolve-cwd.mjs` + hook `tests/hooks/test-omp-tool-bridge.sh`
+**Files:** Modify `omp/extension.mjs`; Create `omp/lib/resolve-cwd.mjs`, `omp/lib/permissions-bridge.mjs`; Test `tests/omp/test-resolve-cwd.mjs`, `tests/omp/test-permissions-bridge.mjs` + hook `tests/hooks/test-omp-tool-bridge.sh` + E2E `tests/omp/e2e-exec-deny.sh`
 
 - [ ] **Step 1: Teste do resolvedor de cwd que falha**
 
@@ -645,6 +645,81 @@ export function resolveProjectCwd(filePath, fallbackCwd) {
 
 Run: `node --test tests/omp/test-resolve-cwd.mjs` → PASS
 
+- [ ] **Step 4a: Teste da permissions-bridge que falha (mapeia tools → categorias; deny real)**
+
+```javascript
+// tests/omp/test-permissions-bridge.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { ompEventToPermEvent } from "../../omp/lib/permissions-bridge.mjs";
+import { evaluatePermissions } from "../../scripts/lib/permissions-evaluator.mjs";
+
+test("bash → exec(command)", () => {
+  assert.deepEqual(ompEventToPermEvent({ toolName: "bash", input: { command: "rm -rf /tmp" } }),
+    { tool_name: "Bash", tool_input: { command: "rm -rf /tmp" } });
+});
+test("edit/write/ast_edit → fs write(file_path)", () => {
+  assert.equal(ompEventToPermEvent({ toolName: "ast_edit", input: { path: "/p/a.ts" } }).tool_input.file_path, "/p/a.ts");
+});
+test("read → fs read", () => {
+  assert.equal(ompEventToPermEvent({ toolName: "read", input: { path: "/p/b.ts" } }).tool_name, "Read");
+});
+test("mcp__* → tool (nome preservado)", () => {
+  assert.equal(ompEventToPermEvent({ toolName: "mcp__dotcontext__plan" }).tool_name, "mcp__dotcontext__plan");
+});
+test("web_search/browser → net(url)", () => {
+  assert.equal(ompEventToPermEvent({ toolName: "browser", input: { url: "http://169.254.169.254/x" } }).tool_input.url, "http://169.254.169.254/x");
+});
+
+test("EXEC DENY: rm -rf bloqueado pelo evaluator real (categoria exec no omp)", async () => {
+  const cfg = { spec: "devflow-permissions/v0", evaluationOrder: ["deny","allow","mode","callback"],
+    deny: { exec: ["rm -rf*"] }, allow: {}, mode: "prompt", callback: { url: null } };
+  const d = await evaluatePermissions(ompEventToPermEvent({ toolName: "bash", input: { command: "rm -rf /tmp" } }), cfg);
+  assert.equal(d.decision, "deny");
+});
+```
+
+- [ ] **Step 4b: Rodar e confirmar a falha**
+
+Run: `node --test tests/omp/test-permissions-bridge.mjs`
+Expected: FAIL — módulo inexistente
+
+- [ ] **Step 4c: Implementar `permissions-bridge.mjs`**
+
+```javascript
+// omp/lib/permissions-bridge.mjs
+// Mapeia um evento de ferramenta do omp para o shape de evento que o
+// permissions-evaluator (vendor-neutral, ADR-004) entende, e avalia em Node
+// puro — cobrindo TODAS as categorias (fs/exec/net/tool), não só edição.
+import { loadPermissions, evaluatePermissions } from "../../scripts/lib/permissions-evaluator.mjs";
+
+const FS_WRITE = new Set(["edit", "write", "ast_edit"]);
+const NET = new Set(["web_search", "browser"]);
+
+/** @param {{toolName?:string, input?:Record<string,unknown>}} e @returns {{tool_name:string, tool_input:object}} */
+export function ompEventToPermEvent(e) {
+  const t = e?.toolName ?? "";
+  const i = e?.input ?? {};
+  const path = i.path ?? i.file_path ?? i.filePath ?? "";
+  if (t === "bash") return { tool_name: "Bash", tool_input: { command: i.command ?? "" } };
+  if (FS_WRITE.has(t)) return { tool_name: "Write", tool_input: { file_path: path } };
+  if (t === "read") return { tool_name: "Read", tool_input: { file_path: path } };
+  if (NET.has(t)) return { tool_name: t, tool_input: { url: i.url ?? "" } };
+  if (t.startsWith("mcp__")) return { tool_name: t, tool_input: {} };
+  return { tool_name: t, tool_input: {} };
+}
+
+/** @returns {Promise<{decision:string, reason?:string}>} */
+export async function checkPermission(ompEvent, projectRoot) {
+  const cfg = loadPermissions(projectRoot);            // lê .context/permissions.yaml (ou EMPTY → "prompt")
+  return evaluatePermissions(ompEventToPermEvent(ompEvent), cfg);
+}
+```
+
+- [ ] **Step 4d: Rodar → PASS**
+
+Run: `node --test tests/omp/test-permissions-bridge.mjs` → PASS (6/6)
+
 - [ ] **Step 5: Teste de hook do bridge (pre injeta knowledge; deny bloqueia)**
 
 ```bash
@@ -687,11 +762,23 @@ Topo de `omp/extension.mjs`:
 ```javascript
 import { translateToolEvent } from "./lib/translate-tool-event.mjs";
 import { resolveProjectCwd } from "./lib/resolve-cwd.mjs";
+import { checkPermission } from "./lib/permissions-bridge.mjs";
 ```
 Dentro de `ext(pi)`:
 ```javascript
-  pi.on("tool_call", (event) => {
-    const cc = translateToolEvent(event, { cwd: process.cwd() });
+  pi.on("tool_call", async (event) => {
+    const projectCwd = event?.cwd ?? event?.workspaceRoot ?? process.cwd();
+
+    // 1) permissions.yaml vendor-neutral — TODAS as classes de tool (fs/exec/net/tool).
+    //    Só `deny` bloqueia (segurança). `prompt`/`ask` ficam a cargo do gating nativo
+    //    do omp (ver SPIKE Task 3) — bloquear "prompt" tornaria o omp inutilizável.
+    const perm = await checkPermission(event, projectCwd);
+    if (perm.decision === "deny") {
+      return { block: true, reason: perm.reason ?? "bloqueado por .context/permissions.yaml" };
+    }
+
+    // 2) específico de edição de arquivo: git-guard + knowledge on-demand
+    const cc = translateToolEvent(event, { cwd: projectCwd });
     if (!cc) return;
     const cwd = resolveProjectCwd(cc.tool_input.file_path, cc.cwd); // A2
     const { contextToInject, block, reason } = parseHookOutput(
@@ -746,11 +833,42 @@ echo "OK"
 
 Run: `bash tests/omp/e2e-git-guard.sh` → `OK`/`SKIP`
 
+- [ ] **Step 11a: E2E de `exec` deny sob omp (permissions.yaml — comando destrutivo)**
+
+```bash
+# tests/omp/e2e-exec-deny.sh
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
+mkdir -p "$TMP/.context"
+cat > "$TMP/.context/permissions.yaml" <<'YAML'
+spec: devflow-permissions/v0
+evaluationOrder: [deny, allow, mode, callback]
+deny:
+  exec:
+    - "rm -rf*"
+allow: {}
+mode: prompt
+callback: { url: null }
+YAML
+echo "alvo" > "$TMP/vitima.txt"
+# Pedir ao omp para rodar um rm -rf via bash → permissions.yaml (categoria exec) deve bloquear.
+OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "rode no bash: rm -rf $TMP/vitima.txt" 2>&1 || true)
+test -f "$TMP/vitima.txt" || { echo "FALHA: rm -rf executou — exec deny não funcionou no omp"; exit 1; }
+echo "$OUT" | grep -qi "block\|permissions\|deny" && echo "OK" || echo "OK (arquivo preservado; sem msg explícita)"
+```
+
+- [ ] **Step 11b: Rodar**
+
+Run: `bash tests/omp/e2e-exec-deny.sh` → `OK`/`SKIP`
+
 - [ ] **Step 12: Commit**
 
 ```bash
-git add omp/extension.mjs omp/lib/resolve-cwd.mjs tests/omp/test-resolve-cwd.mjs tests/hooks/test-omp-tool-bridge.sh tests/omp/e2e-git-guard.sh
-git commit -m "feat(omp): bridge tool_call/tool_result com bloqueio real (C1/A1/A2)"
+git add omp/extension.mjs omp/lib/resolve-cwd.mjs omp/lib/permissions-bridge.mjs tests/omp/test-resolve-cwd.mjs tests/omp/test-permissions-bridge.mjs tests/hooks/test-omp-tool-bridge.sh tests/omp/e2e-git-guard.sh tests/omp/e2e-exec-deny.sh
+git commit -m "feat(omp): permissions vendor-neutral (todas categorias) + bridge tool_call/result (C1/A1/A2)"
 ```
 
 ---
@@ -1378,6 +1496,7 @@ for t in tests/omp/e2e-*.sh; do bash "$t"; done   # SKIP se omp ausente
 | Achado (severidade) | Resolvido em |
 |---|---|
 | C1 — git-guard no-op (`BLOCK:` inexistente) | Task 5 (parse-hook-output) + Task 9 (block real + E2E git-guard) |
+| **permissions.yaml só parcial no omp** (exec/net/tool perdidos) | **Task 9 (permissions-bridge: evaluatePermissions p/ todas as categorias + E2E exec-deny)** + Task 3 spike (tool_call p/ bash/MCP) |
 | A1 — paridade de injeção não provada | Task 3 (spike) + Task 7 (E2E com canário) |
 | A2 — `cwd` de `process.cwd()` | Task 4 + Task 9 (resolve-cwd) |
 | python3 silencioso | Task 7 (probe visível) + Task 18 (pré-requisito) |

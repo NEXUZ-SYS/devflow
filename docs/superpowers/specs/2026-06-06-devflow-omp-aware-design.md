@@ -105,6 +105,12 @@ Ambos são **carregados por contexto** (não enforçados por linter), em pontos 
 
 Conclusão: ADR e Knowledge **funcionam no omp** desde que o bridge cubra `session_start`, `tool_call` (Stage-2 knowledge) e `tool_result` (ADR handoff guard) — todos já no escopo. O único trabalho novo é a camada de tradução compartilhada (acima), que também habilita os standards.
 
+#### permissions.yaml (vendor-neutral, ADR-004): paridade total no omp
+
+O `.context/permissions.yaml` (`deny→allow→mode→callback`, categorias `fs`/`exec`/`net`/`tool`) é avaliado por `scripts/lib/permissions-evaluator.mjs` → **`evaluatePermissions(event, cfg)`, Node puro** (sem bash/python3). Por ser vendor-neutral, é conceitualmente independente do Claude Code.
+
+No omp, o enforcement **não** pode depender apenas do bridge de `pre-tool-use` (que só cobre edição de arquivo): as categorias **`exec`** (rm -rf, force-push, `curl|sh`), **`net`** (SSRF) e **`tool`** (allowlist MCP) aplicam-se a `bash`/rede/MCP. Por isso o handler `tool_call` da extensão chama `evaluatePermissions` **diretamente** (via `omp/lib/permissions-bridge.mjs`, que mapeia o evento omp → categoria) para **todas as classes de tool**, antes de qualquer outra lógica. Só `deny` bloqueia; `prompt`/`ask` ficam a cargo do gating nativo do omp (bloquear "prompt" inutilizaria o runtime). Isso também tira o python3 do caminho de permissão (o mais crítico).
+
 #### Napkin, Routines e MemPalace: paridade no omp
 
 Subsistemas restantes ligados a hooks, todos cobertos pelo wrap & reuse:
@@ -222,6 +228,7 @@ Loop PREVC determinístico em TS, telemetria por fase/story, renderers de TUI, r
 - **ADR/decisions funcionam no omp:** guardrails no `session_start`, PREVC handoff guard (ADR-006) no `tool_result`, `adr-filter` na fase P.
 - **Knowledge / contexto de produto funciona no omp:** índice no `session_start`, corpos on-demand no `pre-tool-use` (por path), `knowledge-filter` (always-active + task) na fase P.
 - **Napkin, Routines e MemPalace funcionam no omp:** napkin + routines via `session_start`; MemPalace via MCP nativo + recall/compact pelo bridge; detecção de MCP cobre config global-only do omp.
+- **permissions.yaml com paridade total no omp:** as 4 categorias (fs/exec/net/tool) enforçadas via `evaluatePermissions` direto no handler `tool_call`; `deny` de comando destrutivo/SSRF/MCP bloqueia em qualquer tool.
 - Subagents despachados via `task` com isolamento e output estruturado; gates leem JSON.
 - Agentes enriquecidos com roles/spawns/output sem quebrar Claude Code nem dotcontext.
 - Seleção de runtime no init grava preferências e ativa só o necessário.
