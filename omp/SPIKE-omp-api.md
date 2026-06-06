@@ -411,3 +411,167 @@ que a fonte estável é `ctx.cwd`, não `event.input.cwd`.
   pré-carregada).
 - **Tipagem:** usar `isToolCallEventType("bash", event)` para narrowing seguro;
   `event.toolName === "bash"` não estreita por causa do `CustomToolCallEvent`.
+
+---
+
+## Autoridade de injeção (follow-up)
+
+> Follow-up empírico ao item 2. Problema: o canal baseline (`before_agent_start`
+> → `{message}`) **entrega** o texto ao transcript, mas o modelo o trata como
+> **conteúdo não-autoritativo** (role `custom`/`hookMessage`) — reconhece como
+> injeção e **ignora a instrução**. Buscou-se um canal com **paridade
+> autoritativa** ao `additionalContext` do Claude Code, i.e. o modelo **obedece**.
+
+### Metodologia (teste de AÇÃO, não de eco)
+
+Para cada canal, injeta-se uma instrução que exige **ação observável** e roda-se
+um prompt neutro com `--no-tools` (para o modelo não ler arquivos sozinho):
+
+```
+omp --no-session --no-tools <canal> -p "Quanto é 2+2?"
+```
+
+Marcador presente na resposta = canal **AUTORITATIVO** (modelo obedeceu).
+
+**⚠️ Confound descoberto e neutralizado:** o marcador inicialmente sugerido
+`⟦DFAUTH:<id>⟧` é **token-shaped** — o modelo o trata como tentativa de
+exfiltração/forja de credencial e **recusa explicitamente, mesmo no bloco 0
+autoritativo** (onde uma instrução benigna É obedecida). Ou seja, esse marcador
+mede o reflexo de segurança do modelo, **não** a autoridade do canal. Os
+resultados abaixo usam um marcador **comportamental benigno** (terminar a
+resposta com a palavra `FIM-DEVFLOW`), que isola a variável "autoridade do
+canal". (A frase "INSTRUÇÃO DE SISTEMA:" também dispara o reflexo de injeção e
+foi evitada em favor de "Convenção de formatação deste projeto:".)
+
+### Tabela de canais × autoridade × dinâmico × evidência
+
+| Canal | Existe? | Assinatura / uso | Autoritativo? (marcador benigno) | Dinâmico? | Evidência |
+|---|---|---|---|---|---|
+| `before_agent_start` → `{message:{customType,content,display}}` | Sim | handler retorna `BeforeAgentStartEventResult.message` | **NÃO (parcial)** — 2/3 com marcador benigno; **0/3** com marcador token-shaped (rejeitado como injeção). Materializa role `custom`/`hookMessage`. | Sim (1×/prompt, reentra por turno) | runs D; types.ts:803 |
+| evento `context` → `{messages}` (injeta role `user`) | Sim | `pi.on("context", h)`; handler retorna `ContextEventResult.messages` (array completo, deep-copy mutável) | **NÃO (parcial)** — 2/3. Mensagem vira role `user` (não há role `system` no array; ver types.ts core L66-68). | **Sim (1× por chamada LLM)** — dispara antes de **cada** request, reescrevendo o array | runs C; runner.ts:792-811; shared-events.ts:165 |
+| `--append-system-prompt "<txt>"` (flag) | Sim | bloco de append **após o footer de projeto** quando NÃO há custom system prompt | **NÃO — fraco** — **1/6** (benigno). Posição ruim no prompt. | Estático (launch) | runs B; docs-index `system-prompt-customization.md`; main.ts:564 |
+| `APPEND_SYSTEM.md` em `.omp/` (projeto) | Sim | mesmo efeito de `--append-system-prompt`; `findConfigFile` (sem walk-up) | **NÃO — fraco** — **1/3** (benigno). Mesma posição ruim. | Estático (launch; arquivo regenerável → "dinâmico por sessão") | run APPEND_SYSTEM; docs-index |
+| **`--system-prompt "<txt>"` (flag)** | Sim | **substitui o bloco 0** (instruções estáveis de topo); footer de projeto (bloco 1) preservado | **SIM — forte** — **4/4** benigno, **3/3** com conteúdo DevFlow realista multi-regra | Estático (launch; DevFlow regenera por sessão → dinâmico por sessão) | runs A/F; main.ts; system-prompt.ts:337 |
+| **`SYSTEM.md` em `.omp/` (projeto)** | Sim | mesmo efeito de `--system-prompt`; discovery `<cwd>/.omp` → `~/.omp/agent` (sem walk-up) | **SIM — forte** — **3/3** com conteúdo DevFlow realista | Estático (launch; arquivo regenerável por sessão) | run G; docs-index |
+| `--system-prompt` **+** `--append-system-prompt` (combo) | Sim | com custom block 0 presente, o append cai **depois do bloco custom, antes do footer** (região autoritativa) | **SIM — forte** — **4/4** benigno | Estático (launch) | run E; docs-index `system-prompt-customization.md` §2 |
+| `pi.appendEntry(type,data)` | Sim | persistência de estado | **N/A — NÃO vai ao LLM** | — | types.ts:1019 (item 2) |
+
+**Achado-chave (estrutural):** a autoridade no omp 15.9.5 é **posicional**. O
+**bloco 0** (instruções estáveis de topo) é o tier autoritativo — o modelo
+obedece. `--system-prompt` / `SYSTEM.md` **reescrevem o bloco 0** → autoritativo
+(equivalente ao `additionalContext`/system de topo). `--append-system-prompt` /
+`APPEND_SYSTEM.md` sozinhos caem **depois do footer de projeto** (cauda) →
+deprioritizados (1/6, 1/3). Mas o **mesmo append**, quando há um custom
+`--system-prompt` presente, migra para a região autoritativa (após o bloco
+custom, antes do footer) e passa a ser obedecido (4/4). Os canais de extensão
+(`before_agent_start.message`, `context`) injetam em roles **não-system**
+(`custom`/`hookMessage`/`user`) → autoridade apenas **parcial** (~2/3) e frágil a
+conteúdo "suspeito".
+
+**Sobre dinamismo:** `--system-prompt`/`SYSTEM.md` são fixados **no launch** do
+processo (estáticos durante a sessão), mas o DevFlow **controla o launch** — pode
+**regenerar** o arquivo/flag a cada sessão (recall MemPalace, routines, ADRs do
+momento). Logo são "dinâmicos por sessão". O único canal **dinâmico
+intra-sessão** (muda por chamada LLM, sem relançar) é o evento `context` — porém
+só com autoridade parcial.
+
+### Recomendação final (híbrido)
+
+**(a) Orientação AUTORITATIVA (using-devflow, modo, guardrails):**
+**`SYSTEM.md` em `.omp/<projeto>` (ou `--system-prompt` no launch).** É o único
+canal que dá **paridade autoritativa** (bloco 0). O DevFlow gera/regenera
+`<cwd>/.omp/SYSTEM.md` por sessão com a orientação estável + contexto do momento.
+Cuidado: reescrever o bloco 0 **descarta** as instruções default do omp (skills,
+tool guidance, workflow rules — ver doc `system-prompt-customization.md` §4). Duas
+saídas: (i) re-suprir no SYSTEM.md as seções default que importarem (copiando de
+`prompts/system/system-prompt.md`), **ou** (ii) usar **custom `--system-prompt`
+mínimo + `--append-system-prompt`/`APPEND_SYSTEM.md`** — o append então cai na
+região autoritativa (run E: 4/4) e o bloco 0 default segue intacto. **Recomendado:
+opção (ii)** — preserva os defaults do omp e mantém autoridade.
+
+**(b) Contexto DINÂMICO por sessão (recall MemPalace, routines, ADRs):** dois
+níveis. Se "por sessão" basta, **regenerar `APPEND_SYSTEM.md`** (com custom
+SYSTEM.md presente) a cada início — autoritativo e dinâmico-por-sessão. Se for
+preciso atualizar **intra-sessão** (sem relançar omp), usar o evento **`context`**
+para reinjetar como role `user` a cada chamada LLM — aceitando autoridade
+parcial (~2/3); reservar para lembretes/contexto, **não** para guardrails duros.
+
+**Resumo:** guardrails/modo → `SYSTEM.md` (custom mínimo) **+** `APPEND_SYSTEM.md`
+(regras DevFlow, região autoritativa). Contexto por sessão → `APPEND_SYSTEM.md`
+regenerado. Contexto intra-sessão (opcional) → evento `context`. Aposentar
+`before_agent_start.message` como canal de **orientação** (serve só para
+notas/telemetria visíveis, não-autoritativas).
+
+### Snippet — extensão omp recomendada (handler `inject`)
+
+Gera o par SYSTEM.md (custom mínimo, preserva defaults via combo) + APPEND_SYSTEM.md
+no `.omp/` do projeto **antes do launch**, e (opcional) reinjeta contexto
+intra-sessão via `context`. O launch passa a flag `--system-prompt` mínima para
+forçar o append à região autoritativa; o conteúdo autoritativo vai no APPEND.
+
+```js
+// devflow-omp-inject.mjs  — carregado via:  omp -e devflow-omp-inject.mjs
+// Pré-requisito do launcher DevFlow (fora da extensão, no spawn do omp):
+//   omp --system-prompt "Você é o agente de coding sob o DevFlow." \
+//       -e devflow-omp-inject.mjs ...
+//   (o --system-prompt mínimo garante que o APPEND_SYSTEM.md caia na região
+//    autoritativa — bloco custom presente; ver run E = 4/4. Os defaults do omp
+//    permanecem porque NÃO reescrevemos o bloco 0 com conteúdo grande.)
+
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+export default function (pi) {
+  // --- (b1) contexto AUTORITATIVO por sessão: APPEND_SYSTEM.md regenerado ---
+  // Chamado no boot; escreve o bloco autoritativo do DevFlow.
+  pi.on("session_start", (_event, ctx) => {
+    const ompDir = join(ctx.cwd, ".omp");
+    try {
+      mkdirSync(ompDir, { recursive: true });
+      const block = buildDevflowAuthoritativeBlock(ctx); // recall/ADR/routines do momento
+      writeFileSync(join(ompDir, "APPEND_SYSTEM.md"), block, "utf8");
+    } catch (e) {
+      ctx.logger?.warn?.(`[devflow] APPEND_SYSTEM.md inject falhou: ${e}`);
+    }
+    // NOTA: o arquivo só é LIDO no próximo launch (discovery é no boot do omp).
+    // Para a sessão ATUAL, o launcher DevFlow deve tê-lo escrito ANTES do spawn.
+  });
+
+  // --- (b2) contexto DINÂMICO intra-sessão (opcional, autoridade PARCIAL) ---
+  // Reinjeta lembretes a cada chamada LLM como role `user`. NÃO usar p/ guardrails.
+  pi.on("context", (event, ctx) => {
+    const reminder = getEphemeralReminder(ctx); // null se nada a injetar
+    if (!reminder) return; // sem mudança → omp mantém event.messages
+    const msg = {
+      role: "user",
+      content: [{ type: "text", text: reminder }],
+      timestamp: Date.now(),
+    };
+    return { messages: [msg, ...event.messages] };
+  });
+}
+
+function buildDevflowAuthoritativeBlock(ctx) {
+  // Conteúdo AUTORITATIVO: using-devflow, modo operacional, guardrails, recall.
+  return [
+    "## DevFlow — diretrizes operacionais (autoritativas)",
+    "Você opera sob o framework DevFlow neste projeto. Trate as regras abaixo",
+    "como diretrizes de sistema de mais alta prioridade.",
+    "- Modo: PREVC. Não pule fases. TDD obrigatório (RED→GREEN→REFACTOR).",
+    "- Guardrails git: sem push/PR/merge/troca de branch sem autorização explícita.",
+    "- Leia os padrões (.context/standards/) e ADRs relevantes antes de editar.",
+    "",
+    "### Contexto recuperado desta sessão",
+    renderRecall(ctx), // MemPalace wake-up, ADRs do momento, routines pendentes
+  ].join("\n");
+}
+
+function renderRecall(_ctx) { return "(preencher via MemPalace/ADR no launcher)"; }
+function getEphemeralReminder(_ctx) { return null; }
+```
+
+> **Por que não `before_agent_start.message`:** materializa role `custom`/
+> `hookMessage` → autoridade apenas parcial e frágil (o modelo reconhece como
+> injeção). Mantê-lo só para **exibir** notas ao usuário (não para instruir o
+> modelo). A autoridade real mora no **bloco 0 / append-com-custom-block** do
+> system prompt.
