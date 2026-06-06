@@ -1,47 +1,46 @@
-# Camada omp-aware do DevFlow — Plano de Implementação
+# Camada omp-aware do DevFlow — Plano de Implementação (rev. pós-review)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tornar o DevFlow cidadão de primeira classe no omp (oh-my-pi) via uma camada aditiva (Opção B), sem fork e sem tocar o núcleo `.claude/`.
 
-**Architecture:** Uma extensão TS/JS fina do omp (`omp/extension.mjs`) faz *wrap & reuse* dos hooks bash/`.mjs` existentes; uma utilidade de tradução (`omp/lib/translate-tool-event.mjs`) adapta o vocabulário/payload de eventos de ferramenta do omp para o shape Claude Code que os scripts esperam; um enriquecedor aditivo (`scripts/lib/omp-enrich-agents.mjs`) adiciona campos omp ao frontmatter dos agentes pós-fill; skills de dispatch ganham um branch omp que usa o `task` tool.
+**Architecture:** Uma extensão fina do omp (`omp/extension.mjs`) faz *wrap & reuse* dos hooks bash/`.mjs` existentes. Duas utilidades puras fazem a ponte de contrato: `translate-tool-event.mjs` (evento omp → shape Claude Code, na ida) e `parse-hook-output.mjs` (envelope JSON dos hooks → `{contextToInject, block, reason}`, na volta). Um enriquecedor aditivo (`omp-enrich-agents.mjs`) adiciona campos omp ao frontmatter dos agentes pós-fill; skills de dispatch ganham um branch omp via `task` tool.
 
-**Tech Stack:** Node 24 (ESM `.mjs`, `node:test`), Bash (hooks), omp/Bun (runtime da extensão), YAML/JSON frontmatter, MCP.
+**Tech Stack:** Node 24 (ESM `.mjs`, `node:test`), Bash + python3 (hooks), omp/Bun (runtime da extensão), YAML/JSON frontmatter, MCP.
 
 **Spec:** `docs/superpowers/specs/2026-06-06-devflow-omp-aware-design.md`
 **Branch:** `feat/omp-integration`
 
-**Convenções de teste do repo (não há `package.json`):**
-- Unit Node: `node --test tests/<arquivo>.mjs`
-- Teste de hook: `bash tests/hooks/<arquivo>.sh` (monta tmpdir, envia evento JSON por stdin)
-- Shape de evento Claude Code (alvo da tradução), confirmado em `tests/hooks/test-pre-tool-use-knowledge.sh`:
-  ```json
-  { "tool_name": "Edit", "tool_input": { "file_path": "/abs/path" }, "cwd": "/project/root" }
-  ```
+### Mudanças desta revisão (fase R — architect + code-reviewer + security-auditor)
 
-**Nota de runtime da extensão:** autoramos a extensão e libs como **`.mjs`** (rodam em Node 24 *e* no Bun do omp, sem build step). A extensão fica em `omp/extension.mjs`; a lógica testável vive nos `.mjs` de `omp/lib/` e `scripts/lib/`, exercitada por `node --test`. O glue da extensão é validado por E2E sob omp (skip explícito se omp ausente).
+A review pegou defeitos de **contrato verificáveis hoje**, todos corrigidos aqui sem mudar a arquitetura:
 
-**Anotação de agentes (E phase, dispatch por grupo):**
-- Fase 1 → `backend-specialist` (libs .mjs) + `test-writer`
-- Fase 2 → `devops-specialist` (hooks/extensão/bash) + `test-writer`
-- Fase 3 → `backend-specialist` (enriquecedor) + `refactoring-specialist` (edição de skills) + `test-writer`
-- Fase 4 → `refactoring-specialist` (skills de dispatch) + `test-writer`
-- Fase 5 → `documentation-writer` (docs/distribuição) + `devops-specialist` (manifesto)
+1. **🔴 Os hooks emitem JSON, não texto cru nem `BLOCK:`.** `session-start`/`post-compact` emitem `{"hookSpecificOutput":{"additionalContext":"..."}}`; `pre-tool-use` bloqueia com `{"hookSpecificOutput":{"permissionDecision":"deny",...}}` e `exit 0` (ev.: `hooks/pre-tool-use:319-348`). → Novo módulo puro **`parse-hook-output.mjs`** (Task 5) parseia o envelope e mapeia `permissionDecision deny/ask → {block,reason}`. Sem isso o git-guard viraria no-op silencioso no omp.
+2. **Spike promovido a Task 3 (GATE):** API de injeção do omp, nomes de evento e formato de extensão (`.mjs` vs `.ts`) são confirmados ANTES de escrever a extensão.
+3. **`cwd` derivado do evento/`file_path`, não de `process.cwd()`** (worktrees `pi-iso` quebram process.cwd) — Task 4 + Task 9.
+4. **`python3` é pré-requisito não-declarado** dos hooks (14 chamadas no post, 9 no pre): probe **visível** (não silêncio) em `run-bash-hook.mjs` + doc.
+5. **Step 4.5 já existe** (`project-init/SKILL.md:509`, Skills README) → enrich omp renumerado para **Step 4.6**.
+6. **Reuso de `scripts/lib/frontmatter.mjs`** (parser CRLF-aware) para o invariante; YAML do `omp-roles.yaml` em formato padrão parseado por helper reusado.
+7. **Validação de `file_path`** (controle/traversal) e **escape de valores de frontmatter** (evitar forjar `\nstatus: unfilled`).
+8. **Injeção via canal de contexto, não `role:system`** (evita escalonamento de privilégio de conteúdo local).
+9. **Tasks de skill-markdown ganham E2E real sob omp** (não só content-check); `package.json` mínimo sem `version`.
+
+**Convenções de teste (não há `package.json` de build):** unit `node --test tests/<arquivo>.mjs`; hook `bash tests/hooks/<arquivo>.sh`; E2E omp `bash tests/omp/e2e-*.sh` (skip explícito se omp ausente).
+**Shape de evento Claude Code (confirmado em `tests/hooks/test-pre-tool-use-knowledge.sh:46`):** `{ "tool_name":"Edit", "tool_input":{"file_path":"/abs"}, "cwd":"/root" }`.
+
+**Anotação de agentes (E phase):** Fase 1 → `backend-specialist`+`test-writer`; Fase 2 → `devops-specialist`+`test-writer`; Fase 3 → `backend-specialist`+`refactoring-specialist`; Fase 4 → `refactoring-specialist`; Fase 5 → `documentation-writer`+`devops-specialist`.
 
 ---
 
-## Fase 1 — Fundações: detecção de runtime + compat-check de frontmatter
+## Fase 1 — Fundações: detecção de runtime + compat-check
 
-**Agent:** backend-specialist | **Handoff from:** architect (design aprovado)
-**Tests:** unit + integração
+**Agent:** backend-specialist | **Tests:** unit + integração
 
-### Task 1: `detect-runtime.mjs` — identificar o runtime corrente
+### Task 1: `detect-runtime.mjs`
 
-**Files:**
-- Create: `omp/lib/detect-runtime.mjs`
-- Test: `tests/omp/test-detect-runtime.mjs`
+**Files:** Create `omp/lib/detect-runtime.mjs`; Test `tests/omp/test-detect-runtime.mjs`
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Teste que falha**
 
 ```javascript
 // tests/omp/test-detect-runtime.mjs
@@ -49,48 +48,35 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { detectRuntime } from "../../omp/lib/detect-runtime.mjs";
 
-test("omp via OMP_* env", () => {
-  assert.equal(detectRuntime({ OMP_SESSION_ID: "x" }), "omp");
-});
-
-test("omp via PI_* env", () => {
-  assert.equal(detectRuntime({ PI_AGENT: "1" }), "omp");
-});
-
-test("claude via CLAUDE* env", () => {
-  assert.equal(detectRuntime({ CLAUDECODE: "1" }), "claude");
-});
-
-test("default conservador = claude quando ambíguo", () => {
-  assert.equal(detectRuntime({}), "claude");
-});
+test("omp via OMP_*", () => assert.equal(detectRuntime({ OMP_SESSION_ID: "x" }), "omp"));
+test("omp via PI_*", () => assert.equal(detectRuntime({ PI_AGENT: "1" }), "omp"));
+test("claude via CLAUDECODE", () => assert.equal(detectRuntime({ CLAUDECODE: "1" }), "claude"));
+test("default conservador = claude", () => assert.equal(detectRuntime({}), "claude"));
 ```
 
-- [ ] **Step 2: Rodar o teste e confirmar a falha**
+- [ ] **Step 2: Rodar e confirmar a falha**
 
 Run: `node --test tests/omp/test-detect-runtime.mjs`
-Expected: FAIL — `Cannot find module '../../omp/lib/detect-runtime.mjs'`
+Expected: FAIL — módulo inexistente
 
-- [ ] **Step 3: Implementar o mínimo**
+- [ ] **Step 3: Implementar**
 
 ```javascript
 // omp/lib/detect-runtime.mjs
-// Probe leve do runtime em execução. Conservador: default = "claude".
-// Não confiar só nisto para ativação — a ativação é explícita no init (Task 8).
-
+// Probe leve do runtime corrente. Conservador: default = "claude".
+// NÃO é o mecanismo de ativação — a ativação é explícita no init (Task 12).
 /** @param {NodeJS.ProcessEnv} [env] @returns {"omp"|"opencode"|"claude"} */
 export function detectRuntime(env = process.env) {
-  const has = (k) => env[k] != null && env[k] !== "";
-  if (Object.keys(env).some((k) => k.startsWith("OMP_") || k.startsWith("PI_"))) return "omp";
-  if (has("OPENCODE") || Object.keys(env).some((k) => k.startsWith("OPENCODE_"))) return "opencode";
+  const keys = Object.keys(env);
+  if (keys.some((k) => k.startsWith("OMP_") || k.startsWith("PI_"))) return "omp";
+  if (env.OPENCODE || keys.some((k) => k.startsWith("OPENCODE_"))) return "opencode";
   return "claude";
 }
 ```
 
-- [ ] **Step 4: Rodar o teste e confirmar que passa**
+- [ ] **Step 4: Rodar e confirmar PASS**
 
-Run: `node --test tests/omp/test-detect-runtime.mjs`
-Expected: PASS (4/4)
+Run: `node --test tests/omp/test-detect-runtime.mjs` → PASS (4/4)
 
 - [ ] **Step 5: Commit**
 
@@ -99,13 +85,11 @@ git add omp/lib/detect-runtime.mjs tests/omp/test-detect-runtime.mjs
 git commit -m "feat(omp): detect-runtime probe (claude/opencode/omp)"
 ```
 
-### Task 2: Compat-check — frontmatter aditivo não quebra dotcontext nem o parser
+### Task 2: Compat-check — frontmatter aditivo não quebra dotcontext
 
-**Files:**
-- Create: `tests/omp/test-frontmatter-compat.mjs`
-- Create (fixture): `tests/fixtures/omp/agent-with-omp-fields.md`
+**Files:** Create `tests/omp/test-frontmatter-compat.mjs`; Create `tests/fixtures/omp/agent-with-omp-fields.md`
 
-- [ ] **Step 1: Criar a fixture de agente com campos omp aditivos**
+- [ ] **Step 1: Criar fixture**
 
 ```markdown
 ---
@@ -118,15 +102,13 @@ skills: [devflow:prevc-planning]
 model: pi/plan
 spawns: explore, plan
 thinking-level: high
-output:
-  properties:
-    correctness: { enum: [correct, incorrect] }
+output: review-verdict
 ---
 # Architect
 Corpo do agente — deve ser preservado intacto.
 ```
 
-- [ ] **Step 2: Escrever o teste que falha**
+- [ ] **Step 2: Teste que falha (usa o parser real do repo)**
 
 ```javascript
 // tests/omp/test-frontmatter-compat.mjs
@@ -135,63 +117,81 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { parseFrontmatter } from "../../scripts/lib/frontmatter.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(__dir, "../fixtures/omp/agent-with-omp-fields.md");
 
-// Contrato: campos omp são ADITIVOS — os campos dotcontext canônicos
-// (type/name/description/role/phases/skills) permanecem presentes e o corpo intacto.
-test("campos dotcontext canônicos preservados junto dos campos omp", () => {
-  const raw = readFileSync(FIXTURE, "utf-8");
-  for (const f of ["type:", "name:", "description:", "role:", "phases:", "skills:"]) {
-    assert.ok(raw.includes(f), `campo canônico ausente: ${f}`);
-  }
-  for (const f of ["model:", "spawns:", "thinking-level:", "output:"]) {
-    assert.ok(raw.includes(f), `campo omp ausente: ${f}`);
-  }
-  assert.ok(raw.includes("Corpo do agente — deve ser preservado intacto."));
+test("parser do repo lê campos canônicos E omp; corpo intacto", () => {
+  const { data, body } = parseFrontmatter(readFileSync(FIXTURE, "utf-8"));
+  for (const f of ["type", "name", "description", "role", "phases", "skills"]) assert.ok(f in data, `canônico ausente: ${f}`);
+  for (const f of ["model", "spawns", "thinking-level", "output"]) assert.ok(f in data, `omp ausente: ${f}`);
+  assert.match(body, /Corpo do agente — deve ser preservado intacto\./);
 });
 ```
 
 - [ ] **Step 3: Rodar e confirmar a falha**
 
 Run: `node --test tests/omp/test-frontmatter-compat.mjs`
-Expected: FAIL — fixture inexistente (`ENOENT`)
+Expected: FAIL — fixture inexistente (ENOENT)
 
-- [ ] **Step 4: Criar a fixture (Step 1) e rodar — deve passar**
+- [ ] **Step 4: Criar a fixture (Step 1), rodar → PASS**
 
-Run: `node --test tests/omp/test-frontmatter-compat.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-frontmatter-compat.mjs` → PASS
 
 - [ ] **Step 5: Validação dotcontext opcional (skip se ausente)**
 
-Run:
-```bash
-command -v dotcontext >/dev/null && dotcontext --version || echo "SKIP: dotcontext ausente"
-```
-Expected: imprime versão OU `SKIP`. Se presente, registrar no PR que a validação de schema dotcontext sobre a fixture passou (campos extras tolerados). Se ausente, marcar skip explícito (sem mascarar).
+Run: `command -v dotcontext >/dev/null && echo "validar schema sobre a fixture" || echo "SKIP: dotcontext ausente"`
+Registrar no PR o resultado (campos extras tolerados) ou o skip explícito.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add tests/omp/test-frontmatter-compat.mjs tests/fixtures/omp/agent-with-omp-fields.md
-git commit -m "test(omp): frontmatter aditivo preserva contrato dotcontext"
+git commit -m "test(omp): frontmatter aditivo preserva contrato dotcontext (parser real)"
 ```
 
 ---
 
-## Fase 2 — Bridge de hooks + tradução de eventos + detection-hardening
+## Fase 2 — Bridge: spike → utilidades puras → extensão
 
-**Agent:** devops-specialist | **Handoff from:** backend-specialist (libs prontas)
-**Tests:** unit + hook (.sh) + E2E (omp)
+**Agent:** devops-specialist | **Tests:** unit + hook + E2E omp
 
-### Task 3: `translate-tool-event.mjs` — evento omp → shape Claude Code
+### Task 3 [GATE]: Spike da API de extensão do omp
 
-**Files:**
-- Create: `omp/lib/translate-tool-event.mjs`
-- Test: `tests/omp/test-translate-tool-event.mjs`
+> **Bloqueante.** Confirma fatos que governam Tasks 7/8/9 antes de escrever a extensão. Nada de código de extensão até este gate fechar.
 
-- [ ] **Step 1: Escrever o teste que falha**
+**Files:** Create `omp/SPIKE-omp-api.md`
+
+- [ ] **Step 1: Probe de disponibilidade**
+
+Run: `command -v omp >/dev/null && omp --version || echo "SKIP: omp ausente — preencher o spike no primeiro ambiente com omp"`
+
+- [ ] **Step 2: Confirmar e documentar em `omp/SPIKE-omp-api.md`** (com omp presente; senão registrar TODO bloqueante)
+
+Responder, citando a doc/observação do omp:
+1. **Formato de extensão aceito:** `.mjs` puro carrega? Ou exige `.ts`/`index.js`? Campo de manifesto correto (`omp.extensions`)?
+2. **API de injeção de contexto no `session_start`:** qual entrega paridade com o `additionalContext` do Claude Code? (`pi.appendEntry`? evento `context`? `sendMessage`?) Qual `role` evita autoridade de system prompt indevida?
+3. **Nomes exatos dos eventos:** `session_start`, compactação (`session_before_compact`/`session_compact`/`auto_compaction_*`), `tool_call`, `tool_result`.
+4. **Shape do payload de `tool_call`/`tool_result`:** campos de nome de ferramenta e de path (`toolName`/`input.path`?), e se carrega `cwd`/`workspaceRoot`.
+5. **Contrato de bloqueio em `tool_call`:** formato do retorno `{block, reason}`; existe equivalente de `ask`?
+
+- [ ] **Step 3: Gate**
+
+Marcar no topo do spike: `STATUS: confirmado` (ou `STATUS: pendente — bloqueia Tasks 7-9`). As Tasks 7/8/9 referenciam este doc; ajustar nomes de evento/API ali conforme o confirmado.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add omp/SPIKE-omp-api.md
+git commit -m "docs(omp): spike da API de extensão (gate da fase 2)"
+```
+
+### Task 4: `translate-tool-event.mjs` (cwd do evento + validação de path)
+
+**Files:** Create `omp/lib/translate-tool-event.mjs`; Test `tests/omp/test-translate-tool-event.mjs`
+
+- [ ] **Step 1: Teste que falha**
 
 ```javascript
 // tests/omp/test-translate-tool-event.mjs
@@ -199,188 +199,263 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { translateToolEvent } from "../../omp/lib/translate-tool-event.mjs";
 
-test("omp edit → tool_name Edit + file_path", () => {
-  const out = translateToolEvent(
-    { toolName: "edit", input: { path: "/p/a.ts" } },
-    { cwd: "/p" }
-  );
-  assert.deepEqual(out, { tool_name: "Edit", tool_input: { file_path: "/p/a.ts" }, cwd: "/p" });
+test("edit → Edit + file_path; cwd do evento tem prioridade", () => {
+  const out = translateToolEvent({ toolName: "edit", input: { path: "/p/a.ts" }, cwd: "/proj" }, { cwd: "/fallback" });
+  assert.deepEqual(out, { tool_name: "Edit", tool_input: { file_path: "/p/a.ts" }, cwd: "/proj" });
 });
-
-test("omp write → Write", () => {
-  const out = translateToolEvent({ toolName: "write", input: { path: "/p/b.ts" } }, { cwd: "/p" });
-  assert.equal(out.tool_name, "Write");
-  assert.equal(out.tool_input.file_path, "/p/b.ts");
+test("sem cwd no evento → usa ctx.cwd", () => {
+  const out = translateToolEvent({ toolName: "write", input: { path: "/p/b.ts" } }, { cwd: "/fallback" });
+  assert.equal(out.cwd, "/fallback");
 });
-
-test("omp ast_edit → Edit (ganho de cobertura)", () => {
-  const out = translateToolEvent({ toolName: "ast_edit", input: { path: "/p/c.ts" } }, { cwd: "/p" });
-  assert.equal(out.tool_name, "Edit");
+test("ast_edit → Edit (cobertura extra)", () => {
+  assert.equal(translateToolEvent({ toolName: "ast_edit", input: { path: "/p/c.ts" } }, { cwd: "/p" }).tool_name, "Edit");
 });
-
-test("ferramenta não-edição → null (não dispara hook)", () => {
+test("ferramenta não-edição → null", () => {
   assert.equal(translateToolEvent({ toolName: "bash", input: {} }, { cwd: "/p" }), null);
 });
-
-test("campo de path alternativo (file_path/filePath)", () => {
-  const a = translateToolEvent({ toolName: "edit", input: { file_path: "/p/d.ts" } }, { cwd: "/p" });
-  assert.equal(a.tool_input.file_path, "/p/d.ts");
-  const b = translateToolEvent({ toolName: "edit", input: { filePath: "/p/e.ts" } }, { cwd: "/p" });
-  assert.equal(b.tool_input.file_path, "/p/e.ts");
+test("file_path com caractere de controle → null (M1)", () => {
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/a\nb.ts" } }, { cwd: "/p" }), null);
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/ .ts" } }, { cwd: "/p" }), null);
+});
+test("path não-absoluto → null (M1)", () => {
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "../etc/passwd" } }, { cwd: "/p" }), null);
+});
+test("aliases de path (file_path/filePath/workspaceRoot)", () => {
+  assert.equal(translateToolEvent({ toolName: "edit", input: { file_path: "/p/d.ts" }, workspaceRoot: "/w" }, { cwd: "/f" }).cwd, "/w");
 });
 ```
 
 - [ ] **Step 2: Rodar e confirmar a falha**
 
-Run: `node --test tests/omp/test-translate-tool-event.mjs`
-Expected: FAIL — módulo inexistente
+Run: `node --test tests/omp/test-translate-tool-event.mjs` → FAIL (módulo inexistente)
 
-- [ ] **Step 3: Implementar o mínimo**
+- [ ] **Step 3: Implementar**
 
 ```javascript
 // omp/lib/translate-tool-event.mjs
-// Traduz um evento de ferramenta do omp para o shape de evento Claude Code
-// que os scripts de hook (.mjs/bash) esperam via stdin.
-// Retorna null quando a ferramenta não é uma edição de arquivo (não deve disparar o hook).
+// Evento de ferramenta do omp → shape de evento Claude Code (stdin dos hooks).
+// Retorna null quando NÃO é edição de arquivo OU o file_path é inválido (M1).
+// cwd: prioriza o do evento (event.cwd/workspaceRoot) sobre ctx.cwd, porque
+// process.cwd() pode apontar p/ worktree pi-iso errada (A2).
 
-const EDIT_TOOLS = new Map([
-  ["edit", "Edit"],
-  ["write", "Write"],
-  ["ast_edit", "Edit"], // omp tem ast_edit; mapeia para gatilho de Edit (cobertura extra)
-]);
+const EDIT_TOOLS = new Map([["edit", "Edit"], ["write", "Write"], ["ast_edit", "Edit"]]);
+const CONTROL_RE = /[ -]/; // newline, NUL, etc.
 
 /**
- * @param {{toolName:string, input?:Record<string,unknown>}} ompEvent
+ * @param {{toolName:string, input?:Record<string,unknown>, cwd?:string, workspaceRoot?:string}} e
  * @param {{cwd:string}} ctx
  * @returns {{tool_name:string, tool_input:{file_path:string}, cwd:string} | null}
  */
-export function translateToolEvent(ompEvent, ctx) {
-  const tool = EDIT_TOOLS.get(ompEvent?.toolName);
+export function translateToolEvent(e, ctx) {
+  const tool = EDIT_TOOLS.get(e?.toolName);
   if (!tool) return null;
-  const input = ompEvent.input ?? {};
-  const filePath = input.path ?? input.file_path ?? input.filePath ?? null;
-  if (!filePath) return null;
-  return { tool_name: tool, tool_input: { file_path: String(filePath) }, cwd: ctx.cwd };
+  const input = e.input ?? {};
+  const raw = input.path ?? input.file_path ?? input.filePath ?? null;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  if (CONTROL_RE.test(raw)) return null;          // M1: rejeita controle/newline/NUL
+  if (!raw.startsWith("/")) return null;          // M1: exige caminho absoluto
+  const cwd = e.cwd ?? e.workspaceRoot ?? ctx.cwd; // A2: prefere o do evento
+  return { tool_name: tool, tool_input: { file_path: raw }, cwd };
 }
 ```
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar e confirmar PASS**
 
-Run: `node --test tests/omp/test-translate-tool-event.mjs`
-Expected: PASS (5/5)
+Run: `node --test tests/omp/test-translate-tool-event.mjs` → PASS (7/7)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add omp/lib/translate-tool-event.mjs tests/omp/test-translate-tool-event.mjs
-git commit -m "feat(omp): translate-tool-event (omp tool events → Claude Code shape)"
+git commit -m "feat(omp): translate-tool-event (cwd do evento + validação de path)"
 ```
 
-### Task 4: Detection-hardening — varrer config MCP do omp
+### Task 5: `parse-hook-output.mjs` — envelope JSON dos hooks → {context, block, reason}
 
-**Files:**
-- Modify: `hooks/session-start` (bloco de detecção MCP, linhas ~49-54)
-- Test: `tests/hooks/test-session-start-omp-mcp-detection.sh`
+> Corrige o achado CRÍTICO C1: os hooks NÃO emitem `BLOCK:`; emitem JSON.
 
-- [ ] **Step 1: Escrever o teste de hook que falha**
+**Files:** Create `omp/lib/parse-hook-output.mjs`; Test `tests/omp/test-parse-hook-output.mjs`
+
+- [ ] **Step 1: Teste que falha (cobre os shapes reais dos hooks)**
+
+```javascript
+// tests/omp/test-parse-hook-output.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseHookOutput } from "../../omp/lib/parse-hook-output.mjs";
+
+test("additionalContext (session-start/post-compact)", () => {
+  const r = parseHookOutput(JSON.stringify({ hookSpecificOutput: { additionalContext: "CTX" } }));
+  assert.deepEqual(r, { contextToInject: "CTX", block: false, reason: null });
+});
+test("permissionDecision deny → block (git-guard C1)", () => {
+  const r = parseHookOutput(JSON.stringify({ hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: "branch protegida" } }));
+  assert.equal(r.block, true);
+  assert.equal(r.reason, "branch protegida");
+  assert.equal(r.contextToInject, null); // NÃO injeta o JSON do deny como contexto
+});
+test("permissionDecision ask → block conservador", () => {
+  assert.equal(parseHookOutput(JSON.stringify({ hookSpecificOutput: { permissionDecision: "ask", permissionDecisionReason: "?" } })).block, true);
+});
+test("allow/vazio → prossegue sem contexto", () => {
+  assert.deepEqual(parseHookOutput(JSON.stringify({ hookSpecificOutput: { permissionDecision: "allow" } })), { contextToInject: null, block: false, reason: null });
+  assert.deepEqual(parseHookOutput(""), { contextToInject: null, block: false, reason: null });
+});
+test("additional_context (snake_case) também aceito", () => {
+  assert.equal(parseHookOutput(JSON.stringify({ additional_context: "C2" })).contextToInject, "C2");
+});
+test("texto puro não-JSON → injeta como contexto (fallback)", () => {
+  assert.equal(parseHookOutput("texto cru de hook legado").contextToInject, "texto cru de hook legado");
+});
+```
+
+- [ ] **Step 2: Rodar e confirmar a falha**
+
+Run: `node --test tests/omp/test-parse-hook-output.mjs` → FAIL
+
+- [ ] **Step 3: Implementar**
+
+```javascript
+// omp/lib/parse-hook-output.mjs
+// Parseia o stdout de um hook DevFlow (protocolo Claude Code) para a decisão
+// que a extensão omp precisa. Os hooks emitem JSON com exit 0:
+//   contexto: { hookSpecificOutput: { additionalContext } }  (ou additional_context)
+//   bloqueio: { hookSpecificOutput: { permissionDecision: "deny"|"ask", permissionDecisionReason } }
+// Fallback: texto não-JSON é tratado como contexto a injetar.
+/** @param {string} stdout @returns {{contextToInject:string|null, block:boolean, reason:string|null}} */
+export function parseHookOutput(stdout) {
+  const none = { contextToInject: null, block: false, reason: null };
+  const text = (stdout ?? "").trim();
+  if (!text) return none;
+  let obj;
+  try { obj = JSON.parse(text); } catch { return { ...none, contextToInject: text }; }
+  const hso = obj.hookSpecificOutput ?? obj;
+  const decision = hso.permissionDecision;
+  if (decision === "deny" || decision === "ask") {
+    return { contextToInject: null, block: true, reason: hso.permissionDecisionReason ?? "bloqueado pelo hook" };
+  }
+  const ctx = hso.additionalContext ?? hso.additional_context ?? obj.additionalContext ?? obj.additional_context ?? null;
+  return { contextToInject: ctx, block: false, reason: null };
+}
+```
+
+- [ ] **Step 4: Rodar e confirmar PASS**
+
+Run: `node --test tests/omp/test-parse-hook-output.mjs` → PASS (6/6)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add omp/lib/parse-hook-output.mjs tests/omp/test-parse-hook-output.mjs
+git commit -m "feat(omp): parse-hook-output (envelope JSON → context/block) — corrige C1"
+```
+
+### Task 6: Detection-hardening — config MCP do omp
+
+**Files:** Modify `hooks/session-start` (bloco de detecção MCP); Test `tests/hooks/test-session-start-omp-mcp-detection.sh`
+
+- [ ] **Step 1: Teste de hook que falha**
 
 ```bash
 # tests/hooks/test-session-start-omp-mcp-detection.sh
 #!/usr/bin/env bash
-# Test: detecção de mempalace/dotcontext quando configurados SÓ no
-# config MCP global do omp (~/.omp/agent/mcp.json), não em .mcp.json.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
-export HOME="$TMP/home"
-mkdir -p "$HOME/.omp/agent"
-# dotcontext + mempalace SÓ no config global do omp
+export HOME="$TMP/home"; mkdir -p "$HOME/.omp/agent"
 cat > "$HOME/.omp/agent/mcp.json" <<'JSON'
 { "mcpServers": { "dotcontext": { "command": "npx" }, "mempalace": { "command": "mempalace-mcp" } } }
 JSON
 mkdir -p "$TMP/proj"
-# Sem .mcp.json no projeto: detecção CC-only daria falso negativo.
-OUT=$(cd "$TMP/proj" && bash "$REPO_ROOT/hooks/session-start" startup 2>/dev/null || true)
-echo "$OUT" | grep -q "MEMPALACE_CONTEXT\|mempalace" || { echo "FALHA: mempalace não detectado via config omp"; exit 1; }
+OUT=$(cd "$TMP/proj" && CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/session-start" startup 2>/dev/null || true)
+echo "$OUT" | grep -qi "mempalace" || { echo "FALHA: mempalace não detectado via config omp"; exit 1; }
 echo "$OUT" | grep -qi "full" || { echo "FALHA: modo Full não detectado via dotcontext omp-global"; exit 1; }
 echo "OK"
 ```
 
 - [ ] **Step 2: Rodar e confirmar a falha**
 
-Run: `bash tests/hooks/test-session-start-omp-mcp-detection.sh`
-Expected: FAIL — `mempalace não detectado` (detecção atual só olha `.mcp.json` e `~/.config/claude/mcp.json`)
+Run: `bash tests/hooks/test-session-start-omp-mcp-detection.sh` → FAIL (detecção só CC)
 
 - [ ] **Step 3: Estender a detecção em `hooks/session-start`**
 
-Localizar o bloco de detecção (`mempalace_available` ~linha 49-54 e a detecção de `dotcontext`/modo). Acrescentar os paths do omp à condição `grep`. Padrão a aplicar para AMBOS (mempalace e dotcontext):
+No bloco de `mempalace_available` (~L49-54) e no de `dotcontext`/modo, acrescentar (mantendo os checks CC):
 
 ```bash
-# Adicionar aos checks existentes (mantendo os de Claude Code):
-# omp project + global config
-elif [ -f "${project_root}/.omp/mcp.json" ] && grep -q "mempalace" "${project_root}/.omp/mcp.json" 2>/dev/null; then
+elif [ -f "${project_root}/.omp/mcp.json" ] && grep -q '"mempalace"' "${project_root}/.omp/mcp.json" 2>/dev/null; then
   mempalace_available="true"
-elif [ -f "${HOME}/.omp/agent/mcp.json" ] && grep -q "mempalace" "${HOME}/.omp/agent/mcp.json" 2>/dev/null; then
+elif [ -f "${HOME}/.omp/agent/mcp.json" ] && grep -q '"mempalace"' "${HOME}/.omp/agent/mcp.json" 2>/dev/null; then
   mempalace_available="true"
 ```
 
-Aplicar o mesmo encadeamento `elif` para a detecção de `dotcontext` (que define `mode="full"`), cobrindo `${project_root}/.omp/mcp.json` e `${HOME}/.omp/agent/mcp.json`.
+(grep ancorado na chave entre aspas — reduz falso positivo, M2.) Replicar o encadeamento para `dotcontext` (que define `mode="full"`).
 
-- [ ] **Step 4: Rodar o teste e confirmar que passa**
+- [ ] **Step 4: Rodar → OK**
 
-Run: `bash tests/hooks/test-session-start-omp-mcp-detection.sh`
-Expected: `OK`
+Run: `bash tests/hooks/test-session-start-omp-mcp-detection.sh` → `OK`
 
-- [ ] **Step 5: Regressão — testes de hook existentes ainda passam**
+- [ ] **Step 5: Regressão**
 
-Run: `for t in tests/hooks/test-napkin-hooks.sh tests/hooks/test-adr-context.sh; do bash "$t" && echo "PASS $t"; done`
-Expected: PASS em ambos (detecção CC inalterada)
+Run: `bash tests/hooks/test-napkin-hooks.sh && bash tests/hooks/test-adr-context.sh`
+Expected: PASS (detecção CC inalterada)
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add hooks/session-start tests/hooks/test-session-start-omp-mcp-detection.sh
-git commit -m "fix(hooks): detectar mempalace/dotcontext no config MCP do omp (Full mode)"
+git commit -m "fix(hooks): detectar mempalace/dotcontext no config MCP do omp"
 ```
 
-### Task 5: Extensão omp — glue de `session_start` (wrap & reuse) + confirmação da API de injeção
+### Task 7: `run-bash-hook.mjs` (probe de deps visível) + extensão `session_start`
 
-**Files:**
-- Create: `omp/extension.mjs`
-- Create: `omp/lib/run-bash-hook.mjs`
-- Test (E2E, skip se omp ausente): `tests/omp/e2e-session-start.sh`
+**Files:** Create `omp/lib/run-bash-hook.mjs`; Create `omp/extension.mjs`; Test `tests/omp/test-run-bash-hook.mjs` + E2E `tests/omp/e2e-session-start.sh`
 
-> **Risco aberto (spec):** o mecanismo exato de injeção de contexto no `session_start` do omp. Esta task **começa** confirmando-o.
+- [ ] **Step 1: Teste unit que falha — probe de deps**
 
-- [ ] **Step 1: Confirmar a API de injeção do omp (spike, documentar)**
+```javascript
+// tests/omp/test-run-bash-hook.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { missingDeps } from "../../omp/lib/run-bash-hook.mjs";
 
-Run:
-```bash
-command -v omp >/dev/null && omp --version || echo "SKIP: omp ausente"
+test("detecta deps ausentes (probe injetável)", () => {
+  const present = new Set(["bash", "node"]); // python3 ausente
+  assert.deepEqual(missingDeps((b) => present.has(b)), ["python3"]);
+});
+test("tudo presente → vazio", () => {
+  assert.deepEqual(missingDeps(() => true), []);
+});
 ```
-Se presente: inspecionar a doc de extensões do omp (`session_start`/`context`/`before_agent_start`, `appendEntry`/`sendMessage`) e registrar no topo de `omp/extension.mjs` (comentário) qual API entrega paridade com `additionalContext`. Se ausente: marcar skip e usar `appendEntry` como candidato padrão, a confirmar no primeiro ambiente com omp.
 
-- [ ] **Step 2: Escrever o helper `run-bash-hook.mjs` (executa script e captura stdout)**
+- [ ] **Step 2: Rodar e confirmar a falha**
+
+Run: `node --test tests/omp/test-run-bash-hook.mjs` → FAIL
+
+- [ ] **Step 3: Implementar `run-bash-hook.mjs` (com probe de python3/node/bash)**
 
 ```javascript
 // omp/lib/run-bash-hook.mjs
-// Executa um script de hook do DevFlow (bash) e retorna seu stdout.
-// Falha graciosa: erro do hook não derruba a sessão (retorna "").
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const REQUIRED = ["bash", "node", "python3"]; // hooks chamam python3 (14 no post, 9 no pre)
+
+/** @param {(bin:string)=>boolean} [probe] @returns {string[]} deps ausentes */
+export function missingDeps(probe) {
+  const has = probe ?? ((b) => spawnSync("command", ["-v", b], { shell: true }).status === 0);
+  return REQUIRED.filter((b) => !has(b));
+}
 
 /**
- * @param {string} hookName  ex.: "session-start"
- * @param {{args?:string[], stdin?:string, cwd?:string}} [opts]
- * @returns {string} stdout (ou "" em falha)
+ * Executa um hook bash do DevFlow e devolve o stdout cru. Falha graciosa.
+ * @param {string} hookName @param {{args?:string[], stdin?:string, cwd?:string}} [opts]
+ * @returns {string}
  */
 export function runBashHook(hookName, opts = {}) {
-  const hookPath = join(PLUGIN_ROOT, "hooks", hookName);
   try {
-    const r = spawnSync("bash", [hookPath, ...(opts.args ?? [])], {
+    const r = spawnSync("bash", [join(PLUGIN_ROOT, "hooks", hookName), ...(opts.args ?? [])], {
       input: opts.stdin ?? "",
       cwd: opts.cwd ?? process.cwd(),
       env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT },
@@ -394,27 +469,44 @@ export function runBashHook(hookName, opts = {}) {
 }
 ```
 
-- [ ] **Step 3: Escrever a extensão com o handler de `session_start`**
+- [ ] **Step 4: Rodar → PASS**
+
+Run: `node --test tests/omp/test-run-bash-hook.mjs` → PASS (2/2)
+
+- [ ] **Step 5: Escrever `omp/extension.mjs` (session_start; usa parse-hook-output; deps warning; canal de contexto)**
+
+> Ajustar `INJECT` e o nome do evento conforme `omp/SPIKE-omp-api.md` (Task 3). `appendEntry` com `role:"user"`/contexto — **nunca `role:"system"`** (B1).
 
 ```javascript
 // omp/extension.mjs
-// Extensão omp (oh-my-pi) do DevFlow — bridge fino: faz wrap & reuse dos
-// hooks bash/.mjs existentes e injeta a saída no contexto do omp.
-// API de injeção confirmada no spike (Task 5, Step 1): usar pi.appendEntry
-// (ajustar aqui se o spike apontar `context`/`sendMessage`).
-import { runBashHook } from "./lib/run-bash-hook.mjs";
+// Extensão omp do DevFlow — bridge fino (wrap & reuse dos hooks).
+// API de injeção confirmada no SPIKE-omp-api.md (Task 3). Ajustar aqui se divergir.
+import { runBashHook, missingDeps } from "./lib/run-bash-hook.mjs";
+import { parseHookOutput } from "./lib/parse-hook-output.mjs";
 
-/** @param {any} pi ExtensionAPI do omp */
+// Canal de injeção de contexto (NÃO usar role:system — B1). Conforme spike.
+function inject(pi, text) {
+  if (text && text.trim()) pi.appendEntry({ role: "user", content: text });
+}
+
+/** @param {any} pi */
 export default function ext(pi) {
-  // session_start → reusa hooks/session-start e injeta o bloco <DEVFLOW_CONTEXT>
-  pi.on("session_start", async () => {
-    const out = runBashHook("session-start", { args: ["startup"], cwd: process.cwd() });
-    if (out && out.trim()) pi.appendEntry({ role: "system", content: out });
+  // Aviso visível (não silêncio) se faltarem deps dos hooks — Architect #2.
+  const missing = missingDeps();
+  if (missing.length) {
+    pi.on("session_start", () =>
+      inject(pi, `⚠️ DevFlow: dependências ausentes (${missing.join(", ")}). Hooks de standards/knowledge/git-guard podem não funcionar. Veja docs/omp-integration.md.`)
+    );
+  }
+
+  pi.on("session_start", () => {
+    const { contextToInject } = parseHookOutput(runBashHook("session-start", { args: ["startup"], cwd: process.cwd() }));
+    inject(pi, contextToInject);
   });
 }
 ```
 
-- [ ] **Step 4: Escrever o E2E (skip se omp ausente)**
+- [ ] **Step 6: E2E session_start (skip se omp ausente)**
 
 ```bash
 # tests/omp/e2e-session-start.sh
@@ -423,32 +515,37 @@ set -euo pipefail
 if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
-mkdir -p "$TMP/.context"; echo "git: { strategy: trunk-based }" > "$TMP/.context/.devflow.yaml"
-# Carrega a extensão e roda um one-shot; deve injetar o bloco DEVFLOW_CONTEXT.
-OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "responda apenas: ping" 2>/dev/null || true)
-echo "$OUT" | grep -q "DEVFLOW_CONTEXT\|DevFlow installed" || { echo "FALHA: contexto não injetado no omp"; exit 1; }
+mkdir -p "$TMP/.context/engineering/standards"
+echo "git: { strategy: trunk-based }" > "$TMP/.context/.devflow.yaml"
+cat > "$TMP/.context/engineering/standards/std-naming.md" <<'EOF'
+---
+type: standard
+name: std-naming
+---
+# Naming
+EOF
+# Canário: o contexto injetado deve influenciar a resposta (não só ecoar).
+OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "Liste em uma linha quais blocos DevFlow você recebeu no contexto." 2>/dev/null || true)
+echo "$OUT" | grep -qi "DevFlow\|standard" || { echo "FALHA: contexto/índice de standards não chegou ao modelo no omp"; exit 1; }
 echo "OK"
 ```
 
-- [ ] **Step 5: Rodar o E2E**
+- [ ] **Step 7: Rodar o E2E**
 
-Run: `bash tests/omp/e2e-session-start.sh`
-Expected: `OK` (ou `SKIP: omp ausente`)
+Run: `bash tests/omp/e2e-session-start.sh` → `OK` (ou `SKIP: omp ausente`)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add omp/extension.mjs omp/lib/run-bash-hook.mjs tests/omp/e2e-session-start.sh
-git commit -m "feat(omp): extensão bridge — session_start via wrap & reuse"
+git add omp/lib/run-bash-hook.mjs omp/extension.mjs tests/omp/test-run-bash-hook.mjs tests/omp/e2e-session-start.sh
+git commit -m "feat(omp): extensão session_start (parse-hook-output + probe deps + canal de contexto)"
 ```
 
-### Task 6: Extensão — eventos de compactação (MemPalace snapshot/rehidratação)
+### Task 8: Extensão — eventos de compactação
 
-**Files:**
-- Modify: `omp/extension.mjs`
-- Test (E2E, skip se omp ausente): `tests/omp/e2e-compact.sh`
+**Files:** Modify `omp/extension.mjs`; E2E `tests/omp/e2e-compact.sh`
 
-- [ ] **Step 1: Escrever o E2E que falha (skip se omp ausente)**
+- [ ] **Step 1: E2E que verifica o snapshot (skip se omp ausente)**
 
 ```bash
 # tests/omp/e2e-compact.sh
@@ -458,41 +555,30 @@ if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
 mkdir -p "$TMP/.context/workflow/.checkpoint"
-echo '{"branch":"feat/x","phase":"E"}' > "$TMP/.context/workflow/.checkpoint/last.json"
-# O handler de compactação reusa hooks/pre-compact (snapshot). Verificação direta:
 ( cd "$TMP" && CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/pre-compact" >/dev/null 2>&1 || true )
 test -f "$TMP/.context/workflow/.checkpoint/last.json" || { echo "FALHA: snapshot ausente"; exit 1; }
 echo "OK"
 ```
 
-- [ ] **Step 2: Rodar e confirmar (E2E falha só se handler ausente; em omp ausente, SKIP)**
+- [ ] **Step 2: Rodar**
 
-Run: `bash tests/omp/e2e-compact.sh`
-Expected: `SKIP: omp ausente` no CI sem omp; `OK` com omp + handlers.
+Run: `bash tests/omp/e2e-compact.sh` → `SKIP`/`OK`
 
-- [ ] **Step 3: Adicionar handlers de compactação à extensão**
+- [ ] **Step 3: Adicionar handlers (nomes de evento conforme spike)**
 
-Acrescentar em `omp/extension.mjs`, dentro de `ext(pi)`:
+Em `omp/extension.mjs`, dentro de `ext(pi)`:
 
 ```javascript
-  // session_before_compact → snapshot (reusa hooks/pre-compact)
-  pi.on("session_before_compact", async () => {
-    runBashHook("pre-compact", { cwd: process.cwd() });
-  });
-
-  // session_compact (pós) → rehidratação (reusa hooks/post-compact)
-  pi.on("session_compact", async () => {
-    const out = runBashHook("post-compact", { cwd: process.cwd() });
-    if (out && out.trim()) pi.appendEntry({ role: "system", content: out });
+  pi.on("session_before_compact", () => { runBashHook("pre-compact", { cwd: process.cwd() }); });
+  pi.on("session_compact", () => {
+    const { contextToInject } = parseHookOutput(runBashHook("post-compact", { cwd: process.cwd() }));
+    inject(pi, contextToInject);
   });
 ```
 
-> Nota: confirmar no spike (Task 5) os nomes exatos dos eventos de compactação do omp (`session_before_compact`/`session_compact`/`auto_compaction_*`) e ajustar as strings se necessário.
-
 - [ ] **Step 4: Rodar o E2E**
 
-Run: `bash tests/omp/e2e-compact.sh`
-Expected: `OK` (ou `SKIP`)
+Run: `bash tests/omp/e2e-compact.sh` → `OK`/`SKIP`
 
 - [ ] **Step 5: Commit**
 
@@ -501,20 +587,69 @@ git add omp/extension.mjs tests/omp/e2e-compact.sh
 git commit -m "feat(omp): handlers de compactação (MemPalace snapshot/rehidratação)"
 ```
 
-### Task 7: Extensão — `tool_call` (pre) e `tool_result` (post) via tradução
+### Task 9: Extensão — `tool_call` (pre) e `tool_result` (post) com bloqueio real
 
-**Files:**
-- Modify: `omp/extension.mjs`
-- Test (hook): `tests/hooks/test-omp-tool-bridge.sh`
+> Corrige C1/A1/A2: bloqueio via `parse-hook-output`; cwd derivado do `file_path`.
 
-- [ ] **Step 1: Escrever o teste que falha — tradução alimenta pre e post**
+**Files:** Modify `omp/extension.mjs`; Create `omp/lib/resolve-cwd.mjs`; Test `tests/omp/test-resolve-cwd.mjs` + hook `tests/hooks/test-omp-tool-bridge.sh`
+
+- [ ] **Step 1: Teste do resolvedor de cwd que falha**
+
+```javascript
+// tests/omp/test-resolve-cwd.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolveProjectCwd } from "../../omp/lib/resolve-cwd.mjs";
+
+test("sobe até a raiz com .context a partir do file_path (A2)", () => {
+  const root = mkdtempSync(join(tmpdir(), "rcwd-"));
+  mkdirSync(join(root, ".context"), { recursive: true });
+  mkdirSync(join(root, "src/deep"), { recursive: true });
+  const f = join(root, "src/deep/a.ts"); writeFileSync(f, "x");
+  assert.equal(resolveProjectCwd(f, "/processo/errado"), root);
+});
+test("sem marcador → fallback", () => {
+  assert.equal(resolveProjectCwd("/no/marker/a.ts", "/fb"), "/fb");
+});
+```
+
+- [ ] **Step 2: Rodar → FAIL**
+
+Run: `node --test tests/omp/test-resolve-cwd.mjs` → FAIL
+
+- [ ] **Step 3: Implementar `resolve-cwd.mjs`**
+
+```javascript
+// omp/lib/resolve-cwd.mjs
+// Deriva a raiz do projeto a partir do file_path editado (sobe procurando
+// .context/ ou .git), em vez de confiar em process.cwd() — A2 (worktrees pi-iso).
+import { existsSync } from "node:fs";
+import { dirname, join, parse } from "node:path";
+
+/** @param {string} filePath @param {string} fallbackCwd @returns {string} */
+export function resolveProjectCwd(filePath, fallbackCwd) {
+  let dir = dirname(filePath);
+  const rootOf = parse(dir).root;
+  while (dir && dir !== rootOf) {
+    if (existsSync(join(dir, ".context")) || existsSync(join(dir, ".git"))) return dir;
+    dir = dirname(dir);
+  }
+  return fallbackCwd;
+}
+```
+
+- [ ] **Step 4: Rodar → PASS**
+
+Run: `node --test tests/omp/test-resolve-cwd.mjs` → PASS
+
+- [ ] **Step 5: Teste de hook do bridge (pre injeta knowledge; deny bloqueia)**
 
 ```bash
 # tests/hooks/test-omp-tool-bridge.sh
 #!/usr/bin/env bash
-# Verifica que um evento de ferramenta do omp (edit) traduzido alimenta:
-#  - pre-tool-use (knowledge on-demand Stage-2)
-#  - post-tool-use (linter de standards)
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
@@ -527,359 +662,336 @@ activation: on-demand
 keywords: [src]
 ---
 # Arquitetura
-Conteúdo on-demand de produto/engenharia.
+Conteúdo de produto/engenharia on-demand.
 EOF
-# Traduz um evento omp e injeta no pre-tool-use:
 EVENT=$(node -e '
   import("'"$REPO_ROOT"'/omp/lib/translate-tool-event.mjs").then(m=>{
-    const o=m.translateToolEvent({toolName:"edit",input:{path:"'"$TMP"'/src/app.ts"}},{cwd:"'"$TMP"'"});
-    process.stdout.write(JSON.stringify(o));
+    process.stdout.write(JSON.stringify(m.translateToolEvent({toolName:"edit",input:{path:"'"$TMP"'/src/app.ts"},cwd:"'"$TMP"'"},{cwd:"'"$TMP"'"})));
   })')
 echo "$EVENT" | grep -q '"tool_name":"Edit"' || { echo "FALHA: tradução"; exit 1; }
-OUT=$(cd "$TMP" && echo "$EVENT" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/pre-tool-use" 2>/dev/null || true)
-echo "$OUT" | grep -qi "KNOWLEDGE_ONDEMAND\|Arquitetura" || { echo "FALHA: knowledge on-demand não injetado"; exit 1; }
+RAW=$(cd "$TMP" && echo "$EVENT" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/pre-tool-use" 2>/dev/null || true)
+# parse-hook-output deve extrair o additionalContext com o knowledge:
+CTX=$(node -e 'import("'"$REPO_ROOT"'/omp/lib/parse-hook-output.mjs").then(m=>{let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(m.parseHookOutput(s).contextToInject||"")))})' <<<"$RAW")
+echo "$CTX" | grep -qi "KNOWLEDGE_ONDEMAND\|Arquitetura" || { echo "FALHA: knowledge on-demand não extraído"; exit 1; }
 echo "OK"
 ```
 
-- [ ] **Step 2: Rodar — entender o que este teste cobre**
+- [ ] **Step 6: Rodar — entender a cobertura**
 
 Run: `bash tests/hooks/test-omp-tool-bridge.sh`
-Expected: este teste valida o **contrato tradução→hook** (código da Task 3 + hooks existentes) — pode já passar a parte de tradução. Ele **não** exercita os handlers da extensão `omp/extension.mjs` (esses só rodam sob omp e são validados pelo E2E da Task 5). Aqui garantimos que o evento omp traduzido alimenta corretamente o `pre-tool-use` (knowledge on-demand). Se o `grep` de `KNOWLEDGE_ONDEMAND` falhar, a tradução/contrato está quebrado.
+Expected: valida o **contrato tradução→hook→parse** (Tasks 4/5 + hook existente). Os handlers da extensão em si são validados pelo E2E sob omp. Se `KNOWLEDGE_ONDEMAND` não for extraído, o contrato está quebrado.
 
-- [ ] **Step 3: Adicionar os handlers de ferramenta à extensão**
+- [ ] **Step 7: Adicionar os handlers à extensão (bloqueio real via parse-hook-output)**
 
-Acrescentar em `omp/extension.mjs` (importar `translateToolEvent` no topo):
-
+Topo de `omp/extension.mjs`:
 ```javascript
 import { translateToolEvent } from "./lib/translate-tool-event.mjs";
+import { resolveProjectCwd } from "./lib/resolve-cwd.mjs";
 ```
-
 Dentro de `ext(pi)`:
-
 ```javascript
-  // tool_call (pre) → git-guard + knowledge on-demand Stage-2
-  pi.on("tool_call", async (event) => {
-    const cc = translateToolEvent(event, { cwd: process.cwd() });
-    if (!cc) return; // não é edição de arquivo
-    const out = runBashHook("pre-tool-use", { stdin: JSON.stringify(cc), cwd: process.cwd() });
-    // pre-tool-use pode bloquear (git-guard). Convenção: stdout começando com "BLOCK:".
-    if (out.startsWith("BLOCK:")) return { block: true, reason: out.slice(6).trim() };
-    if (out && out.trim()) pi.appendEntry({ role: "system", content: out });
-  });
-
-  // tool_result (post) → linter de standards + nudge + PREVC handoff guard
-  pi.on("tool_result", async (event) => {
+  pi.on("tool_call", (event) => {
     const cc = translateToolEvent(event, { cwd: process.cwd() });
     if (!cc) return;
-    const out = runBashHook("post-tool-use", { stdin: JSON.stringify(cc), cwd: process.cwd() });
-    if (out && out.trim()) pi.appendEntry({ role: "system", content: out });
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, cc.cwd); // A2
+    const { contextToInject, block, reason } = parseHookOutput(
+      runBashHook("pre-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })
+    );
+    if (block) return { block: true, reason }; // C1: git-guard real
+    inject(pi, contextToInject);
+  });
+
+  pi.on("tool_result", (event) => {
+    const cc = translateToolEvent(event, { cwd: process.cwd() });
+    if (!cc) return;
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, cc.cwd);
+    const { contextToInject } = parseHookOutput(
+      runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })
+    );
+    inject(pi, contextToInject);
   });
 ```
 
-> Confirmar no spike o shape real de `event` em `tool_call`/`tool_result` do omp (campos `toolName`/`input`) e ajustar `translateToolEvent` se divergir. O contrato `{block, reason}` do `tool_call` foi confirmado na pesquisa.
+- [ ] **Step 8: Rodar testes**
 
-- [ ] **Step 4: Rodar o teste**
+Run: `bash tests/hooks/test-omp-tool-bridge.sh` → `OK`
 
-Run: `bash tests/hooks/test-omp-tool-bridge.sh`
-Expected: `OK`
-
-- [ ] **Step 5: Regressão dos hooks de tool existentes**
+- [ ] **Step 9: Regressão dos hooks de tool**
 
 Run: `bash tests/hooks/test-post-tool-use.sh && bash tests/hooks/test-pre-tool-use-knowledge.sh`
-Expected: PASS em ambos (caminho Claude Code inalterado)
+Expected: PASS (caminho Claude Code inalterado)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: E2E de bloqueio sob omp (git-guard em branch protegida; skip se omp ausente)**
 
 ```bash
-git add omp/extension.mjs tests/hooks/test-omp-tool-bridge.sh
-git commit -m "feat(omp): bridge de tool_call/tool_result (standards+knowledge+ADR guard)"
+# tests/omp/e2e-git-guard.sh
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
+( cd "$TMP" && git init -q && git checkout -q -b main )
+mkdir -p "$TMP/.context"
+cat > "$TMP/.context/.devflow.yaml" <<'YAML'
+git: { strategy: feature-branch, protected_branches: [main] }
+YAML
+# Tentar editar na main protegida → bridge deve bloquear (não apenas avisar).
+OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "edite o arquivo $TMP/app.txt escrevendo 'x'" 2>&1 || true)
+echo "$OUT" | grep -qi "block\|protegida\|protected" || { echo "FALHA: git-guard não bloqueou na main"; exit 1; }
+test ! -f "$TMP/app.txt" || { echo "FALHA: edição prosseguiu em branch protegida"; exit 1; }
+echo "OK"
+```
+
+- [ ] **Step 11: Rodar**
+
+Run: `bash tests/omp/e2e-git-guard.sh` → `OK`/`SKIP`
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add omp/extension.mjs omp/lib/resolve-cwd.mjs tests/omp/test-resolve-cwd.mjs tests/hooks/test-omp-tool-bridge.sh tests/omp/e2e-git-guard.sh
+git commit -m "feat(omp): bridge tool_call/tool_result com bloqueio real (C1/A1/A2)"
 ```
 
 ---
 
-## Fase 3 — Enriquecimento omp dos agentes + seleção de runtime no init
+## Fase 3 — Enriquecimento de agentes + seleção de runtime no init
 
-**Agent:** backend-specialist (enriquecedor) + refactoring-specialist (skills) | **Tests:** unit + hook
-**Handoff from:** devops-specialist (bridge pronto)
+**Agent:** backend-specialist + refactoring-specialist | **Tests:** unit + integração
 
-### Task 8: `omp-roles.yaml` + output schemas
+### Task 10: `omp-roles.yaml` (YAML padrão) + helper de parse reusável + schemas
 
-**Files:**
-- Create: `omp/omp-roles.yaml`
-- Create: `omp/schemas/review-verdict.json`
-- Create: `omp/schemas/validation-verdict.json`
-- Test: `tests/omp/test-omp-roles.mjs`
+**Files:** Modify `scripts/lib/frontmatter.mjs` (exportar `parseYaml`); Create `omp/omp-roles.yaml`; Create `omp/schemas/{review-verdict,validation-verdict}.json`; Test `tests/omp/test-omp-roles.mjs`
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Teste que falha**
 
 ```javascript
 // tests/omp/test-omp-roles.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-const __dir = dirname(fileURLToPath(import.meta.url));
-const ROLES = join(__dir, "../../omp/omp-roles.yaml");
+import { parseYaml } from "../../scripts/lib/frontmatter.mjs";
 
-test("mapa cobre atividades-chave", () => {
-  const y = readFileSync(ROLES, "utf-8");
-  for (const k of ["brainstorming", "writing-plans", "deep-review", "execution", "fanout", "confirmation"]) {
-    assert.ok(y.includes(k), `atividade ausente: ${k}`);
-  }
-  for (const role of ["pi/plan", "pi/slow", "default", "pi/smol", "commit"]) {
-    assert.ok(y.includes(role), `role ausente: ${role}`);
-  }
+test("parseia roles e defaults por agente (parser reusado, não regex frágil)", () => {
+  const data = parseYaml(readFileSync("omp/omp-roles.yaml", "utf-8"));
+  assert.equal(data.activities.brainstorming, "pi/plan");
+  assert.equal(data.activities.fanout, "pi/smol");
+  assert.equal(data.agent_role_defaults["security-auditor"].model, "pi/slow");
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-omp-roles.mjs`
-Expected: FAIL — arquivo inexistente
+Run: `node --test tests/omp/test-omp-roles.mjs` → FAIL (`parseYaml` não exportado / arquivo inexistente)
 
-- [ ] **Step 3: Criar `omp/omp-roles.yaml`**
+- [ ] **Step 3: Exportar `parseYaml` em `scripts/lib/frontmatter.mjs`**
 
-```yaml
-# Mapa atividade → model role do omp. Lido pelo enriquecedor de agentes e
-# pelos skills de fase quando em omp. Inerte no Claude Code.
-activities:
-  brainstorming:   pi/plan      # superpowers:brainstorming (fase P)
-  writing-plans:   pi/plan      # superpowers:writing-plans (fase P)
-  deep-review:     pi/slow      # architect / security-auditor (R, V)
-  execution:       default      # execução TDD (E)
-  fanout:          pi/smol      # fan-out de subagents (E)
-  confirmation:    commit       # docs / commit (C)
-# Default por role de agente (derivado de role+phases):
-agent_role_defaults:
-  architect:        { model: pi/plan,  thinking-level: high }
-  security-auditor: { model: pi/slow,  thinking-level: high, output: review-verdict }
-  code-reviewer:    { model: pi/slow,  output: review-verdict }
-  test-writer:      { model: default,  output: validation-verdict }
-  performance-optimizer: { model: pi/slow }
-  feature-developer:     { model: default }
-  product-manager:       { model: pi/plan }
-  documentation-writer:  { model: commit }
+Logo após `parseYamlSubset` (linha ~191), adicionar:
+```javascript
+export function parseYaml(text) { return parseYamlSubset(text); }
 ```
 
-- [ ] **Step 4: Criar os schemas de output (JTD)**
+- [ ] **Step 4: Criar `omp/omp-roles.yaml` (YAML padrão aninhado — sem `{}` inline)**
+
+```yaml
+# Mapa atividade → model role do omp. Lido pelo enriquecedor e pelos skills de
+# fase quando em omp. Inerte no Claude Code.
+activities:
+  brainstorming: pi/plan
+  writing-plans: pi/plan
+  deep-review: pi/slow
+  execution: default
+  fanout: pi/smol
+  confirmation: commit
+agent_role_defaults:
+  architect:
+    model: pi/plan
+    thinking-level: high
+  security-auditor:
+    model: pi/slow
+    thinking-level: high
+    output: review-verdict
+  code-reviewer:
+    model: pi/slow
+    output: review-verdict
+  test-writer:
+    model: default
+    output: validation-verdict
+  performance-optimizer:
+    model: pi/slow
+  feature-developer:
+    model: default
+  product-manager:
+    model: pi/plan
+  documentation-writer:
+    model: commit
+```
+
+> Validar no Step 5 que `parseYamlSubset` suporta este aninhamento; se não, ajustar o subset ou o schema para o que ele suporta (manter formato padrão, nunca regex ad-hoc).
+
+- [ ] **Step 5: Criar os schemas**
 
 ```json
 // omp/schemas/review-verdict.json
-{
-  "properties": {
-    "overall_correctness": { "enum": ["correct", "incorrect"] },
-    "explanation": { "type": "string" },
-    "confidence": { "type": "number" }
-  },
-  "optionalProperties": {
-    "findings": { "elements": { "properties": { "title": { "type": "string" }, "severity": { "type": "string" } } } }
-  }
-}
+{ "properties": { "overall_correctness": { "enum": ["correct", "incorrect"] }, "explanation": { "type": "string" }, "confidence": { "type": "number" } },
+  "optionalProperties": { "findings": { "elements": { "properties": { "title": { "type": "string" }, "severity": { "type": "string" } } } } } }
 ```
-
 ```json
 // omp/schemas/validation-verdict.json
-{
-  "properties": {
-    "passed": { "type": "boolean" },
-    "summary": { "type": "string" }
-  },
-  "optionalProperties": {
-    "failures": { "elements": { "type": "string" } }
-  }
-}
+{ "properties": { "passed": { "type": "boolean" }, "summary": { "type": "string" } },
+  "optionalProperties": { "failures": { "elements": { "type": "string" } } } }
 ```
 
-- [ ] **Step 5: Rodar o teste e confirmar que passa**
+- [ ] **Step 6: Rodar → PASS**
 
-Run: `node --test tests/omp/test-omp-roles.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-omp-roles.mjs` → PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add omp/omp-roles.yaml omp/schemas/
-git commit -m "feat(omp): mapa de model roles por atividade + output schemas"
+git add scripts/lib/frontmatter.mjs omp/omp-roles.yaml omp/schemas/ tests/omp/test-omp-roles.mjs
+git commit -m "feat(omp): omp-roles.yaml (YAML padrão) + parseYaml reusado + schemas"
 ```
 
-### Task 9: `omp-enrich-agents.mjs` — patch aditivo de frontmatter (pós-fill)
+### Task 11: `omp-enrich-agents.mjs` — patch aditivo seguro (reusa parser; escapa valores)
 
-**Files:**
-- Create: `scripts/lib/omp-enrich-agents.mjs`
-- Test: `tests/omp/test-omp-enrich-agents.mjs`
+**Files:** Create `scripts/lib/omp-enrich-agents.mjs`; Test `tests/omp/test-omp-enrich-agents.mjs`
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Teste que falha (inclui invariante de campos canônicos e valor adversário)**
 
 ```javascript
 // tests/omp/test-omp-enrich-agents.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { parseFrontmatter } from "../../scripts/lib/frontmatter.mjs";
 import { enrichAgentFrontmatter } from "../../scripts/lib/omp-enrich-agents.mjs";
 
-const FILLED = `---
-type: agent
-name: security-auditor
-description: Vulnerability assessment
-role: specialist
-phases: [R, V]
-status: filled
----
-# Security Auditor
-Corpo filled que NÃO pode ser alterado.
-`;
+const FILLED = `---\ntype: agent\nname: security-auditor\nrole: specialist\nphases: [R, V]\nstatus: filled\n---\n# Sec\ncorpo filled.\n`;
 
-test("adiciona campos omp preservando frontmatter e corpo", () => {
-  const out = enrichAgentFrontmatter(FILLED, { model: "pi/slow", "thinking-level": "high", output: "review-verdict" });
-  assert.ok(out.includes("model: pi/slow"));
-  assert.ok(out.includes("thinking-level: high"));
-  assert.ok(out.includes("output: review-verdict"));
-  // canônicos preservados:
-  assert.ok(out.includes("status: filled"));
-  assert.ok(out.includes("name: security-auditor"));
-  // corpo intacto:
-  assert.ok(out.includes("Corpo filled que NÃO pode ser alterado."));
+test("adiciona campos omp; canônicos e corpo intactos (invariante M3)", () => {
+  const out = enrichAgentFrontmatter(FILLED, { model: "pi/slow", "thinking-level": "high" });
+  const before = parseFrontmatter(FILLED).data, after = parseFrontmatter(out).data;
+  assert.equal(after.model, "pi/slow");
+  for (const k of ["type", "name", "role", "status"]) assert.equal(after[k] ?? JSON.stringify(after[k]), before[k] ?? JSON.stringify(before[k]));
+  assert.match(parseFrontmatter(out).body, /corpo filled\./);
 });
-
-test("idempotente — reaplicar não duplica campos", () => {
-  const once = enrichAgentFrontmatter(FILLED, { model: "pi/slow" });
-  const twice = enrichAgentFrontmatter(once, { model: "pi/slow" });
-  assert.equal((twice.match(/model: pi\/slow/g) || []).length, 1);
+test("idempotente", () => {
+  const a = enrichAgentFrontmatter(FILLED, { model: "pi/slow" });
+  assert.equal((enrichAgentFrontmatter(a, { model: "pi/slow" }).match(/model: pi\/slow/g) || []).length, 1);
 });
-
-test("atualiza valor de campo omp existente sem duplicar", () => {
-  const once = enrichAgentFrontmatter(FILLED, { model: "default" });
-  const updated = enrichAgentFrontmatter(once, { model: "pi/slow" });
-  assert.ok(updated.includes("model: pi/slow"));
-  assert.ok(!updated.includes("model: default"));
+test("atualiza valor sem duplicar", () => {
+  const a = enrichAgentFrontmatter(FILLED, { model: "default" });
+  const b = enrichAgentFrontmatter(a, { model: "pi/slow" });
+  assert.ok(b.includes("model: pi/slow") && !b.includes("model: default"));
+});
+test("valor com newline é rejeitado (M3 — não forja status)", () => {
+  assert.throws(() => enrichAgentFrontmatter(FILLED, { model: "x\nstatus: unfilled" }), /valor inválido/);
+});
+test("CRLF não corrompe", () => {
+  const crlf = FILLED.replace(/\n/g, "\r\n");
+  assert.match(parseFrontmatter(enrichAgentFrontmatter(crlf, { model: "pi/slow" })).body, /corpo filled\./);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-omp-enrich-agents.mjs`
-Expected: FAIL — módulo inexistente
+Run: `node --test tests/omp/test-omp-enrich-agents.mjs` → FAIL
 
-- [ ] **Step 3: Implementar o enriquecedor (só frontmatter, idempotente)**
+- [ ] **Step 3: Implementar (CRLF-aware; escapa valores; reusa parseFrontmatter no invariante)**
 
 ```javascript
 // scripts/lib/omp-enrich-agents.mjs
-// Aplica um patch ADITIVO de campos omp ao frontmatter de um agente,
-// preservando os campos canônicos dotcontext e o corpo (nunca sobrescreve
-// conteúdo filled). Idempotente: reaplicar atualiza valores, não duplica.
+// Patch ADITIVO de campos omp no frontmatter, preservando campos canônicos e
+// corpo. Idempotente. Rejeita valores com controle/newline (M3). CRLF-aware.
+import { parseFrontmatter } from "./frontmatter.mjs";
 
-const FM_RE = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
+const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+const BAD_VALUE = /[\r\n ]/;
 
-/**
- * @param {string} content  conteúdo completo do .md do agente
- * @param {Record<string,string>} ompFields  ex.: { model:"pi/slow", "thinking-level":"high" }
- * @returns {string} conteúdo com frontmatter enriquecido
- */
+/** @param {string} content @param {Record<string,string>} ompFields @returns {string} */
 export function enrichAgentFrontmatter(content, ompFields) {
   const m = content.match(FM_RE);
   if (!m) throw new Error("frontmatter ausente ou malformado");
-  let [, fm, body] = m;
-  const lines = fm.split("\n");
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = m[1].split(/\r?\n/);
   for (const [key, value] of Object.entries(ompFields)) {
+    if (BAD_VALUE.test(String(value))) throw new Error(`valor inválido para ${key}`);
     const keyRe = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*.*$`);
     const idx = lines.findIndex((l) => keyRe.test(l));
-    const newLine = `${key}: ${value}`;
-    if (idx >= 0) lines[idx] = newLine; // atualiza
-    else lines.push(newLine);           // adiciona
+    const line = `${key}: ${value}`;
+    if (idx >= 0) lines[idx] = line; else lines.push(line);
   }
-  return `---\n${lines.join("\n")}\n---\n${body}`;
+  const out = `---${eol}${lines.join(eol)}${eol}---${eol}${m[2]}`;
+  // Invariante M3: campos canônicos preservados (defense-in-depth).
+  const a = parseFrontmatter(content).data, b = parseFrontmatter(out).data;
+  for (const k of ["type", "name", "status"]) {
+    if (k in a && JSON.stringify(a[k]) !== JSON.stringify(b[k])) throw new Error(`invariante violado: ${k}`);
+  }
+  return out;
 }
 ```
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar → PASS**
 
-Run: `node --test tests/omp/test-omp-enrich-agents.mjs`
-Expected: PASS (3/3)
+Run: `node --test tests/omp/test-omp-enrich-agents.mjs` → PASS (5/5)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add scripts/lib/omp-enrich-agents.mjs tests/omp/test-omp-enrich-agents.mjs
-git commit -m "feat(omp): omp-enrich-agents — patch aditivo de frontmatter (idempotente)"
+git commit -m "feat(omp): omp-enrich-agents — patch aditivo seguro (invariante + escape)"
 ```
 
-### Task 10: Seleção de runtime no `project-init` (Step 0.5)
+### Task 12: `detect-installed-runtimes.mjs` + Step 0.5 no `project-init`
 
-**Files:**
-- Modify: `skills/project-init/SKILL.md` (inserir Step 0.5 após Step 0)
-- Create: `scripts/lib/detect-installed-runtimes.mjs`
-- Test: `tests/omp/test-detect-installed-runtimes.mjs`
+**Files:** Create `scripts/lib/detect-installed-runtimes.mjs`; Modify `skills/project-init/SKILL.md`; Test `tests/omp/test-detect-installed-runtimes.mjs`
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Teste que falha**
 
 ```javascript
 // tests/omp/test-detect-installed-runtimes.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { detectInstalledRuntimes } from "../../scripts/lib/detect-installed-runtimes.mjs";
-
-test("retorna apenas runtimes presentes (mock de which)", () => {
-  const present = new Set(["claude", "omp"]);
-  const got = detectInstalledRuntimes((bin) => present.has(bin));
-  assert.deepEqual(got.sort(), ["claude", "omp"]);
-});
-
-test("nenhum instalado → lista vazia", () => {
-  assert.deepEqual(detectInstalledRuntimes(() => false), []);
-});
+test("só os presentes", () => assert.deepEqual(detectInstalledRuntimes((b) => new Set(["claude","omp"]).has(b)).sort(), ["claude","omp"]));
+test("nenhum → vazio", () => assert.deepEqual(detectInstalledRuntimes(() => false), []));
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-detect-installed-runtimes.mjs`
-Expected: FAIL — módulo inexistente
+Run: `node --test tests/omp/test-detect-installed-runtimes.mjs` → FAIL
 
-- [ ] **Step 3: Implementar o detector**
+- [ ] **Step 3: Implementar**
 
 ```javascript
 // scripts/lib/detect-installed-runtimes.mjs
 import { spawnSync } from "node:child_process";
-
 const RUNTIMES = ["claude", "opencode", "omp"];
-
-/** @param {(bin:string)=>boolean} [probe] override testável @returns {string[]} */
+/** @param {(bin:string)=>boolean} [probe] @returns {string[]} */
 export function detectInstalledRuntimes(probe) {
-  const isPresent = probe ?? ((bin) => spawnSync("command", ["-v", bin], { shell: true }).status === 0);
-  return RUNTIMES.filter((r) => isPresent(r));
+  const has = probe ?? ((b) => spawnSync("command", ["-v", b], { shell: true }).status === 0);
+  return RUNTIMES.filter((r) => has(r));
 }
 ```
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar → PASS**
 
-Run: `node --test tests/omp/test-detect-installed-runtimes.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-detect-installed-runtimes.mjs` → PASS
 
-- [ ] **Step 5: Inserir o Step 0.5 em `skills/project-init/SKILL.md`**
-
-Inserir logo após o Step 0 (Language Selection), antes de "Initialization Strategy":
+- [ ] **Step 5: Inserir Step 0.5 em `skills/project-init/SKILL.md`** (após Step 0, antes de "Initialization Strategy")
 
 ````markdown
 ## Step 0.5: Seleção de Runtime(s) (após o idioma)
 
-Detectar os runtimes instalados na máquina e perguntar em quais ativar o DevFlow.
-
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-installed-runtimes.mjs"
 ```
-
 Apresentar via AskUserQuestion **apenas os instalados** (multi-seleção), com o
-runtime corrente (via `omp/lib/detect-runtime.mjs`) pré-marcado. Gravar a escolha
-em `.context/.devflow.yaml`:
-
-```yaml
-runtimes: [claude, omp]
-```
-
-Para cada runtime escolhido, ativar o que ele exige:
-- `omp` na lista → garantir o manifesto `omp.extensions` (Task 14) e rodar o
-  enriquecimento de agentes omp no Step 4.5.
-- `claude` → comportamento atual (nada a ativar).
-- `opencode` → lido via compat; nada extra.
+corrente pré-marcado. Gravar em `.context/.devflow.yaml`: `runtimes: [claude, omp]`.
+Ativar por runtime escolhido:
+- `omp` → garantir o manifesto `omp.extensions` (Task 17) e rodar o enriquecimento
+  de agentes omp no Step 4.6.
+- `claude`/`opencode` → comportamento atual (nada extra).
 ````
 
 - [ ] **Step 6: Commit**
@@ -889,16 +1001,13 @@ git add scripts/lib/detect-installed-runtimes.mjs tests/omp/test-detect-installe
 git commit -m "feat(omp): seleção de runtime(s) no project-init (Step 0.5)"
 ```
 
-### Task 11: Step 4.5 de enriquecimento + reuso em config/context-sync
+### Task 13: `omp-enrich-project-agents.mjs` + Step 4.6 + reuso em config/sync
 
-**Files:**
-- Modify: `skills/project-init/SKILL.md` (inserir Step 4.5 após Step 4)
-- Modify: `skills/config/SKILL.md` (opção de re-tunar agentes omp)
-- Modify: `skills/context-sync/SKILL.md` (enriquecer agentes filled — só campos omp)
-- Create: `scripts/lib/omp-enrich-project-agents.mjs` (varre `.context/agents/`, aplica defaults)
-- Test: `tests/omp/test-omp-enrich-project-agents.mjs`
+> Renumerado para **4.6** — Step 4.5 já existe (`project-init/SKILL.md:509`).
 
-- [ ] **Step 1: Escrever o teste que falha**
+**Files:** Create `scripts/lib/omp-enrich-project-agents.mjs`; Modify `skills/project-init/SKILL.md`, `skills/config/SKILL.md`, `skills/context-sync/SKILL.md`; Test `tests/omp/test-omp-enrich-project-agents.mjs`
+
+- [ ] **Step 1: Teste que falha**
 
 ```javascript
 // tests/omp/test-omp-enrich-project-agents.mjs
@@ -909,316 +1018,245 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { enrichProjectAgents } from "../../scripts/lib/omp-enrich-project-agents.mjs";
 
-test("aplica defaults omp a agentes do projeto preservando corpo filled", () => {
+test("aplica defaults omp preservando corpo filled", () => {
   const dir = mkdtempSync(join(tmpdir(), "omp-enrich-"));
   mkdirSync(join(dir, ".context/agents"), { recursive: true });
   const f = join(dir, ".context/agents/security-auditor.md");
-  writeFileSync(f, `---
-type: agent
-name: security-auditor
-role: specialist
-phases: [R, V]
-status: filled
----
-# Sec
-corpo filled.
-`);
+  writeFileSync(f, `---\ntype: agent\nname: security-auditor\nrole: specialist\nphases: [R, V]\nstatus: filled\n---\n# Sec\ncorpo filled.\n`);
   const changed = enrichProjectAgents(dir);
   assert.ok(changed.includes("security-auditor"));
   const out = readFileSync(f, "utf-8");
-  assert.ok(out.includes("model: pi/slow"));      // default de security-auditor
-  assert.ok(out.includes("corpo filled."));        // corpo preservado
+  assert.ok(out.includes("model: pi/slow") && out.includes("corpo filled."));
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-omp-enrich-project-agents.mjs`
-Expected: FAIL — módulo inexistente
+Run: `node --test tests/omp/test-omp-enrich-project-agents.mjs` → FAIL
 
-- [ ] **Step 3: Implementar o varredor (usa Task 8 + Task 9)**
+- [ ] **Step 3: Implementar (usa parseYaml + enrichAgentFrontmatter — sem parser ad-hoc)**
 
 ```javascript
 // scripts/lib/omp-enrich-project-agents.mjs
-// Varre .context/agents/*.md e aplica os defaults omp de omp-roles.yaml,
-// preservando corpo e campos canônicos. Retorna a lista de agentes alterados.
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseYaml } from "./frontmatter.mjs";
 import { enrichAgentFrontmatter } from "./omp-enrich-agents.mjs";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-function loadRoleDefaults() {
-  // parse leve do omp-roles.yaml (bloco agent_role_defaults)
-  const y = readFileSync(join(PLUGIN_ROOT, "omp/omp-roles.yaml"), "utf-8");
-  const defaults = {};
-  const block = y.split("agent_role_defaults:")[1] || "";
-  for (const line of block.split("\n")) {
-    const m = line.match(/^\s{2}([\w-]+):\s*\{(.+)\}\s*$/);
-    if (!m) continue;
-    const fields = {};
-    for (const pair of m[2].split(",")) {
-      const [k, v] = pair.split(":").map((s) => s.trim());
-      if (k && v) fields[k] = v;
-    }
-    defaults[m[1]] = fields;
-  }
-  return defaults;
-}
-
-/** @param {string} projectRoot @returns {string[]} nomes de agentes alterados */
+/** @param {string} projectRoot @returns {string[]} agentes alterados */
 export function enrichProjectAgents(projectRoot) {
   const dir = join(projectRoot, ".context/agents");
   if (!existsSync(dir)) return [];
-  const defaults = loadRoleDefaults();
+  const roles = parseYaml(readFileSync(join(PLUGIN_ROOT, "omp/omp-roles.yaml"), "utf-8"));
+  const defaults = roles.agent_role_defaults ?? {};
   const changed = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
     const name = file.replace(/\.md$/, "");
     const fields = defaults[name];
     if (!fields) continue;
     const path = join(dir, file);
-    const out = enrichAgentFrontmatter(readFileSync(path, "utf-8"), fields);
-    writeFileSync(path, out);
+    writeFileSync(path, enrichAgentFrontmatter(readFileSync(path, "utf-8"), fields));
     changed.push(name);
   }
   return changed;
 }
 ```
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar → PASS**
 
-Run: `node --test tests/omp/test-omp-enrich-project-agents.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-omp-enrich-project-agents.mjs` → PASS
 
-- [ ] **Step 5: Inserir Step 4.5 em `skills/project-init/SKILL.md`**
-
-Após o Step 4 (Fill gaps), antes do Step 5:
+- [ ] **Step 5: Inserir Step 4.6 em `skills/project-init/SKILL.md`** (após o Step 4.5 existente)
 
 ````markdown
-## Step 4.5: Enriquecimento omp dos agentes (só se `omp` ∈ runtimes)
+## Step 4.6: Enriquecimento omp dos agentes (só se `omp` ∈ runtimes)
 
-Se `.context/.devflow.yaml` lista `omp` em `runtimes`, enriquecer os agentes
-gerados com os campos omp — **patch aditivo no frontmatter, nunca toca o corpo
-filled** (respeita o HARD-GATE):
-
+Se `.context/.devflow.yaml` lista `omp`, enriquecer os agentes gerados —
+**patch aditivo no frontmatter, nunca toca o corpo filled** (HARD-GATE):
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/omp-enrich-project-agents.mjs" "$PWD"
 ```
-
-Apresentar ao usuário os defaults propostos por agente (model/spawns/output/
-thinking-level) e permitir ajuste antes de confirmar. Os defaults vêm de
-`omp/omp-roles.yaml`.
+Apresentar os defaults propostos por agente (de `omp/omp-roles.yaml`) e permitir
+ajuste antes de confirmar.
 ````
 
-- [ ] **Step 6: Referenciar a sub-rotina em `config` e `context-sync`**
+- [ ] **Step 6: Referenciar em config/context-sync**
 
-Em `skills/config/SKILL.md`, adicionar à lista de ações: "Re-tunar campos omp dos agentes — roda `omp-enrich-project-agents.mjs` (só campos omp; preserva corpo)."
-Em `skills/context-sync/SKILL.md`, na seção de atualização de agentes: "Ao atualizar agentes filled com `omp` ∈ runtimes, aplicar apenas o patch omp via `omp-enrich-project-agents.mjs` (não regenerar corpo)."
+- `skills/config/SKILL.md`: adicionar ação "Re-tunar campos omp dos agentes — roda `omp-enrich-project-agents.mjs` (só campos omp; preserva corpo)."
+- `skills/context-sync/SKILL.md`: na atualização de agentes, "Com `omp` ∈ runtimes, aplicar só o patch omp via `omp-enrich-project-agents.mjs` (não regenerar corpo)."
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add scripts/lib/omp-enrich-project-agents.mjs tests/omp/test-omp-enrich-project-agents.mjs skills/project-init/SKILL.md skills/config/SKILL.md skills/context-sync/SKILL.md
-git commit -m "feat(omp): Step 4.5 enrich agentes pós-fill + reuso em config/sync"
+git commit -m "feat(omp): Step 4.6 enrich agentes pós-fill + reuso em config/sync"
 ```
 
 ---
 
 ## Fase 4 — Dispatch de subagents via `task` tool
 
-**Agent:** refactoring-specialist | **Handoff from:** backend-specialist
-**Tests:** assert de conteúdo dos skills (markdown) + E2E (omp)
+**Agent:** refactoring-specialist | **Tests:** content smoke + E2E real sob omp
 
-> Estas tasks editam **skills em Markdown** (instruções para o LLM). O "teste" é um asserter de conteúdo que garante que o branch omp existe e referencia os mecanismos corretos, mais um E2E sob omp.
+> Estas tasks editam skills (instruções markdown). O content-check é **smoke**; a prova real é o E2E sob omp (skip se ausente) — atende `feedback_tdd_always`.
 
-### Task 12: Branch omp no `parallel-dispatch`
+### Task 14: Branch omp no `parallel-dispatch`
 
-**Files:**
-- Modify: `skills/parallel-dispatch/SKILL.md`
-- Test: `tests/omp/test-parallel-dispatch-omp-branch.mjs`
+**Files:** Modify `skills/parallel-dispatch/SKILL.md`; Test `tests/omp/test-parallel-dispatch-omp-branch.mjs` + E2E `tests/omp/e2e-task-dispatch.sh`
 
-- [ ] **Step 1: Escrever o asserter que falha**
+- [ ] **Step 1: Smoke que falha**
 
 ```javascript
 // tests/omp/test-parallel-dispatch-omp-branch.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const SKILL = "skills/parallel-dispatch/SKILL.md";
-
-test("parallel-dispatch tem branch omp usando o task tool + worktree + output", () => {
-  const s = readFileSync(SKILL, "utf-8");
-  assert.match(s, /omp/i);
-  assert.match(s, /\btask\b/);
-  assert.match(s, /worktree|isolated|isolation/i);
-  assert.match(s, /output schema|output:/i);
-  assert.match(s, /detect-runtime/);
+test("branch omp: task tool + worktree + output + detect-runtime", () => {
+  const s = readFileSync("skills/parallel-dispatch/SKILL.md", "utf-8");
+  for (const re of [/omp/i, /\btask\b/, /worktree|isolated|isolation/i, /output schema|output:/i, /detect-runtime/]) assert.match(s, re);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-parallel-dispatch-omp-branch.mjs`
-Expected: FAIL — menções ausentes
+Run: `node --test tests/omp/test-parallel-dispatch-omp-branch.mjs` → FAIL
 
-- [ ] **Step 3: Adicionar a seção de branch omp ao skill**
-
-Acrescentar em `skills/parallel-dispatch/SKILL.md`:
+- [ ] **Step 3: Adicionar a seção ao skill**
 
 ````markdown
 ## Branch omp (quando `detect-runtime` reporta `omp`)
 
-Quando rodando no omp, despache via o **`task` tool** nativo em vez do `Task`
-do Claude Code:
-
-- Use `isolated: true` para rodar cada subagent em **worktree isolada** (`pi-iso`).
-- Defina o `agent` (nome exato; resolvido por `discoverAgents`) e passe um array
-  `tasks: [{ id, description, assignment }]`.
-- Para subagents de review/validação, forneça `schema` (output schema JTD —
-  `omp/schemas/*.json`) para receber **JSON validado** em vez de prosa.
-- Respeite o `spawns` allowlist do frontmatter do agente.
-- Para fan-out de tarefas independentes, prefira agentes com `model: pi/smol`.
-
-Verifique a integração ao final (igual ao caminho Claude Code): testes completos
-e merge das worktrees.
+Despache via o **`task` tool** nativo em vez do `Task` do Claude Code:
+- `isolated: true` → worktree isolada (`pi-iso`) por subagent.
+- `agent` (nome exato) + `tasks: [{ id, description, assignment }]`.
+- Review/validação: passe `schema` (output schema de `omp/schemas/*.json`) p/ JSON validado.
+- Respeite o `spawns` allowlist do frontmatter; fan-out independente com `model: pi/smol`.
+Ao final, verifique integração e merge das worktrees (igual ao caminho CC).
 ````
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar → PASS**
 
-Run: `node --test tests/omp/test-parallel-dispatch-omp-branch.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-parallel-dispatch-omp-branch.mjs` → PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: E2E real (skip se omp ausente) — task dispatch retorna output validado**
 
 ```bash
-git add skills/parallel-dispatch/SKILL.md tests/omp/test-parallel-dispatch-omp-branch.mjs
-git commit -m "feat(omp): branch de dispatch via task tool no parallel-dispatch"
+# tests/omp/e2e-task-dispatch.sh
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TMP=$(mktemp -d); trap "rm -rf $TMP" EXIT
+( cd "$TMP" && git init -q )
+echo "ok" > "$TMP/a.txt"
+# Pede ao omp para despachar um subagent via task com output schema e reportar o JSON.
+OUT=$(cd "$TMP" && omp -p "use o task tool com o agent 'explore' e um output schema {\"properties\":{\"done\":{\"type\":\"boolean\"}}} para confirmar que a.txt existe; reporte o JSON retornado" 2>/dev/null || true)
+echo "$OUT" | grep -qi "done\|true\|{" || { echo "FALHA: task tool não retornou output estruturado"; exit 1; }
+echo "OK"
 ```
 
-### Task 13: Branch omp no `autonomous-loop` (gates leem JSON validado)
+- [ ] **Step 6: Rodar**
 
-**Files:**
-- Modify: `skills/autonomous-loop/SKILL.md`
-- Test: `tests/omp/test-autonomous-loop-omp-branch.mjs`
+Run: `bash tests/omp/e2e-task-dispatch.sh` → `OK`/`SKIP`
 
-- [ ] **Step 1: Escrever o asserter que falha**
+- [ ] **Step 7: Commit**
+
+```bash
+git add skills/parallel-dispatch/SKILL.md tests/omp/test-parallel-dispatch-omp-branch.mjs tests/omp/e2e-task-dispatch.sh
+git commit -m "feat(omp): branch de dispatch via task tool no parallel-dispatch (+E2E real)"
+```
+
+### Task 15: Branch omp no `autonomous-loop` (gates leem JSON)
+
+**Files:** Modify `skills/autonomous-loop/SKILL.md`; Test `tests/omp/test-autonomous-loop-omp-branch.mjs`
+
+- [ ] **Step 1: Smoke que falha**
 
 ```javascript
 // tests/omp/test-autonomous-loop-omp-branch.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const SKILL = "skills/autonomous-loop/SKILL.md";
-
-test("autonomous-loop omp: task tool + gate lê output JSON + smol no fanout", () => {
-  const s = readFileSync(SKILL, "utf-8");
-  assert.match(s, /omp/i);
-  assert.match(s, /\btask\b/);
-  assert.match(s, /output schema|JSON validado|validated/i);
-  assert.match(s, /pi\/smol|smol/);
-  assert.match(s, /detect-runtime/);
+test("autonomous-loop omp: task + gate por output JSON + smol", () => {
+  const s = readFileSync("skills/autonomous-loop/SKILL.md", "utf-8");
+  for (const re of [/omp/i, /\btask\b/, /output schema|JSON validado|validated/i, /pi\/smol|smol/, /detect-runtime/]) assert.match(s, re);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-autonomous-loop-omp-branch.mjs`
-Expected: FAIL
+Run: `node --test tests/omp/test-autonomous-loop-omp-branch.mjs` → FAIL
 
-- [ ] **Step 3: Adicionar a seção de branch omp ao skill**
-
-Acrescentar em `skills/autonomous-loop/SKILL.md` (na seção Step 3 — Execute Story):
+- [ ] **Step 3: Adicionar a seção ao skill (no Step 3 — Execute Story)**
 
 ````markdown
 ### Branch omp (quando `detect-runtime` reporta `omp`)
 
-No Step 3c (Dispatch specialist agent), em vez do `Task` do Claude Code:
-
-- Despache via `task` com `agent: <story.agent>`, `isolated: true` (worktree),
-  e `schema` apontando o output schema do agente (`omp/schemas/review-verdict.json`
-  para review, `validation-verdict.json` para validação).
-- Stories independentes (sem `blocked_by` mútuo) podem ir num único `task` com
-  múltiplas entries em `tasks[]`, rodando concorrentes; use `model: pi/smol`
-  para o fan-out.
-
-No Step 4 (Evaluate Result), os **gates leem o JSON validado** retornado pelo
-`output` (ex.: `overall_correctness === "correct"`, `passed === true`) em vez de
-interpretar prosa. Mantêm-se as mesmas regras de retry/escalonamento/circuit-breaker.
+No Step 3c, em vez do `Task` do Claude Code:
+- `task` com `agent: <story.agent>`, `isolated: true`, e `schema` do output do agente
+  (`omp/schemas/review-verdict.json` p/ review; `validation-verdict.json` p/ validação).
+- Stories independentes (sem `blocked_by` mútuo) num único `task` com várias entries,
+  concorrentes, `model: pi/smol`.
+No Step 4, os **gates leem o JSON validado** (`overall_correctness === "correct"`,
+`passed === true`) em vez de prosa. Mesmas regras de retry/escalonamento/circuit-breaker.
 ````
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 4: Rodar → PASS**
 
-Run: `node --test tests/omp/test-autonomous-loop-omp-branch.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-autonomous-loop-omp-branch.mjs` → PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add skills/autonomous-loop/SKILL.md tests/omp/test-autonomous-loop-omp-branch.mjs
-git commit -m "feat(omp): branch de execução via task tool + gates por output JSON"
+git commit -m "feat(omp): branch de execução via task + gates por output JSON"
 ```
 
 ---
 
 ## Fase 5 — Model roles nas fases + distribuição/docs
 
-**Agent:** documentation-writer + devops-specialist | **Handoff from:** refactoring-specialist
-**Tests:** asserter de conteúdo + E2E (omp)
+**Agent:** documentation-writer + devops-specialist
 
-### Task 14: Skills de fase consultam `omp-roles.yaml`
+### Task 16: Skills de fase consultam `omp-roles.yaml`
 
-**Files:**
-- Modify: `skills/prevc-planning/SKILL.md`, `skills/prevc-review/SKILL.md`, `skills/prevc-execution/SKILL.md`
-- Test: `tests/omp/test-phase-skills-roles.mjs`
+**Files:** Modify `skills/prevc-planning/SKILL.md`, `skills/prevc-review/SKILL.md`, `skills/prevc-execution/SKILL.md`; Test `tests/omp/test-phase-skills-roles.mjs`
 
-- [ ] **Step 1: Escrever o asserter que falha**
+- [ ] **Step 1: Smoke que falha**
 
 ```javascript
 // tests/omp/test-phase-skills-roles.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-
-for (const [skill, activity] of [
-  ["skills/prevc-planning/SKILL.md", "plan"],
-  ["skills/prevc-review/SKILL.md", "slow"],
-  ["skills/prevc-execution/SKILL.md", "smol"],
-]) {
-  test(`${skill} referencia omp-roles e o role ${activity}`, () => {
+for (const [skill, role] of [["skills/prevc-planning/SKILL.md","pi/plan"],["skills/prevc-review/SKILL.md","pi/slow"],["skills/prevc-execution/SKILL.md","pi/smol"]]) {
+  test(`${skill} cita omp-roles e ${role}`, () => {
     const s = readFileSync(skill, "utf-8");
     assert.match(s, /omp-roles\.yaml/);
-    assert.match(s, new RegExp(activity, "i"));
+    assert.match(s, new RegExp(role.replace("/", "\\/")));
   });
 }
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-phase-skills-roles.mjs`
-Expected: FAIL
+Run: `node --test tests/omp/test-phase-skills-roles.mjs` → FAIL
 
-- [ ] **Step 3: Adicionar a nota de model role a cada skill de fase**
+- [ ] **Step 3: Adicionar nota de role a cada skill**
 
-Em cada um dos três skills, adicionar uma seção curta:
-
+Em cada skill, uma seção curta (citando o role da fase: planning→`pi/plan`, review→`pi/slow`, execution→`default`/`pi/smol`):
 ````markdown
 ## Model role (omp)
-
-Quando em omp (`detect-runtime` = `omp`), selecione o model role conforme
-`omp/omp-roles.yaml`:
-- Planning (brainstorming/writing-plans) → `pi/plan`
-- Review profundo (architect/security) → `pi/slow`
-- Execução TDD → `default`; fan-out de subagents → `pi/smol`
-No Claude Code esta seção é inerte (sem roles).
+Quando `detect-runtime` = `omp`, selecione o role conforme `omp/omp-roles.yaml`.
+No Claude Code esta seção é inerte.
 ````
 
-(Ajustar a linha citada para a fase do skill: planning cita `pi/plan`, review cita `pi/slow`, execution cita `default`/`pi/smol`.)
+- [ ] **Step 4: Rodar → PASS**
 
-- [ ] **Step 4: Rodar e confirmar que passa**
-
-Run: `node --test tests/omp/test-phase-skills-roles.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-phase-skills-roles.mjs` → PASS
 
 - [ ] **Step 5: Commit**
 
@@ -1227,115 +1265,102 @@ git add skills/prevc-planning/SKILL.md skills/prevc-review/SKILL.md skills/prevc
 git commit -m "feat(omp): skills de fase consultam model roles do omp"
 ```
 
-### Task 15: Manifesto de descoberta da extensão para o omp
+### Task 17: Manifesto `omp.extensions` (package.json mínimo, sem version)
 
-**Files:**
-- Create: `package.json` (mínimo, só para o manifesto `omp.extensions`)
-- Test: `tests/omp/test-omp-manifest.mjs`
+> `package.json` mínimo — **sem `version`/`name`** para não duplicar a fonte de verdade do `.claude-plugin/plugin.json` (Architect #5).
 
-- [ ] **Step 1: Escrever o teste que falha**
+**Files:** Create `package.json`; Test `tests/omp/test-omp-manifest.mjs`
+
+- [ ] **Step 1: Teste que falha (manifesto + regressão de não-interferência)**
 
 ```javascript
 // tests/omp/test-omp-manifest.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
-
-test("package.json declara omp.extensions apontando para a extensão", () => {
-  assert.ok(existsSync("package.json"), "package.json ausente");
+test("package.json declara omp.extensions e NÃO duplica version", () => {
+  assert.ok(existsSync("package.json"));
   const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
-  assert.ok(pkg.omp && Array.isArray(pkg.omp.extensions), "omp.extensions ausente");
-  assert.ok(pkg.omp.extensions.includes("./omp/extension.mjs"));
+  assert.ok(Array.isArray(pkg.omp?.extensions) && pkg.omp.extensions.includes("./omp/extension.mjs"));
+  assert.ok(!("version" in pkg), "version não deve viver no package.json (fonte de verdade é plugin.json)");
+  assert.equal(pkg.private, true);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-omp-manifest.mjs`
-Expected: FAIL — `package.json` ausente
+Run: `node --test tests/omp/test-omp-manifest.mjs` → FAIL
 
-- [ ] **Step 3: Criar o `package.json` mínimo**
+- [ ] **Step 3: Criar `package.json` mínimo**
 
 ```json
 {
-  "name": "devflow",
-  "version": "1.11.2",
   "private": true,
-  "description": "DevFlow — manifesto omp (não publicado no npm; usado para descoberta de extensão pelo omp)",
-  "omp": {
-    "extensions": ["./omp/extension.mjs"]
-  }
+  "description": "DevFlow — manifesto de descoberta de extensão para o omp (não publicado no npm)",
+  "omp": { "extensions": ["./omp/extension.mjs"] }
 }
 ```
 
-> Nota: o `version` deve acompanhar o bump da fase de Confirmation. Verificar que a presença de `package.json` não altera o comportamento do Claude Code (que usa `.claude-plugin/plugin.json`) — confirmar rodando um teste de hook de regressão.
-
-- [ ] **Step 4: Rodar e confirmar que passa + regressão**
+- [ ] **Step 4: Rodar + regressão (CC ignora o package.json)**
 
 Run: `node --test tests/omp/test-omp-manifest.mjs && bash tests/hooks/test-napkin-hooks.sh`
-Expected: PASS + `PASS`
+Expected: PASS + `PASS` (hooks/CC inalterados)
 
-- [ ] **Step 5: E2E — omp carrega a extensão como plugin (skip se omp ausente)**
+- [ ] **Step 5: E2E — omp enxerga a extensão (skip se ausente)**
 
-```bash
-# anexar a tests/omp/e2e-session-start.sh OU rodar manualmente:
-command -v omp >/dev/null && omp plugin list 2>/dev/null | grep -qi devflow && echo "extensão visível" || echo "SKIP/validar manualmente"
-```
-Expected: `extensão visível` (com omp + plugin instalado) ou `SKIP`.
+Run: `command -v omp >/dev/null && (cd /tmp && omp plugin list 2>/dev/null | grep -qi devflow && echo "visível" || echo "validar manualmente") || echo "SKIP"`
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add package.json tests/omp/test-omp-manifest.mjs
-git commit -m "feat(omp): manifesto omp.extensions para descoberta da extensão"
+git commit -m "feat(omp): manifesto omp.extensions (package.json mínimo, sem version)"
 ```
 
-### Task 16: Documentação de instalação/uso no omp
+### Task 18: Documentação de instalação/uso no omp
 
-**Files:**
-- Create: `docs/omp-integration.md`
-- Modify: `README.md` (seção curta + link)
+**Files:** Create `docs/omp-integration.md`; Modify `README.md`; Test `tests/omp/test-omp-docs.mjs`
 
-- [ ] **Step 1: Escrever o asserter que falha**
+- [ ] **Step 1: Teste que falha (cobre seções E o pré-requisito python3)**
 
 ```javascript
 // tests/omp/test-omp-docs.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
-
-test("doc de integração omp existe e cobre install + subsistemas", () => {
+test("doc cobre install, subsistemas e pré-requisitos", () => {
   assert.ok(existsSync("docs/omp-integration.md"));
   const d = readFileSync("docs/omp-integration.md", "utf-8");
-  for (const k of ["marketplace add", "standards", "ADR", "knowledge", "MemPalace", "runtime"]) {
-    assert.ok(d.includes(k), `seção ausente: ${k}`);
-  }
+  for (const k of ["marketplace add", "standards", "ADR", "knowledge", "MemPalace", "runtime", "python3", "task tool"]) assert.ok(d.includes(k), `seção ausente: ${k}`);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar a falha**
+- [ ] **Step 2: Rodar → FAIL**
 
-Run: `node --test tests/omp/test-omp-docs.mjs`
-Expected: FAIL
+Run: `node --test tests/omp/test-omp-docs.mjs` → FAIL
 
-- [ ] **Step 3: Escrever `docs/omp-integration.md`**
+- [ ] **Step 3: Escrever `docs/omp-integration.md`** (pt-BR), cobrindo:
+- Instalação: `/marketplace add NEXUZ-SYS/devflow` no omp; ativação via `runtimes` no init.
+- **Pré-requisitos:** `bash`, `node`, **`python3`** (os hooks dependem dele; a extensão avisa se faltar).
+- Tabela de cobertura por subsistema (modo, standards, ADR, knowledge/produto, napkin, routines, MemPalace) e como cada um se comporta no omp.
+- Model roles; dispatch de subagents via **`task` tool** (worktree + output schema).
+- Nota de segurança: a extensão roda no TCB do plugin (não-sandboxed, mesmo processo).
+- Limitações conhecidas (itens fora de escopo / fase C futura).
+Incluir literalmente os termos verificados pelo teste.
 
-Conteúdo (pt-BR) cobrindo: instalação via `/marketplace add NEXUZ-SYS/devflow` no omp; ativação via `runtimes` no init; como cada subsistema se comporta no omp (tabela de cobertura: modo, standards, ADR, knowledge/produto, napkin, routines, MemPalace); model roles; como despachar subagents via `task`; limitações conhecidas (itens fora de escopo / fase C futura). Incluir explicitamente os termos verificados pelo teste: `marketplace add`, `standards`, `ADR`, `knowledge`, `MemPalace`, `runtime`.
+- [ ] **Step 4: Nota no `README.md`**
 
-- [ ] **Step 4: Adicionar nota no README.md**
+Subseção curta "## Rodando no omp (oh-my-pi)" com link para `docs/omp-integration.md`.
 
-Acrescentar uma subseção curta "## Rodando no omp (oh-my-pi)" com 2-3 linhas e link para `docs/omp-integration.md`.
+- [ ] **Step 5: Rodar → PASS**
 
-- [ ] **Step 5: Rodar e confirmar que passa**
-
-Run: `node --test tests/omp/test-omp-docs.mjs`
-Expected: PASS
+Run: `node --test tests/omp/test-omp-docs.mjs` → PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add docs/omp-integration.md README.md tests/omp/test-omp-docs.mjs
-git commit -m "docs(omp): guia de integração/instalação no omp + nota no README"
+git commit -m "docs(omp): guia de integração no omp (install, subsistemas, python3, task)"
 ```
 
 ---
@@ -1343,14 +1368,28 @@ git commit -m "docs(omp): guia de integração/instalação no omp + nota no REA
 ## Suíte completa (rodar ao fim de cada fase)
 
 ```bash
-# Unit Node
 node --test tests/omp/*.mjs
-# Hooks
 for t in tests/hooks/test-session-start-omp-mcp-detection.sh tests/hooks/test-omp-tool-bridge.sh; do bash "$t"; done
-# E2E omp (skip se ausente)
-for t in tests/omp/e2e-*.sh; do bash "$t"; done
+for t in tests/omp/e2e-*.sh; do bash "$t"; done   # SKIP se omp ausente
 ```
 
-## Fora de escopo (YAGNI — possível fase C futura, registrar via ADR/PRD)
+## Mapa de rastreabilidade da review
+
+| Achado (severidade) | Resolvido em |
+|---|---|
+| C1 — git-guard no-op (`BLOCK:` inexistente) | Task 5 (parse-hook-output) + Task 9 (block real + E2E git-guard) |
+| A1 — paridade de injeção não provada | Task 3 (spike) + Task 7 (E2E com canário) |
+| A2 — `cwd` de `process.cwd()` | Task 4 + Task 9 (resolve-cwd) |
+| python3 silencioso | Task 7 (probe visível) + Task 18 (pré-requisito) |
+| Colisão Step 4.5 | Task 13 (renumerado p/ 4.6) |
+| Reuso de libs / YAML frágil | Task 10 (parseYaml) + Task 11 (parseFrontmatter) + Task 13 |
+| M1 — file_path adversário | Task 4 |
+| M3 — valor de frontmatter | Task 11 (escape + invariante) |
+| B1 — `role:system` | Task 7 (`inject` via `role:user`) |
+| Content-checks fracos | Tasks 14/15 (E2E real) + Task 18 (cobre python3/task) |
+| package.json/version | Task 17 (mínimo, sem version, + regressão) |
+| standards no session_start | Task 7 (E2E com std fixture) |
+
+## Fora de escopo (YAGNI — fase C futura via ADR/PRD)
 
 Loop PREVC determinístico em TS, telemetria por fase/story, renderers de TUI, roteamento dinâmico de modelo, fusão MemPalace↔Hindsight.
