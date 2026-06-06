@@ -428,7 +428,16 @@ git add hooks/session-start tests/hooks/test-session-start-omp-mcp-detection.sh
 git commit -m "fix(hooks): detectar mempalace/dotcontext no config MCP do omp"
 ```
 
-### Task 7: `run-bash-hook.mjs` (probe de deps visível) + extensão `session_start`
+### Task 7: `run-bash-hook.mjs` + launcher `devflow omp` + extensão (revisado pós-spike de autoridade)
+
+> **REVISÃO (spike de autoridade, `c5c8e0c`):** o `before_agent_start.message` entrega mas **não é autoritativo** (role custom → modelo ignora). Decisão aprovada: **launcher wrapper `devflow omp`**. Mecanismo:
+> - **Contexto autoritativo de sessão** (using-devflow, modo, ADR guardrails, índice de standards, recall MemPalace, napkin, routines) → o **launcher** roda `session-start`, captura via `parseHookOutput`, e faz `exec omp --system-prompt "<bloco 0 mínimo>" --append-system-prompt "<bloco DevFlow>" -e <ext> "$@"`. O combo (custom system-prompt + append) cai na região autoritativa (run E: 4/4) **e** preserva os defaults do omp. Sem escrever arquivo (passa por flag). Autoritativo desde o turno 1.
+> - **Extensão** (`omp/extension.mjs`): **não** injeta mais contexto autoritativo. Mantém: handlers de compact (Task 8) e tool_call/tool_result (Task 9). Para o **dinâmico intra-sessão** (knowledge on-demand, nudges pós-tool, rehidratação de compact) usa o evento **`context`** (role user, autoridade parcial — aceitável p/ lembretes; nunca guardrails). Blocos duros seguem via `tool_call → {block}` (efetivos).
+> - O `inject`/fila migra de `before_agent_start` para o evento **`context`**. A 1ª tarefa abaixo (Step 5) é reescrita; o launcher é nova sub-tarefa (Step 5b).
+
+Files (revisado): Create `omp/lib/run-bash-hook.mjs`, `scripts/omp-launch.mjs` (launcher), `omp/extension.mjs`; Test `tests/omp/test-run-bash-hook.mjs`, `tests/omp/e2e-omp-authority.sh` (launcher injeta contexto AUTORITATIVO — canário que o modelo OBEDECE).
+
+### Task 7 (legado — substituído pela revisão acima): `run-bash-hook.mjs` + extensão `session_start`
 
 **Files:** Create `omp/lib/run-bash-hook.mjs`; Create `omp/extension.mjs`; Test `tests/omp/test-run-bash-hook.mjs` + E2E `tests/omp/e2e-session-start.sh`
 
