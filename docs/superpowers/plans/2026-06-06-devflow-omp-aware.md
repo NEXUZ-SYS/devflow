@@ -497,35 +497,40 @@ Run: `node --test tests/omp/test-run-bash-hook.mjs` → PASS (2/2)
 
 - [ ] **Step 5: Escrever `omp/extension.mjs` (session_start; usa parse-hook-output; deps warning; canal de contexto)**
 
-> Ajustar `INJECT` e o nome do evento conforme `omp/SPIKE-omp-api.md` (Task 3). `appendEntry` com `role:"user"`/contexto — **nunca `role:"system"`** (B1).
+> **API confirmada no SPIKE-omp-api.md (Task 3):** injeção de contexto **NÃO** é `appendEntry` (que não vai ao LLM); é o evento **`before_agent_start`** retornando `{message:{customType,content,display}}`. `cwd` vem de **`ctx.cwd`** (2º arg), nunca do evento. Padrão: fila `pending` enchida pelos handlers e drenada no `before_agent_start` (1×/prompt; contexto de sessão injetado só na 1ª vez).
 
 ```javascript
 // omp/extension.mjs
 // Extensão omp do DevFlow — bridge fino (wrap & reuse dos hooks).
-// API de injeção confirmada no SPIKE-omp-api.md (Task 3). Ajustar aqui se divergir.
+// Injeção via before_agent_start.message (confirmado no spike — appendEntry NÃO
+// chega ao LLM). cwd sempre de ctx.cwd. Mensagem custom (não role:system — B1).
 import { runBashHook, missingDeps } from "./lib/run-bash-hook.mjs";
 import { parseHookOutput } from "./lib/parse-hook-output.mjs";
 
-// Canal de injeção de contexto (NÃO usar role:system — B1). Conforme spike.
-function inject(pi, text) {
-  if (text && text.trim()) pi.appendEntry({ role: "user", content: text });
+const pending = [];
+function enqueue(text) { if (text && text.trim()) pending.push(text); }
+function drainMessage() {
+  if (!pending.length) return undefined;
+  const content = pending.join("\n\n");
+  pending.length = 0;
+  return { message: { customType: "devflow-context", content, display: false } };
 }
 
 /** @param {any} pi */
 export default function ext(pi) {
-  // Aviso visível (não silêncio) se faltarem deps dos hooks — Architect #2.
-  const missing = missingDeps();
-  if (missing.length) {
-    pi.on("session_start", () =>
-      inject(pi, `⚠️ DevFlow: dependências ausentes (${missing.join(", ")}). Hooks de standards/knowledge/git-guard podem não funcionar. Veja docs/omp-integration.md.`)
-    );
-  }
-
-  pi.on("session_start", () => {
-    const { contextToInject } = parseHookOutput(runBashHook("session-start", { args: ["startup"], cwd: process.cwd() }));
-    inject(pi, contextToInject);
+  let started = false;
+  // before_agent_start é o canal que CHEGA ao modelo (spike). Drena a fila aqui.
+  pi.on("before_agent_start", (_event, ctx) => {
+    if (!started) {
+      started = true;
+      const missing = missingDeps();
+      if (missing.length) enqueue(`⚠️ DevFlow: dependências ausentes (${missing.join(", ")}). Hooks de standards/knowledge/git-guard podem não funcionar. Veja docs/omp-integration.md.`);
+      enqueue(parseHookOutput(runBashHook("session-start", { args: ["startup"], cwd: ctx.cwd })).contextToInject);
+    }
+    return drainMessage();
   });
 }
+// `enqueue`/`drainMessage` são reusados pelos handlers de compact e tool_result (Tasks 8/9).
 ```
 
 - [ ] **Step 6: E2E session_start (skip se omp ausente)**
@@ -591,10 +596,10 @@ Run: `bash tests/omp/e2e-compact.sh` → `SKIP`/`OK`
 Em `omp/extension.mjs`, dentro de `ext(pi)`:
 
 ```javascript
-  pi.on("session_before_compact", () => { runBashHook("pre-compact", { cwd: process.cwd() }); });
-  pi.on("session_compact", () => {
-    const { contextToInject } = parseHookOutput(runBashHook("post-compact", { cwd: process.cwd() }));
-    inject(pi, contextToInject);
+  pi.on("session_before_compact", (_event, ctx) => { runBashHook("pre-compact", { cwd: ctx.cwd }); });
+  pi.on("session_compact", (_event, ctx) => {
+    // Rehidratação chega ao modelo no próximo before_agent_start (via fila enqueue/drain).
+    enqueue(parseHookOutput(runBashHook("post-compact", { cwd: ctx.cwd })).contextToInject);
   });
 ```
 
@@ -800,36 +805,42 @@ import { checkPermission } from "./lib/permissions-bridge.mjs";
 ```
 Dentro de `ext(pi)`:
 ```javascript
-  pi.on("tool_call", async (event) => {
-    const projectCwd = event?.cwd ?? event?.workspaceRoot ?? process.cwd();
+  pi.on("tool_call", async (event, ctx) => {
+    const projectCwd = ctx.cwd; // spike: evento NÃO tem cwd; usar ctx.cwd (estável)
 
     // 1) permissions.yaml vendor-neutral — TODAS as classes de tool (fs/exec/net/tool).
-    //    Só `deny` bloqueia (segurança). `prompt`/`ask` ficam a cargo do gating nativo
-    //    do omp (ver SPIKE Task 3) — bloquear "prompt" tornaria o omp inutilizável.
+    //    Cobertura universal confirmada no spike (tool_call envolve bash/MCP/rede).
     const perm = await checkPermission(event, projectCwd);
     if (perm.decision === "deny") {
       return { block: true, reason: perm.reason ?? "bloqueado por .context/permissions.yaml" };
+    }
+    if (perm.decision === "prompt" || perm.decision === "ask") {
+      // Não há "ask" no retorno do omp (spike). Com UI, confirmar; sem UI (modo -p),
+      // delegar ao gating nativo do omp (não bloquear unmatched — inutilizaria).
+      if (ctx.hasUI && ctx.ui?.confirm) {
+        const ok = await ctx.ui.confirm(`DevFlow: permitir ${event.toolName}? (${perm.reason ?? "mode: prompt"})`);
+        if (!ok) return { block: true, reason: "negado pelo usuário (permissions: prompt)" };
+      }
     }
 
     // 2) específico de edição de arquivo: git-guard + knowledge on-demand
     const cc = translateToolEvent(event, { cwd: projectCwd });
     if (!cc) return;
-    const cwd = resolveProjectCwd(cc.tool_input.file_path, cc.cwd); // A2
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, projectCwd); // A2
     const { contextToInject, block, reason } = parseHookOutput(
       runBashHook("pre-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })
     );
     if (block) return { block: true, reason }; // C1: git-guard real
-    inject(pi, contextToInject);
+    enqueue(contextToInject); // injetado no próximo before_agent_start
   });
 
-  pi.on("tool_result", (event) => {
-    const cc = translateToolEvent(event, { cwd: process.cwd() });
+  pi.on("tool_result", (event, ctx) => {
+    const cc = translateToolEvent(event, { cwd: ctx.cwd });
     if (!cc) return;
-    const cwd = resolveProjectCwd(cc.tool_input.file_path, cc.cwd);
-    const { contextToInject } = parseHookOutput(
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, ctx.cwd);
+    enqueue(parseHookOutput(
       runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })
-    );
-    inject(pi, contextToInject);
+    ).contextToInject);
   });
 ```
 
@@ -1533,8 +1544,9 @@ for t in tests/omp/e2e-*.sh; do bash "$t"; done   # SKIP se omp ausente
 |---|---|
 | C1 — git-guard no-op (`BLOCK:` inexistente) | Task 5 (parse-hook-output) + Task 9 (block real + E2E git-guard) |
 | **permissions.yaml só parcial no omp** (exec/net/tool perdidos) | **Task 9 (permissions-bridge: evaluatePermissions p/ todas as categorias + E2E exec-deny)** + Task 3 spike (tool_call p/ bash/MCP) |
-| A1 — paridade de injeção não provada | Task 3 (spike) + Task 7 (E2E com canário) |
-| A2 — `cwd` de `process.cwd()` | Task 4 + Task 9 (resolve-cwd) |
+| A1 — paridade de injeção não provada | **RESOLVIDO pelo spike (Task 3):** injeção via `before_agent_start.message` (não `appendEntry`). Task 7 atualizada + E2E com canário |
+| A2 — `cwd` de `process.cwd()` | Task 4 + Task 9 (resolve-cwd). **Spike:** evento não tem cwd → usar `ctx.cwd` (resolve para `bash` também) |
+| prompt/ask trade-off | **Spike:** sem "ask" no retorno → `ctx.ui.confirm` se `ctx.hasUI`, senão delega ao gating do omp (Task 9) |
 | python3 silencioso | Task 7 (probe visível) + Task 18 (pré-requisito) |
 | Colisão Step 4.5 | Task 13 (renumerado p/ 4.6) |
 | Reuso de libs / YAML frágil | Task 10 (parseYaml) + Task 11 (parseFrontmatter) + Task 13 |
