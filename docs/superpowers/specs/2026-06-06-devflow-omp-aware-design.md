@@ -181,7 +181,7 @@ omp é compat com marketplace de plugin Claude. Documentar `/marketplace add NEX
 ```
 project-init
   Step 0  idioma  →  Step 0.5  seleção de runtime (multi)  →  Tier 1/2/3 scaffold
-  →  Step 4 fill (dotcontext)  →  Step 4.5 enrich omp (aditivo, entrevista)
+  →  Step 4 fill (dotcontext)  →  Step 4.6 enrich omp (aditivo, entrevista)
 
 sessão omp
   session_start → extension.ts → exec(hooks/session-start) → pi.inject(contexto/modo)

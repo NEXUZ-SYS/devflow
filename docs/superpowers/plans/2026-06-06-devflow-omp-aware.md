@@ -213,9 +213,9 @@ test("ast_edit → Edit (cobertura extra)", () => {
 test("ferramenta não-edição → null", () => {
   assert.equal(translateToolEvent({ toolName: "bash", input: {} }, { cwd: "/p" }), null);
 });
-test("file_path com caractere de controle → null (M1)", () => {
+test("file_path com caractere de controle → null (M1: newline + NUL)", () => {
   assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/a\nb.ts" } }, { cwd: "/p" }), null);
-  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/ .ts" } }, { cwd: "/p" }), null);
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/a" + String.fromCharCode(0) + "b.ts" } }, { cwd: "/p" }), null);
 });
 test("path não-absoluto → null (M1)", () => {
   assert.equal(translateToolEvent({ toolName: "edit", input: { path: "../etc/passwd" } }, { cwd: "/p" }), null);
@@ -239,7 +239,7 @@ Run: `node --test tests/omp/test-translate-tool-event.mjs` → FAIL (módulo ine
 // process.cwd() pode apontar p/ worktree pi-iso errada (A2).
 
 const EDIT_TOOLS = new Map([["edit", "Edit"], ["write", "Write"], ["ast_edit", "Edit"]]);
-const CONTROL_RE = /[ -]/; // newline, NUL, etc.
+const CONTROL_RE = /[\x00-\x1F]/; // controle C0 (newline, NUL, etc.)
 
 /**
  * @param {{toolName:string, input?:Record<string,unknown>, cwd?:string, workspaceRoot?:string}} e
@@ -307,6 +307,20 @@ test("additional_context (snake_case) também aceito", () => {
 test("texto puro não-JSON → injeta como contexto (fallback)", () => {
   assert.equal(parseHookOutput("texto cru de hook legado").contextToInject, "texto cru de hook legado");
 });
+test("stdout MISTO: knowledge raw + deny JSON → block (deny vence; não injeta blob)", () => {
+  const mixed = `<KNOWLEDGE_ONDEMAND>\nVision do produto\n</KNOWLEDGE_ONDEMAND>\n{\n "hookSpecificOutput": { "permissionDecision": "deny", "permissionDecisionReason": "branch protegida" }\n}`;
+  const r = parseHookOutput(mixed);
+  assert.equal(r.block, true);
+  assert.equal(r.reason, "branch protegida");
+  assert.ok(!String(r.contextToInject ?? "").includes("permissionDecision")); // não injeta o JSON
+});
+test("stdout MISTO: knowledge raw + additionalContext JSON → injeta ambos", () => {
+  const mixed = `<KNOWLEDGE_ONDEMAND>\nPersona X\n</KNOWLEDGE_ONDEMAND>\n{ "hookSpecificOutput": { "additionalContext": "STD-idx" } }`;
+  const r = parseHookOutput(mixed);
+  assert.equal(r.block, false);
+  assert.match(r.contextToInject, /Persona X/);
+  assert.match(r.contextToInject, /STD-idx/);
+});
 ```
 
 - [ ] **Step 2: Rodar e confirmar a falha**
@@ -317,24 +331,32 @@ Run: `node --test tests/omp/test-parse-hook-output.mjs` → FAIL
 
 ```javascript
 // omp/lib/parse-hook-output.mjs
-// Parseia o stdout de um hook DevFlow (protocolo Claude Code) para a decisão
-// que a extensão omp precisa. Os hooks emitem JSON com exit 0:
-//   contexto: { hookSpecificOutput: { additionalContext } }  (ou additional_context)
-//   bloqueio: { hookSpecificOutput: { permissionDecision: "deny"|"ask", permissionDecisionReason } }
-// Fallback: texto não-JSON é tratado como contexto a injetar.
+// Parseia o stdout de um hook DevFlow (protocolo Claude Code).
+// IMPORTANTE: o pre-tool-use pode emitir stdout MISTO — bloco <KNOWLEDGE_ONDEMAND>
+// cru (texto) ANTES do envelope JSON de decisão. Por isso NÃO fazemos JSON.parse
+// no blob inteiro; extraímos o último objeto JSON parseável (o envelope) e
+// tratamos o texto que o antecede como contexto (knowledge on-demand).
+/** Extrai o envelope JSON do fim do stdout + o texto cru que o antecede. */
+function extractEnvelope(text) {
+  for (let i = text.indexOf("{"); i >= 0; i = text.indexOf("{", i + 1)) {
+    try { return { obj: JSON.parse(text.slice(i)), leading: text.slice(0, i).trim() }; } catch { /* tenta o próximo '{' */ }
+  }
+  return { obj: null, leading: text };
+}
 /** @param {string} stdout @returns {{contextToInject:string|null, block:boolean, reason:string|null}} */
 export function parseHookOutput(stdout) {
-  const none = { contextToInject: null, block: false, reason: null };
   const text = (stdout ?? "").trim();
-  if (!text) return none;
-  let obj;
-  try { obj = JSON.parse(text); } catch { return { ...none, contextToInject: text }; }
+  if (!text) return { contextToInject: null, block: false, reason: null };
+  const { obj, leading } = extractEnvelope(text);
+  if (!obj) return { contextToInject: leading || null, block: false, reason: null };
   const hso = obj.hookSpecificOutput ?? obj;
   const decision = hso.permissionDecision;
   if (decision === "deny" || decision === "ask") {
+    // deny vence — não injeta o knowledge nem o JSON.
     return { contextToInject: null, block: true, reason: hso.permissionDecisionReason ?? "bloqueado pelo hook" };
   }
-  const ctx = hso.additionalContext ?? hso.additional_context ?? obj.additionalContext ?? obj.additional_context ?? null;
+  const fromJson = hso.additionalContext ?? hso.additional_context ?? obj.additionalContext ?? obj.additional_context ?? null;
+  const ctx = [leading || null, fromJson].filter(Boolean).join("\n") || null; // combina knowledge cru + additionalContext
   return { contextToInject: ctx, block: false, reason: null };
 }
 ```
@@ -654,27 +676,37 @@ import assert from "node:assert/strict";
 import { ompEventToPermEvent } from "../../omp/lib/permissions-bridge.mjs";
 import { evaluatePermissions } from "../../scripts/lib/permissions-evaluator.mjs";
 
-test("bash → exec(command)", () => {
+// Shape PLANO — evaluatePermissions lê event.tool/.command/.path/.url
+// (não tool_input aninhado). Espelha a transformação de hooks/pre-tool-use:67-72.
+test("bash → exec(command), shape plano", () => {
   assert.deepEqual(ompEventToPermEvent({ toolName: "bash", input: { command: "rm -rf /tmp" } }),
-    { tool_name: "Bash", tool_input: { command: "rm -rf /tmp" } });
+    { tool: "Bash", command: "rm -rf /tmp" });
 });
-test("edit/write/ast_edit → fs write(file_path)", () => {
-  assert.equal(ompEventToPermEvent({ toolName: "ast_edit", input: { path: "/p/a.ts" } }).tool_input.file_path, "/p/a.ts");
+test("edit/write/ast_edit → fs(path)", () => {
+  assert.equal(ompEventToPermEvent({ toolName: "ast_edit", input: { path: "/p/a.ts" } }).path, "/p/a.ts");
 });
-test("read → fs read", () => {
-  assert.equal(ompEventToPermEvent({ toolName: "read", input: { path: "/p/b.ts" } }).tool_name, "Read");
+test("read → Read(path)", () => {
+  const r = ompEventToPermEvent({ toolName: "read", input: { path: "/p/b.ts" } });
+  assert.equal(r.tool, "Read"); assert.equal(r.path, "/p/b.ts");
 });
 test("mcp__* → tool (nome preservado)", () => {
-  assert.equal(ompEventToPermEvent({ toolName: "mcp__dotcontext__plan" }).tool_name, "mcp__dotcontext__plan");
+  assert.equal(ompEventToPermEvent({ toolName: "mcp__dotcontext__plan" }).tool, "mcp__dotcontext__plan");
 });
 test("web_search/browser → net(url)", () => {
-  assert.equal(ompEventToPermEvent({ toolName: "browser", input: { url: "http://169.254.169.254/x" } }).tool_input.url, "http://169.254.169.254/x");
+  assert.equal(ompEventToPermEvent({ toolName: "browser", input: { url: "http://169.254.169.254/x" } }).url, "http://169.254.169.254/x");
 });
 
-test("EXEC DENY: rm -rf bloqueado pelo evaluator real (categoria exec no omp)", async () => {
+// Glob é segmentado (* não cruza '/'); usar o padrão REAL do permissions.yaml.
+test("EXEC DENY: rm -rf /tmp bloqueado pelo evaluator real (shape correto + glob correto)", async () => {
   const cfg = { spec: "devflow-permissions/v0", evaluationOrder: ["deny","allow","mode","callback"],
-    deny: { exec: ["rm -rf*"] }, allow: {}, mode: "prompt", callback: { url: null } };
+    deny: { exec: ["rm -rf /*"] }, allow: {}, mode: "prompt", callback: { url: null } };
   const d = await evaluatePermissions(ompEventToPermEvent({ toolName: "bash", input: { command: "rm -rf /tmp" } }), cfg);
+  assert.equal(d.decision, "deny");
+});
+test("NET DENY: SSRF metadata bloqueado", async () => {
+  const cfg = { spec: "devflow-permissions/v0", evaluationOrder: ["deny","allow","mode","callback"],
+    deny: { net: ["169.254.169.254/*"] }, allow: {}, mode: "prompt", callback: { url: null } };
+  const d = await evaluatePermissions(ompEventToPermEvent({ toolName: "browser", input: { url: "169.254.169.254/latest" } }), cfg);
   assert.equal(d.decision, "deny");
 });
 ```
@@ -688,25 +720,27 @@ Expected: FAIL — módulo inexistente
 
 ```javascript
 // omp/lib/permissions-bridge.mjs
-// Mapeia um evento de ferramenta do omp para o shape de evento que o
-// permissions-evaluator (vendor-neutral, ADR-004) entende, e avalia em Node
-// puro — cobrindo TODAS as categorias (fs/exec/net/tool), não só edição.
+// Mapeia um evento de ferramenta do omp para o shape PLANO que o
+// permissions-evaluator (vendor-neutral, ADR-004) entende: { tool, path?,
+// command?, url? } — espelhando a transformação de hooks/pre-tool-use:67-72.
+// (evaluatePermissions lê event.tool/.path/.command/.url, NÃO tool_input.)
+// Avalia em Node puro, cobrindo TODAS as categorias (fs/exec/net/tool).
 import { loadPermissions, evaluatePermissions } from "../../scripts/lib/permissions-evaluator.mjs";
 
 const FS_WRITE = new Set(["edit", "write", "ast_edit"]);
 const NET = new Set(["web_search", "browser"]);
 
-/** @param {{toolName?:string, input?:Record<string,unknown>}} e @returns {{tool_name:string, tool_input:object}} */
+/** @param {{toolName?:string, input?:Record<string,unknown>}} e @returns {{tool:string, path?:string, command?:string, url?:string}} */
 export function ompEventToPermEvent(e) {
   const t = e?.toolName ?? "";
   const i = e?.input ?? {};
   const path = i.path ?? i.file_path ?? i.filePath ?? "";
-  if (t === "bash") return { tool_name: "Bash", tool_input: { command: i.command ?? "" } };
-  if (FS_WRITE.has(t)) return { tool_name: "Write", tool_input: { file_path: path } };
-  if (t === "read") return { tool_name: "Read", tool_input: { file_path: path } };
-  if (NET.has(t)) return { tool_name: t, tool_input: { url: i.url ?? "" } };
-  if (t.startsWith("mcp__")) return { tool_name: t, tool_input: {} };
-  return { tool_name: t, tool_input: {} };
+  if (t === "bash") return { tool: "Bash", command: String(i.command ?? "") };
+  if (FS_WRITE.has(t)) return { tool: "Write", path };
+  if (t === "read") return { tool: "Read", path };
+  if (NET.has(t)) return { tool: t, url: String(i.url ?? "") };
+  if (t.startsWith("mcp__")) return { tool: t };
+  return { tool: t };
 }
 
 /** @returns {Promise<{decision:string, reason?:string}>} */
@@ -848,16 +882,18 @@ spec: devflow-permissions/v0
 evaluationOrder: [deny, allow, mode, callback]
 deny:
   exec:
-    - "rm -rf*"
+    - "rm -rf /*"
 allow: {}
 mode: prompt
 callback: { url: null }
 YAML
 echo "alvo" > "$TMP/vitima.txt"
 # Pedir ao omp para rodar um rm -rf via bash → permissions.yaml (categoria exec) deve bloquear.
-OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "rode no bash: rm -rf $TMP/vitima.txt" 2>&1 || true)
+OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" -p "rode no bash: rm -rf /tmp/naoexiste; depois rm -rf $TMP/vitima.txt" 2>&1 || true)
+# Discriminante: exigir AMBOS — arquivo preservado E mensagem de bloqueio (não aceitar falso verde).
 test -f "$TMP/vitima.txt" || { echo "FALHA: rm -rf executou — exec deny não funcionou no omp"; exit 1; }
-echo "$OUT" | grep -qi "block\|permissions\|deny" && echo "OK" || echo "OK (arquivo preservado; sem msg explícita)"
+echo "$OUT" | grep -qi "block\|permissions\|deny\|bloque" || { echo "FALHA: sem evidência de bloqueio (possível falso verde)"; exit 1; }
+echo "OK"
 ```
 
 - [ ] **Step 11b: Rodar**
@@ -1024,7 +1060,7 @@ Run: `node --test tests/omp/test-omp-enrich-agents.mjs` → FAIL
 import { parseFrontmatter } from "./frontmatter.mjs";
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
-const BAD_VALUE = /[\r\n ]/;
+const BAD_VALUE = /[\x00-\x1F]/; // rejeita CR/LF/controle C0 (M3)
 
 /** @param {string} content @param {Record<string,string>} ompFields @returns {string} */
 export function enrichAgentFrontmatter(content, ompFields) {
