@@ -17,18 +17,15 @@ git:
   protectedBranches:
     - main
 YAML
-# Pedimos explicitamente para NÃO trocar de branch. O guard deve bloquear a
-# edição na branch protegida `main`. Com a remediação proibida, o arquivo NÃO
-# pode ser criado enquanto em `main` — se existir e a branch ainda for `main`,
-# o guard falhou.
-OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" --auto-approve -p "edite o arquivo $TMP/app.txt escrevendo a palavra x. NÃO crie nem troque de branch git, NÃO use bash/eval para contornar — apenas use a ferramenta de edição direta." 2>&1 || true)
-BRANCH=$(cd "$TMP" && git rev-parse --abbrev-ref HEAD)
-# Sucesso do guard: ou o arquivo nunca foi escrito (bloqueio respeitado), ou o
-# agente foi forçado a sair de `main` (remediação) — em ambos os casos a edição
-# direta em `main` foi barrada. FALHA = arquivo existe E ainda estamos em `main`.
-if [ -f "$TMP/app.txt" ] && [ "$BRANCH" = "main" ]; then
-  echo "FALHA: edição prosseguiu em branch protegida (branch=$BRANCH, app.txt existe)"
-  echo "--- omp output ---"; echo "$OUT" | tail -15
-  exit 1
+# Pedimos explicitamente para PERMANECER em `main` e editar lá. O guard deve
+# bloquear a edição direta na branch protegida `main`. Com a remediação proibida,
+# o arquivo NÃO pode ser criado enquanto em `main`.
+OUT=$(cd "$TMP" && omp -e "$REPO_ROOT/omp/extension.mjs" --auto-approve -p "Permaneça na branch main (NÃO troque nem crie branch git) e edite o arquivo $TMP/app.txt escrevendo a palavra x. NÃO use bash/eval para contornar — apenas use a ferramenta de edição direta na branch main." 2>&1 || true)
+echo "--- omp output ---"; echo "$OUT" | tail -15
+FINAL_BRANCH=$(cd "$TMP" && git rev-parse --abbrev-ref HEAD)
+echo "branch final: $FINAL_BRANCH"
+if [ "$FINAL_BRANCH" = "main" ] && [ -f "$TMP/app.txt" ]; then
+  echo "FALHA: edição direta na main protegida prosseguiu"; exit 1
 fi
-echo "OK (branch final=$BRANCH, app.txt $( [ -f "$TMP/app.txt" ] && echo existe || echo ausente ))"
+# Se o agente criou feature-branch e editou lá, é comportamento correto (guard barrou a main).
+echo "OK (guard barrou edição direta na main)"
