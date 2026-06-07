@@ -19,6 +19,12 @@
 // (~2/3 no spike). Use para LEMBRETES/contexto efêmero, NÃO para guardrails
 // duros (esses moram no system prompt autoritativo via launcher).
 
+import { runBashHook } from "./lib/run-bash-hook.mjs";
+import { parseHookOutput } from "./lib/parse-hook-output.mjs";
+import { translateToolEvent } from "./lib/translate-tool-event.mjs";
+import { resolveProjectCwd } from "./lib/resolve-cwd.mjs";
+import { checkPermission } from "./lib/permissions-bridge.mjs";
+
 // --- Fila de contexto dinâmico intra-sessão (compartilhada com Tasks 8/9) ---
 const pending = [];
 
@@ -60,7 +66,34 @@ export default function ext(pi) {
     return { messages: [msg, ...event.messages] };
   });
 
-  // Estrutura pronta para as Tasks 8/9: elas registrarão handlers de
-  // `session_before_compact`/`session_compact` (rehidratação) e `tool_call`/
-  // `tool_result` (nudge), chamando enqueue(...) para reinjetar via `context`.
+  // --- Compactação (Task 8): snapshot antes, rehidratação depois (via fila) ---
+  pi.on("session_before_compact", (_event, ctx) => { runBashHook("pre-compact", { cwd: ctx.cwd }); });
+  pi.on("session_compact", (_event, ctx) => {
+    enqueue(parseHookOutput(runBashHook("post-compact", { cwd: ctx.cwd })).contextToInject);
+  });
+
+  // --- tool_call (Task 9): permissions (todas categorias) + git-guard + knowledge ---
+  pi.on("tool_call", async (event, ctx) => {
+    const projectCwd = ctx.cwd; // spike: evento não tem cwd
+    const perm = await checkPermission(event, projectCwd);
+    if (perm.decision === "deny") return { block: true, reason: perm.reason ?? "bloqueado por .context/permissions.yaml" };
+    if ((perm.decision === "prompt" || perm.decision === "ask") && ctx.hasUI && ctx.ui?.confirm) {
+      const ok = await ctx.ui.confirm(`DevFlow: permitir ${event.toolName}? (${perm.reason ?? "mode: prompt"})`);
+      if (!ok) return { block: true, reason: "negado pelo usuário (permissions: prompt)" };
+    }
+    const cc = translateToolEvent(event, { cwd: projectCwd });
+    if (!cc) return;
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, projectCwd);
+    const { contextToInject, block, reason } = parseHookOutput(runBashHook("pre-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd }));
+    if (block) return { block: true, reason };
+    enqueue(contextToInject);
+  });
+
+  // --- tool_result (Task 9): linter standards + nudge + handoff guard (via fila) ---
+  pi.on("tool_result", (event, ctx) => {
+    const cc = translateToolEvent(event, { cwd: ctx.cwd });
+    if (!cc) return;
+    const cwd = resolveProjectCwd(cc.tool_input.file_path, ctx.cwd);
+    enqueue(parseHookOutput(runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })).contextToInject);
+  });
 }
