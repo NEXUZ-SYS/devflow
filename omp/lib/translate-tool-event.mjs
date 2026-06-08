@@ -19,6 +19,7 @@ export function translateToolEvent(e, ctx) {
   if (typeof raw !== "string" || raw.length === 0) return null;
   if (CONTROL_RE.test(raw)) return null;          // M1: rejeita controle/newline/NUL
   if (!raw.startsWith("/")) return null;          // M1: exige caminho absoluto
+  if (raw.split("/").includes("..")) return null; // V: rejeita traversal não normalizado
   const cwd = e.cwd ?? e.workspaceRoot ?? ctx.cwd; // prefere o do evento
   return { tool_name: tool, tool_input: { file_path: raw }, cwd };
 }

@@ -69,12 +69,14 @@ export default function ext(pi) {
   // --- Compactação (Task 8): snapshot antes, rehidratação depois (via fila) ---
   pi.on("session_before_compact", (_event, ctx) => { runBashHook("pre-compact", { cwd: ctx.cwd }); });
   pi.on("session_compact", (_event, ctx) => {
-    enqueue(parseHookOutput(runBashHook("post-compact", { cwd: ctx.cwd })).contextToInject);
+    enqueue(parseHookOutput(runBashHook("post-compact", { cwd: ctx.cwd }).stdout).contextToInject);
   });
 
   // --- tool_call (Task 9): permissions (todas categorias) + git-guard + knowledge ---
   pi.on("tool_call", async (event, ctx) => {
     const projectCwd = ctx.cwd; // spike: evento não tem cwd
+    // 3b: fail-closed se o cwd não for determinável (checkPermission depende do projectRoot correto).
+    if (!projectCwd) return { block: true, reason: "DevFlow: cwd indeterminável" };
     const perm = await checkPermission(event, projectCwd);
     if (perm.decision === "deny") return { block: true, reason: perm.reason ?? "bloqueado por .context/permissions.yaml" };
     if ((perm.decision === "prompt" || perm.decision === "ask") && ctx.hasUI && ctx.ui?.confirm) {
@@ -84,7 +86,11 @@ export default function ext(pi) {
     const cc = translateToolEvent(event, { cwd: projectCwd });
     if (!cc) return;
     const cwd = resolveProjectCwd(cc.tool_input.file_path, projectCwd);
-    const { contextToInject, block, reason } = parseHookOutput(runBashHook("pre-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd }));
+    // Fail-closed: se o hook de git-guard não pôde rodar (bash/python3 ausentes, status≠0),
+    // bloqueia em vez de seguir — caso contrário o gate vira no-op.
+    const res = runBashHook("pre-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd });
+    if (!res.ok) return { block: true, reason: "DevFlow: gate de git-guard indisponível (hook falhou; verifique bash/python3)" };
+    const { contextToInject, block, reason } = parseHookOutput(res.stdout);
     if (block) return { block: true, reason };
     enqueue(contextToInject);
   });
@@ -94,6 +100,6 @@ export default function ext(pi) {
     const cc = translateToolEvent(event, { cwd: ctx.cwd });
     if (!cc) return;
     const cwd = resolveProjectCwd(cc.tool_input.file_path, ctx.cwd);
-    enqueue(parseHookOutput(runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd })).contextToInject);
+    enqueue(parseHookOutput(runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd }).stdout).contextToInject);
   });
 }

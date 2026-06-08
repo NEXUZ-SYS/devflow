@@ -23,6 +23,10 @@ test("file_path com caractere de controle → null (M1: newline + NUL)", () => {
 test("path não-absoluto → null (M1)", () => {
   assert.equal(translateToolEvent({ toolName: "edit", input: { path: "../etc/passwd" } }, { cwd: "/p" }), null);
 });
+test("path com .. é rejeitado (traversal) — M1/V", () => {
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/p/../../etc/passwd" } }, { cwd: "/p" }), null);
+  assert.equal(translateToolEvent({ toolName: "edit", input: { path: "/a/b/../c.ts" } }, { cwd: "/p" }), null);
+});
 test("aliases de path (file_path/filePath/workspaceRoot)", () => {
   assert.equal(translateToolEvent({ toolName: "edit", input: { file_path: "/p/d.ts" }, workspaceRoot: "/w" }, { cwd: "/f" }).cwd, "/w");
 });
