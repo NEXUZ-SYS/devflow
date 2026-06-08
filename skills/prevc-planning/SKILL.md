@@ -309,3 +309,9 @@ workflow-advance()  # Moves to R phase
 | "Plans are busywork" | Bite-sized plans prevent 3-hour debugging sessions. Write them. |
 | "Agent annotations are overhead" | They enable parallel execution in E phase. Worth the 2 minutes. |
 | "I can skip the dotcontext handoff" | Without it, agents execute blind. The handoff is the bridge. |
+
+## Model role (omp)
+
+Quando `detect-runtime` = `omp`, selecione o model role conforme `omp/omp-roles.yaml`:
+- brainstorming/writing-plans → `pi/plan`
+No Claude Code esta seção é inerte.

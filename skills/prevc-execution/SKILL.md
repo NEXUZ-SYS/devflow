@@ -198,3 +198,9 @@ For LARGE scale workflows, add checkpoints every 3-5 tasks:
 | "Notes in updateStep are optional" | Notes are critical for rehydration after compaction. Always write them. |
 | "Agent handoffs are overhead" | Handoffs with artifacts prevent context loss between specialists. |
 | "The plan changed, I'll adapt on the fly" | Update the plan document first. Then execute the updated plan. |
+
+## Model role (omp)
+
+Quando `detect-runtime` = `omp`, selecione o model role conforme `omp/omp-roles.yaml`:
+- execução TDD → `default`; fan-out de subagents → `pi/smol`
+No Claude Code esta seção é inerte.

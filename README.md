@@ -102,6 +102,17 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 
 ---
 
+## Rodando no omp (oh-my-pi)
+
+O DevFlow roda sob o **omp** via uma camada de extensão nativa (tool-gating,
+compact e contexto dinâmico) que reaproveita os hooks bash existentes. Lance a
+sessão pelo launcher `devflow omp` para contexto autoritativo desde o turno 1.
+
+Detalhes de instalação, pré-requisitos e cobertura por subsistema:
+[`docs/omp-integration.md`](docs/omp-integration.md).
+
+---
+
 ## Context Layer (v1.0)
 
 A partir da v1.0, o `.context/` ganha 4 dimensões novas que transformam o DevFlow de
