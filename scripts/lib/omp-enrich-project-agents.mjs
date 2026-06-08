@@ -26,3 +26,8 @@ export function enrichProjectAgents(projectRoot) {
   }
   return changed;
 }
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const root = process.argv[2] || process.cwd();
+  const changed = enrichProjectAgents(root);
+  process.stdout.write(changed.length ? `Agentes omp-enriquecidos: ${changed.join(", ")}\n` : "Nenhum agente para enriquecer (.context/agents ausente ou sem matches).\n");
+}
