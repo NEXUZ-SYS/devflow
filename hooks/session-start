@@ -44,6 +44,12 @@ if [ -f "${project_root}/.mcp.json" ] && grep -q "dotcontext" "${project_root}/.
 elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "dotcontext" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
   dotcontext_mcp="true"
   mode="full"
+elif [ -f "${project_root}/.omp/mcp.json" ] && grep -q '"dotcontext"' "${project_root}/.omp/mcp.json" 2>/dev/null; then
+  dotcontext_mcp="true"
+  mode="full"
+elif [ -f "${HOME}/.omp/agent/mcp.json" ] && grep -q '"dotcontext"' "${HOME}/.omp/agent/mcp.json" 2>/dev/null; then
+  dotcontext_mcp="true"
+  mode="full"
 fi
 
 # Check mempalace MCP: look for mempalace in .mcp.json or global mcp config
@@ -51,6 +57,10 @@ mempalace_available="false"
 if [ -f "${project_root}/.mcp.json" ] && grep -q "mempalace" "${project_root}/.mcp.json" 2>/dev/null; then
   mempalace_available="true"
 elif [ -f "${HOME}/.config/claude/mcp.json" ] && grep -q "mempalace" "${HOME}/.config/claude/mcp.json" 2>/dev/null; then
+  mempalace_available="true"
+elif [ -f "${project_root}/.omp/mcp.json" ] && grep -q '"mempalace"' "${project_root}/.omp/mcp.json" 2>/dev/null; then
+  mempalace_available="true"
+elif [ -f "${HOME}/.omp/agent/mcp.json" ] && grep -q '"mempalace"' "${HOME}/.omp/agent/mcp.json" 2>/dev/null; then
   mempalace_available="true"
 fi
 

@@ -127,3 +127,9 @@ Lite/Minimal mode: Update task tracking, proceed to Execution.
 | "Security doesn't apply here" | If the task touches data, APIs, auth, or user input — it applies. |
 | "Review is slowing us down" | Review catches 80% of issues that would cost 10x to fix in Execution. |
 | "Let me just start coding and review later" | That's not review, that's rework. Gate is non-negotiable. |
+
+## Model role (omp)
+
+Quando `detect-runtime` = `omp`, selecione o model role conforme `omp/omp-roles.yaml`:
+- review profundo (architect/security) → `pi/slow`
+No Claude Code esta seção é inerte.

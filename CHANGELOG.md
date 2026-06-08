@@ -5,6 +5,30 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] — 2026-06-08
+
+### Added — Suporte ao runtime omp (oh-my-pi)
+
+Camada **aditiva** (Opção B, sem fork, núcleo `.claude/` intacto) que torna o DevFlow cidadão de primeira classe no **omp** (oh-my-pi, agente de coding TS/Bun compatível com Claude Code).
+
+**Mecanismo de contexto autoritativo (launcher).** `scripts/omp-launch.mjs` (`devflow omp`) roda o `session-start`, captura o contexto DevFlow e faz `exec omp --system-prompt "<bloco 0 mínimo>" --append-system-prompt "<contexto>" -e omp/extension.mjs "$@"`. Descoberta empírica (spike de autoridade, `omp/SPIKE-omp-api.md`): a autoridade no omp é **posicional** — só o bloco 0 do system prompt é obedecido; `before_agent_start.message` (role custom) e o evento `context` (role user) são apenas parciais. O combo system-prompt mínimo + append entrega autoridade preservando os defaults do omp.
+
+**Extensão (`omp/extension.mjs`).** Wrap & reuse dos hooks bash existentes: `tool_call` (permissions 4 categorias via `evaluatePermissions` + git-guard via `pre-tool-use`, com bloqueio real `{block}`), `tool_result` (linter de standards + nudge + handoff guard ADR-006), compact (snapshot/rehidratação MemPalace), e evento `context` para contexto dinâmico intra-sessão. Libs puras: `translate-tool-event`, `parse-hook-output` (envelope JSON, stdout misto), `permissions-bridge` (shape plano, todas categorias), `resolve-cwd`, `run-bash-hook` (`{stdout, ok}`, fail-closed), `detect-runtime`.
+
+**Integração & otimização.** Detection-hardening do MCP cobre config global do omp (`~/.omp/agent/mcp.json`/`.omp/mcp.json`) para modo Full + MemPalace. Seleção de runtime no `init` (Step 0.5, `detect-installed-runtimes`); enrich aditivo de agentes pós-fill (Step 4.6, `omp-enrich-agents`/`omp-enrich-project-agents` + `omp-roles.yaml` + schemas), respeitando o HARD-GATE de `filled`. Branch omp no `parallel-dispatch`/`autonomous-loop` (dispatch via `task` tool, worktree isolada, output schema). Model roles por fase (`pi/plan`/`pi/slow`/`default`/`pi/smol`). Manifesto `omp.extensions` (`package.json` mínimo, sem `version`). Docs: `docs/omp-integration.md`.
+
+### Security
+
+Auditoria de segurança da fase V: (1) **re-âncora de autoridade** no bloco 0 do launcher — conteúdo de fonte-de-projeto (napkin/ADR/knowledge), que é elevado ao tier de system prompt, é declarado como dado de referência não-autoritativo (anti prompt-injection); (2) rejeição de **path traversal** (`..`) em `translate-tool-event`; (3) **fail-closed** do git-guard quando o hook não pôde executar (deps ausentes). Controles SI-1/SI-4/SI-6, permissions deny-first e git-guard preservados (não burlados).
+
+### Tests
+
+50 testes unit/integração + 5 E2E sob omp real (autoridade, compact, git-guard, exec-deny, task-dispatch). TDD RED→GREEN em todas as tasks; 2 spikes empíricos (API de extensão + autoridade de injeção).
+
+### Fora de escopo (YAGNI — fase futura)
+
+Loop PREVC determinístico em TS, telemetria por story, renderers de TUI, roteamento dinâmico de modelo, fusão MemPalace↔Hindsight nativa.
+
 ## [1.11.0] — 2026-06-04
 
 ### Added/Changed — Enriquecimento dos standards default + expansão de linters (ADR-007 v2.1.0)

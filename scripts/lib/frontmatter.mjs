@@ -190,6 +190,8 @@ function parseYamlSubset(yaml) {
   return data;
 }
 
+export function parseYaml(text) { return parseYamlSubset(text); }
+
 export function parseFrontmatter(source) {
   const m = source.match(FM_RE);
   if (!m) {

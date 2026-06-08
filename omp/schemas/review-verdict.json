@@ -1,0 +1,1 @@
+{ "properties": { "overall_correctness": { "enum": ["correct", "incorrect"] }, "explanation": { "type": "string" }, "confidence": { "type": "number" } }, "optionalProperties": { "findings": { "elements": { "properties": { "title": { "type": "string" }, "severity": { "type": "string" } } } } } }

@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "DevFlow — manifesto de descoberta de extensão para o omp (não publicado no npm)",
+  "omp": { "extensions": ["./omp/extension.mjs"] }
+}
