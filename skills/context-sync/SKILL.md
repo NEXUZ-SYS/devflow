@@ -125,6 +125,8 @@ Para cada agent, reler os arquivos do projeto e atualizar as 11 seções com dad
 - Symbols e classes atuais
 - Convenções atuais do projeto
 
+Com `omp` ∈ runtimes, aplicar só o patch omp via `scripts/lib/omp-enrich-project-agents.mjs` (não regenerar corpo).
+
 ### Atualizar skills
 
 Para cada skill, atualizar as 4 seções com padrões atuais do projeto.

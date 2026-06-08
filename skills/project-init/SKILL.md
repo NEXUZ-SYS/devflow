@@ -99,6 +99,16 @@ Os ÚNICOS elementos que permanecem em inglês são:
 
 Se preferência já existe, confirmar brevemente o idioma detectado e prosseguir.
 
+## Step 0.5: Seleção de Runtime(s) (após o idioma)
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-installed-runtimes.mjs"
+```
+
+Apresentar via AskUserQuestion **apenas os instalados** (claude/opencode/omp), multi-seleção, com o runtime corrente (via `omp/lib/detect-runtime.mjs`) pré-marcado. Gravar em `.context/.devflow.yaml`: `runtimes: [claude, omp]`. Ativar por runtime escolhido:
+- `omp` → garantir o manifesto `omp.extensions` e rodar o enriquecimento de agentes omp no Step 4.6.
+- `claude`/`opencode` → comportamento atual (nada extra).
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:
@@ -543,6 +553,17 @@ quando você abre uma sessão neste diretório.
 ```
 
 If a README already exists with `status: filled` or non-empty content, **do not overwrite** — preserve user customizations.
+
+## Step 4.6: Enriquecimento omp dos agentes (só se `omp` ∈ runtimes)
+
+Se `.context/.devflow.yaml` lista `omp`, enriquecer os agentes gerados —
+**patch aditivo no frontmatter, nunca toca o corpo filled** (HARD-GATE):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/omp-enrich-project-agents.mjs" "$PWD"
+```
+
+Apresentar os defaults propostos por agente (de `omp/omp-roles.yaml`) e permitir ajuste antes de confirmar.
 
 ## Step 5: Scaffold Plans Directory
 

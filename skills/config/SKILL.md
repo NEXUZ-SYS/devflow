@@ -393,6 +393,12 @@ Se o arquivo já existir ao iniciar o skill:
 4. Se sim → continuar entrevista normalmente
 5. Se não → encerrar
 
+## Ações disponíveis
+
+Além da entrevista de configuração, este skill oferece:
+
+- **Re-tunar campos omp dos agentes** — roda `scripts/lib/omp-enrich-project-agents.mjs` (só campos omp; preserva corpo). Útil quando `omp` ∈ runtimes e os defaults de `omp/omp-roles.yaml` mudaram.
+
 ## Integração
 
 - **`/devflow config`** → invoca este skill diretamente
