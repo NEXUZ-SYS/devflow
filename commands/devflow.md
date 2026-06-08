@@ -156,6 +156,17 @@ OPERATING MODES
 
   Mode is auto-detected at session start. Check with /devflow:devflow-status
 
+RUNTIMES (onde o DevFlow roda)
+  Claude Code   nativo (plugin) — comando `claude`
+  omp (oh-my-pi)  via launcher `devflow omp` (node scripts/omp-launch.mjs)
+                  injeta contexto autoritativo via system prompt; permissions,
+                  git-guard, standards/ADR/knowledge, subagents via `task` tool
+  OpenCode      lido via camada de compat `.claude/`
+
+  Pré-requisitos dos hooks: bash, node, python3.
+  Selecione os runtimes no /devflow init (Step 0.5 — só os instalados aparecem).
+  Guia completo: docs/omp-integration.md
+
 SETUP (one-time, no terminal)
   1. claude plugin install superpowers@claude-plugins-official --scope user
   2. claude plugin marketplace add NEXUZ-SYS/devflow

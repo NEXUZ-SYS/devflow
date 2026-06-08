@@ -34,6 +34,7 @@ Do zero ao deploy: instalação, configuração, e o fluxo completo de desenvolv
   - [4.10 ADRs — guardrails organizacionais](#410-adrs--guardrails-organizacionais)
   - [4.11 MemPalace — memória semântica persistente](#411-mempalace--memória-semântica-persistente)
   - [4.12 PostToolUse — commit e finish-branch automáticos](#412-posttooluse--commit-e-finish-branch-automáticos)
+  - [4.13 Rodando no omp (oh-my-pi)](#413-rodando-no-omp-oh-my-pi)
 - [5. Fluxo completo: do PRD ao merge](#5-fluxo-completo-do-prd-ao-merge)
   - [5.1 Gerar o PRD (roadmap de produto)](#51-gerar-o-prd-roadmap-de-produto)
   - [5.2 Iniciar a primeira fase do PRD](#52-iniciar-a-primeira-fase-do-prd)
@@ -700,6 +701,53 @@ Quer finalizar a branch? [Sim/Não]
 - Merge antes de completar README update
 - Bump antes de commit da implementação
 - Push sem commit de version bump
+
+---
+
+### 4.13 Rodando no omp (oh-my-pi)
+
+O DevFlow não roda só no Claude Code — ele é cidadão de primeira classe no **omp** (oh-my-pi), um agente de coding para terminal compatível com Claude Code. O mesmo plugin, os mesmos agentes, skills, standards, ADRs, knowledge e permissions — sem fork.
+
+**Pré-requisitos:** `bash`, `node` e **`python3`** no PATH (os hooks dependem deles; o launcher avisa se faltar). Ter o `omp` instalado (`curl -fsSL https://omp.sh/install | sh`).
+
+**Como lançar.** Use o launcher `devflow omp` em vez do `omp` puro — é ele que injeta o contexto do DevFlow de forma **autoritativa** (o modelo obedece os guardrails desde o primeiro turno):
+
+```bash
+# direto
+node /caminho/do/plugin/scripts/omp-launch.mjs
+
+# recomendado: criar um alias
+alias devflow-omp='node "$HOME/.claude/plugins/cache/NEXUZ-SYS/devflow/<versão>/scripts/omp-launch.mjs"'
+devflow-omp                      # abre o omp já sob o DevFlow
+devflow-omp -p "implemente X"    # one-shot
+```
+
+O launcher roda o `session-start`, captura o contexto (modo, `using-devflow`, ADR guardrails, índice de standards, recall MemPalace, napkin, routines) e passa ao omp como system prompt autoritativo, carregando a extensão `omp/extension.mjs`.
+
+**O que funciona no omp (paridade):**
+
+| Subsistema | No omp |
+|------------|--------|
+| Contexto/modo autoritativo | via launcher (system prompt) |
+| **git-guard** (branch protection) | bloqueia de verdade no `tool_call` (fail-closed se deps faltarem) |
+| **permissions.yaml** | 4 categorias (fs/exec/net/tool) — comando destrutivo/SSRF/allowlist MCP barrados |
+| **standards** | índice no início + linter ao editar |
+| **ADR / knowledge / napkin / routines** | roteados via wrap & reuse dos hooks |
+| **MemPalace** | MCP nativo + recall/compact (detecção cobre `~/.omp/agent/mcp.json`) |
+| **Subagents** | despacho via `task` tool do omp (worktree isolada + output schema) |
+| **Model roles por fase** | `omp-roles.yaml` (`pi/plan`/`pi/slow`/`default`/`pi/smol`) |
+
+**No `init`.** Ao rodar `/devflow init`, logo após o idioma há um passo de **seleção de runtime** (Step 0.5) que mostra só os runtimes instalados na máquina (Claude Code / omp / OpenCode) — escolha em quais ativar. Se `omp` for escolhido, os agentes gerados ganham campos omp (model/spawns/output) via patch aditivo pós-fill (Step 4.6), sem tocar o conteúdo já preenchido.
+
+**Instalar no omp.** O omp é compatível com o marketplace de plugins do Claude:
+
+```
+/marketplace add NEXUZ-SYS/devflow
+```
+
+**Nota de segurança.** O conteúdo de `.context/napkin.md` e dos ADRs, sob omp, entra no tier de system prompt — o launcher re-ancora a autoridade no plugin (esse conteúdo é tratado como referência, não como instrução que sobrescreve guardrails). Trate `.context/` como parte da base confiável do projeto.
+
+> 📖 Guia técnico completo: **[docs/omp-integration.md](omp-integration.md)** (cobertura por subsistema, mecanismo de autoridade, limitações conhecidas).
 
 ---
 
