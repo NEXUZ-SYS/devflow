@@ -116,3 +116,12 @@ dotcontext identifies parallelizable agents and provides handoff sequences.
 | Shared file modifications | Git conflicts and overwritten changes |
 | Skipping TDD in parallel tasks | Each subagent must follow TDD independently |
 | No integration test after merge | Parallel tasks may work alone but fail together |
+
+## Branch omp (quando `detect-runtime` reporta `omp`)
+
+Despache via o **`task` tool** nativo em vez do `Task` do Claude Code:
+- `isolated: true` → worktree isolada (`pi-iso`) por subagent.
+- `agent` (nome exato) + `tasks: [{ id, description, assignment }]`.
+- Review/validação: passe `schema` (output schema de `omp/schemas/*.json`) p/ JSON validado.
+- Respeite o `spawns` allowlist do frontmatter; fan-out independente com `model: pi/smol`.
+Ao final, verifique integração e merge das worktrees (igual ao caminho Claude Code).

@@ -103,6 +103,16 @@ After implementation:
 2. **Test suite** — run full test suite, not just new tests
 3. **Security scan** — if story touches auth, data, or API endpoints, invoke `devflow:security-audit` (lightweight mode)
 
+### Branch omp (quando `detect-runtime` reporta `omp`)
+
+No dispatch do specialist agent, em vez do `Task` do Claude Code:
+- `task` com `agent: <story.agent>`, `isolated: true`, e `schema` do output do agente
+  (`omp/schemas/review-verdict.json` p/ review; `validation-verdict.json` p/ validação).
+- Stories independentes (sem `blocked_by` mútuo) num único `task` com várias entries,
+  concorrentes, `model: pi/smol`.
+Na avaliação do resultado, os **gates leem o JSON validado** (`overall_correctness === "correct"`,
+`passed === true`) em vez de prosa. Mesmas regras de retry/escalonamento/circuit-breaker.
+
 ### Step 4: Evaluate Result
 
 **If all gates pass:**
