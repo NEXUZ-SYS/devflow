@@ -1,0 +1,1 @@
+{ "properties": { "passed": { "type": "boolean" }, "summary": { "type": "string" } }, "optionalProperties": { "failures": { "elements": { "type": "string" } } } }

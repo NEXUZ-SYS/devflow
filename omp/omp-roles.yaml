@@ -1,0 +1,31 @@
+# Mapa atividade → model role do omp. Lido pelo enriquecedor e pelos skills de
+# fase quando em omp. Inerte no Claude Code.
+activities:
+  brainstorming: pi/plan
+  writing-plans: pi/plan
+  deep-review: pi/slow
+  execution: default
+  fanout: pi/smol
+  confirmation: commit
+agent_role_defaults:
+  architect:
+    model: pi/plan
+    thinking-level: high
+  security-auditor:
+    model: pi/slow
+    thinking-level: high
+    output: review-verdict
+  code-reviewer:
+    model: pi/slow
+    output: review-verdict
+  test-writer:
+    model: default
+    output: validation-verdict
+  performance-optimizer:
+    model: pi/slow
+  feature-developer:
+    model: default
+  product-manager:
+    model: pi/plan
+  documentation-writer:
+    model: commit
