@@ -75,7 +75,7 @@ scaffoldVersion: "2.0.0"
 
 | name | role | description |
 |------|------|------------|
-| architect-specialist | architect | System architecture design and technical decisions |
+| architect | architect | System architecture design and technical decisions |
 | product-manager | specialist | Product strategy, PRDs, roadmaps, and phase prioritization |
 | feature-developer | developer | Implement new features according to specifications |
 | bug-fixer | developer | Root cause analysis and targeted fixes |

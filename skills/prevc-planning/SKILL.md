@@ -117,7 +117,7 @@ agent({ action: "orchestrate", phase: "P" })
 The architect agent reviews the spec for technical feasibility.
 
 ### Lite Mode
-Read `.context/agents/architect-specialist.md` and apply its review checklist manually.
+Read `.context/agents/architect.md` and apply its review checklist manually.
 
 ### Minimal Mode
 Skip enrichment — spec stands as-is from brainstorming.

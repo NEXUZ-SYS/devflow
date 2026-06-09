@@ -33,7 +33,7 @@ MCP returns the optimal reviewer sequence. Typical: architect → code-reviewer 
 
 ### Lite Mode
 Read these agent playbooks and apply their review checklists:
-- `.context/agents/architect-specialist.md` — always
+- `.context/agents/architect.md` — always
 - `.context/agents/code-reviewer.md` — always
 - `.context/agents/security-auditor.md` — if the task touches auth, data, or APIs
 

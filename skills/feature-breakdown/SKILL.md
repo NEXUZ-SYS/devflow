@@ -117,7 +117,7 @@ agent({ action: "orchestrate", agents: ["architect"], task: "breakdown" })
 ```
 
 ### Lite Mode
-Read `.context/skills/feature-breakdown/SKILL.md` and `.context/agents/architect-specialist.md`.
+Read `.context/skills/feature-breakdown/SKILL.md` and `.context/agents/architect.md`.
 
 ## Anti-Patterns
 
