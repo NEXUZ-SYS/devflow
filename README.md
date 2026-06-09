@@ -122,7 +122,7 @@ A partir da v1.0, o `.context/` ganha 4 dimensões novas que transformam o DevFl
 |---|---|---|
 | `.context/adrs/` | ADRs com path canônico (era `.context/docs/adrs/`); dual-read até v1.2 | ADR-001 |
 | `.context/standards/` | Standards com tripla camada (Markdown + LLM frontmatter + linter sandboxed SI-4) | ADR-002 |
-| `.context/stacks/` | Pipeline artesanal de docs por library (`docs-mcp-server` CLI + `md2llm`) | ADR-003 |
+| `.context/stacks/` | Docs versionadas por library indexadas no store global do `docs-mcp-server` (`mcpIndexed` no manifest; refs `.md` são legado) | ADR-003 |
 | `.context/permissions.yaml` | Gramática vendor-neutral deny → allow → mode → callback | ADR-004 |
 | `.context/observability.yaml` | OTel GenAI semconv opt-in; `gen_ai.*` + `devflow.*` namespace | ADR-005 |
 | `.context/.lock` | Hashes de conteúdo para reproducibility token | — |
