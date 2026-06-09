@@ -53,12 +53,9 @@ stacks:
   - lib: odoo-12
     version: "12.0"
     discoveryHints: ["https://www.odoo.com/documentation/12.0/"]
-    applyTo: ["**/*.py", "**/*.xml"]
   - lib: odoo-17
     version: "17.0"
     discoveryHints: ["https://www.odoo.com/documentation/17.0/developer/"]
-    applyTo: ["**/*.py", "**/*.xml", "**/static/src/**/*.js"]
   - lib: odoo-18
     version: "18.0"
     discoveryHints: ["https://www.odoo.com/documentation/18.0/developer/"]
-    applyTo: ["**/*.py", "**/*.xml", "**/static/src/**/*.js"]
