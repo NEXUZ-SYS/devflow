@@ -5,6 +5,17 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.1] — 2026-06-09
+
+### Fixed — Referências penduradas a `architect-specialist` → `architect`
+
+Correção de **referências quebradas pré-existentes** ao agente architect. O nome canônico é **`architect`** — é o que o **dotcontext** gera em `.context/agents/architect.md` (o DevFlow é bridge do dotcontext e não pode alterar essa saída) e o que o agente bundled (`agents/architect.md`) sempre usou. O nome `architect-specialist` era um **fantasma de nomenclatura** que vazou de templates de plano, deixando três skills com referências a um arquivo que nunca existiu:
+
+- `skills/prevc-review/SKILL.md`, `skills/prevc-planning/SKILL.md`, `skills/feature-breakdown/SKILL.md` → passam a referenciar `.context/agents/architect.md`.
+- `templates/agents/scaffold.md` (tabela de Agent Types) → corrigido para `architect`.
+
+Novo teste de regressão `tests/integration/test-bundled-agent-refs.mjs`: toda referência `.context/agents/<name>.md` em qualquer skill/agent bundled deve ter um fallback `agents/<name>.md` (AC1). Suíte relacionada 12/12.
+
 ## [1.13.0] — 2026-06-09
 
 ### Added — Perfis de framework (seleção de agentes/skills por arquitetura)
