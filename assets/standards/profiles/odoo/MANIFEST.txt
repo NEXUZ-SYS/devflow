@@ -1,0 +1,5 @@
+# Profile-scoped default Standards — Odoo
+# One std-<id>.md filename per line (comments with '#' are ignored).
+# Each entry must be backed by std-<id>.md + machine/std-<id>.js in this dir,
+# and mirrored in profiles/odoo.yaml `standards:`. The list grows per batch.
+# Guarded by tests/integration/test-profile-standards-integrity.mjs.

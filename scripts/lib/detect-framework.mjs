@@ -55,6 +55,8 @@ export function loadProfiles(pluginRoot = defaultPluginRoot()) {
       detect: data.detect || {},
       agents: Array.isArray(data.agents) ? data.agents : [],
       skills: Array.isArray(data.skills) ? data.skills : [],
+      standards: Array.isArray(data.standards) ? data.standards : [],
+      stacks: Array.isArray(data.stacks) ? data.stacks : [],
       dispatchKeywords: data.dispatchKeywords || {},
       _file: file,
     });
@@ -121,10 +123,19 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
   const active = detectFrameworks(projectRoot, pluginRoot);
   const agents = new Set();
   const skills = new Set();
+  const standards = new Set();
+  const stacksByLib = new Map();
   const dispatchKeywords = {};
   for (const p of active) {
     p.agents.forEach((a) => agents.add(a));
     p.skills.forEach((s) => skills.add(s));
+    (p.standards || []).forEach((s) => standards.add(s));
+    for (const stack of p.stacks || []) {
+      // dedupe by lib key; first profile wins (profiles are framework-scoped).
+      if (stack && stack.lib && !stacksByLib.has(stack.lib)) {
+        stacksByLib.set(stack.lib, stack);
+      }
+    }
     for (const [agent, kws] of Object.entries(p.dispatchKeywords || {})) {
       dispatchKeywords[agent] = [...(dispatchKeywords[agent] || []), ...(kws || [])];
     }
@@ -133,6 +144,8 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
     frameworks: active.map((p) => p.framework),
     agents: [...agents],
     skills: [...skills],
+    standards: [...standards],
+    stacks: [...stacksByLib.values()],
     dispatchKeywords,
   };
 }

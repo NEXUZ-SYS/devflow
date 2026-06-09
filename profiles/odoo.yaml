@@ -22,3 +22,26 @@ skills: ["odoo-development", "frontend-specialist-odoo"]
 # Extra Lite-mode dispatch routing: keyword -> agent.
 dispatchKeywords:
   odoo-specialist: ["odoo", "owl", "qweb", "pos", "nfc-e", "nf-e", "l10n_br", "addon", "orm"]
+# Profile-scoped Standards (enforcement) copied into the project's
+# .context/engineering/standards/ ONLY when this profile is detected. The ids
+# are mirrored in assets/standards/profiles/odoo/MANIFEST.txt and backed by
+# std-<id>.md + machine/std-<id>.js there. The list grows as each batch lands;
+# integrity is guarded by tests/integration/test-profile-standards-integrity.mjs.
+standards: []
+# Versioned stack docs to index into the docs-mcp-server global store. Seeded
+# into the project's .context/engineering/stacks/manifest.yaml as `mcpIndexed`
+# entries by project-init (one key per Odoo series). discoveryHints are the
+# official docs roots used by `devflow stacks scrape`/`discover-source`.
+stacks:
+  - lib: odoo-12
+    version: "12.0"
+    discoveryHints: ["https://www.odoo.com/documentation/12.0/"]
+    applyTo: ["**/*.py", "**/*.xml"]
+  - lib: odoo-17
+    version: "17.0"
+    discoveryHints: ["https://www.odoo.com/documentation/17.0/developer/"]
+    applyTo: ["**/*.py", "**/*.xml", "**/static/src/**/*.js"]
+  - lib: odoo-18
+    version: "18.0"
+    discoveryHints: ["https://www.odoo.com/documentation/18.0/developer/"]
+    applyTo: ["**/*.py", "**/*.xml", "**/static/src/**/*.js"]
