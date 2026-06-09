@@ -5,6 +5,24 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] — 2026-06-09
+
+### Added — Perfis de framework (seleção de agentes/skills por arquitetura)
+
+O DevFlow passa a considerar a **arquitetura/framework do projeto** ao selecionar agentes e skills, em vez de usar apenas as tabelas genéricas de tipo de projeto. Primeiro framework suportado: **Odoo**.
+
+**Camada de dados — `profiles/<framework>.yaml`.** Mapeamento data-driven: regras de `detect` (`files` na árvore + `manifestDeps` por manifesto) → `agents` + `skills` + `dispatchKeywords`. Adicionar suporte a um novo framework (Rails, Django, Next.js, …) é criar um perfil irmão — sem mudança de código. `profiles/odoo.yaml` detecta `__manifest__.py`/`__openerp__.py` e `odoo`/`openerp` em `pyproject.toml`/`requirements.txt`.
+
+**Detector — `scripts/lib/detect-framework.mjs`.** API `loadProfiles` / `detectFrameworks` / `frameworkContributions` + CLI (`node scripts/lib/detect-framework.mjs <projectRoot>` → JSON). Sem dependência nova: perfis lidos pelo `parseYaml` caseiro de `frontmatter.mjs`. Walker com profundidade limitada (skip de `node_modules`/`.git`/`.context`/etc.).
+
+**Wiring.** `project-init` (Step 3c-1/3c-3/3c-4) e `context-sync` passam a **unir** os agentes do perfil às tabelas base e a **copiar** os diretórios de skill do framework (`skills/<slug>/`) para `.context/skills/`. `agent-dispatch` ganha discovery dinâmico de agentes via frontmatter `agentType` (não só os 15 fixos) + roteamento Lite por `dispatchKeywords`.
+
+**Template genérico do `odoo-specialist`.** O agente bundled foi saneado para distribuição: referência quebrada `architect-specialist` → `architect` corrigida; tabela "Ambientes de Desenvolvimento" com paths absolutos NXZ, nomes de DB e portas → placeholders preenchidos no `/devflow init`.
+
+### Tests
+
+11 testes de integração (`node --test`): detecção de framework (manifest/pyproject positivo, projeto Node negativo), integridade referencial dos perfis (todo agent/skill listado existe como arquivo) e anti-leak do template `odoo-specialist` (refs resolvem, sem paths/DBs NXZ). Fixtures em tmpdir — nenhum diretório versionado é mutado.
+
 ## [1.12.0] — 2026-06-08
 
 ### Added — Suporte ao runtime omp (oh-my-pi)
