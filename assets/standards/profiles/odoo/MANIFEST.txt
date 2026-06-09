@@ -17,3 +17,9 @@ std-odoo-version-api-hygiene
 std-odoo-js-modules
 std-odoo-qweb-escaping
 std-odoo-test-discipline
+
+# Tier 2 — lint parcial/heurístico
+std-odoo-module-structure
+std-odoo-orm-performance
+std-odoo-security
+std-odoo-owl-patterns
