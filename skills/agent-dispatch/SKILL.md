@@ -31,6 +31,20 @@ DevFlow provides 15 specialist agents, each with defined roles and phase partici
 | devops-specialist | specialist | E, C | CI/CD, infrastructure, deployment |
 | mobile-specialist | specialist | E | iOS/Android development, mobile UX |
 
+### Framework-specific agents (dynamic discovery)
+
+Beyond the 15 base agents, the project may have **framework-specific** agents
+(e.g. `odoo-specialist`). Discover them dynamically — do NOT rely only on the table above:
+
+1. List candidate agents from `.context/agents/*.md` (project) and the bundled
+   `agents/*.md` (plugin). Each agent declares `agentType:` in its frontmatter.
+2. Load the active framework profiles to get their `dispatchKeywords`:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
+   ```
+   The `dispatchKeywords` map (e.g. `odoo-specialist: ["odoo","owl","qweb",...]`) feeds
+   the Lite-mode keyword routing below — a task mentioning those terms routes to that agent.
+
 ## Dispatch Process
 
 ### Step 1: Identify Needed Agents
@@ -56,6 +70,10 @@ Match task keywords to agent roles:
 - "docs", "README", "API docs" → documentation-writer
 - "architecture", "design", "system" → architect
 - "product", "roadmap", "PRD", "requirements" → product-manager
+
+Then **append the framework profiles' `dispatchKeywords`** (from the detector above).
+E.g. in an Odoo project: "odoo", "owl", "qweb", "pos", "nfc-e", "l10n_br" → odoo-specialist.
+A framework agent takes precedence over a generic specialist when both match.
 
 **Minimal Mode:**
 No agent dispatch — proceed with general-purpose approach.

@@ -362,6 +362,20 @@ Read `package.json`, `Cargo.toml`, `go.mod`, `requirements.txt`, `pyproject.toml
 - Testing framework
 - Build tools
 
+### Framework Detection (perfis)
+Run the framework detector to find architecture-specific agents/skills to add:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
+```
+It reads `profiles/*.yaml` (plugin) and returns JSON:
+```json
+{ "frameworks": ["odoo"], "agents": ["odoo-specialist"],
+  "skills": ["odoo-development", "frontend-specialist-odoo"],
+  "dispatchKeywords": { "odoo-specialist": ["odoo", "owl", "..."] } }
+```
+The returned `agents`/`skills` are **added** to the base scaffold sets in Step 3c-3 / 3c-4
+(union, never replace). To support a new framework, add a sibling profile — no code change.
+
 ### Structure Mapping
 Walk the directory tree (top 2-3 levels) and describe each directory's purpose.
 
@@ -446,6 +460,13 @@ Only scaffold agents relevant to the detected project type:
 | Large codebase | + refactoring-specialist, performance-optimizer |
 | Bug fix focus | + bug-fixer |
 
+**Framework profiles (union):** add every agent in the detector's `agents` list
+(Framework Detection above) to the set. E.g. an Odoo project also scaffolds
+`odoo-specialist`. The bundled `agents/odoo-specialist.md` is a **generic template** —
+when scaffolding it, fill the "Ambientes de Desenvolvimento" placeholders
+(`<PATH_DO_AMBIENTE>`, `<NOME_DO_DB>`, `<PORTA>`, `<PATH_DE_DEPLOY>`) from the project
+scan and/or by asking the user. NEVER copy another project's paths/DBs/ports.
+
 Each agent file in `.context/agents/<name>.md`:
 
 ```yaml
@@ -485,6 +506,16 @@ Scaffold skills relevant to the project:
 | test-generation | security-audit (if auth/data handling) |
 | commit-message | documentation (if public API/library) |
 | refactoring | feature-breakdown (if large project) |
+
+**Framework profiles (union + copy):** add every skill in the detector's `skills`
+list (Framework Detection above). These framework skills are **full directories**
+shipped with the plugin (`skills/<slug>/`), not scaffolded prose — **copy** each one
+into `.context/skills/<slug>/` so the framework agent's references resolve:
+```bash
+cp -r "${CLAUDE_PLUGIN_ROOT}/skills/<slug>" ".context/skills/<slug>"
+```
+E.g. an Odoo project copies `odoo-development` and `frontend-specialist-odoo`.
+Do not overwrite a `.context/skills/<slug>/` that already exists with user edits.
 
 Each skill file in `.context/skills/<slug>/SKILL.md`:
 

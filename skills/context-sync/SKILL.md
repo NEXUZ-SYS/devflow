@@ -131,6 +131,16 @@ Com `omp` ∈ runtimes, aplicar só o patch omp via `scripts/lib/omp-enrich-proj
 
 Para cada skill, atualizar as 4 seções com padrões atuais do projeto.
 
+### Sync de perfis de framework
+
+Re-rodar a detecção de framework e adicionar (nunca remover) agentes/skills que faltam:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
+```
+Para cada `agent` retornado ausente em `.context/agents/`, scaffoldar a partir do template
+do plugin (preenchendo placeholders). Para cada `skill` retornada ausente em `.context/skills/`,
+copiar o diretório `${CLAUDE_PLUGIN_ROOT}/skills/<slug>/`. Não sobrescrever arquivos já editados.
+
 ## Step 4: Reportar
 
 ```markdown

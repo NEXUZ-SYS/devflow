@@ -1,0 +1,24 @@
+# DevFlow framework profile — Odoo
+# Data-driven mapping: framework detection -> agents + skills + dispatch keywords.
+# Consumed by scripts/lib/detect-framework.mjs and the project-init / agent-dispatch
+# / context-sync skills. Add a sibling profile (e.g. rails.yaml) to support a new
+# framework — no code change required.
+framework: odoo
+displayName: Odoo
+# A project matches this profile if EITHER a detect.files entry is found in the
+# project tree (up to depth 3) OR a detect.manifestDeps substring appears in the
+# named manifest file.
+detect:
+  files: ["__manifest__.py", "__openerp__.py"]
+  manifestDeps:
+    - file: pyproject.toml
+      deps: ["odoo", "openerp"]
+    - file: requirements.txt
+      deps: ["odoo", "openerp"]
+# Agents to scaffold into .context/agents/ (in addition to the base set).
+agents: ["odoo-specialist"]
+# Skills to copy into .context/skills/ (in addition to the base set).
+skills: ["odoo-development", "frontend-specialist-odoo"]
+# Extra Lite-mode dispatch routing: keyword -> agent.
+dispatchKeywords:
+  odoo-specialist: ["odoo", "owl", "qweb", "pos", "nfc-e", "nf-e", "l10n_br", "addon", "orm"]
