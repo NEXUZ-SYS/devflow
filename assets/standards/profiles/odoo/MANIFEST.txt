@@ -3,3 +3,12 @@
 # Each entry must be backed by std-<id>.md + machine/std-<id>.js in this dir,
 # and mirrored in profiles/odoo.yaml `standards:`. The list grows per batch.
 # Guarded by tests/integration/test-profile-standards-integrity.mjs.
+
+# Tier 1 — backend (lint forte)
+std-odoo-naming-conventions
+std-odoo-manifest-hygiene
+std-odoo-orm-discipline
+std-odoo-computed-fields
+std-odoo-i18n
+std-odoo-code-hygiene
+std-odoo-version-api-hygiene

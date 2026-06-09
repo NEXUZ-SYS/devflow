@@ -27,7 +27,14 @@ dispatchKeywords:
 # are mirrored in assets/standards/profiles/odoo/MANIFEST.txt and backed by
 # std-<id>.md + machine/std-<id>.js there. The list grows as each batch lands;
 # integrity is guarded by tests/integration/test-profile-standards-integrity.mjs.
-standards: []
+standards:
+  - std-odoo-naming-conventions
+  - std-odoo-manifest-hygiene
+  - std-odoo-orm-discipline
+  - std-odoo-computed-fields
+  - std-odoo-i18n
+  - std-odoo-code-hygiene
+  - std-odoo-version-api-hygiene
 # Versioned stack docs to index into the docs-mcp-server global store. Seeded
 # into the project's .context/engineering/stacks/manifest.yaml as `mcpIndexed`
 # entries by project-init (one key per Odoo series). discoveryHints are the
