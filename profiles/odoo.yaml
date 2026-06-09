@@ -35,6 +35,9 @@ standards:
   - std-odoo-i18n
   - std-odoo-code-hygiene
   - std-odoo-version-api-hygiene
+  - std-odoo-js-modules
+  - std-odoo-qweb-escaping
+  - std-odoo-test-discipline
 # Versioned stack docs to index into the docs-mcp-server global store. Seeded
 # into the project's .context/engineering/stacks/manifest.yaml as `mcpIndexed`
 # entries by project-init (one key per Odoo series). discoveryHints are the

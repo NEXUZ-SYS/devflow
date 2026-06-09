@@ -12,3 +12,8 @@ std-odoo-computed-fields
 std-odoo-i18n
 std-odoo-code-hygiene
 std-odoo-version-api-hygiene
+
+# Tier 1 — frontend + testes (lint forte)
+std-odoo-js-modules
+std-odoo-qweb-escaping
+std-odoo-test-discipline
