@@ -5,6 +5,17 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.2] — 2026-06-09
+
+### Fixed — `scrape-stack-batch/SKILL.md` atualizado para a Fase B (store global docs-mcp-server)
+
+O `SKILL.md` da skill `scrape-stack-batch` ainda descrevia o pipeline pré-Fase B (4 stages com `md2llm` + consolidação em `.context/stacks/refs/*.md` + fence SI-6), enquanto `scripts/pipeline.mjs` já implementava o fluxo moderno (2 stages, scrape recursivo direto no store global do `docs-mcp-server`, declaração `mcpIndexed: true` no manifest). Qualquer agente que invocasse a skill anunciava e tentava executar um pipeline que não existe mais.
+
+- `skills/scrape-stack-batch/SKILL.md` (v0.2.0): reescrito para o fluxo Fase B — frontmatter (description + deps sem `md2llm`/`sanitize-snippet`), Fase D em 2 stages (RESOLVE → SCRAPE via `recursiveScrape`), consumo via `mcp__docs-mcp-server__*`, manifest `mcpIndexed`, comandos reais do CLI (`--auto-fallback`, `validate --strict`, `audit`, `discover-source`), anti-pattern reformulado (nunca fabricar conteúdo / `mcpIndexed` fantasma) e SI-6 marcado como legado.
+- `scripts/devflow-stacks.mjs`: removido o flag `--mode=create|refresh|validate` (parseado mas nunca consumido — semântica da era refs/); mensagem do `discover-source` atualizada (o aviso "AVOID SPA" citava `md2llm`; `docs-mcp-server --scrape-mode auto` cobre SPAs via playwright). `parseArgs` exportada para teste.
+- `README.md`: linha da tabela Context Layer (`.context/stacks/`) atualizada para o store global.
+- Testes novos em `tests/scripts/test-devflow-stacks.mjs`: `parseArgs` não reconhece `--mode`; output do `discover-source` não menciona `md2llm`. Suíte stacks 42/42 (1 smoke gated).
+
 ## [1.13.1] — 2026-06-09
 
 ### Fixed — Referências penduradas a `architect-specialist` → `architect`

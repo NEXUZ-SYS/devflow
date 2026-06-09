@@ -124,6 +124,32 @@ test("scrape-batch --dry-run: shows plan without executing", () => {
   }
 });
 
+test("parseArgs: não reconhece --mode (flag morto da era refs/ removido)", async () => {
+  const { parseArgs } = await import(SCRIPT);
+  const opts = parseArgs(["--mode=create", "--dry-run", "foo"]);
+  assert.equal(opts.mode, undefined);
+  assert.equal(opts.dryRun, true);
+  assert.deepEqual(opts.args, ["foo"]);
+});
+
+test("discover-source: output não menciona md2llm (removido na Fase B)", () => {
+  const { root, cleanup } = fixture();
+  try {
+    const dir = join(root, ".context", "stacks");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "manifest.yaml"), `spec: devflow-stack/v0
+frameworks:
+  zod:
+    version: "3.23.0"
+    mcpIndexed: true
+`);
+    const out = runCmd(root, ["discover-source", "zod"]);
+    assert.doesNotMatch(out, /md2llm/);
+  } finally {
+    cleanup();
+  }
+});
+
 test("usage on no args", () => {
   const { root, cleanup } = fixture();
   try {

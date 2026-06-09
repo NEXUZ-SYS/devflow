@@ -1,14 +1,13 @@
 ---
 name: scrape-stack-batch
-description: "Use when the user wants to populate or refresh .context/stacks/refs/ with versioned framework documentation. Trigger words: 'scrape stacks', 'gerar refs', 'atualizar stacks', 'refresh stack docs', 'devflow stacks scrape', 'scrape-batch'. Also trigger when /devflow init detects stacks in package.json/pyproject.toml/Cargo.toml/go.mod and the user wants to bootstrap their docs. Two modes: BATCH (multiple libs from package.json|manifest wishlist|args; per-stack discovery + confirmation + parallel scrape) and SINGLE (one lib with explicit source). Pipeline: docs-mcp-server CLI fetch-url + md2llm + SI-6 sanitization + git commit."
-version: 0.1.0
+description: "Use when the user wants to index versioned framework documentation into the docs-mcp-server global store (declared via mcpIndexed in .context/engineering/stacks/manifest.yaml). Trigger words: 'scrape stacks', 'gerar refs', 'atualizar stacks', 'refresh stack docs', 'devflow stacks scrape', 'scrape-batch'. Also trigger when /devflow init detects stacks in package.json/pyproject.toml/Cargo.toml/go.mod and the user wants to bootstrap their docs. Two modes: BATCH (multiple libs from package.json|manifest wishlist|args; per-stack discovery + confirmation + parallel scrape) and SINGLE (one lib with explicit source). Pipeline: docs-mcp-server recursive scrape into the global store; consumers query via MCP tools."
+version: 0.2.0
 deps:
   external:
     - "@arabold/docs-mcp-server@^2.2.1"
-    - "md2llm@^1.1.0"
   internal:
     - "scripts/lib/url-validator.mjs"
-    - "scripts/lib/sanitize-snippet.mjs"
+    - "scripts/lib/scrape-recursive.mjs"
     - "scripts/lib/manifest-stacks.mjs"
 trigger_phrases:
   - "scrape stack"
@@ -21,7 +20,9 @@ trigger_phrases:
 
 # Scrape Stack Batch — DevFlow Edition
 
-Discovers official documentation sources for npm/PyPI/crates libraries and generates `artisanalRef` files in `.context/stacks/refs/<lib>@<version>.md` via the artisanal pipeline (docs-mcp-server CLI + md2llm).
+Discovers official documentation sources for npm/PyPI/crates libraries and indexes versioned docs into the **docs-mcp-server global store** via recursive scrape. Consumers (agents, Camadas 1-4) query the indexed libraries through MCP tools (`mcp__docs-mcp-server__search_docs`, `list_libraries`, `find_version`) — there is no per-project `.md` output.
+
+> **Fase B (histórico):** versões anteriores desta skill geravam arquivos `artisanalRef` em `.context/stacks/refs/<lib>@<version>.md` via md2llm + sanitização SI-6. Esse fluxo foi removido — o store global É o output. Refs `.md` existentes são tratados como legado read-only (ver `devflow stacks validate`). A migração está documentada no header de `scripts/pipeline.mjs` desta skill.
 
 **Announce at start:** "Invocando `devflow:scrape-stack-batch` — vou descobrir fontes, pedir confirmação e scrapeando em paralelo."
 
@@ -109,14 +110,33 @@ Confirma? [y/n/edit/details]
 
 ### Fase D — EXECUÇÃO (`scripts/pipeline.mjs`)
 
-Pipeline em 4 stages, paralelizado (default `--concurrency=3`):
+Pipeline em 2 stages:
 
-1. **RESOLVE** — valida lib/version contra slug regex; revalida URL (SI-3 defesa-em-profundidade); cria tmp work dir
-2. **SCRAPE** — `execFile('npx', ['-y', '@arabold/docs-mcp-server@2.2.1', 'fetch-url', url])` (NUNCA shell, SI-2; 5min timeout, 50MB maxBuffer)
-3. **REFINE** — `execFile('npx', ['-y', 'md2llm@1.1.0', refinedDir, rawDir, '--source-url', url])`
-4. **CONSOLIDATE** — concat snippets ordenados; `sanitizeSnippet()` strips role markers + wraps em fence canary `<<<DEVFLOW_STACK_REF_START_<sha256>>>>` (SI-6); escreve em `.context/stacks/refs/`; cleanup tmp
+1. **RESOLVE** — valida lib contra slug regex npm-spec (sem traversal), version contra version regex; revalida URL (SI-3 defesa-em-profundidade)
+2. **SCRAPE** — `recursiveScrape()` (`scripts/lib/scrape-recursive.mjs`) invoca `execFile('npx', ['-y', '@arabold/docs-mcp-server@2.2.1', 'scrape', ...])` (NUNCA shell, SI-2; 10min timeout, 50MB maxBuffer). Crawl recursivo com limites: `--max-pages` (default 50), `--max-depth` (default 3), `--scope hostname`, `--scrape-mode auto` (playwright fallback para SPAs)
 
-Em falha, prompt humano com 5 opções: `retry` / `retry-alt` / `skip` / `abort` / `edit`. Sucesso parcial só é commitado com `skip` explícito; default é `abort` (rollback transacional).
+O resultado é a lib indexada no **store global** do docs-mcp-server (`~/.local/share/docs-mcp-server/` por default). Não há arquivo de output no projeto — o consumo é via MCP:
+
+```text
+mcp__docs-mcp-server__list_libraries   → confere o que está indexado
+mcp__docs-mcp-server__find_version     → resolve versão mais próxima
+mcp__docs-mcp-server__search_docs      → consulta semântica por lib@version
+```
+
+Após o scrape, declare a lib no manifest do projeto (`.context/engineering/stacks/manifest.yaml`):
+
+```yaml
+spec: devflow-stack/v0
+frameworks:
+  next:
+    version: "15.0.0"
+    mcpIndexed: true        # indexada no store global (declaração moderna)
+    applyTo: ["src/**"]
+```
+
+`artisanalRef: refs/<lib>@<version>.md` é aceito apenas como **legado** (refs pré-Fase B já existentes em disco). Entradas novas usam `mcpIndexed: true`.
+
+Em falha, prompt humano com opções `retry` / `retry-alt` / `skip` / `abort` / `edit`. Sucesso parcial só é commitado com `skip` explícito; default é `abort`.
 
 ---
 
@@ -127,12 +147,11 @@ Em falha, prompt humano com 5 opções: `retry` / `retry-alt` / `skip` / `abort`
 ```text
 devflow stacks scrape-batch [<lib1>@<version1> ...]
   [--from-package]              # detect from package.json/pyproject.toml/Cargo.toml/go.mod
-  [--from-manifest]             # read wishlist: section of .context/stacks/manifest.yaml
-  [--strategy=registry|llms-txt|web-search|all]   # default: all
+  [--from-manifest]             # read wishlist: section of manifest.yaml
   [--dry-run]                   # show plan without executing
-  [--concurrency=N]             # default: 3
-  [--output-format=text|json]   # default: text
 ```
+
+A execução real do batch é gated por confirmação humana — o CLI mostra o plano; o fluxo interativo roda via esta skill.
 
 ### `devflow stacks scrape <library> <version>` (single-lib)
 
@@ -140,51 +159,52 @@ devflow stacks scrape-batch [<lib1>@<version1> ...]
 devflow stacks scrape <library> <version>
   --source=github|docs-site|local|llms-txt
   --from=<url|repo|path>
-  [--mode=create|refresh|validate]
+  [--auto-fallback]             # tenta discoveryHints do manifest se --from falhar
   [--dry-run]
+  [--project=<path>]
 ```
 
-`--mode`:
-- `create` (default) — fail if `refs/<lib>@<version>.md` exists
-- `refresh` — overwrite, regenerate hash, commit as "refresh"
-- `validate` — don't regen; just confirm sanity checks (≥5 snippets, headers, hash)
+### `devflow stacks validate [<lib>] [--strict]`
 
-### `devflow stacks validate [<lib>]`
+Valida o `manifest.yaml`: spec, e que cada framework declara um de `mcpIndexed: true` | `artisanalRef` | `skipDocs: true`. Para refs **legados** (`artisanalRef`), verifica adicionalmente que o arquivo existe, tem fence SI-6 e ≥5 code blocks. Entradas `mcpIndexed` passam declarativamente — confira o conteúdo via `mcp__docs-mcp-server__search_docs`.
 
-Verifies every `artisanalRef` declared in `manifest.yaml` exists in `refs/`, has SI-6 fence start/end markers, and contains at least 5 code blocks (md2llm sanity).
+### `devflow stacks audit <lib>@<version>`
+
+Auditoria profunda via `scripts/lib/stack-audit.mjs`. Para entradas `mcpIndexed: true`, o check passa com a instrução de verificar o conteúdo via MCP; para refs legados `.md`, roda os checks de integridade do formato artisanal (T1–T5).
+
+### `devflow stacks discover-source <lib>`
+
+Lista URLs candidatas para scrape (hints curados do ADR + fallbacks GitHub raw/registry).
 
 ---
 
-## ⚠️ NUNCA gerar refs manualmente (anti-pattern crítico)
+## ⚠️ NUNCA fabricar docs de stack manualmente (anti-pattern crítico)
 
-**Regra absoluta:** Os arquivos `refs/<lib>@<version>.md` **DEVEM** ser produzidos exclusivamente pelo pipeline `docs-mcp-server CLI + md2llm + sanitize-snippet`. Nunca criar/editar manualmente, nunca pedir ao LLM "gere o conteúdo do ref baseado no que você sabe sobre essa lib", nunca colar trecho copiado da doc oficial direto no arquivo.
+**Regra absoluta:** o conteúdo indexado **DEVE** vir exclusivamente do pipeline de scrape (`docs-mcp-server` contra a fonte oficial). Nunca pedir ao LLM "gere a documentação baseada no que você sabe sobre essa lib", nunca declarar `mcpIndexed: true` sem um scrape real ter populado o store, nunca criar/editar arquivos `refs/*.md` à mão (formato legado ou não).
 
-**Por quê:** Refs gerados manualmente (ou pelo LLM) têm 3 falhas características que o pipeline real previne:
+**Por quê:**
 
-1. **SOURCE alucinado** — paths como `docs/intro.md` que não existem no repo upstream da lib (ninguém valida)
-2. **Fence SI-6 ausente ou hash placeholder** — `<<<DEVFLOW_STACK_REF_START_xxxxxxxx>>>` sem sha256 real do conteúdo, quebrando o canário anti-injeção
-3. **Headers TITLE/DESCRIPTION/SOURCE/LANGUAGE/CODE inconsistentes** — md2llm produz estrutura uniforme; geração manual gera variações que confundem o consumer
+1. **Conteúdo alucinado** — docs geradas de memória do modelo misturam versões de API e inventam métodos; o scrape ancora cada snippet na fonte oficial versionada
+2. **`mcpIndexed: true` fantasma** — manifest declara a lib mas `mcp__docs-mcp-server__list_libraries` não a retorna; consumers assumem cobertura que não existe
+3. **Refs legados fabricados** — falham nos checks de integridade do `devflow stacks audit` (fence SI-6, headers, markers de geração manual)
 
-**Como detectar:** rode `devflow stacks audit <lib>@<version>` — checa T2 (headers consistentes), T4 (fence + hash), T5 (markers de geração manual). Refs manuais falham em pelo menos uma.
+**Como detectar:** `devflow stacks audit <lib>@<version>` + conferência cruzada com `mcp__docs-mcp-server__list_libraries`.
 
-**Marcadores proibidos no conteúdo:** comentários como `Generated by Claude`, `Manually created`, `TODO: scrape later` causam FAIL imediato no T5.
-
-Se o pipeline real está bloqueado (URL inacessível, lib sem doc oficial), use `skipDocs: true` no `manifest.yaml` em vez de fabricar conteúdo. T1 short-circuita audit para libs com `skipDocs:true`.
+Se o pipeline real está bloqueado (URL inacessível, lib sem doc oficial), use `skipDocs: true` no `manifest.yaml` em vez de fabricar conteúdo.
 
 ---
 
 ## Segurança (SI compliance)
 
-- **SI-2**: TODAS chamadas de `npx @arabold/docs-mcp-server` e `npx md2llm` via `child_process.execFile` com array de args, **NUNCA** `exec()` ou shell strings
+- **SI-2**: TODAS as chamadas de `npx @arabold/docs-mcp-server` via `child_process.execFile` com array de args (`scripts/lib/scrape-recursive.mjs`), **NUNCA** `exec()` ou shell strings
 - **SI-3**: URLs validados via `validateUrl()` no `input-resolver` (Fase A) E re-validados no `resolve()` da Fase D — defesa-em-profundidade contra DNS rebinding e race conditions
-- **SI-6**: Conteúdo scraped passa por `sanitizeSnippet()` antes de consolidar — strips role markers (`SYSTEM:`/`USER:`/`ASSISTANT:`/`HUMAN:`), strips ignore-instructions phrases, wraps em fence delimitador com sha256 canary
-- Prompt-injection mitigada por design: snippets nunca colados diretamente no prompt do agent — hooks PreToolUse os injetam dentro de `<STACK_FOR_TASK>` block que é explicitamente de baixa autoridade
+- **Prompt-injection mitigada por design**: o conteúdo scraped vive no store do docs-mcp-server e só entra no contexto via consultas MCP sob demanda (resultados parciais de busca), nunca colado integralmente no prompt. Nudges de edição listam apenas `lib@version` indexadas, não conteúdo
+- **SI-6 (legado)**: refs `.md` pré-Fase B mantêm fence canary + sanitização (`scripts/lib/sanitize-snippet.mjs`), verificados por `validate`/`audit`
 
 ---
 
 ## Reference
 
-- ADR-003: `.context/adrs/003-stack-docs-artisanal-pipeline-v1.0.0.md` — decisão arquitetural
-- Spec original: `docs/devflow-context-layer-validation-v2-pt-br.md` §3 (pipeline detalhes), §3.4 (scrape-batch comando), §5.3 (este ADR)
-- Lib externa: `@arabold/docs-mcp-server@^2.2.1` (NÃO `docs-cli` — correção da spec)
-- Lib externa: `md2llm@^1.1.0`
+- ADR-003: `.context/engineering/adrs/003-stack-docs-artisanal-pipeline-v1.0.0.md` — decisão arquitetural original (pipeline artisanal); a migração Fase B para o store global está documentada no header de `scripts/pipeline.mjs`
+- Spec original: `docs/devflow-context-layer-validation-v2-pt-br.md` §3 (pipeline detalhes), §3.4 (scrape-batch comando), §5.3
+- Lib externa: `@arabold/docs-mcp-server@^2.2.1` (NÃO `docs-cli` — correção da spec; md2llm removido na Fase B)

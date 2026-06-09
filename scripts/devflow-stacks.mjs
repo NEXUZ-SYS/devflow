@@ -3,7 +3,7 @@
 //
 // Subcommands:
 //   scrape-batch [<lib@ver> ...] [--from-package|--from-manifest] [--dry-run]
-//   scrape <lib> <version> --source=<type> --from=<url> [--mode=create|refresh|validate]
+//   scrape <lib> <version> --source=<type> --from=<url> [--auto-fallback]
 //   validate [<lib>] [--strict]
 //
 // Per Dependency Policy: pure node:* — uses skill scripts (input-resolver,
@@ -199,7 +199,8 @@ async function cmdScrapeBatch(opts, projectRoot) {
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
-function parseArgs(argv) {
+// Pura e exportada p/ teste (mesmo contrato do formatScrapeOk).
+export function parseArgs(argv) {
   const opts = { args: [] };
   for (const arg of argv) {
     if (arg === "--dry-run") opts.dryRun = true;
@@ -209,7 +210,6 @@ function parseArgs(argv) {
     else if (arg === "--strict") opts.strict = true;
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);
-    else if (arg.startsWith("--mode=")) opts.mode = arg.slice(7);
     else if (arg.startsWith("--project=")) opts.project = arg.slice(10);
     else if (!arg.startsWith("--")) opts.args.push(arg);
   }
@@ -314,9 +314,9 @@ async function cmdDiscoverSource(lib, projectRoot) {
   console.log("Run scrape with chosen URL:");
   console.log(`  node scripts/devflow-stacks.mjs scrape ${lib} ${version} --source=<type> --from=<URL> --project=${projectRoot}`);
   console.log("");
-  console.log("AVOID: SPA-rendered docs (typescriptlang.org/docs, react.dev,");
-  console.log("zod.dev) — md2llm needs static markdown/HTML; SPAs return empty");
-  console.log("HTML shell that produces zero useful snippets.");
+  console.log("Note: SPA-rendered docs (typescriptlang.org/docs, react.dev, zod.dev)");
+  console.log("are handled by docs-mcp-server --scrape-mode auto (playwright fallback),");
+  console.log("but raw markdown sources still yield the best snippet quality.");
   console.log("");
   console.log("After scrape, verify quality with `devflow stacks audit ${lib}@${version}` —");
   console.log("T3 check warns if <5 snippets (registry-pages-of-install-commands signal).");
