@@ -1,6 +1,7 @@
 # Plano — Standards default do Odoo (profile-scoped) + wishlist de stacks
 
-> Status: **aguardando aprovação** · Branch: `feat/odoo-default-standards` · Autor: standards-builder (DevFlow)
+> Status: **CONCLUÍDO** (Lotes 0–5) · Branch: `feat/odoo-default-standards` · Autor: standards-builder (DevFlow)
+> Registro: ADR-008 (framework-profile-scoped standards). 17 std-odoo-* + wiring + docs entregues; scrape das stacks deixado como follow-up (`/devflow:scrape-stack-batch`).
 > Relacionados: [[default-engineering-standards]] · [[standards-default-enforcement]] · [[framework-profiles-agent-skill-selection]] · ADR-007 (default-standards-library) · ADR-002 (triple-layer)
 
 ---
