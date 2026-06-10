@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -157,5 +157,57 @@ describe("std-odoo-version-api-hygiene linter", () => {
   it("ignores files sem extensão alvo (.txt)", () => {
     const r = lint("x.txt", `<tree> attrs= name_get @api.multi`);
     assert.equal(r.code, 0);
+  });
+
+  // ---- Gate de série-alvo (manifest version) ------------------------------
+  // Suprime os checks 17/18 num módulo que ainda está numa série < 17.
+
+  function lintInModule(manifestVersion, relpath, content) {
+    const root = mkdtempSync(join(tmpdir(), "odoo-mod-"));
+    writeFileSync(
+      join(root, "__manifest__.py"),
+      `{'name': 'M', 'version': '${manifestVersion}', 'license': 'LGPL-3'}`,
+    );
+    const fp = join(root, relpath);
+    // garante subdir (ex: models/m.py)
+    const parts = relpath.split("/");
+    if (parts.length > 1) {
+      mkdirSync(join(root, ...parts.slice(0, -1)), { recursive: true });
+    }
+    writeFileSync(fp, content);
+    try {
+      execFileSync("node", [LINTER, fp], { encoding: "utf-8" });
+      return { code: 0, out: "" };
+    } catch (e) {
+      return { code: e.status, out: (e.stdout || "").toString() };
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it("NÃO flaga name_get num módulo série 12 (gate suprime)", () => {
+    const r = lintInModule("12.0.1.0.0", "m.py", `def name_get(self):\n    return []`);
+    assert.equal(r.code, 0);
+  });
+
+  it("NÃO flaga <tree> num módulo série 16 (< 17)", () => {
+    const r = lintInModule("16.0.1.0.0", "v.xml", `<tree string="x"/>`);
+    assert.equal(r.code, 0);
+  });
+
+  it("flaga name_get num módulo série 18 (>= 17)", () => {
+    const r = lintInModule("18.0.1.0.0", "m.py", `def name_get(self):\n    return []`);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /VIOLATION/);
+  });
+
+  it("gate funciona em arquivo aninhado (models/m.py acha o manifest acima)", () => {
+    const r = lintInModule("12.0.1.0.0", "models/m.py", `@api.multi\ndef f(self):\n    pass`);
+    assert.equal(r.code, 0);
+  });
+
+  it("sem manifest, roda como antes (série desconhecida não gateia)", () => {
+    const r = lint("m.py", `def name_get(self):\n    return []`);
+    assert.equal(r.code, 1);
   });
 });

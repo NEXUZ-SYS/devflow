@@ -1,7 +1,7 @@
 ---
 id: std-odoo-version-api-hygiene
 description: Nunca emitir símbolo de API removido/renomeado no Odoo alvo (migração NXZ para 17/18)
-version: 1.0.0
+version: 1.1.0
 source: devflow-default-odoo
 applyTo: ["**/*.py", "**/*.xml"]
 activation: on-demand
@@ -43,7 +43,7 @@ Coluna **Versão** indica onde o símbolo errado ainda é válido. Em todos os c
 
 `machine/std-odoo-version-api-hygiene.js` — gate por extensão: roda os checks `.py` em arquivos `.py`, os checks `.xml` em arquivos `.xml`, e sai com exit 0 para qualquer outra extensão. Dedup via `Set` (cada símbolo é reportado uma vez). Em violação emite uma linha `VIOLATION: ...` e exit 1.
 
-**Atenção à nuance de versão:** o linter sinaliza esses símbolos como obsoletos **para o alvo Odoo 17/18**. Num módulo que permanece em 12 eles são corretos — não rode este standard sobre código 12. O perfil ativa este standard apenas em módulos marcados para migração.
+**Gate de série-alvo (automático desde v1.1.0):** antes de qualquer check, o linter lê a série Odoo do `version` no `__manifest__.py` mais próximo (subindo do arquivo editado) e **sai com exit 0 se a série for < 17** — porque nesses módulos os símbolos ainda são válidos. Ou seja: num módulo `12.0.x`/`15.0.x`/`16.0.x` o standard se auto-suprime; num `17.0.x`/`18.0.x` ele roda. Se nenhum manifest for encontrado (série desconhecida, ex. fixture de teste), roda normalmente. Você não precisa mais desativar o standard manualmente por módulo — o gate faz isso.
 
 Checks `.py`:
 

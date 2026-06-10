@@ -1,7 +1,7 @@
 ---
 id: std-odoo-js-modules
 description: Módulos JS no padrão ES (Odoo 16+) — sem odoo.define() autogerado nem require() AMD legado
-version: 1.0.0
+version: 1.1.0
 source: devflow-default-odoo
 applyTo: ["**/static/src/**/*.js"]
 activation: on-demand
@@ -46,6 +46,8 @@ Em **human-review** (não lintável, fica só nesta prosa):
 3. Primeira linha `/** @odoo-module **/` quando exigido (fora de `/static/src`) — exige conhecer a convenção de path do arquivo.
 4. Imports ES6 com paths de namespace (`@web/...`, `@point_of_sale/...`) — validar o alias correto depende do mapa de assets do módulo.
 5. Sem jQuery `$` no código novo — distinguir uso legítimo de legado exige contexto semântico.
+
+**Gate de série-alvo (desde v1.1.0):** ES modules são Odoo **16+**. O linter lê a série do `version` no `__manifest__.py` mais próximo e se auto-suprime (exit 0) quando a série é **< 16** — em módulos `≤15` o `odoo.define()`/`require()` AMD eram o padrão. Sem manifest, roda normalmente.
 
 ## Referência
 

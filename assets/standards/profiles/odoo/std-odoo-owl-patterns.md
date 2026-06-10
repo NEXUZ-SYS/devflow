@@ -1,7 +1,7 @@
 ---
 id: std-odoo-owl-patterns
 description: Componentes OWL idiomáticos (Odoo 18) — setup() em vez de constructor() e extensão de core por patch(), não herança
-version: 1.0.0
+version: 1.1.0
 source: devflow-default-odoo
 applyTo: ["**/static/src/**/*.js"]
 activation: on-demand
@@ -70,6 +70,8 @@ Em **human-review** (não lintável, fica só nesta prosa):
 5. `static template = "addon.Nome"` com prefixo de addon — validar o prefixo correto depende do nome do módulo e do `t-name` registrado nos assets.
 6. Lifecycle via hooks (`onWillStart`/`onMounted`/`onWillUnmount`) dentro de `setup()` — distinguir um hook de um método homônimo exige contexto semântico.
 7. Service via `registry.category("services").add(...)` e consumo por `useService("name")` — validar o par registro/consumo exige rastrear o `name` entre arquivos.
+
+**Gate de série-alvo (desde v1.1.0):** OWL é Odoo **16+**. O linter lê a série do `version` no `__manifest__.py` mais próximo e se auto-suprime (exit 0) quando a série é **< 16** — em módulos `≤15` o frontend era Backbone/widget, sem componentes OWL. Sem manifest, roda normalmente.
 
 ## Referência
 

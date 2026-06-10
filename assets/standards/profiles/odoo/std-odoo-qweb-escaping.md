@@ -1,7 +1,7 @@
 ---
 id: std-odoo-qweb-escaping
 description: Escaping anti-XSS em templates QWeb — sem t-raw nem t-esc; saída sempre via t-out, com HTML confiável só por markupsafe.Markup
-version: 1.0.0
+version: 1.1.0
 source: devflow-default-odoo
 applyTo: ["**/*.xml", "**/static/src/**/*.xml"]
 activation: on-demand
@@ -40,6 +40,8 @@ Em **human-review** (não lintável, fica só nesta prosa):
 3. HTML intencional só via `markupsafe.Markup` sobre conteúdo confiável — distinguir markup legítimo de entrada de usuário embrulhada exige contexto semântico.
 4. `t-inherit` sempre com prefixo de módulo (`addon.Template`) — validar o namespace correto depende do manifesto do addon.
 5. Herança via `xpath`, não substituição integral do template — detectar redefinição abusiva exige comparar com o template-base original.
+
+**Gate de série-alvo (desde v1.1.0):** `t-out` existe desde Odoo **15**. O linter lê a série do `version` no `__manifest__.py` mais próximo e se auto-suprime (exit 0) quando a série é **< 15** — em módulos `≤14` `t-raw`/`t-esc` eram o padrão e `t-out` não existia. Sem manifest, roda normalmente.
 
 ## Referência
 

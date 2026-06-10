@@ -4,13 +4,46 @@
 // símbolos de ORM/views que são VÁLIDOS no Odoo 12 mas REMOVIDOS/renomeados no 17/18.
 // Orientado ao alvo de migração NXZ (17/18) — não use num módulo que permanece em 12.
 // Contrato SI-4: filePath em argv[2]; violação → 'VIOLATION: ...' + exit 1.
-import { readFileSync } from "node:fs";
+// Gate de série: só roda quando o módulo-alvo é série >= MIN_SERIES (lida do
+// `version` do __manifest__.py mais próximo). Num módulo que permanece em série
+// anterior, esses símbolos ainda são válidos — sem manifest, não gateia.
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const MIN_SERIES = 17;
+
+// Série Odoo major do __manifest__.py mais próximo subindo de `fp`, ou null.
+function odooTargetSeries(filePath) {
+  let dir = dirname(filePath);
+  for (let i = 0; i < 12; i++) {
+    for (const m of ["__manifest__.py", "__openerp__.py"]) {
+      const p = join(dir, m);
+      if (existsSync(p)) {
+        try {
+          const mm = readFileSync(p, "utf-8").match(
+            /['"]version['"]\s*:\s*['"](\d+)\.\d+/,
+          );
+          return mm && +mm[1] >= 8 ? +mm[1] : null;
+        } catch {
+          return null;
+        }
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
 
 const fp = process.argv[2];
 if (!fp) process.exit(0);
 const isPy = fp.endsWith(".py"),
   isXml = fp.endsWith(".xml");
 if (!isPy && !isXml) process.exit(0);
+
+const series = odooTargetSeries(fp);
+if (series !== null && series < MIN_SERIES) process.exit(0);
 
 let c = "";
 try {

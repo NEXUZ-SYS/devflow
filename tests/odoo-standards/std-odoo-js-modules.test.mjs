@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -95,5 +95,25 @@ describe("std-odoo-js-modules linter", () => {
   it("ignores non-js files (.xml)", () => {
     const r = lint("x.xml", `var rpc = require('web.rpc');`);
     assert.equal(r.code, 0);
+  });
+
+  // ---- Gate de série-alvo (ES modules são 16+) ----------------------------
+  function lintInModule(manifestVersion, relpath, content) {
+    const root = mkdtempSync(join(tmpdir(), "odoo-mod-"));
+    writeFileSync(join(root, "__manifest__.py"), `{'name': 'M', 'version': '${manifestVersion}'}`);
+    const parts = relpath.split("/");
+    if (parts.length > 1) mkdirSync(join(root, ...parts.slice(0, -1)), { recursive: true });
+    writeFileSync(join(root, relpath), content);
+    try { execFileSync("node", [LINTER, join(root, relpath)], { encoding: "utf-8" }); return { code: 0 }; }
+    catch (e) { return { code: e.status }; }
+    finally { rmSync(root, { recursive: true, force: true }); }
+  }
+
+  it("NÃO flaga odoo.define num módulo série 12 (< 16)", () => {
+    assert.equal(lintInModule("12.0.1.0.0", "static/src/a.js", `odoo.define('m', function (require) {});`).code, 0);
+  });
+
+  it("flaga odoo.define num módulo série 18 (>= 16)", () => {
+    assert.equal(lintInModule("18.0.1.0.0", "static/src/a.js", `odoo.define('m', function (require) {});`).code, 1);
   });
 });
