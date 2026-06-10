@@ -5,6 +5,16 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.15.1] — 2026-06-10
+
+### Fixed — Gate de git bloqueava escrita de auto-memory/napkin com `cwd` ausente
+
+O hook `hooks/pre-tool-use` negava (`permissionDecision=deny`, mensagem "DevFlow não está configurado") escritas em **arquivos não-projeto** — auto-memory (`~/.claude/projects/*/memory/*`) e napkin (`.context/napkin.md`) — quando o evento chegava com `cwd` vazio/ausente (caso típico de `Write` fora do workspace). A exceção que emite `ask` para esses paths estava posicionada **depois** do `deny` de no-config: com `cwd` vazio a config resolvia para `""`, o deny de no-config disparava primeiro e o caminho de exceção nunca era alcançado.
+
+- **Fix:** a exceção de paths não-projeto passa a ser avaliada **antes** do deny de no-config, via helpers `is_nonproject_path` + `emit_ask_nonproject`. Auto-memory e napkin nunca mais recebem `deny` — no máximo `ask` (confirmação), independentemente de `cwd`/config/branch. Comportamento preservado: `ask` em branch protegida com `cwd`, allow silencioso em branch de trabalho, e `deny` mantido para código do projeto sem config.
+- **MemPalace:** opera via MCP (`mcp__mempalace__*`), não via Edit/Write — nunca foi interceptado pelo hook; documentado no comentário do fix.
+- **Testes:** `tests/hooks/test-pre-tool-use.sh` passa de 10 → 14 casos / 20 asserts (novos: cwd vazio/ausente para memory/napkin → `ask`; código do projeto + cwd vazio → ainda `deny`). RED→GREEN. Sem regressão em permissions/grounding/napkin hooks.
+
 ## [1.15.0] — 2026-06-10
 
 ### Added — Modo doc-grounding obrigatório (`.devflow.yaml`)

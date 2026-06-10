@@ -139,6 +139,33 @@ output=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"'"$NOCONFIG"'/foo.
 assert_contains "denies on missing config" "$output" '"permissionDecision": "deny"'
 rm -rf "$NOCONFIG"
 
+# Empty-cwd tests run from inside SANDBOX so the hook's PWD fallback finds a
+# git repo on a protected branch (main) — deterministic regardless of runner CWD.
+# This simulates the real bug: cwd arrives empty for a Write outside the workspace.
+
+# Test 11: Auto-memory with EMPTY cwd → ASK, never deny (regression: was no-config deny)
+echo "Test 11: Auto-memory with empty cwd emits ASK (not no-config deny)"
+output=$(cd "$SANDBOX" && echo '{"tool_name":"Write","tool_input":{"file_path":"/home/user/.claude/projects/-home-user-proj/memory/note.md"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
+assert_contains "empty-cwd memory emits ask" "$output" '"permissionDecision": "ask"'
+assert_not_contains "empty-cwd memory does not deny" "$output" '"permissionDecision": "deny"'
+
+# Test 12: Auto-memory with NO cwd field → ASK, never deny
+echo "Test 12: Auto-memory with missing cwd field emits ASK"
+output=$(cd "$SANDBOX" && echo '{"tool_name":"Write","tool_input":{"file_path":"/home/user/.claude/projects/-home-user-proj/memory/note.md"}}' | bash "$HOOK" 2>/dev/null || true)
+assert_contains "missing-cwd memory emits ask" "$output" '"permissionDecision": "ask"'
+assert_not_contains "missing-cwd memory does not deny" "$output" '"permissionDecision": "deny"'
+
+# Test 13: napkin with empty cwd → ASK, never deny
+echo "Test 13: napkin with empty cwd emits ASK"
+output=$(cd "$SANDBOX" && echo '{"tool_name":"Edit","tool_input":{"file_path":"/home/user/proj/.context/napkin.md"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
+assert_contains "empty-cwd napkin emits ask" "$output" '"permissionDecision": "ask"'
+assert_not_contains "empty-cwd napkin does not deny" "$output" '"permissionDecision": "deny"'
+
+# Test 14: Project source with empty cwd → still DENY (no-config guard intact for project code)
+echo "Test 14: Project source with empty cwd still denies (no over-allow)"
+output=$(cd "$SANDBOX" && echo '{"tool_name":"Edit","tool_input":{"file_path":"/home/user/proj/src/foo.js"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
+assert_contains "empty-cwd source still denies" "$output" '"permissionDecision": "deny"'
+
 echo ""
 echo "=== Results ==="
 printf 'PASS: %d\n' "$PASS"
