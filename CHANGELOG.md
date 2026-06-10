@@ -5,6 +5,26 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] — 2026-06-09
+
+### Added — Standards default do Odoo (profile-scoped) com gate de série-alvo
+
+Novo eixo de enforcement específico de framework: **17 Standards de desenvolvimento Odoo** (`std-odoo-*`) embutidos no plugin e ativados **somente em projetos Odoo** (detecção via `profiles/odoo.yaml`). Ao contrário dos ~21 Standards universais, estes são copiados para `.context/engineering/standards/` do projeto no `init`/`sync`, virando `origin:project` — o sandbox SI-4 anti-RCE do set universal permanece **byte-idêntico** (ADR-008).
+
+- **Tier 1 (lint forte):** `std-odoo-naming-conventions`, `std-odoo-manifest-hygiene`, `std-odoo-orm-discipline`, `std-odoo-computed-fields`, `std-odoo-i18n`, `std-odoo-code-hygiene`, `std-odoo-version-api-hygiene`, `std-odoo-js-modules`, `std-odoo-qweb-escaping`, `std-odoo-test-discipline`.
+- **Tier 2 (parcial/heurístico):** `std-odoo-module-structure`, `std-odoo-orm-performance`, `std-odoo-security`, `std-odoo-owl-patterns`.
+- **Tier 3 (NXZ, `weakStandardWarning`):** `std-odoo-oca-separation`, `std-odoo-qweb-pdf-safety`, `std-odoo-fiscal-br-integrity`.
+- Cada std é o trio prosa + frontmatter + linter `machine/*.js`, concern-framed, com fontes oficiais Odoo 12/17/18 + OCA `pylint-odoo` citadas (nenhuma inventada). Construídos via TDD (RED→GREEN), ~190 fixtures de linter.
+- **Gate de série-alvo (v1.1.0 dos 4 stds 17/18-oriented):** `version-api-hygiene` (≥17), `js-modules`/`owl-patterns` (≥16), `qweb-escaping` (≥15) leem a série do `version` no `__manifest__.py` mais próximo e se auto-suprimem (exit 0) em módulos de série anterior — resolve o misfire em código Odoo 12 num repo 12+18. Sem manifest, rodam normalmente.
+
+### Added — Wiring de Standards/stacks por perfil de framework
+
+- `scripts/lib/detect-framework.mjs`: `loadProfiles` normaliza as chaves `standards`/`stacks`; `frameworkContributions` as agrega (retrocompatível — perfil sem as chaves → arrays vazios).
+- `profiles/odoo.yaml`: `+standards` (os 17 ids) e `+stacks` (wishlist Odoo 12/17/18 com `discoveryHints` oficiais, `mcpIndexed`).
+- `scripts/devflow-stacks.mjs`: novo subcomando `add --lib=<l> --version=<v> --discovery-hint=<url>` que semeia o manifest de stacks do projeto com entradas `mcpIndexed`.
+- `skills/project-init/SKILL.md` e `skills/context-sync/SKILL.md`: passo de cópia dos Standards do perfil + seeding das stacks (idempotente; respeita `standards.local.yaml disable:`; não sobrescreve std customizado).
+- ADR-008 `framework-profile-scoped-standards` (audit 13/13); plano em `.context/plans/odoo-profile-standards.md`; guia em `docs/odoo-profile-standards.md`.
+
 ## [1.13.2] — 2026-06-09
 
 ### Fixed — `scrape-stack-batch/SKILL.md` atualizado para a Fase B (store global docs-mcp-server)
