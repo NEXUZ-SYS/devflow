@@ -144,4 +144,47 @@ test("devflow-config: WARN when .devflow.yaml absent", async () => {
   assert.equal(r.status, "WARN");
 });
 
+// ── grounding-mcp ──────────────────────────────────────────────────
+function writeCfg(dir, body) {
+  writeFileSync(join(dir, ".context", ".devflow.yaml"), body);
+}
+
+test("grounding-mcp: OK when grounding absent", async () => {
+  const dir = tmpRepo();
+  writeCfg(dir, "git:\n  strategy: branch-flow\n");
+  const r = await getCheck("grounding-mcp").run(ctx(dir));
+  assert.equal(r.status, "OK");
+});
+
+test("grounding-mcp: OK when mode=off", async () => {
+  const dir = tmpRepo();
+  writeCfg(dir, "grounding:\n  mode: off\n");
+  const r = await getCheck("grounding-mcp").run(ctx(dir));
+  assert.equal(r.status, "OK");
+});
+
+test("grounding-mcp: WARN when active but docsMcpServer not in .mcp.json", async () => {
+  const dir = tmpRepo();
+  writeCfg(dir, "grounding:\n  mode: docs-only\n  docsMcpServer: docs-mcp-server\n");
+  const r = await getCheck("grounding-mcp").run(ctx(dir));
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /docs-mcp-server|fail-closed|grounding/i);
+});
+
+test("grounding-mcp: WARN when server configured under a different name", async () => {
+  const dir = tmpRepo();
+  writeCfg(dir, "grounding:\n  mode: docs-first\n  docsMcpServer: docs-mcp-server\n");
+  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { other: { command: "npx" } } }));
+  const r = await getCheck("grounding-mcp").run(ctx(dir));
+  assert.equal(r.status, "WARN");
+});
+
+test("grounding-mcp: OK when active and docsMcpServer present in .mcp.json", async () => {
+  const dir = tmpRepo();
+  writeCfg(dir, "grounding:\n  mode: docs-only\n  docsMcpServer: docs-mcp-server\n");
+  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { "docs-mcp-server": { command: "npx" } } }));
+  const r = await getCheck("grounding-mcp").run(ctx(dir));
+  assert.equal(r.status, "OK");
+});
+
 // Cleanup note: tmpdirs are left to the OS; tests never delete the real palace.

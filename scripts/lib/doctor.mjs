@@ -194,7 +194,52 @@ const gitHooks = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks];
+// Parse the grounding section of .context/.devflow.yaml (no YAML dep).
+function readGrounding(cwd) {
+  const path = join(cwd, ".context", ".devflow.yaml");
+  const def = { mode: "off", server: "docs-mcp-server" };
+  if (!existsSync(path)) return def;
+  let raw = "";
+  try { raw = readFileSync(path, "utf-8"); } catch { return def; }
+  let mode = "off", server = "docs-mcp-server", inG = false;
+  for (const line of raw.split("\n")) {
+    const stripped = line.trim();
+    if (stripped === "grounding:") { inG = true; continue; }
+    if (inG) {
+      if (line && !/^\s/.test(line)) break; // dedent → grounding section ended
+      const m = stripped.match(/^mode:\s*(.+)$/);
+      if (m) mode = m[1].trim().replace(/['"]/g, "");
+      const s = stripped.match(/^docsMcpServer:\s*(.+)$/);
+      if (s) server = s[1].trim().replace(/['"]/g, "");
+    }
+  }
+  return { mode, server };
+}
+
+const groundingMcp = {
+  id: "grounding-mcp",
+  title: "Doc-grounding: MCP de docs canônico configurado",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const { mode, server } = readGrounding(ctx.cwd);
+    if (!mode || mode === "off") {
+      return { status: "OK", diagnosis: "Doc-grounding desativado (mode: off ou ausente).", repair: "" };
+    }
+    const mcp = readMcp(ctx.cwd);
+    const servers = (mcp.present && !mcp.parseError && mcp.json && mcp.json.mcpServers) ? mcp.json.mcpServers : {};
+    if (!Object.prototype.hasOwnProperty.call(servers, server)) {
+      return {
+        status: "WARN",
+        diagnosis: `grounding ativo (mode: ${mode}) mas o docsMcpServer '${server}' não está no .mcp.json — o modo fica fail-closed para TODO fato de stack (sem fonte e sem fallback de memória).`,
+        repair: `Configure o docs-mcp-server (/devflow config §2.4) ou ajuste grounding.docsMcpServer para um server presente em .mcp.json.`,
+      };
+    }
+    return { status: "OK", diagnosis: `Doc-grounding ativo (mode: ${mode}); docsMcpServer '${server}' presente no .mcp.json.`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
