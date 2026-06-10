@@ -538,6 +538,43 @@ scaffoldVersion: "2.0.0"
 3. Examples — real examples from this project
 4. Guidelines — project-specific best practices
 
+## Step 3c-5: Scaffold Profile Standards + Stacks (all tiers, when a profile matches)
+
+The framework detector (`frameworkContributions`) also returns `standards` (ids of
+profile-scoped enforcement Standards) and `stacks` (versioned doc sources). Unlike the
+~20 universal default Standards — which are **live-merged** from the plugin at lint-time
+and never copied — profile Standards are **framework-conditional** and therefore
+**copied into the project** (same model as profile agents/skills), so their linters run
+under the project's own `machine/` sandbox.
+
+**Profile Standards (copy):** for every id in the detector's `standards` list, copy both
+the prose and its bundled linter from the profile bundle into the project's engineering
+standards layer:
+```bash
+mkdir -p .context/engineering/standards/machine
+for id in <detector.standards>; do
+  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/${id}.md" \
+     ".context/engineering/standards/${id}.md"
+  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/machine/${id}.js" \
+     ".context/engineering/standards/machine/${id}.js"
+done
+```
+E.g. an Odoo project copies the `std-odoo-*` set from `assets/standards/profiles/odoo/`.
+**Never overwrite** a `.context/engineering/standards/<id>.md` that already exists with
+user edits, and honor `.context/standards.local.yaml` `disable:` — skip disabled ids.
+
+**Profile Stacks (seed manifest):** for every entry in the detector's `stacks` list, add
+it to the project's stack manifest so `devflow stacks scrape` can index the official docs
+into the docs-mcp-server global store (one key per series, `mcpIndexed: true`):
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add \
+  --lib=<stack.lib> --version=<stack.version> \
+  --discovery-hint=<stack.discoveryHints[0]> --project=<PWD>
+```
+E.g. an Odoo project seeds `odoo-12@12.0`, `odoo-17@17.0`, `odoo-18@18.0`. The actual
+scrape is a follow-up the user runs (`/devflow:scrape-stack-batch`); init only declares
+the wishlist.
+
 ## Step 4: Fill Gaps
 
 After dotcontext (Tier 1/2) or DevFlow standalone (Tier 3) has run, check for gaps.

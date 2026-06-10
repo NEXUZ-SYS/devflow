@@ -22,3 +22,47 @@ skills: ["odoo-development", "frontend-specialist-odoo"]
 # Extra Lite-mode dispatch routing: keyword -> agent.
 dispatchKeywords:
   odoo-specialist: ["odoo", "owl", "qweb", "pos", "nfc-e", "nf-e", "l10n_br", "addon", "orm"]
+# Profile-scoped Standards (enforcement) copied into the project's
+# .context/engineering/standards/ ONLY when this profile is detected. The ids
+# are mirrored in assets/standards/profiles/odoo/MANIFEST.txt and backed by
+# std-<id>.md + machine/std-<id>.js there. The list grows as each batch lands;
+# integrity is guarded by tests/integration/test-profile-standards-integrity.mjs.
+standards:
+  - std-odoo-naming-conventions
+  - std-odoo-manifest-hygiene
+  - std-odoo-orm-discipline
+  - std-odoo-computed-fields
+  - std-odoo-i18n
+  - std-odoo-code-hygiene
+  - std-odoo-version-api-hygiene
+  - std-odoo-js-modules
+  - std-odoo-qweb-escaping
+  - std-odoo-test-discipline
+  - std-odoo-module-structure
+  - std-odoo-orm-performance
+  - std-odoo-security
+  - std-odoo-owl-patterns
+  - std-odoo-oca-separation
+  - std-odoo-qweb-pdf-safety
+  - std-odoo-fiscal-br-integrity
+# Versioned stack docs to index into the docs-mcp-server global store. Seeded
+# into the project's .context/engineering/stacks/manifest.yaml by project-init
+# (one key per Odoo series). Each entry mirrors a manifest framework entry:
+#   - mcpIndexed: true  → docs queried from the docs-mcp-server global store
+#                         (modern default; vs legacy artisanalRef or skipDocs).
+#   - discoveryHints    → official docs roots used by the scrape/discover-source.
+# The actual index (recursive scrape) is a runtime follow-up the user runs via
+# `/devflow:scrape-stack-batch` — the plugin ships only the wishlist.
+stacks:
+  - lib: odoo-12
+    version: "12.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/12.0/"]
+  - lib: odoo-17
+    version: "17.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/17.0/developer/"]
+  - lib: odoo-18
+    version: "18.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/18.0/developer/"]

@@ -141,6 +141,15 @@ Para cada `agent` retornado ausente em `.context/agents/`, scaffoldar a partir d
 do plugin (preenchendo placeholders). Para cada `skill` retornada ausente em `.context/skills/`,
 copiar o diretório `${CLAUDE_PLUGIN_ROOT}/skills/<slug>/`. Não sobrescrever arquivos já editados.
 
+A detecção também retorna `standards` (ids de Standards profile-scoped) e `stacks` (docs
+versionados). Para cada `standard` ausente em `.context/engineering/standards/`, copiar
+`${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/<id>.md` **e**
+`.../machine/<id>.js` para `.context/engineering/standards/` (+`machine/`). **Nunca**
+sobrescrever um std já customizado pelo projeto; respeitar `.context/standards.local.yaml`
+`disable:` (pular ids desabilitados). Para cada `stack` ausente no manifest, semear via
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add --lib=<lib> --version=<ver> --discovery-hint=<url> --project=<PWD>`
+(idempotente; o scrape real é follow-up via `/devflow:scrape-stack-batch`).
+
 ## Step 4: Reportar
 
 ```markdown

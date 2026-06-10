@@ -1,0 +1,30 @@
+# Profile-scoped default Standards — Odoo
+# One std-<id>.md filename per line (comments with '#' are ignored).
+# Each entry must be backed by std-<id>.md + machine/std-<id>.js in this dir,
+# and mirrored in profiles/odoo.yaml `standards:`. The list grows per batch.
+# Guarded by tests/integration/test-profile-standards-integrity.mjs.
+
+# Tier 1 — backend (lint forte)
+std-odoo-naming-conventions
+std-odoo-manifest-hygiene
+std-odoo-orm-discipline
+std-odoo-computed-fields
+std-odoo-i18n
+std-odoo-code-hygiene
+std-odoo-version-api-hygiene
+
+# Tier 1 — frontend + testes (lint forte)
+std-odoo-js-modules
+std-odoo-qweb-escaping
+std-odoo-test-discipline
+
+# Tier 2 — lint parcial/heurístico
+std-odoo-module-structure
+std-odoo-orm-performance
+std-odoo-security
+std-odoo-owl-patterns
+
+# Tier 3 — domínio NXZ (weakStandardWarning; maioria human-review)
+std-odoo-oca-separation
+std-odoo-qweb-pdf-safety
+std-odoo-fiscal-br-integrity

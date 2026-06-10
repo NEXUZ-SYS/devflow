@@ -5,6 +5,7 @@
 //   scrape-batch [<lib@ver> ...] [--from-package|--from-manifest] [--dry-run]
 //   scrape <lib> <version> --source=<type> --from=<url> [--auto-fallback]
 //   validate [<lib>] [--strict]
+//   add --lib=<lib> --version=<ver> [--discovery-hint=<url> ...]   (seed manifest)
 //
 // Per Dependency Policy: pure node:* — uses skill scripts (input-resolver,
 // discovery, pipeline) and lib helpers (manifest-stacks, url-validator).
@@ -16,6 +17,7 @@ import {
   loadManifest,
   validateManifest,
   findMissingRefs,
+  addFrameworksToManifest,
 } from "./lib/manifest-stacks.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -197,6 +199,36 @@ async function cmdScrapeBatch(opts, projectRoot) {
   return 0;
 }
 
+// ─── add ─────────────────────────────────────────────────────────────────
+
+// Seed the project stack manifest with an mcpIndexed framework entry.
+// Used by project-init to declare a profile's stack wishlist (one key per
+// series). Wraps the idempotent addFrameworksToManifest lib helper.
+async function cmdAdd(opts, projectRoot) {
+  const lib = opts.lib;
+  const version = opts.version;
+  if (!lib || !version) {
+    console.error("Usage: devflow stacks add --lib=<lib> --version=<ver> [--discovery-hint=<url> ...] [--project=<path>]");
+    return 2;
+  }
+  const entry = { lib, version };
+  if (Array.isArray(opts.discoveryHints) && opts.discoveryHints.length > 0) {
+    entry.discoveryHints = opts.discoveryHints;
+  }
+  const r = addFrameworksToManifest(projectRoot, [entry]);
+  if (r.drift.length > 0) {
+    const d = r.drift[0];
+    console.error(`⚠️  ${d.lib} already at ${d.existingVersion}; not overwritten with ${d.newVersion}`);
+    return 1;
+  }
+  if (r.added.length > 0) {
+    console.log(`✓ added ${r.added.join(", ")} (mcpIndexed)`);
+  } else {
+    console.log(`= ${lib}@${version} already declared (no-op)`);
+  }
+  return 0;
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 // Pura e exportada p/ teste (mesmo contrato do formatScrapeOk).
@@ -211,6 +243,11 @@ export function parseArgs(argv) {
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);
     else if (arg.startsWith("--project=")) opts.project = arg.slice(10);
+    else if (arg.startsWith("--lib=")) opts.lib = arg.slice(6);
+    else if (arg.startsWith("--version=")) opts.version = arg.slice(10);
+    else if (arg.startsWith("--discovery-hint=")) {
+      (opts.discoveryHints ||= []).push(arg.slice(17));
+    }
     else if (!arg.startsWith("--")) opts.args.push(arg);
   }
   return opts;
@@ -248,6 +285,10 @@ async function main() {
     case "discover-source": {
       const [lib] = opts.args;
       const code = await cmdDiscoverSource(lib, projectRoot);
+      process.exit(code);
+    }
+    case "add": {
+      const code = await cmdAdd(opts, projectRoot);
       process.exit(code);
     }
     default:
