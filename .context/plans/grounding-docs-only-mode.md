@@ -42,6 +42,7 @@ grounding:
   mode: off            # off | docs-first | docs-only
   docsMcpServer: docs-mcp-server   # qual server MCP é a FONTE canônica (ver §8)
   blockWeb: true       # nega WebSearch/WebFetch quando mode != off
+  blockToolPatterns: []  # padrões extras de tool-name de MCP de internet a negar (ex: "rag-web-browser")
   failClosed: true     # MCP indisponível/vazio → parar e declarar, não responder de memória
   requireCitation: true # toda afirmação de stack cita o resultado do MCP (lib@versão)
 ```
@@ -54,7 +55,11 @@ Semântica dos modos:
 ## 5. Camadas de implementação
 
 ### 5a. Hard enforcement — `hooks/pre-tool-use` (bloqueio de web)
-Estende o hook (que já lê `.context/.devflow.yaml` e já emite `deny`): quando `grounding.mode != off` e `grounding.blockWeb`, negar `tool_name ∈ {WebSearch, WebFetch}` com `permissionDecisionReason` instruindo a usar `mcp__<docsMcpServer>__search_docs`. Opcional: alertar (não negar) em tools de MCP de internet genérico.
+Estende o hook (que já lê `.context/.devflow.yaml` e já emite `deny`): quando `grounding.mode != off` e `grounding.blockWeb`, negar `tool_name ∈ {WebSearch, WebFetch}` com `permissionDecisionReason` instruindo a usar `mcp__<docsMcpServer>__search_docs`.
+
+**[Review — isolamento, BLOQUEANTE p/ Execution]** O check de grounding deve ser um **ramo early, self-contained, só para tool_names de web** — avaliado ANTES (ou ao lado) da lógica de branch-protection existente, e que **retorna apenas para esses tools**. NUNCA pode alterar o caminho de `Edit`/`Write` nem o `deny` de config ausente (a branch-protection já existente fica byte-intacta). Config ausente / `grounding` ausente → `mode=off` → **não** bloqueia web (fail-open correto: grounding é opt-in; só projetos que ativaram bloqueiam).
+
+**[Review — bypass, honestidade]** Bloquear `WebSearch`/`WebFetch` é **best-effort**: não cobre `Bash` rodando `curl`/`wget` nem MCPs de internet genéricos (apify, rag-web-browser, etc.). Fase 1 nega `WebSearch`/`WebFetch` **+ uma denylist configurável de padrões de tool-name de MCP de internet** (`grounding.blockToolPatterns: [...]`). `Bash` com `curl`/`wget` fica como **gap residual documentado** (hardening opcional posterior: grep de comando de rede no Bash). Isso é coerente com a honestidade do §2 — o enforcement reduz, não zera.
 
 ### 5b. Diretiva — `hooks/session-start` (injeção de contexto)
 Quando `grounding.mode != off`, injeta um bloco `<GROUNDING_MODE>` no contexto (mesmo mecanismo que injeta o DevFlow context), declarando: o modo ativo, o server canônico, o protocolo de resposta (§5d), e o fail-closed. Assim a regra entra como instrução de alta prioridade em toda sessão.
