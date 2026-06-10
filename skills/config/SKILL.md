@@ -291,6 +291,32 @@ AskUserQuestion:
 2. Avisar o usuário **explicitamente** que o Claude Code precisa ser reiniciado para carregar o novo MCP server (`exit` + relaunch). Sem restart, as tools `mcp__docs-mcp-server__*` não estarão disponíveis na sessão atual.
 3. Ressaltar que store é global (`~/.local/share/docs-mcp-server/`) — limpeza manual via `npx @arabold/docs-mcp-server remove <lib>` se necessário.
 
+### 2.5 (opcional) Doc-grounding obrigatório
+
+Força o sourcing de fatos de **stack externo** (lib/framework/API/versão) **apenas** pelo MCP de documentação: bloqueia `WebSearch`/`WebFetch` (hard, via `pre-tool-use`), exige citação e é **fail-closed** (MCP vazio/down → o agente para e declara, não responde de memória de treino). Operacionaliza o `std-grounding` para conhecimento de stack. Depende de um docs-mcp-server (§2.4).
+
+> **Honestidade:** o modo NÃO desliga o conhecimento de treino do modelo (não há trava nos pesos). Ele eleva a guarda a *web bloqueado + citação obrigatória + fail-closed*. Escopo = só stack externo; raciocínio geral e o código do próprio projeto (via Read/Grep) seguem livres.
+
+**Detectar o(s) server(s) de docs:** em `.mcp.json` (e `~/.config/claude/mcp.json`), liste as chaves de `mcpServers` cujo nome contém `docs`. Se houver **mais de um** (ex.: `docs-mcp-server` e `plugin_devflow_docs-mcp-server`), o usuário escolhe qual é a fonte canônica.
+
+**P10: Ativar doc-grounding?**
+```
+AskUserQuestion:
+  question: "Forçar grounding via MCP de docs para fatos de stack externo? (bloqueia web e conhecimento de treino não-citado)"
+  header: "Doc-grounding"
+  multiSelect: false
+  options:
+    - label: "Não (off)"
+      description: "Desativado (default). Comportamento atual."
+    - label: "docs-first"
+      description: "Consulta o MCP primeiro; se vazio/down, complementa COM disclosure explícito 'fonte: treino, não verificado'. Web bloqueado."
+    - label: "docs-only (estrito)"
+      description: "Fato de stack só com o MCP. Vazio/timeout → para e avisa (fail-closed). Web bloqueado."
+```
+
+- **Se != off e houver >1 server de docs:** perguntar qual é o `docsMcpServer` canônico (listar os detectados).
+- **Se != off e nenhum docs-mcp-server detectado:** avisar que o modo ficará fail-closed para **todo** fato de stack — recomendar configurar o docs-mcp-server (§2.4) primeiro; permitir ativar mesmo assim.
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -334,6 +360,18 @@ git:
 - `autoMine: post-merge` é o default — o hook `post-merge` (instalado via `/devflow:devflow-memory install-hook`) só minera quando este valor é `post-merge`; `off` desativa sem desinstalar o hook
 - `wing: auto` é o default — só incluir se o usuário informar um nome customizado
 - `auto_diary: true` é o default — só incluir se desativado
+
+**Regras de geração para grounding:**
+- Se off ou pulado (P10): **não incluir** a seção `grounding:` (ausência = off; os hooks só ativam quando `mode != off`)
+- Se docs-first ou docs-only:
+  ```yaml
+  grounding:
+    mode: docs-first        # docs-first | docs-only
+    docsMcpServer: docs-mcp-server  # server canônico escolhido em §2.5
+    blockWeb: true          # nega WebSearch/WebFetch no pre-tool-use
+    failClosed: true        # MCP down/vazio → parar, não responder de memória
+    # blockToolPatterns: [] # (opcional) padrões extras de tool-name de MCP de internet a negar
+  ```
 
 ### 4. Confirmar e informar
 
