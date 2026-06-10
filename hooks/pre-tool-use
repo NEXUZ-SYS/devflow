@@ -247,6 +247,27 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
+# --- Non-project paths (auto-memory, napkin) ---
+# These are NOT project source code: auto-memory lives outside the repo
+# (~/.claude/projects/*/memory/*) and the curated napkin is operational
+# (.context/napkin.md). They must never be hard-denied by the branch gate —
+# at most they get an ASK so the user confirms (avoids silent changes).
+# MemPalace is reached via its MCP server (mcp__mempalace__*), not Edit/Write,
+# so it is never intercepted by this hook.
+is_nonproject_path() {
+  case "$1" in
+    */.claude/projects/*/memory/*|*/.context/napkin.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+emit_ask_nonproject() {
+  local fp="$1" br="$2" ask_reason reason_escaped
+  ask_reason=$(render_msg "$MSG_ASK_HEADER" "file_path=${fp}" "branch=${br}")
+  reason_escaped=$(escape_for_json "$ask_reason")
+  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "ask",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$reason_escaped"
+}
+
 # --- Also check: is the file being edited inside the plugin itself? ---
 
 PLUGIN_ROOT_CHECK="${CLAUDE_PLUGIN_ROOT:-}"
@@ -265,8 +286,15 @@ if [ -n "$CWD" ]; then
   DEVFLOW_CONFIG="$CWD/.context/.devflow.yaml"
 fi
 
-# If no config exists → DENY with config instruction
+# If no config exists → DENY with config instruction.
+# EXCEPTION: non-project files (auto-memory, napkin) are never hard-denied,
+# even when cwd/config is unavailable (e.g. cwd arrives empty for a Write
+# outside the workspace). Emit ASK so the user still confirms.
 if [ -z "$DEVFLOW_CONFIG" ] || [ ! -f "$DEVFLOW_CONFIG" ]; then
+  if is_nonproject_path "$FILE_PATH"; then
+    emit_ask_nonproject "$FILE_PATH" "$BRANCH"
+    exit 0
+  fi
   REASON_ESCAPED=$(escape_for_json "$MSG_NO_CONFIG")
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
   exit 0
@@ -354,15 +382,9 @@ fi
 # Non-project files: auto-memory (outside the repo) and curated napkin (inside .context/).
 # Emit permissionDecision=ask so Claude Code prompts the user per edit.
 
-if [ -n "$FILE_PATH" ]; then
-  case "$FILE_PATH" in
-    */.claude/projects/*/memory/*|*/.context/napkin.md)
-      ask_reason=$(render_msg "$MSG_ASK_HEADER" "file_path=${FILE_PATH}" "branch=${BRANCH}")
-      REASON_ESCAPED=$(escape_for_json "$ask_reason")
-      printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "ask",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
-      exit 0
-      ;;
-  esac
+if [ -n "$FILE_PATH" ] && is_nonproject_path "$FILE_PATH"; then
+  emit_ask_nonproject "$FILE_PATH" "$BRANCH"
+  exit 0
 fi
 
 # --- BLOCK: on protected branch, editing project source code ---
