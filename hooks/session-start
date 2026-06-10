@@ -347,6 +347,51 @@ PYEOF
   fi
 fi
 
+# --- Grounding mode directive (doc-grounding obrigatório) ---
+# When grounding.mode != off in .context/.devflow.yaml, inject a high-priority
+# directive: source external-stack facts ONLY from the docs MCP, fail-closed,
+# never from training memory. The web hard-block lives in pre-tool-use; this is
+# the behavioral protocol. Absent/off → no block (opt-in).
+
+grounding_context=""
+grounding_config="${project_root}/.context/.devflow.yaml"
+if [ -f "$grounding_config" ]; then
+  read g_mode g_server <<< $(python3 - "$grounding_config" << 'PYEOF'
+import sys
+mode, server = 'off', 'docs-mcp-server'
+try:
+    in_g = False
+    for raw in open(sys.argv[1]):
+        line = raw.rstrip('\n'); stripped = line.strip()
+        if stripped == 'grounding:':
+            in_g = True; continue
+        if in_g:
+            if line and not line[0].isspace():
+                break
+            if stripped.startswith('mode:'):
+                mode = stripped.split(':', 1)[1].strip().strip('"\'')
+            elif stripped.startswith('docsMcpServer:'):
+                server = stripped.split(':', 1)[1].strip().strip('"\'')
+except Exception:
+    pass
+print(mode, server)
+PYEOF
+  )
+  g_server=$(printf '%s' "$g_server" | tr -cd 'a-zA-Z0-9._-'); g_server=${g_server:-docs-mcp-server}
+
+  if [ -n "$g_mode" ] && [ "$g_mode" != "off" ]; then
+    grounding_instruction="DOC-GROUNDING ATIVO (mode: ${g_mode}). Fonte canonica de fatos de stack: o MCP de documentacao (mcp__${g_server}__search_docs / find_version / list_libraries).
+PROTOCOLO para qualquer afirmacao sobre lib/framework/API/versao EXTERNA:
+1. Consulte o MCP ANTES de afirmar.
+2. Responda CITANDO lib@versao + o trecho retornado.
+3. Se o MCP retornar vazio/timeout/erro: em 'docs-only' PARE e diga 'nao ha doc indexada ou o MCP falhou — nao vou responder de memoria de treino', e ofereca /devflow:scrape-stack-batch. Em 'docs-first', so entao complemente, com disclosure explicito 'fonte: conhecimento de treino, nao verificado no MCP'.
+ESCOPO: vale para conhecimento de STACK EXTERNO. Raciocinio geral, o codigo DO PROPRIO projeto (verificavel por Read/Grep/Glob) e o contexto da conversa seguem livres.
+LIMITE (honestidade): este modo bloqueia ferramentas web (hard, via pre-tool-use) + exige citacao + fail-closed; NAO e trava nos pesos do modelo — e compromisso reforcado por essas barreiras."
+    g_escaped=$(escape_for_json "$grounding_instruction")
+    grounding_context="\\n<GROUNDING_MODE>\\n${g_escaped}\\n</GROUNDING_MODE>\\n"
+  fi
+fi
+
 using_devflow_escaped=$(escape_for_json "$using_devflow_content")
 
 # --- Build mode context ---
@@ -438,7 +483,7 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${routines_due_ctx}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 

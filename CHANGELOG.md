@@ -5,6 +5,21 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] — 2026-06-10
+
+### Added — Modo doc-grounding obrigatório (`.devflow.yaml`)
+
+Flag **opt-in** que força afirmações sobre **stack externo** (lib/framework/API/versão) a virem **apenas** do MCP de documentação canônico — resposta ao incidente em que o `search_docs` deu timeout e o agente respondeu de memória de treino. Operacionaliza o `std-grounding` (prose-only) para conhecimento de stack. Registrado no **ADR-009**.
+
+- **Config:** seção `grounding:` no `.context/.devflow.yaml` com `mode: off | docs-first | docs-only` (ausência = off). `docs-first` complementa com disclosure explícito; `docs-only` é estrito (fail-closed).
+- **Enforcement em camadas** (separando máquina de diretiva, com honestidade de escopo — NÃO é trava nos pesos):
+  - **Hard** — `hooks/pre-tool-use` nega `WebSearch`/`WebFetch` quando o modo está ativo (mecânica `permissionDecision=deny` do ADR-004). Ramo self-contained antes do gate Edit/Write — branch-protection inalterada (regressão provada).
+  - **Diretiva** — `hooks/session-start` injeta `<GROUNDING_MODE>` com o protocolo: consultar o MCP → citar `lib@versão` → fail-closed (parar e declarar em `docs-only`; complementar com disclosure em `docs-first`).
+  - **UX** — pergunta P10 no `/devflow config` (§2.5) gera a seção; detecta os servers `*docs*` e pede o canônico quando há mais de um. `project-init` herda via interview.
+  - **Safety-net** — check `grounding-mcp` no `/devflow:devflow-doctor`: WARN se o `docsMcpServer` canônico não está no `.mcp.json` enquanto o modo está ativo (evita fail-closed silencioso).
+- **Escopo:** só stack externo — raciocínio geral e código do próprio projeto (via Read/Grep, domínio do `std-grounding`) seguem livres. Gap residual documentado: `Bash curl/wget` não é coberto pelo web-block.
+- TDD: `test-pre-tool-use-grounding.sh` (10/10), `test-session-start-grounding.sh` (6/6), `test-doctor.mjs` (+5). Regressão zero nos hooks (pre-tool-use 13/0, permissions all-pass, session-start e2e 18/18, unit 21/21).
+
 ## [1.14.0] — 2026-06-09
 
 ### Added — Standards default do Odoo (profile-scoped) com gate de série-alvo

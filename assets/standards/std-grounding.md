@@ -23,6 +23,8 @@ weakStandardWarning: true
 - Verificação precede geração: nenhum import, tipo, hook, env var ou path é escrito antes de confirmado por Read/Grep/Glob
 - Ao usar API de uma lib, confirme a versão instalada e o que essa versão suporta — APIs mudam entre majors
 
+> **Enforcement opcional (modo doc-grounding):** este standard é prose-only (sem linter). Para **enforçar** a regra "nunca confie só em memória" sobre conhecimento de **stack externo** (lib/framework/API/versão), ative `grounding.mode: docs-first|docs-only` no `.context/.devflow.yaml` (via `/devflow config`). Aí o `pre-tool-use` bloqueia `WebSearch`/`WebFetch` e o `session-start` injeta o protocolo fail-closed (consultar o MCP de docs → citar `lib@versão` → parar se vazio/down). O `/devflow:devflow-doctor` (check `grounding-mcp`) avisa se o server canônico não está configurado.
+
 ## Anti-patterns
 
 | Errado | Corrija para |

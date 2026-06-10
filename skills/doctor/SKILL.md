@@ -35,6 +35,7 @@ Para cada resultado FAIL/WARN com `repair` não-vazio, em ordem de severidade:
    - `mempalace-health` (drift) → rodar `mempalace repair`.
    - `mempalace-health` (wings órfãs) → **DESTRUTIVO**: listar drawers (tools MCP `mempalace_list_drawers`) e remover com `mempalace_delete_drawer` **só após confirmação explícita** de quais wings.
    - `git-hooks` → `/devflow:devflow-memory install-hook`.
+   - `grounding-mcp` (WARN) → doc-grounding ativo mas o `docsMcpServer` canônico não está no `.mcp.json` (o modo fica fail-closed para todo fato de stack). Configurar o docs-mcp-server (`/devflow config`) ou ajustar `grounding.docsMcpServer`.
 
 ## Step 3: Salvaguardas
 

@@ -105,6 +105,56 @@ print(json.dumps(prefixed)[1:-1])
   fi
 fi
 
+# --- Grounding mode: block internet tools when doc-grounding is active ---
+# Self-contained, web-tool-only branch placed BEFORE the Edit/Write gate so it
+# can act on WebSearch/WebFetch (which the gate below exits 0 on). It NEVER
+# touches the branch-protection path (that runs only for Edit/Write). Grounding
+# absent/off → no-op (opt-in). Fail-open on parse error (does not block).
+case "$TOOL_NAME" in
+  WebSearch|WebFetch)
+    GROUNDING_CONFIG="${CWD:-$PWD}/.context/.devflow.yaml"
+    if [ -f "$GROUNDING_CONFIG" ]; then
+      GROUNDING_REASON=$(python3 - "$GROUNDING_CONFIG" "$TOOL_NAME" << 'PYEOF'
+import sys, json
+fp, tool = sys.argv[1], sys.argv[2]
+mode, block_web, server = 'off', True, 'docs-mcp-server'
+try:
+    in_g = False
+    for raw in open(fp):
+        line = raw.rstrip('\n')
+        stripped = line.strip()
+        if stripped == 'grounding:':
+            in_g = True
+            continue
+        if in_g:
+            # leave the section at the first non-indented, non-empty line
+            if line and not line[0].isspace():
+                break
+            if stripped.startswith('mode:'):
+                mode = stripped.split(':', 1)[1].strip().strip('"\'')
+            elif stripped.startswith('blockWeb:'):
+                block_web = stripped.split(':', 1)[1].strip().lower() != 'false'
+            elif stripped.startswith('docsMcpServer:'):
+                server = stripped.split(':', 1)[1].strip().strip('"\'')
+except Exception:
+    sys.exit(0)  # fail-open: never block on parse error (grounding is opt-in)
+if mode != 'off' and block_web:
+    reason = ("[devflow grounding:%s] Ferramenta de internet '%s' bloqueada — o modo "
+              "doc-grounding exige que fatos de stack (lib/framework/API/versão) venham "
+              "SÓ do MCP de documentação. Use mcp__%s__search_docs / find_version. Se a "
+              "doc não estiver indexada, rode /devflow:scrape-stack-batch ou declare a "
+              "incerteza — NUNCA responda de memória de treino." % (mode, tool, server))
+    print(json.dumps(reason)[1:-1])  # JSON-escaped; surrounding quotes stripped
+PYEOF
+)
+      if [ -n "$GROUNDING_REASON" ]; then
+        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$GROUNDING_REASON"
+        exit 0
+      fi
+    fi
+    ;;
+esac
+
 # --- Only act on Edit and Write (legacy branch-protection logic) ---
 
 if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
