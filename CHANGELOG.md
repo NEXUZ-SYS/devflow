@@ -5,6 +5,18 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.16.0] — 2026-06-10
+
+### Added — Patch incremental no `/devflow config` (Step 5)
+
+Quando o `.context/.devflow.yaml` já existe, o skill `devflow:config` deixava só dois caminhos: **manter tudo** ou **reconfigurar tudo**. Faltava o meio-termo óbvio — adicionar só o que falta (ex.: a seção `grounding:` ou o `routines.json`) sem mexer no resto. Esta versão introduz o **patch incremental** como caminho padrão.
+
+- **Painel de estado (5.1):** mostra TODAS as 9 áreas configuráveis — inclusive as ausentes (✅ configurado / ⬚ não configurado): estratégia git, branches protegidas, CLI de PR, branch protection, auto-finish, MemPalace (+ hook auto-mine), docs-mcp-server, doc-grounding e rotinas de manutenção.
+- **Menu de 3 vias (5.2):** Patch incremental (recomendado) · Reconfigurar tudo · Manter como está.
+- **Multi-seleção (5.3):** lista as 5 unidades configuráveis com as **ausentes pré-marcadas** — o default já é "só o que falta", mas é possível marcar uma área existente para alterá-la. Roda apenas os blocos de pergunta das unidades marcadas.
+- **Merge não-destrutivo:** novo helper `scripts/lib/devflow-yaml-merge.mjs` (`mergeSection` + `topLevelKeys`) substitui-ou-anexa **somente** a seção alvo, preservando cabeçalho-comentário e demais seções verbatim. Nova regra no Step 3 proíbe regenerar o arquivo inteiro no modo patch. `routines.json` e `.mcp.json` permanecem não-destrutivos por construção.
+- **Testes:** `tests/validation/test-config-incremental-merge.mjs` — 8 casos cobrindo anexar/substituir/ordem/normalização/validação. RED→GREEN. Suíte de validação 819/819.
+
 ## [1.15.1] — 2026-06-10
 
 ### Fixed — Gate de git bloqueava escrita de auto-memory/napkin com `cwd` ausente

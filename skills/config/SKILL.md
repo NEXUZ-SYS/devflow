@@ -373,6 +373,12 @@ git:
     # blockToolPatterns: [] # (opcional) padrões extras de tool-name de MCP de internet a negar
   ```
 
+**Regras de geração no modo patch incremental (Step 5.3):**
+- **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
+- Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
+- `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (`|| cp` e merge dentro de `mcpServers`) — não sobrescrever.
+- Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
+
 ### 4. Confirmar e informar
 
 Após gerar o arquivo, mostrar ao usuário:
@@ -424,12 +430,92 @@ O SessionStart passa a **sugerir** rodar `/devflow:devflow-routines run context-
 
 ### 5. Se `.context/.devflow.yaml` já existe
 
-Se o arquivo já existir ao iniciar o skill:
-1. Ler o arquivo atual
-2. Informar as configurações atuais
-3. Perguntar: "Quer reconfigurar? As configurações atuais serão sobrescritas."
-4. Se sim → continuar entrevista normalmente
-5. Se não → encerrar
+**Não** trate isto como um binário "manter tudo" vs "reconfigurar tudo". O caminho padrão é o **patch incremental**: mostrar o estado de TODAS as áreas (inclusive as ausentes) e configurar **apenas** as selecionadas, sem tocar no resto.
+
+#### 5.1 Painel de estado
+
+Ler o YAML atual e sondar o ambiente para montar um quadro de cada área configurável — ✅ quando configurada (com o valor) e ⬚ quando ausente. Detecções:
+
+```bash
+# Seções de topo presentes no YAML
+SECTIONS=$(node -e 'import("'"$CLAUDE_PLUGIN_ROOT"'/scripts/lib/devflow-yaml-merge.mjs").then(m=>{const fs=require("fs");process.stdout.write(m.topLevelKeys(fs.readFileSync(".context/.devflow.yaml","utf8")).join(" "))})')
+
+# Rotinas de manutenção
+[ -f .context/routines.json ] && echo "routines: sim" || echo "routines: nao"
+
+# Hook git de auto-mine do MemPalace
+{ [ -f .git/hooks/post-merge ] && grep -q mempalace .git/hooks/post-merge 2>/dev/null && echo "automine-hook: sim"; } || echo "automine-hook: nao"
+
+# docs-mcp-server e mempalace MCP → reusar as detecções de §2.4 (HAS_DOCS_MCP) e P6 (HAS_MEMPALACE)
+```
+
+Imprimir um painel cobrindo as 9 áreas (✅/⬚), por exemplo:
+
+```
+Estado atual de .context/.devflow.yaml:
+  ✅ Estratégia git ........ branch-flow (main, develop)
+  ✅ CLI de PR ............. gh
+  ✅ Branch protection ..... ativada
+  ✅ Auto-finish ........... ativado (tudo)
+  ✅ MemPalace ............. ativado (global, 1000)  · hook auto-mine: ⬚ não instalado
+  ✅ docs-mcp-server ....... ativado (.mcp.json)
+  ✅ Doc-grounding ......... docs-only
+  ⬚ Rotinas de manutenção . não configurado
+```
+
+#### 5.2 Menu de 3 vias
+
+```
+AskUserQuestion:
+  question: "O .context/.devflow.yaml já existe. Como deseja proceder?"
+  header: "Reconfigurar?"
+  multiSelect: false
+  options:
+    - label: "Patch incremental (Recomendado)"
+      description: "Escolher quais áreas configurar — só elas mudam, o resto fica intacto"
+    - label: "Reconfigurar tudo"
+      description: "Rodar a entrevista completa e sobrescrever todas as seções"
+    - label: "Manter como está"
+      description: "Não alterar nada; encerrar"
+```
+
+- **Manter como está** → encerrar.
+- **Reconfigurar tudo** → rodar a entrevista completa (Steps 2→4.6) e regenerar o arquivo normalmente.
+- **Patch incremental** → seguir 5.3.
+
+#### 5.3 Patch incremental
+
+```
+AskUserQuestion:
+  question: "Quais áreas configurar agora? (as demais ficam intactas)"
+  header: "Áreas"
+  multiSelect: true
+  options:
+    - label: "Estratégia git e finalização"
+      description: "Estratégia, branches protegidas, CLI de PR, branch protection, auto-finish (P1–P5)"
+    - label: "MemPalace"
+      description: "Integração de memória + budget/palace + hook de auto-mine (P6–P8 + §4.5)"
+    - label: "docs-mcp-server"
+      description: "Índice de docs de stacks via MCP (§2.4)"
+    - label: "Doc-grounding"
+      description: "Sourcing obrigatório de fatos de stack via MCP (§2.5)"
+    - label: "Rotinas de manutenção"
+      description: "Semear .context/routines.json com o health-check periódico (§4.6)"
+```
+
+**Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la.
+
+Para **cada** unidade selecionada, rodar **somente** o(s) bloco(s) de pergunta correspondente(s) e aplicar o resultado de forma **não-destrutiva** (ver "Regras de geração no modo patch", abaixo):
+
+| Unidade | Blocos a rodar | Como aplicar |
+|---|---|---|
+| Estratégia git e finalização | P1–P5 (+ §4.5/§4.6 se já cobertos por outras unidades, não duplicar) | `mergeSection(yaml, "git", <bloco git:>)` |
+| MemPalace | P6–P8 + oferta de hook §4.5 | `mergeSection(yaml, "mempalace", <bloco mempalace:>)` + §4.5 |
+| docs-mcp-server | §2.4 / P9 | editar `.mcp.json` (merge em `mcpServers`) |
+| Doc-grounding | §2.5 / P10 | `mergeSection(yaml, "grounding", <bloco grounding:>)` |
+| Rotinas de manutenção | §4.6 | criar `.context/routines.json` (só se ausente) |
+
+Ao final, reimprimir o painel 5.1 atualizado para confirmar o que mudou.
 
 ## Ações disponíveis
 
