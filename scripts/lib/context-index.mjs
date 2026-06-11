@@ -21,7 +21,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadStandardsMerged } from "./standards-loader.mjs";
-import { loadManifest } from "./manifest-stacks.mjs";
+import { loadStacksMerged } from "./stacks-loader.mjs";
+import { filterStacks } from "./stacks-filter.mjs";
 
 /**
  * Build the context index for Camada 1.
@@ -32,7 +33,7 @@ import { loadManifest } from "./manifest-stacks.mjs";
  */
 export function buildContextIndex(projectRoot, pluginRoot) {
   const standards = collectStandards(projectRoot, pluginRoot);
-  const refs = collectRefs(projectRoot);
+  const refs = collectRefs(projectRoot, pluginRoot);
   return {
     standards,
     refs,
@@ -60,11 +61,19 @@ function collectStandards(projectRoot, pluginRoot) {
   }));
 }
 
-function collectRefs(projectRoot) {
-  const m = loadManifest(projectRoot);
+function collectRefs(projectRoot, pluginRoot) {
+  // Fase 7: live-load dual-source (plugin defaults + projeto) e filtro por
+  // framework detectado. Entradas declaradas pelo projeto (origin "project")
+  // são SEMPRE incluídas (declaração explícita); defaults do plugin entram só
+  // quando o filtro casa com as deps detectadas — assim o índice reflete o que
+  // o projeto realmente usa, sem regredir refs legados declarados localmente.
+  const merged = loadStacksMerged(projectRoot, pluginRoot);
+  const { matched } = filterStacks(merged, projectRoot);
+  const matchedLibs = new Set(matched.map((x) => x.lib));
   const out = [];
-  for (const [lib, fw] of Object.entries(m.frameworks || {})) {
+  for (const [lib, fw] of Object.entries(merged.frameworks || {})) {
     if (fw.skipDocs) continue;
+    if (fw.origin !== "project" && !matchedLibs.has(lib)) continue;
 
     // Fase B (Migration to docs-mcp-server): mcpIndexed:true is the modern
     // declaration. Lib is indexed in the docs-mcp-server global store and
