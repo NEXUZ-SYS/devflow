@@ -17,6 +17,7 @@ import { parseArgs } from "node:util";
 import { loadStandards } from "./lib/standards-loader.mjs";
 import { validateSubset } from "./lib/glob.mjs";
 import { contextPaths } from "./lib/context-paths.mjs";
+import { isWithinDir } from "./lib/path-guard.mjs";
 
 const SCAFFOLD_TEMPLATE = (id) => `---
 id: std-${id}
@@ -508,12 +509,10 @@ async function cmdVerify(targetId, strict, projectRoot) {
  * Secondary containment: catches edge cases that id-regex might miss.
  */
 function assertWithinDir(filePath, parentDir) {
-  const rel = resolve(filePath);
-  const par = resolve(parentDir);
-  if (!rel.startsWith(par + sep) && rel !== par) {
+  if (!isWithinDir(filePath, parentDir)) {
     process.stderr.write(
       `Error: path traversal detected — resolved path escapes the target directory\n` +
-        `  resolved: ${rel}\n  dir: ${par}\n`,
+        `  resolved: ${resolve(filePath)}\n  dir: ${resolve(parentDir)}\n`,
     );
     process.exit(1);
   }

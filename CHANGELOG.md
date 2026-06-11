@@ -5,6 +5,20 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] — 2026-06-11
+
+### Added — Distribuição dos stacks defaults (live-load + filtro por framework) — Fase 7
+
+Os 22 stacks default do plugin (`assets/stacks/`, v1.17.0) passam a chegar a qualquer projeto **sem cópia**, espelhando o mecanismo de standards (`loadStandardsMerged`): defaults vivem só no plugin, carregados via live-load, e um filtro narra o que é relevante ao framework detectado.
+
+- **`scripts/lib/stacks-loader.mjs`** — `loadStacksMerged(projectRoot, pluginRoot)`: dual-source (plugin `assets/stacks/` + projeto `.context/engineering/stacks/`), projeto vence por nome de lib, respeita `.context/stacks.local.yaml` `disable:`. Anota `origin`/`concern`/`mdPath`.
+- **`scripts/lib/stacks-filter.mjs`** — detecta deps do projeto (`package.json`/`pyproject.toml`/`go.mod`/`Cargo.toml`) e filtra via alias map (`tailwind`→`tailwindcss`, `vercel-ai-sdk`→`ai`, `postgres`→`pg|…`, `bigquery`→`@google-cloud/bigquery`, + frontmatter `package:`). Bordas: `node` sempre que houver `package.json`; `harness-engineering`/`gemini` nunca auto-incluídos (só por keyword no skill).
+- **`scripts/lib/context-index.mjs`** — índice do SessionStart usa `loadStacksMerged` + filtro: lista só stacks relevantes; entradas `origin: project` sempre aparecem. Regressão do índice de standards preservada.
+- **`skills/stack-filter/SKILL.md`** (`devflow:stack-filter`) + `scripts/lib/stacks-filter-cli.mjs` — filtro on-demand no PREVC Planning (análogo a `knowledge-filter`/`adr-filter`); emite `<STACKS filtered>` com ponteiros `mcp__docs-mcp-server__search_docs`. Integrado no `prevc-planning` Step 1.
+- **`devflow stacks eject <lib>`** — copia o `.md` narrativo default p/ `.context/engineering/stacks/`. Novo `scripts/lib/path-guard.mjs` (`isWithinDir`) extraído e compartilhado com `devflow-standards.mjs` (containment SI, prefix-attack safe).
+- **`project-init`** documenta o live-load (não seeda os 22).
+- **Testes:** 26 novos (loader/filter/eject/path-guard/filter-cli/context-index-stacks), TDD RED→GREEN. Suíte 845/845 (0 falhas, 1 skip), hooks session-start 50/50. Pure `node:*`.
+
 ## [1.17.0] — 2026-06-10
 
 ### Added — Stacks defaults padronizadas (`assets/stacks/`) + indexação no docs-mcp-server
