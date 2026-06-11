@@ -86,6 +86,24 @@ After loading ADR guardrails, check for a knowledge layer:
 
 **Fallback:** If `devflow:knowledge-filter` is unavailable (e.g., installation incomplete), fall back to loading only docs with `activation: always` — correctness over optimization.
 
+### All Modes — Stack Layer Loading (filtered by detected framework)
+
+After loading knowledge, check for relevant stacks:
+
+1. The stacks default ship with the plugin (`assets/stacks/`) and are live-loaded — there is nothing to "exist" in the project. Proceed whenever the project has a dependency manifest (`package.json`/`pyproject.toml`/`go.mod`/`Cargo.toml`).
+
+2. **Invoke `devflow:stack-filter`** passing the current task description. That skill:
+   - Runs `loadStacksMerged` (plugin defaults + project, project wins, respects `stacks.local.yaml`)
+   - Filters to the stacks whose client package is in the detected deps (alias map); `node` always when `package.json` exists
+   - Keyword-releases sinalless stacks (`harness-engineering`, `gemini`) only when the task mentions relevant terms
+   - Emits a `<STACKS filtered="true">` block with `mcp__docs-mcp-server__search_docs` pointers per lib
+
+3. Collect the filtered stacks as context. Announce: "Loaded N stacks relevant to the detected framework."
+
+**Note:** Stacks are descriptive (what the project uses). For external lib/API/version facts, query the docs-mcp-server (`search_docs`) — never answer from training memory (`std-grounding`/doc-grounding).
+
+**Fallback:** If `devflow:stack-filter` is unavailable or the project declares no deps, proceed without stack context — opt-in, like the ADR/knowledge filters.
+
 ## Step 2: Brainstorming
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:brainstorming`
