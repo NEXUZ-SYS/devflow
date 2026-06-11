@@ -5,6 +5,18 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] — 2026-06-10
+
+### Added — Stacks defaults padronizadas (`assets/stacks/`) + indexação no docs-mcp-server
+
+O plugin passa a versionar um conjunto de **stacks defaults** — docs narrativos de conhecimento (DDC) curados à mão, irmãos de `assets/standards/`. Cada `.md` descreve convenções, anti-patterns e uso-no-projeto de uma tecnologia (Next 16, React 19, Zod 4, etc.), com frontmatter `version`/`upstream`.
+
+- **25 docs DDC** movidos para `assets/stacks/<concern>/` em 9 concerns (ai, backend, database, frontend, language, runtime, state, testing, validation) + `MANIFEST.txt`.
+- **`assets/stacks/manifest.yaml`** (`spec: devflow-stack/v0`): liga cada lib por **nome** (não `artisanalRef`), declarando `mcpIndexed: true` (doc oficial indexada) ou `skipDocs: true`. Validado por `scripts/lib/manifest-stacks.mjs` (`validateManifest` → 0 erros).
+- **Indexação via `devflow:scrape-stack-batch`** no store global do `docs-mcp-server`: **22 libs** com doc oficial scrapeada (`mcpIndexed`), consultáveis via `mcp__docs-mcp-server__search_docs`. Conteúdo ancorado na fonte oficial — nunca fabricado (regra anti-fabricação da skill).
+- **3 `skipDocs`:** `postgres` (API estável), `harness-engineering` (disciplina, não-produto), `gemini` (crawler hostil — `.md` narrativo cobre).
+- **Notas de scrape** (no manifest): `openai` exigiu o host pós-redirect (`developers.openai.com`); `mastra-sdk` indexado em 2 passes (`/guides` + `/docs`); `shadcn-ui` em 2 passes (`/docs/installation` + `/docs/components`) com `scope: subpages` para escapar do root `/docs/v0` derivado do sitemap.
+
 ## [1.16.0] — 2026-06-10
 
 ### Added — Patch incremental no `/devflow config` (Step 5)
