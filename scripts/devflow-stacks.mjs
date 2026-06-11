@@ -12,13 +12,21 @@
 
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFile } from "node:fs/promises";
 import {
   loadManifest,
   validateManifest,
   findMissingRefs,
   addFrameworksToManifest,
 } from "./lib/manifest-stacks.mjs";
+import { contextPaths } from "./lib/context-paths.mjs";
+import { isWithinDir } from "./lib/path-guard.mjs";
+
+const EJECT_CONCERNS = [
+  "ai", "backend", "database", "frontend", "language",
+  "runtime", "state", "testing", "validation",
+];
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, "..");
@@ -240,6 +248,7 @@ export function parseArgs(argv) {
     else if (arg === "--from-manifest") opts.fromManifest = true;
     else if (arg === "--auto-fallback") opts.autoFallback = true;
     else if (arg === "--strict") opts.strict = true;
+    else if (arg === "--force") opts.force = true;
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);
     else if (arg.startsWith("--project=")) opts.project = arg.slice(10);
@@ -253,13 +262,57 @@ export function parseArgs(argv) {
   return opts;
 }
 
+// eject <lib> [--project=<path>] [--force]
+// Copia <pluginRoot>/assets/stacks/<concern>/<lib>*.md → projeto .context/engineering/stacks/.
+// Espelha cmdEject de devflow-standards.mjs; containment via isWithinDir (path-guard).
+export async function cmdEject(rawLib, projectRoot, opts = {}) {
+  const lib = String(rawLib ?? "");
+  if (!/^[a-z][a-z0-9-]*$/.test(lib)) {
+    process.stderr.write(`Error: lib inválida '${rawLib}' — deve casar /^[a-z][a-z0-9-]*$/ (sem /, \\, ..)\n`);
+    return 1;
+  }
+  const pluginRoot = opts.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT;
+  const stacksAssets = resolve(pluginRoot, "assets", "stacks");
+
+  // Resolve concern + arquivo varrendo assets/stacks/<concern>/<lib>*.md
+  let srcRel = null;
+  for (const c of EJECT_CONCERNS) {
+    const dir = resolve(stacksAssets, c);
+    if (!existsSync(dir)) continue;
+    const f = readdirSync(dir).find(
+      (n) => n.endsWith(".md") && n.replace(/\.md$/, "").replace(/@.*$/, "") === lib,
+    );
+    if (f) { srcRel = `${c}/${f}`; break; }
+  }
+  if (!srcRel) {
+    process.stderr.write(`Error: stack default não encontrado: ${lib}\n  Procurado em: ${stacksAssets}/<concern>/${lib}*.md\n`);
+    return 1;
+  }
+
+  const src = resolve(stacksAssets, srcRel);
+  if (!isWithinDir(src, stacksAssets)) { process.stderr.write("Error: containment (src)\n"); return 1; }
+
+  const stacksDir = contextPaths(projectRoot).stacks;
+  const dest = resolve(stacksDir, srcRel);
+  if (!isWithinDir(dest, stacksDir)) { process.stderr.write("Error: containment (dest)\n"); return 1; }
+
+  if (existsSync(dest) && !opts.force) {
+    process.stderr.write(`Error: ${dest} já existe (use --force para sobrescrever)\n`);
+    return 1;
+  }
+  mkdirSync(resolve(dest, ".."), { recursive: true });
+  await copyFile(src, dest);
+  process.stdout.write(`Ejected ${lib} → ${dest}\n`);
+  return 0;
+}
+
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const opts = parseArgs(rest);
   const projectRoot = opts.project ? resolve(opts.project) : process.cwd();
 
   if (!sub) {
-    console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit> [args]");
+    console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|eject> [args]");
     process.exit(2);
   }
 
@@ -291,11 +344,17 @@ async function main() {
       const code = await cmdAdd(opts, projectRoot);
       process.exit(code);
     }
+    case "eject": {
+      const [lib] = opts.args;
+      const code = await cmdEject(lib, projectRoot, { force: opts.force });
+      process.exit(code);
+    }
     default:
       console.error(`Unknown subcommand: ${sub}`);
-      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|discover-source> [args]");
+      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|discover-source|eject> [args]");
       console.error("  audit <lib>@<version>          Deep audit of refs/<lib>@<version>.md (5 checks)");
       console.error("  discover-source <lib>          List candidate URLs to scrape (curated + heuristic)");
+      console.error("  eject <lib> [--force]          Copia o stack default <lib>.md → .context/engineering/stacks/");
       process.exit(2);
   }
 }
