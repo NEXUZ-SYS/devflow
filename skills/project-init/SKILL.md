@@ -575,6 +575,17 @@ E.g. an Odoo project seeds `odoo-12@12.0`, `odoo-17@17.0`, `odoo-18@18.0`. The a
 scrape is a follow-up the user runs (`/devflow:scrape-stack-batch`); init only declares
 the wishlist.
 
+**Default Stacks (live-load, NOT copied):** the ~22 universal default stacks shipped with
+the plugin (`assets/stacks/`) are **live-loaded** via `loadStacksMerged` at index/filter
+time — exactly like the ~20 default Standards, they are **never copied** into the project.
+Init does NOT seed them. The SessionStart index (`context-index-cli`) and the
+`devflow:stack-filter` skill surface only the defaults relevant to the **detected
+framework** (by dependency match). To customize a default stack's narrative doc in the
+project, run `devflow stacks eject <lib>` (copies `assets/stacks/<concern>/<lib>.md` into
+`.context/engineering/stacks/`). Honor `.context/stacks.local.yaml` `disable:` to suppress
+a default. The profile-stack seeding above (via `devflow stacks add`) remains unchanged —
+it declares libs that are NOT in the defaults.
+
 ## Step 4: Fill Gaps
 
 After dotcontext (Tier 1/2) or DevFlow standalone (Tier 3) has run, check for gaps.
