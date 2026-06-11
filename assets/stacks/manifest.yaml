@@ -1,0 +1,139 @@
+spec: devflow-stack/v0
+
+# Stacks defaults padronizadas do plugin DevFlow.
+# Os .md por concern (ai/ backend/ ... validation/) são docs narrativos de
+# conhecimento (DDC), curados à mão — NÃO são output de scrape. Eles se ligam a
+# este manifest por NOME de lib (não por artisanalRef, que exige fence SI-6).
+#
+# mcpIndexed: true  → docs OFICIAIS indexadas no store global do docs-mcp-server
+#                     (scrape real confirmado via list_libraries/search_docs).
+#                     Consumir via mcp__docs-mcp-server__search_docs.
+# skipDocs: true    → sem doc oficial indexada (API estável, não-produto, ou
+#                     fonte hostil ao crawler). O .md narrativo cobre o uso.
+#
+# Indexação executada em 2026-06-10 via scrape-stack-batch (Fase 5).
+
+runtime:
+  node: "24"
+
+frameworks:
+  # ── frontend ──
+  next:
+    version: "16"
+    mcpIndexed: true
+    applyTo: ["app/**", "src/**"]
+  react:
+    version: "19"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  tailwind:
+    version: "4"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  radix-ui:
+    version: "latest"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  # scrape em 2 passes: /docs/installation/* (scope subpages) + /docs/components/*
+  # (entrada /docs/components, scope subpages — hostname/bare-/docs falham no /docs/v0
+  # que o crawler deriva do sitemap). subpages mantém a URL dada como root.
+  shadcn-ui:
+    version: "latest"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+
+  # ── language / runtime ──
+  typescript:
+    version: "6"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  node:
+    version: "24"
+    mcpIndexed: true
+
+  # ── state / validation ──
+  zustand:
+    version: "5"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  zod:
+    version: "4"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+
+  # ── testing ──
+  playwright:
+    version: "1.4"
+    mcpIndexed: true
+    applyTo: ["tests/**"]
+  vitest:
+    version: "2"
+    mcpIndexed: true
+    applyTo: ["src/**", "tests/**"]
+
+  # ── ai ──
+  vercel-ai-sdk:
+    version: "4"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  # scrape em 2 passes: /guides/* + /docs/* (entrada /docs/agents/processors, scope
+  # hostname). Cobre agents, tools, memory, server. O bare /docs falha (root → 404).
+  mastra-sdk:
+    version: "latest"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  anthropic-sdk:
+    version: "1.0"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  openai-sdk:
+    version: "4"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  google-genai-sdk:
+    version: "latest"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  # fonte: developers.openai.com/api/docs (platform.openai.com/docs redireciona p/ lá;
+  # scrapear o host pós-redirect foi necessário para o crawl pegar as subpáginas).
+  openai:
+    version: "latest"
+    mcpIndexed: true
+
+  # ── backend / database ──
+  firebase-functions:
+    version: "6"
+    mcpIndexed: true
+    applyTo: ["functions/**", "src/**"]
+  firebase-firestore:
+    version: "latest"
+    mcpIndexed: true
+    applyTo: ["src/**"]
+  bigquery:
+    version: "latest"
+    mcpIndexed: true
+  pgvector:
+    version: "0.8"
+    mcpIndexed: true
+  # scrape parcial: o job marcou "failed" por um 404 em página profunda, mas
+  # indexou as docs reais de platform.claude.com/docs/* (Messages API etc.).
+  # docs.anthropic.com migrou p/ platform.claude.com — fonte confirmada via search_docs.
+  anthropic:
+    version: "latest"
+    mcpIndexed: true
+
+  # ── skipDocs (sem doc oficial indexada) ──
+  # API estável / não-produto — o .md narrativo é a referência.
+  postgres:
+    version: "16"
+    skipDocs: true
+  harness-engineering:
+    version: "n/a"
+    skipDocs: true
+  # TODO (scrape falhou — crawler hostil; revisitar com fonte que funcione):
+  #   gemini: ai.google.dev/gemini-api/docs aborta (9/10 child fail) e ?hl=pt-br
+  #     entra em loop de redirect. Store ficou vazio (search → not found).
+  #     Candidata: referência estável da API ou mirror.
+  gemini:
+    version: "latest"
+    skipDocs: true
