@@ -100,7 +100,7 @@ Audits ADRs that were **touched in this workflow** (via `git diff`) using the de
 ```bash
 # Worktree-safe diff base — works with branches, worktrees, intermediate pulls.
 # Includes legacy .context/docs/adrs/ for dual-read support until v1.2.
-touched_adrs=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/adrs/*.md' '.context/docs/adrs/*.md')
+touched_adrs=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/engineering/adrs/*.md' '.context/adrs/*.md' '.context/docs/adrs/*.md')
 ```
 
 If `touched_adrs` is empty → skip this step entirely. The block runs only when the workflow modified or created ADR files.
@@ -127,7 +127,7 @@ For each touched ADR, apply per-status logic:
 
 ```bash
 # Diff includes legacy .context/docs/adrs/ for dual-read until v1.2
-touched=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/adrs/*.md' '.context/docs/adrs/*.md')
+touched=$(git diff --name-only $(git merge-base HEAD main)...HEAD -- '.context/engineering/adrs/*.md' '.context/adrs/*.md' '.context/docs/adrs/*.md')
 if [ -z "$touched" ]; then
   echo "Step 2.6: nenhuma ADR tocada — skip"
   exit 0

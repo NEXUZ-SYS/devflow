@@ -81,6 +81,13 @@ agent({ action: "orchestrate", agents: ["security-auditor"], task: "<task-descri
 ### Lite Mode
 Read `.context/agents/security-auditor.md` and apply its checklist.
 
+## Step R.x: ADR conflict gate
+
+Antes de aprovar o plano, releia-o contra os guardrails carregados no bloco `<ADR_GUARDRAILS>` (Planning Step 1):
+
+1. **Conflito plano×guardrail** — algum passo do plano viola um SEMPRE/NUNCA/QUANDO de ADR aprovada? Se sim, **sinalize como BLOCK** (não é oferta — é gate): aponte a ADR e o guardrail violado; o plano deve ser corrigido ou a ADR evoluída antes de avançar.
+2. **Decisão nova no plano** — o plano introduziu uma decisão arquitetural que o Planning não capturou? Se sim, aplique o cruzamento do Planning Step 3.5 (b/c) reusando `scripts/adr-decision.mjs` e ofereça evolve/create. Respeite `skip_adr_offer`.
+
 ## Step 5: Present Findings
 
 Present all review findings to the user in a structured format:
