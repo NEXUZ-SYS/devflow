@@ -5,6 +5,32 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] — 2026-06-12
+
+### Added — Integração ADR↔decisão cross-aware no PREVC
+
+O `Step 3.5` do `prevc-planning` deixa de oferecer apenas CREATE e passa a **cruzar** a decisão arquitetural detectada com as ADRs já carregadas (bloco `<ADR_GUARDRAILS>`), escolhendo a ação:
+
+- **EVOLVE** quando a decisão contradiz/estende uma ADR existente (oferece `/devflow adr:evolve <name>`, com `evolveHint` sugerido).
+- **CREATE** quando nenhuma ADR trata do tema (`/devflow adr:new --mode=prefilled`).
+- **silêncio** quando a decisão já está alinhada com uma ADR aprovada.
+
+A heurística de detecção foi suavizada de 4/4 para **3/4**: núcleo obrigatório (`não-trivial` **E** `afeta stack/arquitetura`) + **≥1 reforço** (`alternativas` **OU** `implica guardrails`).
+
+A consideração de ADR foi estendida às fases pós-Planning:
+
+- **Review** — novo *ADR conflict gate*: relê o plano contra os guardrails e sinaliza conflito plano×guardrail como BLOCK.
+- **Execution** — captura passiva de decisões emergentes em `.context/workflow/.adr-pending.json` (efêmero, gitignored, não interrompe o loop).
+- **Confirmation** — *ADR sweep*: varre os candidatos capturados + ADRs tocadas (via `resolveAdrPath`) e oferece evolve/create em lote; nova seção "ADRs criadas/evoluídas" no summary.
+
+Arquitetura: o **julgamento** (sinais, relação) fica no LLM; a **regra** vira lib determinística e testável — `scripts/adr-decision.mjs` (`evaluateSignals`, `decideAction`, `parseGuardrailsBlock`) e `scripts/lib/adr-pending.mjs` (envelope `{schema:1}`, dedup com normalização de diacríticos). O opt-out `skip_adr_offer` passa a cobrir o workflow inteiro (Planning + sweep do Confirmation).
+
+### Fixed
+
+- O `git diff` do gate de auditoria de ADR no `prevc-validation` (Steps 2.5/2.6) passa a cobrir o path canônico `.context/engineering/adrs/`, que não era contemplado — a fase V não detectava ADRs tocadas no path real.
+
+42 testes novos (unit + E2E determinístico da cadeia P→E→C + guard de referências dos SKILL.md). Suíte de validação: 882/882.
+
 ## [1.18.0] — 2026-06-11
 
 ### Added — Distribuição dos stacks defaults (live-load + filtro por framework) — Fase 7
