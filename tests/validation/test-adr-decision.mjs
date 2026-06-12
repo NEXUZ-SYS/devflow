@@ -70,3 +70,21 @@ test('parseGuardrailsBlock: entrada vazia/nula → []', () => {
   assert.deepEqual(parseGuardrailsBlock(''), []);
   assert.deepEqual(parseGuardrailsBlock(null), []);
 });
+
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+const CLI = resolve(import.meta.dirname, '../../scripts/adr-decision.mjs');
+const run = (args) => JSON.parse(execFileSync('node', [CLI, ...args], { encoding: 'utf-8' }));
+
+test('CLI evaluate: núcleo+reforço → trigger true', () =>
+  assert.deepEqual(run(['evaluate', '--non-trivial=true', '--affects-stack=true', '--alternatives=true', '--guardrails=false']),
+    { trigger: true }));
+test('CLI evaluate: núcleo sem reforço → trigger false', () =>
+  assert.deepEqual(run(['evaluate', '--non-trivial=true', '--affects-stack=true', '--alternatives=false', '--guardrails=false']),
+    { trigger: false }));
+test('CLI decide: contradicts → evolve major', () =>
+  assert.deepEqual(run(['decide', '--relation=contradicts', '--name=observability-otel-genai']),
+    { action: 'evolve', command: '/devflow adr:evolve observability-otel-genai', evolveHint: 'major' }));
+test('CLI decide: none → create', () =>
+  assert.deepEqual(run(['decide', '--relation=none']),
+    { action: 'create', command: '/devflow adr:new --mode=prefilled' }));
