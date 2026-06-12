@@ -68,16 +68,34 @@ test("resolve: rejects missing url", async () => {
   );
 });
 
-// Smoke test — real docs-mcp-server scrape into the user's global store.
-// Gated by RUN_SMOKE=1 because it takes ~30s and mutates the global store.
-test("runPipeline (smoke): is-odd@4.0.0 populates global store", { skip: !process.env.RUN_SMOKE }, async () => {
+// Fase "hosted MCP": runPipeline NÃO executa scrape — apenas valida e devolve
+// o spec que a skill passa para mcp__docs-mcp-server__scrape_docs. Quem indexa
+// é a tool MCP contra o servidor hospedado, orquestrada pela skill. Logo este
+// teste é puro (sem rede, sem gate) e NÃO afirma `indexed`.
+test("runPipeline: devolve o scrape spec validado (sem executar scrape, sem 'indexed')", async () => {
   const { runPipeline } = await import("../scripts/pipeline.mjs");
-  const result = await runPipeline({
+  const spec = await runPipeline({
     library: "is-odd",
     version: "4.0.0",
     url: "https://github.com/i-voted-for-trump/is-odd",
     type: "github",
   });
-  assert.equal(result.library, "is-odd");
-  assert.equal(result.indexed, true);
+  assert.equal(spec.library, "is-odd");
+  assert.equal(spec.version, "4.0.0");
+  assert.equal(spec.url, "https://github.com/i-voted-for-trump/is-odd");
+  assert.equal(spec.type, "github");
+  // knobs default repassados à tool MCP (scope/maxPages/maxDepth)
+  assert.equal(spec.scope, "hostname");
+  assert.equal(spec.maxPages, 50);
+  assert.equal(spec.maxDepth, 3);
+  // contrato novo: NÃO afirma indexação (quem indexa é a tool MCP hospedada)
+  assert.equal("indexed" in spec, false);
+});
+
+test("runPipeline: rejeita URL SSRF antes de produzir o spec (SI-3 client-side)", async () => {
+  const { runPipeline } = await import("../scripts/pipeline.mjs");
+  await assert.rejects(
+    runPipeline({ library: "foo", version: "1.0.0", url: "https://169.254.169.254/" }),
+    /denied|metadata/i,
+  );
 });

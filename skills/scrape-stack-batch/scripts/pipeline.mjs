@@ -1,26 +1,32 @@
-// skills/scrape-stack-batch/scripts/pipeline.mjs — RESOLVE → SCRAPE.
+// skills/scrape-stack-batch/scripts/pipeline.mjs — RESOLVE (validate only).
 //
-// Fase B (commit dropping consolidate): the pipeline now populates the
-// docs-mcp-server global store directly. There is no `.context/stacks/refs/`
-// .md output anymore. Consumers (Camadas 1-4, agents) query the indexed
-// libraries via MCP tools (`mcp__docs-mcp-server__*`).
+// Fase "hosted MCP": o scrape NÃO roda mais neste script. O docs-mcp-server
+// hospedado (https://docs-mcp.nexuz.app/mcp) executa o scrape como tool MCP
+// (`mcp__docs-mcp-server__scrape_docs`, job assíncrono), orquestrada pela skill
+// `devflow:scrape-stack-batch`. Ferramentas MCP só são chamáveis pelo LLM/skill,
+// não de dentro de um .mjs — por isso este módulo só VALIDA e devolve o spec.
 //
-// Stages:
-//   RESOLVE — validate lib/version/url
-//   SCRAPE  — invoke `docs-mcp-server scrape` (recursive, global store)
+// Estágio único:
+//   RESOLVE — valida lib/version/url e devolve o scrape spec (library, version,
+//             url, type, scope, maxPages, maxDepth) que a skill passa à tool MCP.
 //
-// Removed in Fase B (was ~180 LoC, now obsolete):
-//   - REFINE stage (no-op pass-through; md2llm dropped)
-//   - CONSOLIDATE stage (no .md file to write; SI-6 fence canary irrelevant)
-//   - sanitizeSnippet (only applied to .md output)
-//   - workDir mkdtemp + cleanup (no consolidated output file)
+// Removido nesta fase:
+//   - Estágio SCRAPE via `recursiveScrape()`/npx (scripts/lib/scrape-recursive.mjs)
+//     — o scrape agora roda server-side no hospedado, não há subprocess local.
 //
-// Security invariants still enforced:
-//   SI-2: external commands via execFile, never shell (in scrape-recursive.mjs)
-//   SI-3: URL pre-validated by caller; resolve() re-validates as defense in depth
+// Invariantes de segurança:
+//   SI-2: N/A — sem exec/subprocess local; o scrape roda server-side no hospedado.
+//   SI-3: URL validada por `resolve()` (defesa-em-profundidade). O anti-SSRF
+//         efetivo é do servidor hospedado (allowlist server-side verificado:
+//         RFC1918/169.254-metadata/file:// negados). NENHUMA url deve chegar à
+//         tool MCP sem passar por `resolve()` primeiro (invariante da skill).
 
 import { validateUrl } from "../../../scripts/lib/url-validator.mjs";
-import { recursiveScrape } from "../../../scripts/lib/scrape-recursive.mjs";
+
+// Knobs default repassados à tool MCP scrape_docs (espelham os limites de crawl).
+const DEFAULT_SCOPE = "hostname";
+const DEFAULT_MAX_PAGES = 50;
+const DEFAULT_MAX_DEPTH = 3;
 
 // SECURITY (Semana 2 audit CRITICAL): npm-spec compliant pattern — optional
 // scope prefix `@scope/`, then a single segment. No '..', no leading dot,
@@ -44,31 +50,21 @@ export async function resolve({ library, version, url, type }) {
   return { library, version, url, type };
 }
 
-// ─── Stage 2: SCRAPE ──────────────────────────────────────────────────────
-// Populates the docs-mcp-server global store. No file output.
-
-export async function scrape(resolved) {
-  await recursiveScrape({
-    library: resolved.library,
-    version: resolved.version,
-    url: resolved.url,
-    maxPages: resolved.maxPages ?? 50,
-    maxDepth: resolved.maxDepth ?? 3,
-    scope: resolved.scope ?? "hostname",
-  });
-  return {
-    library: resolved.library,
-    version: resolved.version,
-    url: resolved.url,
-    indexed: true,
-  };
-}
-
 // ─── Orchestrator ──────────────────────────────────────────────────────────
-// Two stages only: validate, then index into the global store. Caller can
-// verify success via `listIndexedLibraries()` or MCP `list_libraries` tool.
+// Valida o input e devolve o scrape spec. NÃO executa o scrape — quem indexa é
+// a tool MCP `mcp__docs-mcp-server__scrape_docs` (servidor hospedado), invocada
+// pela skill. A skill consome este spec validado e o passa à tool; depois faz
+// polling de `list_jobs`/`get_job_info` e verifica via `search_docs`.
 
 export async function runPipeline(input) {
   const r = await resolve(input);
-  return scrape(r);
+  return {
+    library: r.library,
+    version: r.version,
+    url: r.url,
+    type: r.type,
+    scope: input.scope ?? DEFAULT_SCOPE,
+    maxPages: input.maxPages ?? DEFAULT_MAX_PAGES,
+    maxDepth: input.maxDepth ?? DEFAULT_MAX_DEPTH,
+  };
 }

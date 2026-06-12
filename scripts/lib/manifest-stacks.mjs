@@ -174,9 +174,10 @@ export function addFrameworksToManifest(projectRoot, entries) {
       }
       continue;
     }
-    // Fase B (Migration to docs-mcp-server): new entries use `mcpIndexed: true`
-    // by default. The lib is expected to be indexed in the docs-mcp-server
-    // global store via `recursiveScrape()`. Legacy `artisanalRef` is still
+    // Migration to hosted docs-mcp-server: new entries use `mcpIndexed: true`
+    // by default. The lib is expected to be indexed in the hosted docs-mcp-server
+    // store via the MCP tool `scrape_docs` (orchestrated by the
+    // `devflow:scrape-stack-batch` skill). Legacy `artisanalRef` is still
     // supported by readers but no longer written by this path.
     manifest.frameworks[lib] = {
       version,
