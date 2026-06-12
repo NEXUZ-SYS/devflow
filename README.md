@@ -298,7 +298,7 @@ o design completo e rationale.
 
 ```
 devflow/
-├── commands/         # 6 commands: /devflow, /devflow:devflow-sync, /devflow:devflow-status, /devflow:devflow-next, /devflow:devflow-dispatch, /devflow:devflow-recall
+├── commands/         # 10 commands: /devflow + 9 subcomandos (adr, dispatch, doctor, memory, next, recall, routines, status, sync)
 ├── skills/           # 43 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
 ├── agents/           # 20 playbooks de agentes (inclui memory-specialist, business-context, product-context, engineering-context, operations-context)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)

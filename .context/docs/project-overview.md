@@ -12,7 +12,7 @@ scaffoldVersion: "2.0.0"
 
 DevFlow is a plugin system and workflow orchestrator for Claude Code (and compatible IDEs: Cursor, Codex, Gemini CLI). It bridges two foundational systems — **superpowers** (discipline: TDD, brainstorming, code review, SDD) and **dotcontext** (agent orchestration, project context management) — into a cohesive **PREVC workflow** (Planning → Review → Execution → Validation → Confirmation).
 
-The plugin provides 43 skills, 21 specialist agent playbooks, 6 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation. Optional MemPalace integration adds persistent semantic memory across sessions. It ships standardized default Standards and **default Stacks** (`assets/stacks/`, live-loaded + filtered by the project's detected framework via `devflow:stack-filter`), with official docs indexed in the docs-mcp-server global store.
+The plugin provides 43 skills, 21 specialist agent playbooks, 10 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation. Optional MemPalace integration adds persistent semantic memory across sessions. It ships standardized default Standards and **default Stacks** (`assets/stacks/`, live-loaded + filtered by the project's detected framework via `devflow:stack-filter`), with official docs indexed in the docs-mcp-server global store.
 
 ## Codebase Reference
 
@@ -30,7 +30,7 @@ The plugin provides 43 skills, 21 specialist agent playbooks, 6 CLI commands, an
 | Plugin deps | superpowers (required), dotcontext (optional for Full mode) |
 | Skills | 43 (PREVC phases + bridge + on-demand + filters) |
 | Agents | 21 specialist playbooks |
-| Commands | 6 (`/devflow`, `/devflow:devflow-sync`, `/devflow:devflow-status`, `/devflow:devflow-next`, `/devflow:devflow-dispatch`, `/devflow:devflow-recall`) |
+| Commands | 10 (`/devflow` + 9 subcomandos: `adr`, `dispatch`, `doctor`, `memory`, `next`, `recall`, `routines`, `status`, `sync`) |
 
 ## Entry Points
 
@@ -53,7 +53,7 @@ DevFlow exports no runtime code. It provides:
 
 ```
 devflow/
-├── commands/           — 6 slash command definitions (/devflow, /devflow:devflow-sync, etc.)
+├── commands/           — 10 slash command definitions (/devflow, /devflow:devflow-sync, etc.)
 ├── skills/             — 43 skill directories, each with SKILL.md
 ├── agents/             — 21 specialist agent playbooks (architect, backend, security, memory, etc.)
 ├── templates/          — Scaffold templates for agents, skills, and docs
