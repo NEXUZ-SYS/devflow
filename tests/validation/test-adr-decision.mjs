@@ -37,3 +37,36 @@ test('decideAction: relação inválida lança', () =>
   assert.throws(() => decideAction({ relation: 'foo' }), /unknown relation/));
 test('decideAction: evolve sem adrName lança', () =>
   assert.throws(() => decideAction({ relation: 'contradicts' }), /adrName required/));
+
+import { parseGuardrailsBlock } from '../../scripts/lib/adr-decision.mjs';
+
+const BLOCK_FILTER = `<ADR_GUARDRAILS filtered="true">
+Loaded 2 of 6 active ADR(s), filtered for task: "x".
+
+### observability-otel-genai [firm] (stack: universal)
+NUNCA logar payload bruto.
+
+### permissions-vendor-neutral [proposto] (stack: universal)
+SEMPRE deny-first.
+</ADR_GUARDRAILS>`;
+
+const BLOCK_HOOK = `<ADR_GUARDRAILS>
+### adr-path-migration-to-context-root (stack: universal)
+SEMPRE usar resolveAdrPath.
+</ADR_GUARDRAILS>`;
+
+test('parseGuardrailsBlock: formato adr-filter (com tags)', () =>
+  assert.deepEqual(parseGuardrailsBlock(BLOCK_FILTER), [
+    { name: 'observability-otel-genai', stack: 'universal', tags: ['firm'] },
+    { name: 'permissions-vendor-neutral', stack: 'universal', tags: ['proposto'] },
+  ]));
+test('parseGuardrailsBlock: formato hook (sem tags)', () =>
+  assert.deepEqual(parseGuardrailsBlock(BLOCK_HOOK), [
+    { name: 'adr-path-migration-to-context-root', stack: 'universal', tags: [] },
+  ]));
+test('parseGuardrailsBlock: bloco sem ADRs → []', () =>
+  assert.deepEqual(parseGuardrailsBlock('<ADR_GUARDRAILS>\nnada\n</ADR_GUARDRAILS>'), []));
+test('parseGuardrailsBlock: entrada vazia/nula → []', () => {
+  assert.deepEqual(parseGuardrailsBlock(''), []);
+  assert.deepEqual(parseGuardrailsBlock(null), []);
+});

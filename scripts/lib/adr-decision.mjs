@@ -27,3 +27,19 @@ export function decideAction({ relation, adrName } = {}) {
   }
   throw new Error(`unknown relation: ${relation}`);
 }
+
+// Header emitido por hook/adr-filter: "### <name> [tag]... (stack: <stack>)".
+// O hook (session-start) omite [tags]; o adr-filter pode incluí-las. Ambos têm (stack:).
+const HEADER_RE = /^###\s+(.+?)\s*((?:\[[^\]]+\]\s*)*)\(stack:\s*([^)]+)\)\s*$/;
+
+export function parseGuardrailsBlock(text) {
+  if (!text || typeof text !== 'string') return [];
+  const out = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(HEADER_RE);
+    if (!m) continue;
+    const tags = (m[2].match(/\[([^\]]+)\]/g) || []).map(t => t.slice(1, -1).trim());
+    out.push({ name: m[1].trim(), stack: m[3].trim(), tags });
+  }
+  return out;
+}
