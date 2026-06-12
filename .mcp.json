@@ -16,9 +16,10 @@
       "args": []
     },
     "docs-mcp-server": {
-      "type": "sse",
-      "url": "http://localhost:6280/sse"
+      "type": "http",
+      "url": "https://docs-mcp.nexuz.app/mcp"
     },
+
     "odoo": {
       "type": "http",
       "url": "https://skioba-teste.saas.nexuz.app/mcp"

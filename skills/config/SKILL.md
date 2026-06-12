@@ -277,19 +277,19 @@ AskUserQuestion:
 ```
 
 **Se sim (configurar):**
-1. Adicionar entry ao `.mcp.json` dentro de `mcpServers` (merge se já existe, criar se não):
+1. Adicionar entry ao `.mcp.json` dentro de `mcpServers` (merge se já existe, criar se não) — aponta para o **docs-mcp-server hospedado** (sem npx/CLI local):
    ```json
    {
      "mcpServers": {
        "docs-mcp-server": {
-         "command": "npx",
-         "args": ["-y", "@arabold/docs-mcp-server@latest"]
+         "type": "http",
+         "url": "https://docs-mcp.nexuz.app/mcp"
        }
      }
    }
    ```
 2. Avisar o usuário **explicitamente** que o Claude Code precisa ser reiniciado para carregar o novo MCP server (`exit` + relaunch). Sem restart, as tools `mcp__docs-mcp-server__*` não estarão disponíveis na sessão atual.
-3. Ressaltar que store é global (`~/.local/share/docs-mcp-server/`) — limpeza manual via `npx @arabold/docs-mcp-server remove <lib>` se necessário.
+3. Ressaltar que o store é **hospedado e compartilhado** (não há store local em `~/.local/share/`): scrape via tool `mcp__docs-mcp-server__scrape_docs` e limpeza via `mcp__docs-mcp-server__remove_docs` (não há comando npx local).
 
 ### 2.5 (opcional) Doc-grounding obrigatório
 

@@ -101,10 +101,12 @@ async function cmdValidate(targetLib, strict, projectRoot) {
 
 // ─── scrape (single-lib) ───────────────────────────────────────────────────
 
-// Formata a linha de sucesso do scrape a partir do contrato atual de
-// runPipeline ({ library, version, url, indexed }). Pura e exportada p/ teste.
+// Formata a linha de sucesso da VALIDAÇÃO a partir do contrato de runPipeline
+// (spec validado: { library, version, url, ... }). O scrape em si é executado
+// pela tool MCP `scrape_docs` (docs-mcp-server hospedado), orquestrada pela
+// skill — por isso o CLI NÃO afirma "indexed". Pura e exportada p/ teste.
 export function formatScrapeOk(result) {
-  return `OK: indexed ${result.library}@${result.version} from ${result.url}`;
+  return `VALIDADO: ${result.library}@${result.version} (fonte: ${result.url}) — execute o scrape via skill devflow:scrape-stack-batch (tool MCP scrape_docs).`;
 }
 
 async function cmdScrape(library, version, opts, projectRoot) {
@@ -143,33 +145,29 @@ async function cmdScrape(library, version, opts, projectRoot) {
     return 0;
   }
 
+  // O scrape em si NÃO roda aqui — é executado pela tool MCP `scrape_docs`
+  // (docs-mcp-server hospedado), orquestrada pela skill devflow:scrape-stack-batch.
+  // Este comando VALIDA o spec (npm-spec + SI-3) e redireciona. Validar a
+  // URL primária garante o invariante "nenhuma url chega à tool MCP sem passar
+  // por resolve()".
   const { runPipeline } = await loadSkillScript("pipeline.mjs");
-  const attempts = [];
-  for (const url of urls) {
-    try {
-      const result = await runPipeline({
-        library, version,
-        url,
-        type: opts.source,
-      });
-      if (attempts.length > 0) {
-        console.log(`Auto-fallback: tried ${attempts.length + 1} URL(s), succeeded with: ${url}`);
-        for (const a of attempts) console.log(`  ✗ ${a.url} — ${a.error}`);
-      }
-      console.log(formatScrapeOk(result));
-      return 0;
-    } catch (err) {
-      attempts.push({ url, error: err.message });
-      if (!opts.autoFallback) {
-        console.error(`SCRAPE FAILED: ${err.message}`);
-        return 1;
-      }
-      // Auto-fallback: continue to next URL
-    }
+  let spec;
+  try {
+    spec = await runPipeline({ library, version, url: urls[0], type: opts.source });
+  } catch (err) {
+    console.error(`VALIDATION FAILED: ${err.message}`);
+    return 1;
   }
-  console.error(`SCRAPE FAILED: tried ${attempts.length} URL(s), all failed:`);
-  for (const a of attempts) console.error(`  ✗ ${a.url} — ${a.error}`);
-  return 1;
+
+  console.log(formatScrapeOk(spec));
+  if (opts.autoFallback && urls.length > 1) {
+    console.log(`URLs de fallback (a skill tenta em ordem se a primeira falhar no scrape):`);
+    urls.forEach((u, i) => console.log(`  ${i + 1}. ${opts.source}://${u}`));
+  }
+  console.log("");
+  console.log("Próximo passo: invoque a skill `devflow:scrape-stack-batch` para executar o");
+  console.log("scrape via tool MCP (scrape_docs) contra o docs-mcp-server hospedado.");
+  return 0;
 }
 
 // ─── scrape-batch ──────────────────────────────────────────────────────────

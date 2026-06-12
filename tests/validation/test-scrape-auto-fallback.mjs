@@ -45,9 +45,15 @@ function writeManifest(root, frameworks) {
 
 // ─── Unit: formatScrapeOk reflete o contrato atual de runPipeline ──────────
 
-test("formatScrapeOk reflete o contrato atual de runPipeline (sem undefined)", () => {
-  const result = { library: "zod", version: "4.1.0", url: "https://zod.dev/", indexed: true };
-  assert.equal(formatScrapeOk(result), "OK: indexed zod@4.1.0 from https://zod.dev/");
+test("formatScrapeOk reflete o novo contrato: VALIDADO (não indexed) + redireciona p/ skill", () => {
+  // runPipeline agora devolve o spec validado; quem indexa é a tool MCP
+  // scrape_docs (hospedado), orquestrada pela skill — o CLI não pode afirmar "indexed".
+  const result = { library: "zod", version: "4.1.0", url: "https://zod.dev/" };
+  const out = formatScrapeOk(result);
+  assert.match(out, /VALIDADO/);
+  assert.match(out, /zod@4\.1\.0/);
+  assert.match(out, /zod\.dev/);
+  assert.doesNotMatch(out, /indexed/i, "CLI não deve afirmar indexação — quem indexa é a tool MCP");
 });
 
 // ─── Sem --auto-fallback: comportamento atual preservado ───────────────────
@@ -161,69 +167,65 @@ test("scrape --auto-fallback lib não existente no manifest: usa apenas --from",
   } finally { cleanup(); }
 });
 
-// ─── Real pipeline contra URLs sabidamente ruins (smoke; usa rede) ─────────
-// Skippable se variável SKIP_NETWORK_TESTS=1 estiver setada (CI sem rede).
+// ─── Novo contrato: o CLI VALIDA e redireciona; o scrape roda na tool MCP ──
+// O `devflow stacks scrape` não executa mais o scrape (não toca a rede). Ele
+// valida o spec (npm-spec + SI-3) e instrui a invocar a skill, que faz o scrape
+// via `mcp__docs-mcp-server__scrape_docs` no servidor hospedado. Logo:
+//   - URL com formato válido (mesmo host inalcançável) → exit 0 + VALIDADO
+//     (alcançabilidade é problema do scrape server-side, não da validação)
+//   - URL bloqueada por SI-3 (SSRF) → exit 1 + VALIDATION FAILED
 
-// Testes que indexam de verdade (rede + docs-mcp-server) são opt-in.
-const RUN_NETWORK = process.env.RUN_NETWORK_TESTS === "1";
-
-test("scrape --auto-fallback recupera de host inválido para hint válido (real network)", { skip: !RUN_NETWORK }, () => {
-  // Primária é host inválido (falha garantida → força o fallback); o hint
-  // zod.dev sabe indexar. Auto-fallback detecta exit 1, tenta a próxima, sucesso.
-  const { root, cleanup } = fixture();
-  try {
-    writeManifest(root, {
-      zod: {
-        version: "4.1.0",
-        artisanalRef: "refs/zod@4.1.0.md",
-        discoveryHints: ["https://zod.dev/"],  // canonical fallback (funciona)
-      },
-    });
-    const r = spawnSync("node", [
-      CLI, "scrape", "zod", "4.1.0",
-      "--source=html",
-      "--from=https://nonexistent-host.invalid/",  // falha garantida → força fallback
-      "--auto-fallback", `--project=${root}`,
-    ], { encoding: "utf-8", timeout: 60000 });
-    // Sucesso esperado via fallback
-    assert.equal(r.status, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-    assert.match(r.stdout, /OK: indexed zod@4\.1\.0/, "mensagem OK reflete o novo contrato");
-    assert.match(r.stdout, /Auto-fallback: tried 2 URL\(s\)/, "resumo de tentativas");
-  } finally { cleanup(); }
-});
-
-test("scrape sem --auto-fallback: host inválido → exit 1 + SCRAPE FAILED (determinístico)", () => {
+test("scrape sem --auto-fallback: valida e redireciona para a skill (sem executar scrape)", () => {
   const { root, cleanup } = fixture();
   try {
     writeManifest(root, {});
     const r = spawnSync("node", [
       CLI, "scrape", "foo", "1.0.0",
       "--source=html",
-      "--from=https://nonexistent-host.invalid/",
+      "--from=https://nonexistent-host.invalid/",  // formato válido; alcance é do scrape MCP
       `--project=${root}`,
     ], { encoding: "utf-8", timeout: 60000 });
-    assert.equal(r.status, 1, `esperava exit 1; stderr: ${r.stderr}`);
-    assert.match(r.stderr, /SCRAPE FAILED:/);
+    assert.equal(r.status, 0, `esperava exit 0; stderr: ${r.stderr}`);
+    assert.match(r.stdout, /VALIDADO: foo@1\.0\.0/);
+    assert.match(r.stdout, /devflow:scrape-stack-batch/, "redireciona para a skill");
+    assert.doesNotMatch(r.stdout, /indexed/i, "CLI não afirma indexação");
   } finally { cleanup(); }
 });
 
-test("scrape --auto-fallback: todas URLs inválidas → exit 1 + tried N URLs", () => {
+test("scrape: URL bloqueada por SI-3 (SSRF) → exit 1 + VALIDATION FAILED", () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeManifest(root, {});
+    const r = spawnSync("node", [
+      CLI, "scrape", "foo", "1.0.0",
+      "--source=html",
+      "--from=https://169.254.169.254/",  // cloud metadata → SI-3 bloqueia
+      `--project=${root}`,
+    ], { encoding: "utf-8", timeout: 60000 });
+    assert.equal(r.status, 1, `esperava exit 1; stdout: ${r.stdout}`);
+    assert.match(r.stderr, /VALIDATION FAILED:/);
+  } finally { cleanup(); }
+});
+
+test("scrape --auto-fallback: valida e lista URLs de fallback para a skill", () => {
   const { root, cleanup } = fixture();
   try {
     writeManifest(root, {
       foo: {
         version: "1.0.0",
         artisanalRef: "refs/foo@1.0.0.md",
-        discoveryHints: ["https://also-bad.invalid/"],
+        discoveryHints: ["https://hint-b.example/"],
       },
     });
     const r = spawnSync("node", [
       CLI, "scrape", "foo", "1.0.0",
       "--source=html",
-      "--from=https://nonexistent-host.invalid/",
+      "--from=https://primary.example/",
       "--auto-fallback", `--project=${root}`,
     ], { encoding: "utf-8", timeout: 60000 });
-    assert.equal(r.status, 1, `esperava exit 1; stderr: ${r.stderr}`);
-    assert.match(r.stderr, /tried 2 URL\(s\)/);
+    assert.equal(r.status, 0, `esperava exit 0; stderr: ${r.stderr}`);
+    assert.match(r.stdout, /VALIDADO: foo@1\.0\.0/);
+    assert.match(r.stdout, /fallback/i);
+    assert.match(r.stdout, /hint-b\.example/, "lista o hint de fallback p/ a skill");
   } finally { cleanup(); }
 });

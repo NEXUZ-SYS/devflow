@@ -132,7 +132,7 @@ Search for "Bash tool", "Read tool", "Write tool", "Edit tool", "Grep tool" in S
 ## 6. Lib + CLI portability — confirmed clean
 
 - All scripts use `import.meta.url` + `dirname()` to self-locate. No hardcoded paths.
-- Pure `node:*` imports (no third-party node modules in critical path; only `@arabold/docs-mcp-server` and `md2llm` for stack scrape, invoked via `npx`).
+- Pure `node:*` imports (no third-party node modules in critical path). Stack-doc scraping runs server-side on the **hosted docs-mcp-server** (`https://docs-mcp.nexuz.app/mcp`) via the MCP tool `scrape_docs` — no local npm package or `npx` in the path.
 - Tests run as `node --test tests/validation/*.mjs` — no platform coupling.
 - `--project=<path>` flag honored by every CLI that needs project context.
 
