@@ -139,6 +139,28 @@ git commit -m "chore: bump to vX.Y.Z"
 
 Se o pre-commit hook faz auto-bump (como neste projeto), o commit pode já incluir os arquivos de versão automaticamente. Nesse caso, o README deve estar staged ANTES do commit para ser incluído.
 
+## Step C.x: ADR sweep (rede de segurança)
+
+Antes de finalizar o branch:
+
+1. Leia os candidatos capturados na Execution:
+   ```bash
+   node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs').then(m => console.log(JSON.stringify(m.readCandidates(process.cwd()))))"
+   ```
+2. Detecte ADRs tocadas no workflow (paths via `resolveAdrPath`, nunca hardcode — guardrail ADR-001/006):
+   ```bash
+   ADR_GLOBS=$(node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/path-resolver.mjs').then(m => { const p = m.resolveAdrPath(process.cwd()); console.log(p.readPaths.map(d => d + '/*.md').join(' ')); })")
+   BASE=$(git merge-base HEAD "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@origin/@@' || echo main)")
+   git diff --name-only "$BASE"...HEAD -- $ADR_GLOBS
+   ```
+3. Para cada candidato **sem ADR já registrada**, classifique a relação e resolva a ação com `scripts/adr-decision.mjs decide`. Apresente as ofertas **em lote** (uma lista única evolve/create). **Respeite `skip_adr_offer`** — se ativo, pule o sweep silenciosamente.
+4. Limpe o estado:
+   ```bash
+   node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs').then(m => m.clearPending(process.cwd()))"
+   ```
+
+**Completion summary:** acrescente a seção **"ADRs criadas/evoluídas neste workflow"**, listando os nomes tocados (passo 2) e o resultado do sweep.
+
 ## Step 4: Finalize Branch
 
 <HARD-GATE>
