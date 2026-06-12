@@ -140,42 +140,71 @@ Read `.context/agents/architect.md` and apply its review checklist manually.
 ### Minimal Mode
 Skip enrichment — spec stands as-is from brainstorming.
 
-## Step 3.5: ADR opportunity check (Step 5.6 of plan adr-system-v2)
+## Step 3.5: ADR opportunity check (cross-aware)
 
-After the spec is enriched and BEFORE writing the implementation plan, evaluate whether the design contains an architectural decision that should be registered as an ADR.
+After the spec is enriched and BEFORE writing the implementation plan, evaluate whether the design contains an architectural decision and **cruze com as ADRs já carregadas no Step 1** (bloco `<ADR_GUARDRAILS>`).
 
-**Mechanism:** instrução em linguagem natural — você (LLM) avalia os 4 sinais simultaneamente. Não é regex, não é lib. P11 do plan adr-system-v2.
+**Princípio:** o *julgamento* (sinais, relação) é seu (LLM); a *regra* (disparo 3/4 e a ação) é aplicada por `scripts/adr-decision.mjs` — não reimplemente em prosa.
 
-**Os 4 sinais (todos devem bater para ativar):**
+### a) Detecção (heurística 3/4: núcleo + reforço)
 
-| Sinal | Como detectar |
-|---|---|
-| **Escolha entre alternativas** | Spec contém ≥2 opções discutidas com tradeoffs ("X vs Y", "em vez de", "considerei A mas optei por B") |
-| **Afeta stack/arquitetura** | Spec menciona framework, biblioteca, padrão, protocolo, ferramenta de infra, layer de stack |
-| **Implica guardrails** | Decisão cria regras de uso recorrentes ("sempre usar X", "evitar Y", contratos de chamada) |
-| **Não-trivial** | Task não é bugfix, rename, typo, ou refactor cosmético |
+Avalie 4 sinais como booleanos:
 
-Se `sinais_presentes < 4 de 4` → pula este step, segue para Step 4. Alta especificidade evita fadiga.
+| Sinal | Papel | Como detectar |
+|---|---|---|
+| **não-trivial** | núcleo (obrigatório) | Task não é bugfix, rename, typo, refactor cosmético |
+| **afeta stack/arquitetura** | núcleo (obrigatório) | Menciona framework, biblioteca, padrão, protocolo, ferramenta de infra |
+| **alternativas** | reforço (≥1) | ≥2 opções com tradeoffs ("X vs Y", "em vez de") |
+| **implica guardrails** | reforço (≥1) | Cria regras de uso recorrentes ("sempre X", "evitar Y") |
 
-**Quando os 4 sinais batem, oferecer:**
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-decision.mjs evaluate \
+  --non-trivial=<bool> --affects-stack=<bool> --alternatives=<bool> --guardrails=<bool>
+```
+Se `{"trigger": false}` → pule para o Step 4.
 
-> Detectei uma decisão arquitetural no design proposto:
->   "<frase-chave do spec, ex: Adotar Zod como validador único entre frontend e backend>"
->
-> Quer registrar como ADR antes de escrever o plan?
-> - **(a) Sim**, rodar `/devflow adr:new --mode=prefilled` com pré-preenchimento deste design
-> - **(b) Não**, seguir direto para o plan (decisão fica só no spec)
-> - **(c) Não oferecer novamente neste workflow** (`skip_adr_offer=true`)
+### b) Cruzamento com ADRs existentes
+
+Se disparou, classifique a **relação** da decisão contra as ADRs presentes no bloco `<ADR_GUARDRAILS>` (cada header traz o `name` da ADR; use-o como identificador):
+
+- **contradicts** — substitui/contraria uma ADR aprovada
+- **extends** — adiciona/refina sem contrariar
+- **aligned** — já coberta, sem novidade
+- **none** — nenhuma ADR do bloco trata do tema
+
+Na dúvida entre `aligned` e `contradicts/extends`, **prefira oferecer** (falso positivo > falso negativo).
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/adr-decision.mjs decide --relation=<relation> [--name=<adrName>]
+```
+`<adrName>` é o `name` do header (ex.: `observability-otel-genai`); `adr:evolve` o resolve por query.
+
+### c) Ação
+
+- **`action: "silent"`** (aligned) → siga para o Step 4 **sem nenhuma menção**.
+- **`action: "evolve"`** → ofereça registrar a mudança na ADR existente, citando a ADR-alvo e o `evolveHint` (sugestão — o kind final é do `adr-builder` EVOLVE):
+
+  > Detectei que esta decisão **<contradiz|estende>** a ADR **`<adrName>`**:
+  >   "<frase-chave exata do spec>"
+  >
+  > - **(a) Sim**, rodar `<command>` (sugestão: `<evolveHint>`)
+  > - **(b) Não**, seguir direto para o plan
+  > - **(c) Não oferecer novamente neste workflow** (`skip_adr_offer=true`)
+
+- **`action: "create"`** (none) → oferta de CREATE:
+
+  > Detectei uma decisão arquitetural sem ADR correspondente:
+  >   "<frase-chave exata do spec>"
+  >
+  > - **(a) Sim**, rodar `/devflow adr:new --mode=prefilled` com pré-preenchimento
+  > - **(b) Não**, seguir direto para o plan
+  > - **(c) Não oferecer novamente neste workflow** (`skip_adr_offer=true`)
 
 **Comportamento por escolha:**
-- **(a)** — suspende o fluxo de prevc-planning. Spawna workflow filho `/devflow adr:new --mode=prefilled` com o design atual como briefing. Quando workflow-filho conclui (V phase passa, ADR commitada), controle volta para Step 4 com ADR criada disponível em `.context/adrs/`. Plan a ser escrito pode referenciá-la.
-- **(b)** — segue direto para Step 4. Nada muda.
-- **(c)** — escreve `skip_adr_offer: true` no workflow metadata. Step 3.5 não roda novamente neste workflow. Default permanece ativo em workflows futuros.
+- **(a)** — suspende o fluxo, spawna o workflow filho (`adr:evolve` ou `adr:new`). Ao concluir, controle volta ao Step 4 com a ADR disponível.
+- **(b)** — segue ao Step 4.
+- **(c)** — escreve `skip_adr_offer: true` no workflow metadata. **Cobre todo o workflow** (Planning e o sweep do Confirmation).
 
-**Brittleness mitigada por:**
-1. 4 sinais simultâneos — alta especificidade, baixa fadiga
-2. Opt-out persistente — usuário pode pular permanentemente neste workflow
-3. Texto de oferta declarativo — sempre cita a frase exata do spec que disparou os 4 sinais (transparência)
+A oferta sempre cita a frase-chave exata do spec (transparência).
 
 ## Step 4: Write Plan
 
