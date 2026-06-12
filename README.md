@@ -14,8 +14,8 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Loop autônomo** — execução story-by-story com contexto fresco, escalação automática e retry inteligente
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
-- **20 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
-- **32 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, memory-recall...
+- **21 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
+- **43 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, stack-filter, memory-recall...
 - **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
 - **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
 - **Escala adaptativa** — auto-detecta complexidade e ajusta o fluxo (QUICK/SMALL/MEDIUM/LARGE)
@@ -38,7 +38,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 │    (disciplina)     │    (contexto + workflow)         │
 ├────────────────────┼─────────────────────────────────┤
 │ brainstorming       │ fases PREVC                     │
-│ TDD iron law        │ 20 agentes via MCP              │
+│ TDD iron law        │ 21 agentes via MCP              │
 │ SDD (subagents)     │ análise semântica               │
 │ code review 2x      │ gestão de planos                │
 │ anti-racional.      │ sync multi-tool                 │
@@ -299,7 +299,7 @@ o design completo e rationale.
 ```
 devflow/
 ├── commands/         # 6 commands: /devflow, /devflow:devflow-sync, /devflow:devflow-status, /devflow:devflow-next, /devflow:devflow-dispatch, /devflow:devflow-recall
-├── skills/           # 32 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
+├── skills/           # 43 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall)
 ├── agents/           # 20 playbooks de agentes (inclui memory-specialist, business-context, product-context, engineering-context, operations-context)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)

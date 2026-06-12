@@ -3,7 +3,7 @@ type: doc
 name: project-overview
 description: High-level overview of DevFlow, a unified development workflow plugin that bridges superpowers and dotcontext
 category: overview
-generated: 2026-04-14
+generated: 2026-06-12
 status: filled
 scaffoldVersion: "2.0.0"
 ---
@@ -12,13 +12,13 @@ scaffoldVersion: "2.0.0"
 
 DevFlow is a plugin system and workflow orchestrator for Claude Code (and compatible IDEs: Cursor, Codex, Gemini CLI). It bridges two foundational systems — **superpowers** (discipline: TDD, brainstorming, code review, SDD) and **dotcontext** (agent orchestration, project context management) — into a cohesive **PREVC workflow** (Planning → Review → Execution → Validation → Confirmation).
 
-The plugin provides 32 skills, 16 specialist agent playbooks, 6 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation. Optional MemPalace integration adds persistent semantic memory across sessions.
+The plugin provides 43 skills, 21 specialist agent playbooks, 6 CLI commands, and a hook-based lifecycle system. It operates in three modes (Full, Lite, Minimal) with graceful degradation. Optional MemPalace integration adds persistent semantic memory across sessions. It ships standardized default Standards and **default Stacks** (`assets/stacks/`, live-loaded + filtered by the project's detected framework via `devflow:stack-filter`), with official docs indexed in the docs-mcp-server global store.
 
 ## Codebase Reference
 
 - **Repository**: https://github.com/NEXUZ-SYS/devflow
 - **License**: MIT (NEXUZ-SYS 2026)
-- **Version**: 0.10.5
+- **Version**: 1.18.0
 
 ## Quick Facts
 
@@ -28,8 +28,8 @@ The plugin provides 32 skills, 16 specialist agent playbooks, 6 CLI commands, an
 | Primary language | Markdown (skills/agents/docs) + Bash (hooks) + JSON (config) |
 | Runtime deps | Node.js 20+, Git 2.x+, Claude Code |
 | Plugin deps | superpowers (required), dotcontext (optional for Full mode) |
-| Skills | 32 (PREVC phases + bridge + on-demand) |
-| Agents | 16 specialist playbooks |
+| Skills | 43 (PREVC phases + bridge + on-demand + filters) |
+| Agents | 21 specialist playbooks |
 | Commands | 6 (`/devflow`, `/devflow:devflow-sync`, `/devflow:devflow-status`, `/devflow:devflow-next`, `/devflow:devflow-dispatch`, `/devflow:devflow-recall`) |
 
 ## Entry Points
@@ -54,8 +54,8 @@ DevFlow exports no runtime code. It provides:
 ```
 devflow/
 ├── commands/           — 6 slash command definitions (/devflow, /devflow:devflow-sync, etc.)
-├── skills/             — 32 skill directories, each with SKILL.md
-├── agents/             — 16 specialist agent playbooks (architect, backend, security, memory, etc.)
+├── skills/             — 43 skill directories, each with SKILL.md
+├── agents/             — 21 specialist agent playbooks (architect, backend, security, memory, etc.)
 ├── templates/          — Scaffold templates for agents, skills, and docs
 ├── hooks/              — 7 lifecycle hooks (session-start, pre/post-compact, pre/post-tool-use)
 ├── references/         — Skills map + tool compatibility matrix
