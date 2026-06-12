@@ -14,6 +14,9 @@ Thumbs.db
 # DevFlow runtime artifacts (auto-generated)
 .context/cache/
 .context/harness/
+
+# DevFlow — estado efêmero de captura de decisões (PREVC)
+.context/workflow/.adr-pending.json
 .context/workflow/.checkpoint/*
 tests/validation/tmp/
 
