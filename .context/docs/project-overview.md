@@ -18,7 +18,7 @@ The plugin provides 43 skills, 21 specialist agent playbooks, 6 CLI commands, an
 
 - **Repository**: https://github.com/NEXUZ-SYS/devflow
 - **License**: MIT (NEXUZ-SYS 2026)
-- **Version**: 1.18.0
+- **Version**: 1.19.0
 
 ## Quick Facts
 
