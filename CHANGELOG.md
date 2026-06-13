@@ -5,6 +5,29 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] — 2026-06-13
+
+### Added — Cobertura de Standards: gaps de concern fechados (3 eixos)
+
+A partir da análise em `docs/research/standards-coverage-gap.md`, fecha os gaps entre a doutrina de
+engenharia (`framework_ddc/.contexts/engineering/`) e os Standards default:
+
+- **Taxonomy (Eixo B):** registra os concerns lintáveis `module-size`, `environment-config`,
+  `git-workflow` e fecha o órfão `typescript-strict` em `taxonomy-of-concerns.yaml` (23→27 entries),
+  tornando-a fonte única de verdade. Novo `tests/standards/taxonomy-consistency.test.mjs` enforça o
+  trio `taxonomy ↔ .md ↔ MANIFEST ↔ machine` (5 checks, incl. `linter:null ⟹ enforcedBy/aviso`).
+- **Standards do Eixo A (a taxonomy já os definia):** `std-layer-boundaries`, `std-domain-events`,
+  `std-pre-commit-hygiene` (+ MANIFEST). `pre-commit-hygiene` é `enforcedBy: hook:pre-commit`
+  (enforcement repo-level, não file-linter).
+- **Enforcement do Eixo C (8 stds sem linter), roteado pelo veículo correto:** 5 file-linters SI-4
+  novos via TDD (`internationalization`, `accessibility`, `documentation`, `layer-boundaries`,
+  `domain-events`); `commit-hygiene → hook:commit-msg`; `code-review → ci:danger`
+  (`references/danger-code-review.md`); `state-management`/`caching`/`grounding` permanecem
+  `linter: null` com `enforcedBy` explícito documentado.
+
+`machine/*.js` permanecem bundled-only (ADR-007 anti-RCE); sync ao repo standalone fica no release.
+Suíte `tests/standards/` 37/37; regressão odoo-standards 200/200, taxonomy/profile validation verdes.
+
 ## [1.19.0] — 2026-06-12
 
 ### Added — Integração ADR↔decisão cross-aware no PREVC
