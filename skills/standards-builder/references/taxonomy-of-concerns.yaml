@@ -823,3 +823,100 @@ entries:
       - frontend
       - performance
       - arquitetura
+
+  - id: module-size
+    summary: Arquivos e funções dentro de orçamento de tamanho; baixo acoplamento
+    category: maintainability
+    defaultApplyTo:
+      - "**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - eslint
+      - max-lines
+    principleTemplate: |
+      Arquivos 150-500 linhas; funções 30-50 linhas (exceções: schemas declarativos,
+      JSX denso de página). Um arquivo = uma responsabilidade nomeável. Imports no topo,
+      sem side effect em import time. Acima do orçamento, dividir por responsabilidade.
+    antiPatternTemplate:
+      - rule: "Mega-arquivo utils.ts de milhares de linhas"
+        correct: "Quebrar por domínio; um arquivo = uma responsabilidade"
+      - rule: "Função com 8 parâmetros posicionais"
+        correct: "Objeto nomeado de argumentos"
+    linterHints:
+      - "ESLint max-lines (500), max-lines-per-function (50), complexity, max-depth"
+      - "regex conservador: contagem de linhas do arquivo > 500"
+    relatedAdrCategories:
+      - arquitetura
+      - frontend
+      - backend
+
+  - id: environment-config
+    summary: Config externa via env/secret-manager; sem lógica de negócio por ambiente
+    category: process
+    defaultApplyTo:
+      - "src/**/*.{ts,tsx,js,jsx,py,go}"
+    inverseHints:
+      - dotenv
+      - process.env
+    principleTemplate: |
+      Toda config externa vem de variável de ambiente / secret manager, nunca literal por
+      ambiente. Sem `if (env === 'prod')` em código de domínio — diferença é configuração,
+      não código. `.env.example` lista todas as vars; secrets isolados por ambiente.
+    antiPatternTemplate:
+      - rule: "const API = isDev ? 'localhost' : 'api.com'"
+        correct: "process.env.API_URL com fallback validado no boot"
+      - rule: "if (env === 'prod') { regra de negócio }"
+        correct: "Feature flag / config; ambiente não altera lógica de domínio"
+    linterHints:
+      - "regex: \\b(env|NODE_ENV|APP_ENV)\\s*===\\s*['\"](prod|production|dev)['\"]"
+      - "AST: ternário sobre isDev/isProd retornando URL/host literal"
+    relatedAdrCategories:
+      - processo
+      - backend
+      - bff
+
+  - id: git-workflow
+    summary: Branch naming, vida curta de branch, sem force-push em ramo compartilhado
+    category: process
+    defaultApplyTo:
+      - "**/*"
+    inverseHints:
+      - husky
+      - lefthook
+    principleTemplate: |
+      Branches feature de vida curta a partir do trunk; nome `<tipo>/<scope>-<descricao>`
+      (feat/fix/hotfix/release). Nunca `git push --force` em branch compartilhada;
+      `--force-with-lease` apenas na própria. Commits atômicos por intenção.
+    antiPatternTemplate:
+      - rule: "Branch de longa duração que diverge do trunk"
+        correct: "Rebase frequente; branch de horas a poucos dias"
+      - rule: "git push --force em branch com review em andamento"
+        correct: "--force-with-lease apenas na própria branch"
+    linterHints:
+      - "hook pre-push: rejeita --force em protectedBranches"
+      - "hook: valida nome da branch contra <tipo>/<scope>"
+    relatedAdrCategories:
+      - processo
+
+  - id: typescript-strict
+    summary: Strictness de TypeScript — proíbe any, enum e default export de função
+    category: language
+    defaultApplyTo:
+      - "**/*.{ts,tsx}"
+    inverseHints:
+      - typescript
+    principleTemplate: |
+      tsconfig em strict mode (noImplicitAny, strictNullChecks). Proibir `any` (usar
+      `unknown` + narrowing); preferir union types a `enum`; sem default export de função
+      (named export ajuda discovery). Tipos derivam de schemas, não duplicados.
+    antiPatternTemplate:
+      - rule: "Anotação ou cast para any"
+        correct: "unknown + refinement, ou tipo específico"
+      - rule: "enum Status { ... }"
+        correct: "type Status = 'a' | 'b' (union literal)"
+    linterHints:
+      - "regex: \\bany\\b em anotação de tipo; \\benum\\s+\\w+"
+      - "tsconfig: strict !== true"
+    relatedAdrCategories:
+      - frontend
+      - backend
+      - bff
