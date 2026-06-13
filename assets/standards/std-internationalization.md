@@ -7,8 +7,7 @@ applyTo: ["**/*.{tsx,jsx,ts}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-internationalization.js
 ---
 ## Princípios
 

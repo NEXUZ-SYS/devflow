@@ -8,6 +8,7 @@ activation: on-demand
 relatedAdrs: []
 enforcement:
   linter: null
+  enforcedBy: hook:commit-msg
 weakStandardWarning: true
 ---
 ## Princípios

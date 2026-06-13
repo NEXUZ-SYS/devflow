@@ -8,6 +8,7 @@ activation: on-demand
 relatedAdrs: []
 enforcement:
   linter: null
+  enforcedBy: doc-grounding-hook+tsc
 weakStandardWarning: true
 ---
 ## Princípios
