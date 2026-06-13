@@ -19,3 +19,6 @@ std-internationalization.md
 std-caching.md
 std-state-management.md
 std-typescript-strict.md
+std-layer-boundaries.md
+std-domain-events.md
+std-pre-commit-hygiene.md
