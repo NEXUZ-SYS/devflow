@@ -5,6 +5,7 @@ description: System architecture design, technical decisions, and scalability re
 role: architect
 phases: [P, R]
 skills: [devflow:prevc-planning, devflow:prevc-review, devflow:context-awareness]
+model: opus
 ---
 
 # Architect

@@ -5,6 +5,7 @@ description: Vulnerability assessment, security review, and compliance checking
 role: specialist
 phases: [R, V]
 skills: [devflow:prevc-review, devflow:prevc-validation]
+model: opus
 ---
 
 # Security Auditor
