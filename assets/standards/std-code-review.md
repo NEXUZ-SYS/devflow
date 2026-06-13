@@ -8,6 +8,7 @@ activation: on-demand
 relatedAdrs: []
 enforcement:
   linter: null
+  enforcedBy: ci:danger
 weakStandardWarning: true
 ---
 ## Princípios

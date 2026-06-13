@@ -8,6 +8,7 @@ activation: on-demand
 relatedAdrs: []
 enforcement:
   linter: null
+  enforcedBy: eslint
 weakStandardWarning: true
 ---
 ## Princípios

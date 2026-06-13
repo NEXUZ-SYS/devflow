@@ -7,8 +7,7 @@ applyTo: ["**/*.{tsx,jsx}"]
 activation: on-demand
 relatedAdrs: []
 enforcement:
-  linter: null
-weakStandardWarning: true
+  linter: machine/std-accessibility.js
 ---
 ## Princípios
 
