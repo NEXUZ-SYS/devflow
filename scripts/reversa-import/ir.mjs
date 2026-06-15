@@ -11,11 +11,14 @@ export function createIR() {
     readiness: { global: null, perFeature: {} }, // verdict por feature + global
     tasks: [],        // { id, name, dependsOn:[], milestone, confidence }
     milestones: [],   // { id, after, demo }
-    features: [],     // { slug, requirements, specPath, specLineCount, hasForward, hasSdd, screens, interfaces, markers }
+    features: [],     // { slug, requirements, specPath, screensPath, specLineCount, hasForward, hasSdd, hasScreens, markers }
     decisions: [],    // { id, title, status, confidence, body }
     gaps: [],         // { feature, text }
-    preserve: [],     // { sourcePath, destSubpath, kind, feature }
-    provenance: [],   // { devflowArtifact, reversaSource, hash } — preenchido por emitters
+    // Reservados para uso futuro/CLI. O plano de preserve hoje vem de planPreserve()
+    // e a proveniência de emitManifest() — estes slots ficam vazios por ora (não são
+    // populados pelo pipeline). Mantidos para estabilidade do shape do IR.
+    preserve: [],     // { sourcePath, destSubpath, kind, feature } — reservado
+    provenance: [],   // { devflowArtifact, reversaSource, hash } — reservado
   };
 }
 

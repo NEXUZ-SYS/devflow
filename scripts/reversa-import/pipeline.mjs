@@ -1,7 +1,7 @@
 // scripts/reversa-import/pipeline.mjs
 // Orquestra os estágios puros. NÃO escreve no disco — retorna o que emitir.
 // Escrita não-destrutiva fica a cargo da CLI/skill.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createIR, validateIR } from "./ir.mjs";
 import { detectReversa } from "./detect.mjs";
@@ -54,8 +54,10 @@ function buildIR(sourceDir) {
     const fwdName = fwdFeatures.find((s) => toSlug(s) === slug);
     const sdd = sddName ? parseSddSpec(join(sddDir, sddName)) : { hasSdd: false, specLineCount: 0, isStub: true, markers: { official: 0, captured: 0, inferred: 0, gap: 0, total: 0, gaps: [] }, specPath: null, hasScreens: false };
     const fwd = fwdName ? parseForwardFeature(join(fwdDir, fwdName)) : { requirements: "", hasForward: false, interfaces: false };
+    // screensPath resolvido do NOME REAL do dir SDD (sddName), não do slug sanitizado (I1)
+    const screensPath = sddName && sdd.hasScreens ? join(sddDir, sddName, "screens.md") : null;
     ir.features.push({
-      slug, requirements: clean(fwd.requirements), specPath: sdd.specPath, specLineCount: sdd.specLineCount,
+      slug, requirements: clean(fwd.requirements), specPath: sdd.specPath, screensPath, specLineCount: sdd.specLineCount,
       hasForward: fwd.hasForward, hasSdd: sdd.hasSdd, hasScreens: sdd.hasScreens, markers: sdd.markers,
     });
     for (const g of sdd.markers.gaps || []) ir.gaps.push({ feature: slug, text: clean(g) });
@@ -91,7 +93,7 @@ export function runPipeline({ sourceDir, now = "1970-01-01T00:00:00.000Z" } = {}
     stories: emitStories(ir, { now }),
     fidelityReport: emitFidelityReport(ir),
   };
-  const preservePlan = planPreserve(ir, sourceDir);
+  const preservePlan = planPreserve(ir);
   // manifesto preliminar (paths reais preenchidos na escrita pela CLI)
   artifacts.manifest = emitManifest(ir, preservePlan.map((p) => ({ devflowArtifact: p.to, reversaSource: p.from })));
 

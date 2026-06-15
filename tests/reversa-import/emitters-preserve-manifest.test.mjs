@@ -11,10 +11,25 @@ import { emitManifest } from "../../scripts/reversa-import/emitters/manifest.mjs
 describe("planPreserve", () => {
   it("mapeia refs Reversa para .context/imported/reversa/ sem copiar (plano)", () => {
     const ir = createIR();
-    ir.features = [{ slug: "auth", specPath: "/src/_reversa_sdd/auth/spec.md", hasSdd: true, hasScreens: false }];
-    const plan = planPreserve(ir, "/src");
+    ir.features = [{ slug: "auth", specPath: "/src/_reversa_sdd/auth/spec.md", screensPath: null, hasSdd: true, hasScreens: false }];
+    const plan = planPreserve(ir);
     assert.ok(plan.some((p) => p.to.includes(".context/imported/reversa/auth")));
     assert.ok(plan.every((p) => p.from && p.to));
+  });
+
+  it("usa screensPath do dir REAL, não reconstrói do slug (regressão I1)", () => {
+    const ir = createIR();
+    // dir real "001-auth" → slug "auth"; o screens deve vir do path real, não de "_reversa_sdd/auth/"
+    ir.features = [{
+      slug: "auth",
+      specPath: "/src/_reversa_sdd/001-auth/spec.md",
+      screensPath: "/src/_reversa_sdd/001-auth/screens.md",
+      hasSdd: true, hasScreens: true,
+    }];
+    const plan = planPreserve(ir);
+    const screens = plan.find((p) => p.kind === "screens");
+    assert.equal(screens.from, "/src/_reversa_sdd/001-auth/screens.md");
+    assert.equal(screens.to, ".context/imported/reversa/auth/screens.md");
   });
 });
 
