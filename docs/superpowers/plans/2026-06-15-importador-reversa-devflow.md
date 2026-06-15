@@ -2753,7 +2753,7 @@ function buildIR(sourceDir) {
   const { tasks, milestones } = parseReconstructionPlan(readSafe(join(sddDir, "reconstruction-plan.md")));
   const mapped = mapTasksToMilestones(tasks.map((t) => ({ ...t, name: clean(t.name) })), milestones);
   ir.tasks = mapped.tasks;
-  ir.milestones = milestones;
+  ir.milestones = milestones.map((m) => ({ ...m, demo: clean(m.demo) })); // demo é texto de terceiro embutido no PRD (M1)
   ir._mapDegraded = mapped.degraded; // sinal p/ a skill avisar (achado #4)
 
   // features: une forward + sdd pelo slug seguro (toSlug — elimina divergência N1)
@@ -2777,7 +2777,7 @@ function buildIR(sourceDir) {
   for (const d of ir.decisions.filter((x) => x.status === "pending")) ir.gaps.push({ feature: "_decisions", text: `${d.id}: ${d.title}` });
 
   ir._review = parseReview(join(sddDir, "_review"));
-  ir._soul = parseSoul(sourceDir);
+  ir._soul = parseSoul(sourceDir); // NÃO embutir em artefato lido por LLM sem clean() antes (M1)
   return ir;
 }
 
@@ -2842,7 +2842,7 @@ A escrita é separada do pipeline para manter o pipeline puro. `writeArtifacts` 
 // tests/reversa-import/write.test.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeArtifacts } from "../../scripts/reversa-import/write.mjs";
@@ -2952,9 +2952,6 @@ describe("writeArtifacts", () => {
 
 Run: `node --test tests/reversa-import/write.test.mjs`
 Expected: FAIL — módulo não encontrado
-
-> **Importante:** adicione `symlinkSync` ao import do `node:fs` no topo do teste:
-> `import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync } from "node:fs";`
 
 - [ ] **Step 3: Implementar**
 
@@ -3423,9 +3420,14 @@ A skill é o único consumidor interativo da lib. Contrato:
 - `result.preservePlan` — `[{ from, to, kind, feature }]`
 
 ## `writeArtifacts(result, { destDir, prdFilename, confirmOverwrite }) → { log }`
-- Escrita **não-destrutiva**. `confirmOverwrite(path) → boolean` é chamado quando um arquivo
-  existente difere do conteúdo a escrever. Retorne `false` para preservar WIP.
-- `log` é uma lista `[nome, status]` com status `written|unchanged|skipped|copied`.
+- Escrita **não-destrutiva** e **contida** (`isWithinDir` — nada fora de `.context/`).
+  `confirmOverwrite(path) → boolean` é chamado quando um arquivo existente difere do conteúdo
+  a escrever. Retorne `false` para preservar WIP.
+- `log` é uma lista `[nome, status]` com status `written|unchanged|skipped|refused-traversal|refused-symlink|missing-source`.
+
+## `diffSourceAgainstManifest(destDir) → { firstImport, changed, unchanged, missing }`
+- §6: lê o manifesto da importação anterior e reporta quais fontes Reversa mudaram por hash.
+  Read-only; a skill mostra `changed`/`missing` antes de reescrever no re-import.
 
 ## O que a skill faz que a lib NÃO faz
 - Toda interação com o usuário (destino, bootstrap, decisão de readiness, reconcile).
