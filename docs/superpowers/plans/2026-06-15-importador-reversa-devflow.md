@@ -392,7 +392,7 @@ Expected: FAIL — módulo não encontrado
 // scripts/reversa-import/detect.mjs
 // Detecção tolerante: .reversa/ é obrigatório; forward/sdd são esperados mas
 // ausências viram "missing" (degradação graciosa), não erro fatal.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 export function detectReversa(sourceDir) {
@@ -667,7 +667,7 @@ Expected: FAIL — módulo não encontrado
 // scripts/reversa-import/readiness.mjs
 // Pre-flight Readiness Gate (lado Reversa). Triangula múltiplos sinais — NUNCA
 // confia só no state.json (que pode estar stale). Roda ANTES do parse.
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { scanMarkers } from "./markers.mjs";
 
@@ -753,7 +753,7 @@ export function assessReadiness(sourceDir) {
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `node --test tests/reversa-import/readiness.test.mjs`
-Expected: PASS (4 testes)
+Expected: PASS (5 testes)
 
 - [ ] **Step 5: Commit**
 
@@ -2609,9 +2609,12 @@ Expected: FAIL — `sanitize.mjs` não encontrado
 ```javascript
 // scripts/reversa-import/sanitize.mjs
 // Strip de prompt-injection em conteúdo Reversa (terceiro) antes de embutir em
-// artefatos lidos por LLM. Mesmos padrões de scripts/lib/sanitize-snippet.mjs.
+// artefatos lidos por LLM. Baseado em scripts/lib/sanitize-snippet.mjs (SI-6),
+// porém com IGNORE_RE deliberadamente mais robusto: tolera múltiplos
+// qualificadores em qualquer ordem ("ignore all previous instructions"), que é a
+// frase de injeção mais comum e que o padrão SI-6 original (1 qualificador) perde.
 const ROLE_MARKER_RE = /^\s*(SYSTEM|ASSISTANT|USER|HUMAN)\s*:/i;
-const IGNORE_RE = /ignore (the )?(previous|above|all) (instructions|context|rules)/i;
+const IGNORE_RE = /ignore\s+(?:the\s+|all\s+|above\s+|previous\s+)*(?:instructions|context|rules)/i;
 
 export function stripInjection(input) {
   if (typeof input !== "string") return { text: "", hits: 0 };
