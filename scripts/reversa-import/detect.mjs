@@ -1,7 +1,7 @@
 // scripts/reversa-import/detect.mjs
 // Detecção tolerante: .reversa/ é obrigatório; forward/sdd são esperados mas
 // ausências viram "missing" (degradação graciosa), não erro fatal.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 export function detectReversa(sourceDir) {

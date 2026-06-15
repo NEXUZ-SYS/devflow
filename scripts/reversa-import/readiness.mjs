@@ -1,7 +1,7 @@
 // scripts/reversa-import/readiness.mjs
 // Pre-flight Readiness Gate (lado Reversa). Triangula múltiplos sinais — NUNCA
 // confia só no state.json (que pode estar stale). Roda ANTES do parse.
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { scanMarkers } from "./markers.mjs";
 
