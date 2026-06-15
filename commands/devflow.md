@@ -60,6 +60,7 @@ Parse the first argument and route to the matching section below. Do NOT treat k
 | `update` | `/devflow update` section | **No** — runs bash commands directly |
 | `update migration` | `/devflow update` → invoke `devflow:migration` | Yes → `devflow:migration` |
 | `migration` | Alias for `update migration` | Yes → `devflow:migration` |
+| `import-reversa` | `/devflow import-reversa` section | Yes → `devflow:import-reversa` |
 | `language` | `/devflow language` section | Yes → `devflow:language` |
 | `prd` | `/devflow prd` section | Yes → `devflow:prd-generation` |
 | `auto` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
@@ -434,6 +435,11 @@ LAYOUT_VERSION=""
 7. Output é 100% dotcontext-compatible
 8. Enables Lite mode automatically
 9. **Todas as interações subsequentes seguem o idioma escolhido**
+
+### /devflow import-reversa <source>
+1. Invoke `devflow:import-reversa` skill
+2. Pass `<source>` (the Reversa project dir) to the skill
+3. The skill orchestrates validation, destination choice, bootstrap, readiness, reconcile, emit, and handoff
 
 ### `/devflow:devflow-sync [scope]`
 1. Invoke `devflow:context-sync` skill
