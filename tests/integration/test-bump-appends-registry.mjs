@@ -8,6 +8,6 @@ const SH = readFileSync(resolve(import.meta.dirname, "../../scripts/bump-version
 
 describe("bump-version.sh", () => {
   it("chama gen-known-hashes --append após o bump", () => {
-    assert.match(SH, /gen-known-hashes\.mjs\s+--append/);
+    assert.match(SH, /gen-known-hashes\.mjs"?\s+--append/);
   });
 });
