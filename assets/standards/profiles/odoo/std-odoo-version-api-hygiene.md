@@ -1,6 +1,6 @@
 ---
 id: std-odoo-version-api-hygiene
-description: Nunca emitir símbolo de API removido/renomeado no Odoo alvo (migração NXZ para 17/18)
+description: Nunca emitir símbolo de API removido/renomeado na versão Odoo alvo (migração para 17/18)
 version: 1.1.0
 source: devflow-default-odoo
 applyTo: ["**/*.py", "**/*.xml"]
@@ -11,7 +11,7 @@ enforcement:
 ---
 ## Princípios
 
-- O alvo de migração NXZ é Odoo **17/18**: o código novo nunca emite símbolos de API que foram removidos ou renomeados nessas versões — falhar cedo no commit é mais barato que descobrir no upgrade do servidor.
+- Em migrações para Odoo **17/18**: o código novo nunca emite símbolos de API que foram removidos ou renomeados nessas versões — falhar cedo no commit é mais barato que descobrir no upgrade do servidor.
 - **Nuance de versão (leia antes de "corrigir" às cegas):** todos os símbolos cobertos por este standard são **válidos no Odoo 12** e só foram **removidos/renomeados no 17/18**. Este linter é orientado ao alvo de migração; não é um erro absoluto. Se você mantém um módulo que permanece em 12, esses símbolos continuam corretos lá — não ative este standard nesse módulo.
 - ORM: `count=True` em `search()` virou método dedicado `search_count()`; `name_get()` foi substituído pelo campo computado `_compute_display_name`; `invalidate_cache()` virou `invalidate_recordset()` (e variantes de model/registry); os decorators `@api.one`/`@api.multi` foram removidos (todo método opera sobre recordset por padrão); `_columns`/`_defaults` são da API pré-8.0 e não existem mais.
 - Views: a tag `<tree>` foi renomeada para `<list>` no 17+; o atributo `attrs="..."` (e o irmão `states="..."`) foi removido no 18 — a visibilidade/readonly condicional agora é expressa inline (`invisible="..."`, `readonly="..."`, `required="..."`) com expressões Python diretas sobre os campos.
@@ -19,7 +19,7 @@ enforcement:
 
 ## Anti-patterns
 
-Coluna **Versão** indica onde o símbolo errado ainda é válido. Em todos os casos ele é **removido/renomeado no Odoo 17/18** (o alvo NXZ).
+Coluna **Versão** indica onde o símbolo errado ainda é válido. Em todos os casos ele é **removido/renomeado no Odoo 17/18**.
 
 ### Python (`.py`)
 
@@ -62,4 +62,4 @@ Checks `.xml`:
 
 - Odoo 18 — ORM API reference (`search_count`, `display_name`, `invalidate_recordset`): https://www.odoo.com/documentation/18.0/developer/reference/backend/orm.html
 - OCA pylint-odoo — checks `deprecated-*` (símbolos de API descontinuados por versão): https://github.com/OCA/pylint-odoo
-- Origem interna NXZ — `skills/odoo-development` e `agents/odoo-specialist.md` (alvo de migração 17/18; padrões de port de POS e localização brasileira).
+- Origem interna — `skills/odoo-development` e `agents/odoo-specialist.md` (alvo de migração 17/18; padrões de port de POS).

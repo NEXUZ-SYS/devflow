@@ -18,7 +18,7 @@ detect:
 # Agents to scaffold into .context/agents/ (in addition to the base set).
 agents: ["odoo-specialist"]
 # Skills to copy into .context/skills/ (in addition to the base set).
-skills: ["odoo-development", "frontend-specialist-odoo"]
+skills: ["odoo-development", "frontend-specialist-odoo", "odoo-l10n-br"]
 # Extra Lite-mode dispatch routing: keyword -> agent.
 dispatchKeywords:
   odoo-specialist: ["odoo", "owl", "qweb", "pos", "nfc-e", "nf-e", "l10n_br", "addon", "orm"]
@@ -42,9 +42,7 @@ standards:
   - std-odoo-orm-performance
   - std-odoo-security
   - std-odoo-owl-patterns
-  - std-odoo-oca-separation
   - std-odoo-qweb-pdf-safety
-  - std-odoo-fiscal-br-integrity
 # Versioned stack docs to index into the docs-mcp-server global store. Seeded
 # into the project's .context/engineering/stacks/manifest.yaml by project-init
 # (one key per Odoo series). Each entry mirrors a manifest framework entry:
@@ -58,6 +56,22 @@ stacks:
     version: "12.0"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/12.0/"]
+  - lib: odoo-13
+    version: "13.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/13.0/"]
+  - lib: odoo-14
+    version: "14.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/14.0/developer/"]
+  - lib: odoo-15
+    version: "15.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/15.0/developer/"]
+  - lib: odoo-16
+    version: "16.0"
+    mcpIndexed: true
+    discoveryHints: ["https://www.odoo.com/documentation/16.0/developer/"]
   - lib: odoo-17
     version: "17.0"
     mcpIndexed: true

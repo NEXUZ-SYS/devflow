@@ -97,6 +97,64 @@ function manifestHasDep(projectRoot, manifestFile, deps) {
   return deps.some((d) => content.includes(String(d).toLowerCase()));
 }
 
+const MAX_MANIFEST_BYTES = 512 * 1024; // anti-DoS: manifest Odoo legítimo é pequeno
+
+/** True if any directory name (bounded depth, symlink-safe) starts with a prefix. */
+function treeHasDirPrefix(root, prefixes, depth = 0) {
+  if (depth > MAX_DEPTH) return false;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const e of entries) {
+    // isDirectory() é false para symlink-de-dir → symlink não é seguido nem contado.
+    if (e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) {
+      if (prefixes.some((p) => e.name.startsWith(p))) return true;
+      if (treeHasDirPrefix(join(root, e.name), prefixes, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+/** True if any manifest file (by basename) has key:'...value...' for some anyOf value. */
+function treeHasManifestKeyValue(root, basename, keys, anyOf, depth = 0) {
+  if (depth > MAX_DEPTH) return false;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  const lowered = anyOf.map((v) => String(v).toLowerCase());
+  for (const e of entries) {
+    if (e.isFile() && e.name === basename) {
+      const p = join(root, e.name);
+      try {
+        if (statSync(p).size > MAX_MANIFEST_BYTES) continue; // anti-DoS
+        const content = readFileSync(p, "utf-8");
+        for (const key of keys) {
+          // casa  key ... : ... '...valor...'  na mesma "entrada" (até a próxima quebra forte)
+          const re = new RegExp(
+            `['"]?${key}['"]?\\s*[:=]\\s*['"][^'"]*(${lowered.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})[^'"]*['"]`,
+            "i",
+          );
+          if (re.test(content)) return true;
+        }
+      } catch {
+        /* ignore IO errors */
+      }
+    }
+  }
+  for (const e of entries) {
+    if (e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith(".")) {
+      if (treeHasManifestKeyValue(join(root, e.name), basename, keys, anyOf, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
 /** Evaluate a single profile's detect rules against the project. */
 function profileMatches(projectRoot, profile) {
   const det = profile.detect || {};
@@ -108,6 +166,19 @@ function profileMatches(projectRoot, profile) {
     if (!entry || !entry.file) continue;
     const deps = Array.isArray(entry.deps) ? entry.deps : [];
     if (deps.length && manifestHasDep(projectRoot, entry.file, deps)) return true;
+  }
+
+  // dirPrefixes: diretório cujo nome começa com um prefixo (bounded, symlink-safe).
+  const dirPrefixes = Array.isArray(det.dirPrefixes) ? det.dirPrefixes : [];
+  if (dirPrefixes.length && treeHasDirPrefix(projectRoot, dirPrefixes)) return true;
+
+  // manifestContent: substring em CHAVES específicas de qualquer manifest no tree.
+  const manifestContent = Array.isArray(det.manifestContent) ? det.manifestContent : [];
+  for (const entry of manifestContent) {
+    if (!entry || !entry.file) continue;
+    const keys = Array.isArray(entry.keys) ? entry.keys : ["author"];
+    const anyOf = Array.isArray(entry.anyOf) ? entry.anyOf : [];
+    if (anyOf.length && treeHasManifestKeyValue(projectRoot, entry.file, keys, anyOf)) return true;
   }
   return false;
 }
@@ -124,12 +195,16 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
   const agents = new Set();
   const skills = new Set();
   const standards = new Set();
+  const standardsOrigin = new Map(); // id -> framework (C1: preserva a origem do profile)
   const stacksByLib = new Map();
   const dispatchKeywords = {};
   for (const p of active) {
     p.agents.forEach((a) => agents.add(a));
     p.skills.forEach((s) => skills.add(s));
-    (p.standards || []).forEach((s) => standards.add(s));
+    (p.standards || []).forEach((s) => {
+      standards.add(s);
+      if (!standardsOrigin.has(s)) standardsOrigin.set(s, p.framework);
+    });
     for (const stack of p.stacks || []) {
       // dedupe by lib key; first profile wins (profiles are framework-scoped).
       if (stack && stack.lib && !stacksByLib.has(stack.lib)) {
@@ -145,6 +220,7 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
     agents: [...agents],
     skills: [...skills],
     standards: [...standards],
+    standardsWithOrigin: [...standardsOrigin].map(([id, framework]) => ({ id, framework })),
     stacks: [...stacksByLib.values()],
     dispatchKeywords,
   };

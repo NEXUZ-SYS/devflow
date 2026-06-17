@@ -1,0 +1,28 @@
+# DevFlow framework profile — NXZ (overlay sobre o profile odoo)
+# Compõe sobre profiles/odoo.yaml: detectFrameworks() retorna ambos quando o projeto
+# é Odoo E NXZ; frameworkContributions() agrega skills/standards/stacks dos dois.
+# Detectado por diretório nxz_* OU chave author/maintainer = Nexuz no manifest.
+framework: nxz
+displayName: NXZ ERP (Odoo)
+detect:
+  # diretório cujo nome começa com o prefixo (bounded por MAX_DEPTH, symlink-safe)
+  dirPrefixes: ["nxz_"]
+  # substring SÓ nas chaves listadas de qualquer __manifest__.py/__openerp__.py no tree
+  manifestContent:
+    - file: "__manifest__.py"
+      keys: ["author", "maintainer", "website"]
+      anyOf: ["Nexuz", "nexuz"]
+    - file: "__openerp__.py"
+      keys: ["author", "maintainer", "website"]
+      anyOf: ["Nexuz", "nexuz"]
+# Agentes: o odoo-specialist já vem do profile odoo (não duplicar).
+agents: []
+# Skill de overlay NXZ — copiada só quando este profile casa.
+skills: ["odoo-nxz-overlay"]
+# Standards NXZ — backed por assets/standards/profiles/nxz/.
+standards:
+  - std-odoo-oca-separation
+  - std-odoo-fiscal-br-integrity
+dispatchKeywords:
+  odoo-specialist: ["nxz", "bridge", "nfce", "danfe"]
+stacks: []

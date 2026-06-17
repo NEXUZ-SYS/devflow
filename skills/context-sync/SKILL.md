@@ -141,10 +141,14 @@ Para cada `agent` retornado ausente em `.context/agents/`, scaffoldar a partir d
 do plugin (preenchendo placeholders). Para cada `skill` retornada ausente em `.context/skills/`,
 copiar o diretório `${CLAUDE_PLUGIN_ROOT}/skills/<slug>/`. Não sobrescrever arquivos já editados.
 
-A detecção também retorna `standards` (ids de Standards profile-scoped) e `stacks` (docs
-versionados). Para cada `standard` ausente em `.context/engineering/standards/`, copiar
+A detecção também retorna `standards` (ids), `standardsWithOrigin` (`[{id, framework}]` — a
+origem de cada std) e `stacks` (docs versionados). Como um projeto pode casar múltiplos
+profiles compostos (ex.: `odoo` + `nxz`), use `standardsWithOrigin` para resolver a pasta
+de origem por id — não assuma um único `<framework>`. Para cada entrada ausente em
+`.context/engineering/standards/`, copiar
 `${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/<id>.md` **e**
-`.../machine/<id>.js` para `.context/engineering/standards/` (+`machine/`). **Nunca**
+`.../machine/<id>.js` (usando o `framework` da entrada) para `.context/engineering/standards/`
+(+`machine/`). **Nunca**
 sobrescrever um std já customizado pelo projeto; respeitar `.context/standards.local.yaml`
 `disable:` (pular ids desabilitados). Para cada `stack` ausente no manifest, semear via
 `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add --lib=<lib> --version=<ver> --discovery-hint=<url> --project=<PWD>`

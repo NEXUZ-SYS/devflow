@@ -2,24 +2,27 @@
 type: skill
 name: frontend-specialist-odoo
 description: >
-  Odoo 18 frontend development specialist covering OWL components, QWeb templates,
-  registries, services, hooks, patching, POS (Point of Sale) customization, receipt
-  rendering, and module migration from Odoo 15 to 18. Covers both generic OWL/web
-  client development AND NXZ-specific POS patterns (DANFE NFC-e, fiscal hooks,
-  bridge modules). Use this skill when creating, modifying, extending, or debugging
-  Odoo frontend code — including OWL components, QWeb XML templates, JavaScript modules,
-  custom field widgets, client actions, systray items, view controllers/renderers,
-  service definitions, hook usage, patching existing components, POS screens, receipt
-  templates, or asset bundle configuration. Also trigger when migrating Odoo 15 POS
-  JavaScript (odoo.define, Registries.Component.extend, Backbone models) to Odoo 18
-  (ES modules, patch(), OWL reactive models).
+  Odoo frontend development specialist (camada L1 — framework genérico) covering
+  Odoo 12 through 18: the legacy widget system (web.widget, odoo.define/require,
+  Backbone POS, .extend()/.include()) on Odoo 12, 13 and 14; OWL 1.x on 15 and 16;
+  OWL 2.x on 17; OWL 3.x on 18. Covers OWL components, QWeb templates, registries,
+  services, hooks, patching, POS (Point of Sale) customization, receipt rendering,
+  and frontend module migration across all 12–18 series. Use this skill when creating,
+  modifying, extending, or debugging Odoo frontend code — including OWL components,
+  QWeb XML templates, JavaScript modules, custom field widgets, client actions, systray
+  items, view controllers/renderers, service definitions, hook usage, patching existing
+  components, legacy widgets, POS screens, receipt templates, or asset bundle
+  configuration. Also trigger when migrating frontend JS between Odoo series (legacy
+  odoo.define/Backbone → OWL, OWL1 → OWL2 → OWL3).
   Do NOT use for Python-only backend development, QWeb report templates (server-side),
   or Odoo configuration/administration tasks. For backend Odoo development, use the
-  odoo-development skill instead.
+  odoo-development skill instead. For Brazilian fiscal localization (NFC-e/DANFE) use
+  odoo-l10n-br; for a company-specific module hierarchy use the matching L3 overlay
+  skill (gated by profile).
 skillSlug: frontend-specialist-odoo
 phases: [P, R, E, V, C]
 generated: 2026-02-19
-updated: 2026-02-24
+updated: 2026-06-17
 status: filled
 scaffoldVersion: "2.0.0"
 mode: manual
@@ -28,9 +31,39 @@ autoActivate: true
 ---
 
 
-# Odoo 18+ Frontend Development Specialist
+# Odoo Frontend Development Specialist (L1 — framework genérico, Odoo 12–18)
 
-This skill provides authoritative guidance for developing Odoo 18+ frontend code using the OWL component framework and the Odoo web client architecture, with special focus on POS (Point of Sale) customization and migration from Odoo 15.
+Esta skill é a **camada L1** (framework genérico, sem acoplamento a projeto) para
+desenvolvimento de frontend Odoo, cobrindo **todas as séries de 12 a 18**:
+
+| Série | Framework de UI | Sistema de módulos | Extensão | Referência |
+|---|---|---|---|---|
+| **12** | Widgets (`web.widget`) + Backbone (POS) | `odoo.define`/`require` | `.extend()` / `.include()` | `references/legacy-widgets-12to14.md` |
+| **13** | Widgets + Backbone (POS) | `odoo.define`/`require` | `.extend()` / `.include()` | `references/legacy-widgets-12to14.md` |
+| **14** | Widgets + Backbone (POS) | `odoo.define`/`require` | `.extend()` / `.include()` | `references/legacy-widgets-12to14.md` |
+| **15** | OWL 1.x (POS ainda Backbone) | `odoo.define` (transição) | `Registries.Component.extend()` | `references/owl-components.md` |
+| **16** | OWL 2.x | ambos (transicional) | `extend()` / `patch()` | `references/owl-components.md` |
+| **17** | OWL 2.x | `@odoo-module` only | `patch()` | `references/owl-components.md` |
+| **18** | OWL 3.x | imports ES6 | `patch()` only | `references/owl-components.md` |
+
+> **Em 12–14** o frontend usa o **sistema de widgets legado** (não OWL) — leia
+> `references/legacy-widgets-12to14.md` antes de mexer em código dessas séries. **Em
+> 15–18** use OWL. A travessia entre paradigmas é uma migração explícita
+> (`references/migration-frontend.md`).
+
+## Grounding (fontes versionadas)
+
+Para confirmar comportamento de uma série específica, consulte sempre a fonte versionada
+em vez de assumir:
+
+- **Documentação oficial por série:** `odoo.com/documentation/NN.0/developer` (ex.:
+  `odoo.com/documentation/18.0/developer`, `.../12.0/developer`).
+- **docs-mcp-server:** `mcp__docs-mcp-server__search_docs` (lib `odoo-NN`, ex.: `odoo-18`,
+  `odoo-12`) e `mcp__docs-mcp-server__find_version` para descobrir o que está indexado.
+  Séries não indexadas (atualmente 13/14/15/16) → marcar como não confirmado e indexar
+  via `/devflow:scrape-stack-batch`.
+- **OWL framework:** repositório oficial `github.com/odoo/owl` (componentes, hooks,
+  reatividade, versões OWL 1.x/2.x/3.x).
 
 > **Before writing any code**, read the relevant reference file(s) in `references/` based on what the user needs. Each reference covers a specific domain in depth.
 
@@ -38,24 +71,44 @@ This skill provides authoritative guidance for developing Odoo 18+ frontend code
 
 | User Need | Reference File |
 |---|---|
-| Creating OWL components, lifecycle, reactivity, props, templates | `references/owl-components.md` |
+| **Legacy frontend on Odoo 12, 13, 14 (web.widget, odoo.define, Backbone POS, .extend()/.include())** | `references/legacy-widgets-12to14.md` |
+| Creating OWL components, lifecycle, reactivity, props, templates (15–18) | `references/owl-components.md` |
 | Services, registries, hooks, patching, client actions, field widgets | `references/odoo-web-framework.md` |
 | Module structure, asset bundles, manifest, XML templates | `references/module-and-assets.md` |
 | **POS screens, receipt rendering, POS models, POS extension** | `references/pos-frontend.md` |
-| **Migrating JS from Odoo 15 to 18 (odoo.define → ES modules)** | `references/migration-frontend-15to18.md` |
+| **Migrating frontend across series (12→18 overview)** | `references/migration-frontend.md` |
+| **Detailed 15→18 POS migration (odoo.define → ES modules, Backbone → OWL)** | `references/migration-frontend-15to18.md` |
 
 ## Cross-References
 
 | Topic | Skill/Resource |
 |---|---|
-| Backend Python (models, ORM, fiscal) | `@.context/skills/odoo-development/SKILL.md` |
-| NFC-e emission flow, SEFAZ integration | `@.context/skills/odoo-development/SKILL.md` sec. 7 |
-| Test patterns (unit, E2E, RPC) | `@.context/skills/odoo-development/SKILL.md` sec. 10 |
+| Backend Python (models, ORM, testing, API por versão) | `odoo-development` skill (L1) |
+| Brazilian fiscal localization (OCA localization stack, NFC-e/NF-e, DANFE, SEFAZ) | `odoo-l10n-br` skill (L2) |
+| Company module hierarchy, bridge modules, project POS overlay | L3 overlay skill (gated por profile) |
 | Gotchas from napkin | `.claude/napkin.md` |
+
+> **Camadas:** esta skill é **L1** (genérica). Conteúdo de **localização BR** (fluxo
+> NFC-e, DANFE, integração SEFAZ) vive em `odoo-l10n-br` (L2). Hierarquia de módulos e
+> padrões de bridge de um projeto específico (ex.: uma stack POS proprietária) vivem no
+> **overlay de empresa (L3)**, uma skill gated por profile. Variáveis de ambiente do
+> projeto (paths, DBs, portas) vivem no `.context/` do projeto, nunca nesta skill.
 
 ## Architecture Overview
 
-The Odoo 18 web client is a single-page application built on **OWL** (Odoo Web Library), a ~20kb reactive component framework inspired by React and Vue. All new frontend development must use OWL — the legacy widget system is deprecated.
+The Odoo web client is a single-page application. The UI framework **depends on the
+series**:
+
+- **Odoo 12**, **Odoo 13** and **Odoo 14** — built on the **legacy widget system**
+  (`web.widget`), the Odoo class system (`.extend()`/`.include()`) and
+  `odoo.define`/`require`. The POS uses **Backbone.js** models. See
+  `references/legacy-widgets-12to14.md`.
+- **Odoo 15–18** — built on **OWL** (Odoo Web Library), a ~20kb reactive component
+  framework inspired by React and Vue (OWL 1.x in 15/16, 2.x in 17, 3.x in 18). On these
+  series all new frontend development uses OWL; the legacy widget system is deprecated.
+
+The OWL-focused architecture below applies to **Odoo 15–18**. For 12–14, use the widget
+patterns in the legacy reference instead.
 
 ### Core Building Blocks
 
@@ -104,49 +157,29 @@ The Odoo 18 web client is a single-page application built on **OWL** (Odoo Web L
 5. **QWeb templates**: XML-based templates with `t-` directives. Support inheritance via `t-inherit` + XPath.
 6. **Asset bundles**: JS/CSS/XML files are organized in asset bundles declared in `__manifest__.py`.
 
-## NXZ Project Context
+## Migration Across Series (resumo)
 
-### Module Hierarchy (Frontend)
+Os saltos de paradigma entre séries — **legacy → OWL1 (12–14 → 15)**, **OWL1 → OWL2
+(15/16 → 17)** e **OWL2 → OWL3 (17 → 18)** — são tratados em
+`references/migration-frontend.md` (visão geral 12→18). O salto 15→18 do POS, o mais
+denso, tem detalhamento side-by-side em `references/migration-frontend-15to18.md`.
 
-```
-point_of_sale (Odoo base)
-+-- l10n_br_pos (OCA: CPF/CNPJ, fiscal JSON, PaymentScreen hooks)
-|   +-- nxz_l10n_br_pos (NXZ bridge: tax computation, _afterOrderSync)
-|   |   +-- l10n_br_pos_nfce (OCA: NFC-e base)
-|   |       +-- nxz_l10n_br_pos_nfce (NXZ: DANFE receipt, NfceProcessor, print CSS)
-+-- nxz_vouchers_pos (NXZ: coupon/voucher system)
-+-- nxz_pos_product_company (NXZ: product filtering)
-```
+Mapeamentos centrais do salto 15 → 18 (POS):
 
-### Bridge Module Pattern (MANDATORY)
-
-NXZ follows strict OCA/NXZ separation:
-- **OCA modules** (`l10n_br_pos`, `l10n_br_pos_nfce`): Keep faithful to OCA migration, no NXZ features
-- **NXZ bridge modules** (`nxz_l10n_br_pos`, `nxz_l10n_br_pos_nfce`): Extend OCA via `_inherit` in Python, `patch()` in JS (Odoo 18)
-
-### Current Frontend State
-
-**Odoo 18 migration COMPLETE (Phase 3).** All 5 POS modules rewritten to OWL 3:
-- `l10n_br_pos`: 5 JS + 2 XML (fiscal maps, PaymentScreen, TicketScreen)
-- `l10n_br_pos_nfce`: 1 JS (PosPayment patch)
-- `nxz_l10n_br_pos`: 2 JS (tax computation, _postPushOrderResolve hook)
-- `nxz_vouchers_pos`: 3 JS + 1 XML (coupon system)
-- `nxz_l10n_br_pos_nfce`: 4 JS + 1 XML + 1 CSS (DANFE receipt, NfceProcessor)
-
-**Key architectural changes from 15→18:**
 - `odoo.define()` → `/** @odoo-module */` + ES6 imports
 - `Registries.Component.extend()` → `patch(Component.prototype, {...})`
-- `models.Order.extend()` → `patch(PosOrder.prototype, {...})`
-- `_afterOrderSync` → native `_postPushOrderResolve` hook
+- `models.Order.extend()` (Backbone) → `patch(PosOrder.prototype, {...})` (OWL reativo)
 - `_export_for_ui` → `_load_pos_data_fields` (Python)
 - `models.load_models()` / `models.load_fields()` → `pos.load.mixin` (Python)
 - `this.rpc({model, method})` → `this.pos.data.call(model, method, args)`
 - `showPopup("ErrorPopup")` → `this.dialog.add(AlertDialog, {})`
 - `this.env.pos` → `this.pos = usePos()`
-- ReprintReceiptScreen/Button REMOVED → TicketScreen handles reprinting
+- ReprintReceiptScreen/Button REMOVIDOS → TicketScreen cuida da reimpressão
 - Moment.js → Luxon DateTime
 
-See `references/migration-frontend-15to18.md` for complete migration guide.
+> Projetos com hierarquia de módulos própria (ex.: stacks POS com módulos bridge sobre
+> OCA) devem documentar essa hierarquia no **overlay de empresa (L3)** e no `.context/`
+> do projeto — não nesta camada L1.
 
 ## Quick Reference: Common Patterns
 

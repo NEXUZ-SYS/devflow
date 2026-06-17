@@ -48,7 +48,7 @@ Em **human-review** (não lintável, fica só nesta prosa):
 
 ## Referência
 
-- **Origem interna NXZ** — esta é a fonte primária deste standard; não há documentação oficial do Odoo cobrindo essas restrições (são comportamento do **wkhtmltopdf**, não do framework):
+- **Origem interna** — esta é a fonte primária deste standard; não há documentação oficial do Odoo cobrindo essas restrições (são comportamento do **wkhtmltopdf**, não do framework):
   - Skill interna `skills/odoo-development`, seção 8 — "QWeb Reports e wkhtmltopdf" (layout com `<table>`, QR via base64, `class="article"`, `@media screen`, `body.container` no `minimal_layout`).
-  - Agente interno `agents/odoo-specialist.md` — convenções de relatórios PDF NXZ.
+  - Agente interno `agents/odoo-specialist.md` — convenções de relatórios PDF.
 - **Fonte da limitação técnica** (sem flex/grid; WebKit antigo; `--disable-local-file-access`): documentação do wkhtmltopdf — https://wkhtmltopdf.org/ (o suporte a CSS é limitado ao motor WebKit embarcado, sem flexbox/grid).

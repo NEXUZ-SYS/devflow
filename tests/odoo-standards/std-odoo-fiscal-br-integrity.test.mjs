@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 
 const LINTER = resolve(
   import.meta.dirname,
-  "../../assets/standards/profiles/odoo/machine/std-odoo-fiscal-br-integrity.js",
+  "../../assets/standards/profiles/nxz/machine/std-odoo-fiscal-br-integrity.js",
 );
 
 // Helper: cria arquivo temporário, roda o linter via subprocesso e devolve {code, out}.
