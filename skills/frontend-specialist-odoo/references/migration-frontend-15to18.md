@@ -26,14 +26,14 @@ This reference provides side-by-side patterns for each migration concern.
 ### Odoo 15 (Legacy)
 
 ```javascript
-odoo.define('nxz_l10n_br_pos.PaymentScreen', function (require) {
+odoo.define('my_pos_module.PaymentScreen', function (require) {
     'use strict';
 
     const Registries = require('point_of_sale.Registries');
     const PaymentScreen = require('point_of_sale.PaymentScreen');
     const { useListener } = require('web.custom_hooks');
 
-    const NxzPaymentScreen = (PaymentScreen) =>
+    const CustomPaymentScreen = (PaymentScreen) =>
         class extends PaymentScreen {
             setup() {
                 super.setup();
@@ -42,12 +42,12 @@ odoo.define('nxz_l10n_br_pos.PaymentScreen', function (require) {
 
             async _afterOrderSync(syncedOrderBackendIds) {
                 await super._afterOrderSync(...arguments);
-                // NXZ fiscal logic
+                // custom fiscal logic
             }
         };
 
-    Registries.Component.extend(PaymentScreen, NxzPaymentScreen);
-    return NxzPaymentScreen;
+    Registries.Component.extend(PaymentScreen, CustomPaymentScreen);
+    return CustomPaymentScreen;
 });
 ```
 
@@ -67,7 +67,7 @@ patch(PaymentScreen.prototype, {
 
     async _afterOrderSync(syncedOrderBackendIds) {
         await super._afterOrderSync(...arguments);
-        // NXZ fiscal logic
+        // custom fiscal logic
     },
 });
 ```
@@ -108,7 +108,7 @@ export class MyComponent extends Component { ... }
 
 ```javascript
 // Factory function pattern — returns arrow function returning class
-const NxzScreen = (OriginalScreen) =>
+const CustomScreen = (OriginalScreen) =>
     class extends OriginalScreen {
         mounted() {
             super.mounted();
@@ -116,7 +116,7 @@ const NxzScreen = (OriginalScreen) =>
         }
     };
 
-Registries.Component.extend(PaymentScreen, NxzScreen);
+Registries.Component.extend(PaymentScreen, CustomScreen);
 ```
 
 ### Odoo 18: `patch()`
@@ -283,7 +283,7 @@ def _load_pos_data_fields(self, config_id):
 
 ```xml
 <!-- Odoo 15 -->
-<t t-name="nxz_module.ExtendedReceipt"
+<t t-name="my_module.ExtendedReceipt"
    t-inherit="point_of_sale.ReceiptScreen"
    t-inherit-mode="extension">
     <xpath expr="//OrderReceipt" position="replace">
@@ -292,7 +292,7 @@ def _load_pos_data_fields(self, config_id):
 </t>
 
 <!-- Odoo 18 — same syntax, but no owl="1" attribute -->
-<t t-name="nxz_module.ExtendedReceipt"
+<t t-name="my_module.ExtendedReceipt"
    t-inherit="point_of_sale.ReceiptScreen"
    t-inherit-mode="extension">
     <xpath expr="//OrderReceipt" position="replace">
@@ -448,12 +448,12 @@ const result = await this.pos.data.call(
 );
 
 // From non-component class (pass pos reference)
-class NfceProcessor {
+class FiscalDocumentProcessor {
     constructor(pos) { this.pos = pos; }
     async send_order(order) {
         const result = await this.pos.data.call(
-            "pos.order", "prepare_nfce_vals",
-            [[order.backendId || order.id], "nfce"]
+            "pos.order", "prepare_fiscal_vals",
+            [[order.backendId || order.id], "fiscal_doc"]
         );
     }
 }
@@ -477,7 +477,7 @@ class CouponButton extends PosComponent {
     }
     async onClick() { /* ... */ }
 }
-CouponButton.template = 'nxz_vouchers_pos.CouponButton';
+CouponButton.template = 'my_vouchers_pos.CouponButton';
 
 ProductScreen.addControlButton({
     component: CouponButton,
@@ -495,7 +495,7 @@ import { Component } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 
 export class CouponButton extends Component {
-    static template = "nxz_vouchers_pos.CouponButton";
+    static template = "my_vouchers_pos.CouponButton";
 
     async onClick() { /* ... */ }
 }
@@ -503,7 +503,7 @@ export class CouponButton extends Component {
 registry.category("pos_available_widgets").add("coupon_button", CouponButton);
 ```
 
-## 10. NXZ Migration Checklist
+## 10. POS Module Migration Checklist
 
 For each POS module being migrated from 15 to 18:
 

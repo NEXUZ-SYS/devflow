@@ -311,9 +311,10 @@ patch(PosOrder.prototype, {
 </templates>
 ```
 
-### Replacing Receipt Conditionally (NXZ Pattern)
+### Replacing Receipt Conditionally
 
-The NXZ DANFE system conditionally replaces the standard receipt:
+A common pattern is to conditionally replace the standard receipt with a custom one
+(e.g. a fiscal/localized receipt) while falling back to the default `OrderReceipt`:
 
 ```xml
 <t t-name="my_module.ReceiptScreen"
@@ -425,69 +426,66 @@ const rpc = useService("rpc");
 const data = await rpc("/my_module/custom_endpoint", { param: "value" });
 ```
 
-## NXZ POS Patterns (Project-Specific)
+## Generic Cross-Module POS Patterns
 
-### Hook-Based Extension Architecture
+These are reusable, framework-level patterns. Project- or localization-specific overlays
+(e.g. Brazilian fiscal receipts / DANFE NFC-e, vendor bridge modules) are documented in
+the layered skills — see the **Cross-References** section of the parent `SKILL.md`
+(`odoo-l10n-br` for BR fiscal, the company L3 overlay skill for a project-specific
+module hierarchy).
 
-The NXZ POS uses a hook pattern for cross-module extension:
+### Hook-Based Extension Architecture (sync hooks)
+
+A common cross-module pattern is to react after an order is synced to the backend. The
+extension point evolved across versions:
 
 ```
-# Odoo 15 (custom hook):
-l10n_br_pos (OCA)          → defines _afterOrderSync() hook (empty)
-nxz_l10n_br_pos (NXZ)      → implements hook: sets backendId, calls document_send()
+# Odoo 15 — custom hook defined by a base module:
+base_pos_module     → defines _afterOrderSync() hook (often empty)
+extension_module    → implements hook: sets backendId, triggers a post-sync action
 
-# Odoo 18 (native hook):
-PaymentScreen              → provides _postPushOrderResolve(order, order_server_ids)
-nxz_l10n_br_pos (NXZ)      → patches _postPushOrderResolve: sets backendId, calls document_send()
-nxz_l10n_br_pos_nfce (NXZ) → NfceProcessor: prepare_nfce_vals → SEFAZ → get_danfe_pos_data
+# Odoo 18 — native hook on PaymentScreen:
+PaymentScreen       → provides _postPushOrderResolve(order, order_server_ids)
+extension_module    → patches _postPushOrderResolve: sets backendId, triggers action
 ```
 
-**NOTE:** `_afterOrderSync` was a custom NXZ hook in Odoo 15. Odoo 18 provides `_postPushOrderResolve` as a native extension point, eliminating the need for the intermediate hook.
-
-### DANFE Receipt Data Structure
-
-The `danfe_data` object from `get_danfe_pos_data()` contains ~220 fields:
-
-| Section | Key Fields |
-|---------|-----------|
-| Company | company_legal_name, company_cnpj, company_ie, address |
-| NFC-e | document_number, document_serie, document_date, nfce_document_key |
-| Auth | authorization_protocol, authorization_date, nfce_url |
-| QR | document_qrcode_base64 |
-| Items | product_default_code, product_name, fmt_quantity, fmt_unit_value, fmt_unit_total |
-| Totals | fmt_amount_products, fmt_amount_discount, fmt_amount_total, fmt_amount_change |
-| Payments | method, fmt_value |
-| Consumer | is_anonymous_consumer, consumer_name, consumer_cpf_cnpj |
-| Tax | fmt_tributos_total |
+**NOTE:** `_afterOrderSync` was typically a *custom* hook in Odoo 15. Odoo 18 provides
+`_postPushOrderResolve` as a **native** extension point, removing the need for an
+intermediate custom hook.
 
 ### Getter-Based Template Context
 
+Expose conditionals/data to the template via getters on the patched class:
+
 ```javascript
 // Use getters for template conditionals
-get isNfceReceipt() {
+get isCustomReceipt() {
     const order = this.pos.get_order();
-    return order && order.nfce_document_number;
+    return order && order.custom_document_number;
 }
 
-get danfeData() {
+get customReceiptData() {
     const order = this.pos.get_order();
-    return order?.danfe_data || null;
+    return order?.custom_receipt_data || null;
 }
-// Template: <t t-if="isNfceReceipt and danfeData">
+// Template: <t t-if="isCustomReceipt and customReceiptData">
 ```
 
 ### Reusable Sub-Templates (t-call)
 
+Factor a receipt body into a reusable QWeb sub-template and `t-call` it from multiple
+screens:
+
 ```xml
 <!-- Define reusable body -->
-<t t-name="nxz_l10n_br_pos_nfce.DanfeNfceBody">
-    <div class="danfe-header" t-att-class="'danfe-' + (danfeData.paper_width or '80mm')">
+<t t-name="my_module.CustomReceiptBody">
+    <div class="receipt-header" t-att-class="'receipt-' + (customReceiptData.paper_width or '80mm')">
         <!-- Receipt content -->
     </div>
 </t>
 
 <!-- Call from multiple screens -->
-<t t-call="nxz_l10n_br_pos_nfce.DanfeNfceBody"/>
+<t t-call="my_module.CustomReceiptBody"/>
 ```
 
 ## Source Documentation
