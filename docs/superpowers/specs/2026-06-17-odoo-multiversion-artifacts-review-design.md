@@ -65,7 +65,8 @@ PLUGIN DevFlow
 │
 ├── assets/stacks/  manifest.yaml + backend/odoo.md (ponteiros docs-mcp 12–18)
 │
-└── scripts/lib/detect-framework.mjs  + regra de detecção NXZ + agregação de standards/stacks
+└── scripts/lib/detect-framework.mjs  + regras de detecção NXZ (dirPrefixes/manifestContent)
+                                       + resolução de ORIGEM de standards (ver "Composição")
 ```
 
 ### Camadas
@@ -82,21 +83,32 @@ PLUGIN DevFlow
 | Sec 7 fiscal BR (l10n_br, NFC-e, SEFAZ, gotchas fiscais) | `odoo-development` | L2 `odoo-l10n-br` |
 | Sec 8 QWeb/wkhtmltopdf (genérico) | `odoo-development` | L1 (fica) |
 | "NXZ Project Context", hierarquia POS, "migration COMPLETE Phase 3" | `frontend-specialist-odoo` | L3 (hierarquia) / remover (estado de projeto) |
-| NfceProcessor/DANFE NXZ | `frontend-specialist-odoo` refs | L3 + L2 (parte genérica DANFE) |
+| DANFE genérico (layout 57/80mm, QR base64, `class="article"`, encoding SEFAZ) | `frontend-specialist-odoo` refs | L2 `odoo-l10n-br` |
+| `NfceProcessor` (classe NXZ), hierarquia de módulos NXZ, bridges fiscais NXZ | `frontend-specialist-odoo` refs | L3 `odoo-nxz-overlay` |
 | Tabela de Ambientes (paths/DB/portas), Recursos do Projeto | agente | `.context/` do projeto (não vai p/ plugin) |
 | `std-odoo-oca-separation`, `std-odoo-fiscal-br-integrity` (NXZ-flavored) | profile odoo | `assets/standards/profiles/nxz/` |
 | Demais 15 standards (limpar "vs NXZ") | profile odoo | permanecem (L1/L2) |
 
 ### Detecção NXZ (`profiles/nxz.yaml`)
 
-`detect.files`/`detect.manifestDeps` atuais não cobrem `author='Nexuz'` nem diretórios `nxz_*`. Será adicionada uma regra de detecção nova ao `detect-framework.mjs` (ex.: `detect.dirPrefixes: ["nxz_"]` e/ou `detect.manifestContent` varrendo `__manifest__.py` por `Nexuz`), com teste dedicado. O agregador será estendido/confirmado para também unir `standards` e `stacks` dos profiles compostos.
+`detect.files`/`detect.manifestDeps` atuais não cobrem `author='Nexuz'` nem diretórios `nxz_*`. Serão adicionadas duas regras de detecção ao `detect-framework.mjs`, com teste dedicado:
+- `detect.dirPrefixes: ["nxz_"]` — diretório cujo nome começa com o prefixo (bounded por `MAX_DEPTH`, ignorando `SKIP_DIRS`).
+- `detect.manifestContent: [{file, keys, anyOf}]` — substring em **chaves específicas** do manifest (`author`/`maintainer`/`website`), **não** substring livre no arquivo (evita falso-positivo de "Nexuz" em comentário/changelog de addon OCA).
+
+**Restrições de segurança (encodadas como asserts no teste):** os novos walkers recursam apenas em `e.isDirectory()` (não seguem symlink, igual ao `treeHasFile` atual); leitura de manifest com cap de tamanho (`statSync.size` < 512KB) anti-DoS; profundidade limitada a `MAX_DEPTH`.
+
+### Composição de profiles (correção de design — origem de standards)
+
+O `detect-framework.mjs` **já** retorna todos os profiles que casam (`profiles.filter`) e o agregador `frameworkContributions` **já une `agents`, `skills`, `standards` e `stacks`** (dedup de standards por id, de stacks por `lib`). Portanto **não** é preciso "estender" o agregador para standards/stacks — apenas confirmar com teste.
+
+**Defeito a corrigir (C1):** o `project-init` copia cada standard de `assets/standards/profiles/<framework>/<id>.md`, resolvendo `<framework>` **por profile, não por std**. Com a composição, o agregador devolve a *união* de ids sem dizer de qual profile cada id veio — então a cópia não sabe que `std-odoo-oca-separation` agora vive em `profiles/nxz/` e os demais em `profiles/odoo/`. **Resolução adotada:** o agregador passa a devolver `standards` como objetos `{id, framework}` (origem preservada), e o `project-init`/`context-sync` copiam usando essa origem. Coberto por um teste de dry-run que assere a resolução de path **por id** (não só "recebe L1+L2+L3").
 
 ## Critérios de qualidade (= o que a suíte de lint testa, RED→GREEN)
 
 1. **Cobertura de versão:** L1 cita explicitamente 12,13,14,15,16,17,18; frontend deixa de ser "18-only".
 2. **Sem acoplamento de ambiente no core:** zero paths absolutos / nomes de DB / portas / service-name em L1 e L2.
-3. **Separação de camadas:** L1 não menciona `nxz_*` nem l10n_br; L2 não menciona `nxz_*`; conteúdo NXZ só em L3.
-4. **Integridade estrutural:** numeração de seções monotônica e sem duplicatas.
+3. **Separação de camadas:** o scan cobre os 2 SKILL.md de L1 **e** os `.md` de `assets/standards/profiles/odoo/`. Token-scan: `/\bnxz\b/i` (não só `nxz_*`) + lista de nomes de classe/domínio NXZ (`NfceProcessor`, etc.) + `l10n_br` em L1. L1 não menciona nenhum; L2 não menciona `nxz`/nomes NXZ; conteúdo NXZ só em L3.
+4. **Integridade estrutural:** numeração monotônica e sem duplicatas em H2 (`## N.`) **e** coerência de subseção (`### N.M` herda o N do `## N.` pai — pega o defeito real `### 5.x` sob `## 6.`).
 5. **Grounding híbrido:** cada tabela de breaking-change tem ponteiro para `search_docs`/`find_version` ou fonte OCA.
 6. **Cross-refs resolvem:** todo `references/x.md` citado existe.
 7. **Front-matter válido** em skills/agente/standards.
@@ -112,7 +124,7 @@ PLUGIN DevFlow
 ## Propagação e confirmação (fase C)
 
 1. Plugin corrigido → bump de versão (pipeline de autoFinish: README → bump → commit → push → merge → cleanup).
-2. Sync para `nxz-odoo-migration` (recebe L1+L2+L3, é NXZ) e `nxz_erp` (recebe L1+L2+L3, é ERP NXZ) — antes, reconciliar o agente atrasado no projeto.
+2. Sync para `nxz-odoo-migration` (recebe L1+L2+L3, é NXZ) e `nxz_erp` (recebe L1+L2+L3, é ERP NXZ) — antes, reconciliar o agente atrasado no projeto. **Salvaguarda:** o sync nunca sobrescreve `.context/` com edição local não-commitada; fazer `diff` antes e abortar se houver WIP (alinha com o incidente prévio de sync destrutivo). Qualquer simulação roda em `mkdtempSync` com assert de que o destino começa por `os.tmpdir()` antes de `rsync --delete`.
 3. Standards standalone: se `std-odoo-*` default mudar, push para `NEXUZ-SYS/devflow-standards` (só `.md`) antes do Step 4d do `/devflow update`, senão o fetch reverte. (Validar se os standards de profile entram nesse fluxo.)
 
 ## Riscos
