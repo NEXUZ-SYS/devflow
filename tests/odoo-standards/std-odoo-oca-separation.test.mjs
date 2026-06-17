@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 
 const LINTER = resolve(
   import.meta.dirname,
-  "../../assets/standards/profiles/odoo/machine/std-odoo-oca-separation.js",
+  "../../assets/standards/profiles/nxz/machine/std-odoo-oca-separation.js",
 );
 
 // Monta um módulo Odoo em tmpdir e roda o linter ancorado no __manifest__.py.
