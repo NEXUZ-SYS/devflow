@@ -1,0 +1,9 @@
+# Profile-scoped default Standards — NXZ (overlay sobre o profile odoo)
+# One std-<id>.md filename per line (comments with '#' are ignored).
+# Each entry must be backed by std-<id>.md + machine/std-<id>.js in this dir,
+# and mirrored in profiles/nxz.yaml `standards:`.
+# Guarded by tests/integration/test-profile-nxz-integrity.mjs.
+
+# Domínio NXZ (weakStandardWarning; maioria human-review)
+std-odoo-oca-separation
+std-odoo-fiscal-br-integrity

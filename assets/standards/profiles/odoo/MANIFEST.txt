@@ -23,8 +23,4 @@ std-odoo-module-structure
 std-odoo-orm-performance
 std-odoo-security
 std-odoo-owl-patterns
-
-# Tier 3 — domínio NXZ (weakStandardWarning; maioria human-review)
-std-odoo-oca-separation
 std-odoo-qweb-pdf-safety
-std-odoo-fiscal-br-integrity
