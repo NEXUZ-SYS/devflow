@@ -4,85 +4,74 @@
 >
 > **DevFlow workflow:** provenance-aware-sync | **Scale:** MEDIUM | **Phase:** E
 > **Spec:** `docs/superpowers/specs/2026-06-17-provenance-aware-sync-design.md`
+> **Revisão R aplicada:** C1 (backfill por commits, não tags), C2/D4 (agents fora — só skills+standards verbatim), A1 (resolveArtifacts na lib), W2 (scope profiles + dest engineering/standards), segurança CRITICAL/HIGH (isWithinDir + recusa symlink + refused + teste RED), A2 (pluginHash==null), A3 (órfãos), W4 (report relativo).
 
-**Goal:** Fazer o sync distinguir deploy intocado (auto-update) de edição local (preserva+reporta) via hash de proveniência + registry de hashes históricos.
+**Goal:** Fazer o sync distinguir deploy intocado (auto-update) de edição local (preserva+reporta) via hash de proveniência + registry histórico, **contido** (sem traversal/symlink), para **skills e standards de profile**.
 
-**Architecture:** Uma lib determinística (`scripts/lib/provenance-sync.mjs`) decide a ação por artefato comparando `projHash` × `pluginHash` × `recorded` (manifesto `.context/.provenance.json`) × `registry` (hashes históricos embarcados). As skills `context-sync`/`project-init` passam a invocar a lib em vez de decidir por prosa. Um gerador (`gen-known-hashes.mjs`) produz o registry (backfill git tags + append no bump).
+**Architecture:** Lib determinística `scripts/lib/provenance-sync.mjs` resolve os artefatos (profiles compostos → `{src,dest,framework}`), decide por hash (`projHash`×`pluginHash`×`recorded`×`registry`), copia **contido** (`isWithinDir`, sem symlink), atualiza `.context/.provenance.json` e reporta. Registry `assets/provenance/known-hashes.json` gerado por **histórico de commits**. Skills invocam a lib; agents seguem o fluxo `fillSingle` (fora).
 
-**Tech Stack:** Node 24 (ESM, `node:test`, `node:assert/strict`, `node:crypto` sha256, `node:fs`), Markdown (skills), Bash (bump-version.sh).
+**Tech Stack:** Node 24 (ESM, `node:test`, `node:assert/strict`, `node:crypto`, `node:fs`, `node:child_process`), reuso de `scripts/lib/path-guard.mjs` e `scripts/lib/detect-framework.mjs`.
 
 ## Global Constraints
 
-- Idioma de relatórios/comentários: **pt-BR** (termos técnicos mantidos).
-- **Zero deps externas** em runtime (só `node:*`). (convenção do repo)
-- Testes via `node --test`; qualquer escrita de teste em **tmpdir** (`mkdtempSync`), nunca in-place.
-- Linters/scripts: stdout determinístico; exit 0 sucesso / exit 1 erro.
-- Escopo de artefatos: **skills + agents + standards** (stacks fora).
-- Proveniência: store `.context/.provenance.json` `{schema:1, artifacts:[{path,hash,sourceVersion,framework}]}`; registry `assets/provenance/known-hashes.json` `{schema:1, hashes:[...]}`.
-- D2: arquivo editado localmente → **preservar + reportar** (sem merge UI).
+- pt-BR em relatórios/comentários; **zero deps externas** (só `node:*` + libs do repo).
+- Testes via `node --test`; escrita SEMPRE em `mkdtempSync(tmpdir())`, nunca in-place.
+- Escopo verbatim: **skills + standards de profile**. **Agents FORA** (transformados no deploy). std-*.md raiz fora (live-loaded).
+- **Contenção obrigatória:** `src` ⊂ pluginRoot; `dest` ⊂ `.context/`; recusar symlink. Violação → `refused` (nunca escreve).
+- Store `.context/.provenance.json` `{schema:1, artifacts:[{path,hash,sourceVersion,framework}]}`; registry `assets/provenance/known-hashes.json` `{schema:1, hashes:[...]}`.
+- `report` usa paths **relativos** ao projeto.
 
 ---
 
 ## File Structure
 
-**Criar:**
-- `scripts/lib/provenance-sync.mjs` — lib + CLI. Responsável por: hash de arquivo, decisão 3-way pura, I/O do manifesto, `applySync` (aplica decisões/copia/atualiza/reporta), CLI `apply`.
-- `scripts/lib/gen-known-hashes.mjs` — gera/append o registry histórico (backfill git tags + working tree).
-- `assets/provenance/known-hashes.json` — registry (gerado; commitado).
-- `tests/integration/test-provenance-sync.mjs` — unit da decisão 3-way + manifesto + applySync (tmpdir).
-- `tests/integration/test-gen-known-hashes.mjs` — registry deduplicado + contém working tree.
-- `tests/integration/test-provenance-sync-e2e.mjs` — E2E sync sobre projeto-fixture.
+**Criar:** `scripts/lib/provenance-sync.mjs` (resolveArtifacts + decideArtifact + hash + manifesto + applySync + CLI), `scripts/lib/gen-known-hashes.mjs` (registry por commit history), `assets/provenance/known-hashes.json` (gerado), testes em `tests/integration/`.
+**Modificar:** `scripts/bump-version.sh` (append registry), `skills/context-sync/SKILL.md` + `skills/project-init/SKILL.md` (invocar lib; agents fora).
+**Reusar:** `scripts/lib/path-guard.mjs` (`isWithinDir`), `scripts/lib/detect-framework.mjs` (`frameworkContributions`/`standardsWithOrigin`).
 
-**Modificar:**
-- `scripts/bump-version.sh` — append do registry no release.
-- `skills/context-sync/SKILL.md` — invocar a lib na cópia de artefatos.
-- `skills/project-init/SKILL.md` — idem no re-scaffold.
+> **Pré-requisito:** ler `scripts/lib/path-guard.mjs` (assinatura de `isWithinDir`) e `scripts/reversa-import/write.mjs` (padrão de recusa de symlink: `lstatSync` + `isSymbolicLink()`) antes da Task 2.
 
 ---
 
-## Task 1: Decisão 3-way pura + hash + manifesto I/O
+## Task 1: Decisão 3-way pura (incl. pluginHash==null) + hash + manifesto I/O
 
 **Agent:** backend-specialist
-**Files:**
-- Create: `scripts/lib/provenance-sync.mjs`
-- Create: `tests/integration/test-provenance-sync.mjs`
+**Files:** Create `scripts/lib/provenance-sync.mjs`, `tests/integration/test-provenance-sync.mjs`
 
-**Interfaces:**
-- Produces:
-  - `hashFile(path) -> string|null` (sha256 hex; null em erro de IO)
-  - `decideArtifact({projHash, pluginHash, recorded, registry}) -> {action}` onde `action ∈ {"add","current","untouched","edited"}` e `registry` é um `Set<string>`. Regras: projHash null→`add`; projHash===pluginHash→`current`; recorded!=null & projHash===recorded→`untouched`; recorded!=null & projHash!==recorded→`edited`; recorded==null & registry.has(projHash)→`untouched`; senão→`edited`.
-  - `loadManifest(projectRoot) -> {schema, artifacts}` (default `{schema:1, artifacts:[]}` se ausente)
-  - `saveManifest(projectRoot, manifest) -> void` (escreve `.context/.provenance.json`)
+**Interfaces — Produces:**
+- `hashFile(path) -> string|null` (sha256 hex; null em IO erro)
+- `decideArtifact({projHash, pluginHash, recorded, registry}) -> {action}`, `action ∈ {"skip","add","current","untouched","edited"}`. Regras (nesta ordem): `pluginHash==null`→`skip`; `projHash==null`→`add`; `projHash===pluginHash`→`current`; `recorded!=null & projHash===recorded`→`untouched`; `recorded!=null & projHash!==recorded`→`edited`; `recorded==null & registry.has(projHash)`→`untouched`; senão→`edited`.
+- `loadManifest(projectRoot) -> {schema, artifacts}`; `saveManifest(projectRoot, manifest)`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write failing test**
 
 ```javascript
 // tests/integration/test-provenance-sync.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashFile, decideArtifact, loadManifest, saveManifest } from "../../scripts/lib/provenance-sync.mjs";
 
-describe("decideArtifact — 6 linhas da tabela", () => {
-  const reg = new Set(["HISTORICO"]);
-  it("ausente → add", () => assert.equal(decideArtifact({projHash:null, pluginHash:"P", recorded:null, registry:reg}).action, "add"));
-  it("igual ao plugin → current", () => assert.equal(decideArtifact({projHash:"P", pluginHash:"P", recorded:"X", registry:reg}).action, "current"));
-  it("recorded==proj → untouched", () => assert.equal(decideArtifact({projHash:"A", pluginHash:"P", recorded:"A", registry:reg}).action, "untouched"));
-  it("recorded!=proj → edited", () => assert.equal(decideArtifact({projHash:"A", pluginHash:"P", recorded:"B", registry:reg}).action, "edited"));
-  it("sem recorded & no registry → untouched (stale)", () => assert.equal(decideArtifact({projHash:"HISTORICO", pluginHash:"P", recorded:null, registry:reg}).action, "untouched"));
-  it("sem recorded & fora do registry → edited", () => assert.equal(decideArtifact({projHash:"DESCONHECIDO", pluginHash:"P", recorded:null, registry:reg}).action, "edited"));
+describe("decideArtifact — 7 linhas", () => {
+  const reg = new Set(["HIST"]);
+  const d = (o) => decideArtifact(o).action;
+  it("pluginHash null → skip", () => assert.equal(d({projHash:"A", pluginHash:null, recorded:null, registry:reg}), "skip"));
+  it("ausente → add", () => assert.equal(d({projHash:null, pluginHash:"P", recorded:null, registry:reg}), "add"));
+  it("igual plugin → current", () => assert.equal(d({projHash:"P", pluginHash:"P", recorded:"X", registry:reg}), "current"));
+  it("recorded==proj → untouched", () => assert.equal(d({projHash:"A", pluginHash:"P", recorded:"A", registry:reg}), "untouched"));
+  it("recorded!=proj → edited", () => assert.equal(d({projHash:"A", pluginHash:"P", recorded:"B", registry:reg}), "edited"));
+  it("sem recorded & registry hit → untouched", () => assert.equal(d({projHash:"HIST", pluginHash:"P", recorded:null, registry:reg}), "untouched"));
+  it("sem recorded & registry miss → edited", () => assert.equal(d({projHash:"Z", pluginHash:"P", recorded:null, registry:reg}), "edited"));
 });
 
 describe("hashFile + manifesto roundtrip", () => {
-  it("hashFile estável e null em IO erro", () => {
-    const d = mkdtempSync(join(tmpdir(), "prov-"));
-    const f = join(d, "a.txt"); writeFileSync(f, "abc");
-    assert.match(hashFile(f), /^[0-9a-f]{64}$/);
-    assert.equal(hashFile(join(d, "nope")), null);
+  it("hashFile estável e null em erro", () => {
+    const dir = mkdtempSync(join(tmpdir(), "prov-")); const f = join(dir, "a"); writeFileSync(f, "abc");
+    assert.match(hashFile(f), /^[0-9a-f]{64}$/); assert.equal(hashFile(join(dir, "nope")), null);
   });
-  it("load default + save/load roundtrip", () => {
+  it("load default + roundtrip", () => {
     const proj = mkdtempSync(join(tmpdir(), "prov-proj-"));
     assert.deepEqual(loadManifest(proj), { schema: 1, artifacts: [] });
     const m = { schema: 1, artifacts: [{ path: ".context/x.md", hash: "H", sourceVersion: "1.0.0", framework: "odoo" }] };
@@ -93,7 +82,7 @@ describe("hashFile + manifesto roundtrip", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL** — `node --test tests/integration/test-provenance-sync.mjs` (module not found).
+- [ ] **Step 2: Run → FAIL** — `node --test tests/integration/test-provenance-sync.mjs`.
 
 - [ ] **Step 3: Implement**
 
@@ -108,27 +97,23 @@ export function hashFile(path) {
   catch { return null; }
 }
 
-// Decisão pura. registry é um Set<string> de hashes históricos.
 export function decideArtifact({ projHash, pluginHash, recorded, registry }) {
-  if (projHash === null || projHash === undefined) return { action: "add" };
+  if (pluginHash == null) return { action: "skip" };
+  if (projHash == null) return { action: "add" };
   if (projHash === pluginHash) return { action: "current" };
-  if (recorded != null) {
-    return { action: projHash === recorded ? "untouched" : "edited" };
-  }
+  if (recorded != null) return { action: projHash === recorded ? "untouched" : "edited" };
   return { action: registry && registry.has(projHash) ? "untouched" : "edited" };
 }
 
-function manifestPath(projectRoot) {
-  return join(projectRoot, ".context", ".provenance.json");
-}
+function manifestPath(projectRoot) { return join(projectRoot, ".context", ".provenance.json"); }
 
 export function loadManifest(projectRoot) {
   const p = manifestPath(projectRoot);
   if (!existsSync(p)) return { schema: 1, artifacts: [] };
   try {
-    const data = JSON.parse(readFileSync(p, "utf-8"));
-    if (!data || typeof data !== "object" || !Array.isArray(data.artifacts)) return { schema: 1, artifacts: [] };
-    return { schema: data.schema ?? 1, artifacts: data.artifacts };
+    const d = JSON.parse(readFileSync(p, "utf-8"));
+    if (!d || !Array.isArray(d.artifacts)) return { schema: 1, artifacts: [] };
+    return { schema: d.schema ?? 1, artifacts: d.artifacts };
   } catch { return { schema: 1, artifacts: [] }; }
 }
 
@@ -139,115 +124,107 @@ export function saveManifest(projectRoot, manifest) {
 }
 ```
 
-- [ ] **Step 4: Run → PASS** — `node --test tests/integration/test-provenance-sync.mjs`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/lib/provenance-sync.mjs tests/integration/test-provenance-sync.mjs
-git commit -m "feat(sync): decisão 3-way pura + hash + manifesto de proveniência"
-```
+- [ ] **Step 4: Run → PASS**.
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): decisão 3-way (incl. pluginHash null) + hash + manifesto"`
 
 ---
 
-## Task 2: `applySync` — aplica decisões, copia, atualiza manifesto, reporta
+## Task 2: `applySync` contido (isWithinDir + recusa symlink + refused + relativo)
 
 **Agent:** backend-specialist
-**Files:**
-- Modify: `scripts/lib/provenance-sync.mjs`
-- Modify: `tests/integration/test-provenance-sync.mjs`
+**Files:** Modify `scripts/lib/provenance-sync.mjs`, `tests/integration/test-provenance-sync.mjs`
 
 **Interfaces:**
-- Consumes: `hashFile`, `decideArtifact`, `loadManifest`, `saveManifest` (Task 1).
-- Produces: `applySync({projectRoot, artifacts, registry, sourceVersion}) -> report` onde:
-  - `artifacts`: `[{ src, dest, framework }]` (src = path no plugin; dest = path absoluto no projeto; ambos absolutos).
-  - `registry`: `Set<string>`.
-  - `report`: `{ added:[dest], updated:[dest], current:[dest], preserved:[dest] }`.
-  - Efeitos: para `add`/`untouched` copia `src`→`dest` (cria dirs) e grava entrada no manifesto (path relativo ao projectRoot, hash do plugin, sourceVersion, framework); `current` garante a entrada no manifesto sem copiar; `edited` não toca nada e entra em `preserved`.
+- Consumes: Task 1 + `isWithinDir` de `scripts/lib/path-guard.mjs` + `lstatSync`.
+- Produces: `applySync({projectRoot, pluginRoot, artifacts, registry, sourceVersion}) -> report`. `artifacts`: `[{src(abs), dest(abs), framework}]`. `report`: `{added:[rel], updated:[rel], current:[rel], preserved:[rel], refused:[rel]}` (rel = relativo a projectRoot). Contenção: recusa (`refused`) se `src` ⊄ pluginRoot, `dest` ⊄ `join(projectRoot,".context")`, ou se `src`/`dest` existente é symlink. `skip` (pluginHash null) também entra em `refused`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write failing test (efeitos + segurança RED)**
 
 ```javascript
 // adicionar em tests/integration/test-provenance-sync.mjs
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { applySync } from "../../scripts/lib/provenance-sync.mjs";
 
-describe("applySync — efeitos e relatório", () => {
-  function setup() {
-    const plug = mkdtempSync(join(tmpdir(), "prov-plug-"));
-    const proj = mkdtempSync(join(tmpdir(), "prov-proj2-"));
-    return { plug, proj };
-  }
-  it("add (ausente), untouched (registry), edited (preserva)", () => {
-    const { plug, proj } = setup();
-    // plugin tem 3 artefatos
-    for (const n of ["new", "stale", "edited"]) {
-      mkdirSync(join(plug, n), { recursive: true });
-      writeFileSync(join(plug, n, "SKILL.md"), `PLUGIN-${n}-v2`);
-    }
-    // projeto: 'new' ausente; 'stale' = versão antiga (hash no registry); 'edited' = conteúdo do usuário
-    mkdirSync(join(proj, ".context", "stale"), { recursive: true });
-    writeFileSync(join(proj, ".context", "stale", "SKILL.md"), "ANTIGO-stale-v1");
-    mkdirSync(join(proj, ".context", "edited"), { recursive: true });
-    writeFileSync(join(proj, ".context", "edited", "SKILL.md"), "EDITADO-pelo-usuario");
+function mk() { return { plug: mkdtempSync(join(tmpdir(), "prov-plug-")), proj: mkdtempSync(join(tmpdir(), "prov-proj2-")) }; }
 
-    const registry = new Set([hashFile(join(proj, ".context", "stale", "SKILL.md"))]); // 'stale' é release antiga
-    const artifacts = ["new", "stale", "edited"].map((n) => ({
-      src: join(plug, n, "SKILL.md"),
-      dest: join(proj, ".context", n, "SKILL.md"),
-      framework: "odoo",
-    }));
+describe("applySync — efeitos", () => {
+  it("add / untouched(registry) / edited(preserva)", () => {
+    const { plug, proj } = mk();
+    for (const n of ["new", "stale", "edited"]) { mkdirSync(join(plug, n), {recursive:true}); writeFileSync(join(plug, n, "S.md"), `PLUG-${n}-v2`); }
+    mkdirSync(join(proj, ".context", "stale"), {recursive:true}); writeFileSync(join(proj, ".context", "stale", "S.md"), "ANTIGO");
+    mkdirSync(join(proj, ".context", "edited"), {recursive:true}); writeFileSync(join(proj, ".context", "edited", "S.md"), "USER");
+    const registry = new Set([hashFile(join(proj, ".context", "stale", "S.md"))]);
+    const artifacts = ["new","stale","edited"].map((n) => ({ src: join(plug,n,"S.md"), dest: join(proj,".context",n,"S.md"), framework: "odoo" }));
+    const r = applySync({ projectRoot: proj, pluginRoot: plug, artifacts, registry, sourceVersion: "2.0.0" });
+    assert.ok(r.added.some((p) => p.endsWith("new/S.md")));
+    assert.ok(r.updated.some((p) => p.endsWith("stale/S.md")));
+    assert.ok(r.preserved.some((p) => p.endsWith("edited/S.md")));
+    assert.ok(r.added.every((p) => !p.startsWith("/")), "report relativo");
+    assert.equal(readFileSync(join(proj,".context","stale","S.md"),"utf-8"), "PLUG-stale-v2");
+    assert.equal(readFileSync(join(proj,".context","edited","S.md"),"utf-8"), "USER");
+  });
+});
 
-    const report = applySync({ projectRoot: proj, artifacts, registry, sourceVersion: "2.0.0" });
-
-    assert.deepEqual(report.added.map((p) => p.endsWith("new/SKILL.md")), [true]);
-    assert.deepEqual(report.updated.map((p) => p.endsWith("stale/SKILL.md")), [true]);
-    assert.deepEqual(report.preserved.map((p) => p.endsWith("edited/SKILL.md")), [true]);
-    // efeitos: new e stale agora têm conteúdo do plugin; edited intacto
-    assert.equal(readFileSync(join(proj, ".context", "new", "SKILL.md"), "utf-8"), "PLUGIN-new-v2");
-    assert.equal(readFileSync(join(proj, ".context", "stale", "SKILL.md"), "utf-8"), "PLUGIN-stale-v2");
-    assert.equal(readFileSync(join(proj, ".context", "edited", "SKILL.md"), "utf-8"), "EDITADO-pelo-usuario");
-    // manifesto: new + stale gravados, edited não
-    const m = loadManifest(proj);
-    const paths = m.artifacts.map((a) => a.path).sort();
-    assert.ok(paths.some((p) => p.endsWith("new/SKILL.md")));
-    assert.ok(paths.some((p) => p.endsWith("stale/SKILL.md")));
-    assert.ok(!paths.some((p) => p.endsWith("edited/SKILL.md")));
+describe("applySync — segurança (contenção)", () => {
+  it("traversal de dest/src → refused, nada escrito fora", () => {
+    const { plug, proj } = mk();
+    mkdirSync(join(plug, "ok"), {recursive:true}); writeFileSync(join(plug, "ok", "S.md"), "X");
+    const artifacts = [
+      { src: join(plug, "ok", "S.md"), dest: join(proj, ".context", "..", "escape.md"), framework: "odoo" },
+      { src: join(plug, "..", "outside.md"), dest: join(proj, ".context", "z.md"), framework: "odoo" },
+    ];
+    const r = applySync({ projectRoot: proj, pluginRoot: plug, artifacts, registry: new Set(), sourceVersion: "2.0.0" });
+    assert.equal(r.refused.length, 2);
+    assert.ok(!existsSync(join(proj, "escape.md")), "não escreveu fora de .context");
+  });
+  it("src symlink → refused", () => {
+    const { plug, proj } = mk();
+    writeFileSync(join(plug, "real.md"), "R"); symlinkSync(join(plug, "real.md"), join(plug, "link.md"));
+    const artifacts = [{ src: join(plug, "link.md"), dest: join(proj, ".context", "x.md"), framework: "odoo" }];
+    const r = applySync({ projectRoot: proj, pluginRoot: plug, artifacts, registry: new Set(), sourceVersion: "2.0.0" });
+    assert.equal(r.refused.length, 1); assert.ok(!existsSync(join(proj, ".context", "x.md")));
   });
 });
 ```
 
-- [ ] **Step 2: Run → FAIL** (applySync undefined).
+- [ ] **Step 2: Run → FAIL**.
 
 - [ ] **Step 3: Implement (append em provenance-sync.mjs)**
 
 ```javascript
-import { copyFileSync } from "node:fs";
+import { copyFileSync, lstatSync } from "node:fs";
 import { relative } from "node:path";
+import { isWithinDir } from "./path-guard.mjs";
 
-export function applySync({ projectRoot, artifacts, registry, sourceVersion }) {
+function isSymlink(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } }
+
+export function applySync({ projectRoot, pluginRoot, artifacts, registry, sourceVersion }) {
+  const contextRoot = join(projectRoot, ".context");
   const manifest = loadManifest(projectRoot);
   const byPath = new Map(manifest.artifacts.map((a) => [a.path, a]));
-  const report = { added: [], updated: [], current: [], preserved: [] };
+  const report = { added: [], updated: [], current: [], preserved: [], refused: [] };
 
   for (const { src, dest, framework } of artifacts) {
-    const relPath = relative(projectRoot, dest);
+    const rel = relative(projectRoot, dest);
+    // Contenção (segurança): src no plugin, dest em .context, sem symlink.
+    if (!isWithinDir(src, pluginRoot) || !isWithinDir(dest, contextRoot) || isSymlink(src) || isSymlink(dest)) {
+      report.refused.push(rel); continue;
+    }
     const projHash = hashFile(dest);
     const pluginHash = hashFile(src);
-    const recorded = byPath.get(relPath)?.hash ?? null;
+    const recorded = byPath.get(rel)?.hash ?? null;
     const { action } = decideArtifact({ projHash, pluginHash, recorded, registry });
 
+    if (action === "skip") { report.refused.push(rel); continue; }
     if (action === "add" || action === "untouched") {
       mkdirSync(dirname(dest), { recursive: true });
       copyFileSync(src, dest);
-      byPath.set(relPath, { path: relPath, hash: pluginHash, sourceVersion, framework });
-      (action === "add" ? report.added : report.updated).push(dest);
+      byPath.set(rel, { path: rel, hash: pluginHash, sourceVersion, framework });
+      (action === "add" ? report.added : report.updated).push(rel);
     } else if (action === "current") {
-      byPath.set(relPath, { path: relPath, hash: pluginHash, sourceVersion, framework });
-      report.current.push(dest);
-    } else { // edited
-      report.preserved.push(dest);
-    }
+      byPath.set(rel, { path: rel, hash: pluginHash, sourceVersion, framework });
+      report.current.push(rel);
+    } else { report.preserved.push(rel); }
   }
   saveManifest(projectRoot, { schema: 1, artifacts: [...byPath.values()] });
   return report;
@@ -255,451 +232,328 @@ export function applySync({ projectRoot, artifacts, registry, sourceVersion }) {
 ```
 
 - [ ] **Step 4: Run → PASS**.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/lib/provenance-sync.mjs tests/integration/test-provenance-sync.mjs
-git commit -m "feat(sync): applySync aplica decisões + atualiza manifesto + reporta"
-```
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): applySync contido (isWithinDir + recusa symlink + refused + relativo)"`
 
 ---
 
-## Task 3: CLI `apply` (consumido pelas skills)
+## Task 3: `resolveArtifacts` na lib (profiles compostos → skills + standards)
 
 **Agent:** backend-specialist
-**Files:**
-- Modify: `scripts/lib/provenance-sync.mjs`
-- Modify: `tests/integration/test-provenance-sync.mjs`
+**Files:** Modify `scripts/lib/provenance-sync.mjs`, `tests/integration/test-provenance-sync.mjs`
 
 **Interfaces:**
-- Consumes: `applySync`, registry loader.
-- Produces: CLI `node scripts/lib/provenance-sync.mjs apply --project=<root> --plugin=<root> --artifacts=<jsonFile>` onde o jsonFile contém `[{srcRel, destRel, framework}]` (srcRel relativo ao plugin, destRel relativo ao projeto). Carrega o registry de `<plugin>/assets/provenance/known-hashes.json` (default set vazio se ausente). Imprime o `report` como JSON em stdout, exit 0.
+- Consumes: `frameworkContributions` de `detect-framework.mjs`.
+- Produces: `resolveArtifacts({projectRoot, pluginRoot, baseSkills}) -> [{src(abs), dest(abs), framework}]`. Inclui: skills (de `contributions.skills` + `baseSkills`) → `skills/<slug>/**` → `.context/skills/<slug>/**`; standards de profile (de `contributions.standardsWithOrigin`) → `assets/standards/profiles/<fw>/<id>.md` (+ `machine/<id>.js`) → `.context/engineering/standards/<id>.md` (+`machine/`). **NÃO inclui agents nem std-*.md raiz.**
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write failing test**
 
 ```javascript
 // adicionar em tests/integration/test-provenance-sync.mjs
-import { execFileSync } from "node:child_process";
+import { resolveArtifacts } from "../../scripts/lib/provenance-sync.mjs";
 import { resolve } from "node:path";
+const REPO = resolve(import.meta.dirname, "../..");
 
-describe("CLI apply", () => {
-  it("aplica via CLI e imprime report JSON", () => {
-    const plug = mkdtempSync(join(tmpdir(), "prov-cliplug-"));
-    const proj = mkdtempSync(join(tmpdir(), "prov-cliproj-"));
-    mkdirSync(join(plug, "skills", "x"), { recursive: true });
-    writeFileSync(join(plug, "skills", "x", "SKILL.md"), "NOVA");
-    mkdirSync(join(plug, "assets", "provenance"), { recursive: true });
-    writeFileSync(join(plug, "assets", "provenance", "known-hashes.json"), JSON.stringify({ schema: 1, hashes: [] }));
-    const artifactsFile = join(proj, "artifacts.json");
-    writeFileSync(artifactsFile, JSON.stringify([{ srcRel: "skills/x/SKILL.md", destRel: ".context/skills/x/SKILL.md", framework: "odoo" }]));
-
-    const CLI = resolve(import.meta.dirname, "../../scripts/lib/provenance-sync.mjs");
-    const out = execFileSync("node", [CLI, "apply", `--project=${proj}`, `--plugin=${plug}`, `--artifacts=${artifactsFile}`], { encoding: "utf-8" });
-    const report = JSON.parse(out);
-    assert.equal(report.added.length, 1);
-    assert.equal(readFileSync(join(proj, ".context", "skills", "x", "SKILL.md"), "utf-8"), "NOVA");
+describe("resolveArtifacts", () => {
+  it("inclui skills e standards de profile; exclui agents", () => {
+    // projeto-fixture com marcador odoo
+    const proj = mkdtempSync(join(tmpdir(), "prov-res-"));
+    mkdirSync(join(proj, "addons", "x"), {recursive:true}); writeFileSync(join(proj, "addons", "x", "__manifest__.py"), "{'name':'x'}");
+    const arts = resolveArtifacts({ projectRoot: proj, pluginRoot: REPO, baseSkills: [] });
+    assert.ok(arts.some((a) => a.dest.includes(".context/skills/odoo-development")));
+    assert.ok(arts.some((a) => a.dest.includes(".context/engineering/standards/std-odoo-naming-conventions.md")));
+    assert.ok(arts.every((a) => !a.dest.includes(".context/agents/")), "agents fora");
+    assert.ok(arts.every((a) => a.src.startsWith(REPO)), "src no plugin");
   });
 });
 ```
 
 - [ ] **Step 2: Run → FAIL**.
 
-- [ ] **Step 3: Implement (append: registry loader + CLI entrypoint)**
+- [ ] **Step 3: Implement (append)** — usar `frameworkContributions(projectRoot, pluginRoot)`; para cada skill, enumerar arquivos sob `skills/<slug>/` (walk) e mapear para `.context/skills/<slug>/<rel>`; para cada `{id, framework}` em `standardsWithOrigin`, mapear `assets/standards/profiles/<framework>/<id>.md` → `.context/engineering/standards/<id>.md` e `.../machine/<id>.js` → `.context/engineering/standards/machine/<id>.js` (se existir). Reutilizar um `walk` simples (espelhar `gen-known-hashes`/`detect-framework`).
 
 ```javascript
+import { frameworkContributions } from "./detect-framework.mjs";
+import { readdirSync } from "node:fs";
+
+function walkFiles(root, sub, out) {
+  let entries; try { entries = readdirSync(join(root, sub), { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    if (e.name.startsWith(".")) continue;
+    const rel = sub ? join(sub, e.name) : e.name;
+    if (e.isDirectory()) walkFiles(root, rel, out);
+    else if (e.isFile()) out.push(rel);
+  }
+}
+
+export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
+  const c = frameworkContributions(projectRoot, pluginRoot);
+  const arts = [];
+  const skills = [...new Set([...(c.skills || []), ...baseSkills])];
+  for (const slug of skills) {
+    const files = [];
+    walkFiles(pluginRoot, join("skills", slug), files);
+    for (const rel of files) arts.push({ src: join(pluginRoot, rel), dest: join(projectRoot, ".context", rel), framework: "skill" });
+  }
+  for (const { id, framework } of c.standardsWithOrigin || []) {
+    const md = join("assets", "standards", "profiles", framework, `${id}.md`);
+    arts.push({ src: join(pluginRoot, md), dest: join(projectRoot, ".context", "engineering", "standards", `${id}.md`), framework });
+    const js = join("assets", "standards", "profiles", framework, "machine", `${id}.js`);
+    if (existsSync(join(pluginRoot, js))) arts.push({ src: join(pluginRoot, js), dest: join(projectRoot, ".context", "engineering", "standards", "machine", `${id}.js`), framework });
+  }
+  return arts;
+}
+```
+
+- [ ] **Step 4: Run → PASS**.
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): resolveArtifacts (skills+standards de profile; agents fora)"`
+
+---
+
+## Task 4: CLI `apply` (resolve + aplica) — consumido pelas skills
+
+**Agent:** backend-specialist
+**Files:** Modify `scripts/lib/provenance-sync.mjs`, `tests/integration/test-provenance-sync.mjs`
+
+**Interfaces:**
+- Produces: `loadRegistry(pluginRoot) -> Set<string>`; CLI `node provenance-sync.mjs apply --project=<root> --plugin=<root> [--base-skills=a,b]`. Resolve via `resolveArtifacts`, carrega registry, lê `sourceVersion` de `<plugin>/.claude-plugin/plugin.json`, roda `applySync`, imprime `report` JSON (paths relativos). Exit 0.
+
+- [ ] **Step 1: Write failing test**
+
+```javascript
+// adicionar em tests/integration/test-provenance-sync.mjs
+import { execFileSync } from "node:child_process";
+describe("CLI apply", () => {
+  it("resolve+aplica via CLI e imprime report", () => {
+    const proj = mkdtempSync(join(tmpdir(), "prov-cli-"));
+    mkdirSync(join(proj, "addons", "x"), {recursive:true}); writeFileSync(join(proj, "addons", "x", "__manifest__.py"), "{'name':'x'}");
+    const CLI = resolve(import.meta.dirname, "../../scripts/lib/provenance-sync.mjs");
+    const out = execFileSync("node", [CLI, "apply", `--project=${proj}`, `--plugin=${REPO}`], { encoding: "utf-8" });
+    const r = JSON.parse(out);
+    assert.ok(Array.isArray(r.added));
+    assert.ok(existsSync(join(proj, ".context", "skills", "odoo-development", "SKILL.md")), "skill copiada");
+  });
+});
+```
+
+- [ ] **Step 2: Run → FAIL**.
+
+- [ ] **Step 3: Implement (append: loadRegistry + CLI)**
+
+```javascript
+import { resolve } from "node:path"; // já pode estar importado — consolidar
+
 export function loadRegistry(pluginRoot) {
   const p = join(pluginRoot, "assets", "provenance", "known-hashes.json");
   if (!existsSync(p)) return new Set();
-  try {
-    const data = JSON.parse(readFileSync(p, "utf-8"));
-    return new Set(Array.isArray(data.hashes) ? data.hashes : []);
-  } catch { return new Set(); }
+  try { const d = JSON.parse(readFileSync(p, "utf-8")); return new Set(Array.isArray(d.hashes) ? d.hashes : []); }
+  catch { return new Set(); }
 }
 
-function arg(name) {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return hit ? hit.slice(name.length + 3) : null;
-}
+function arg(name) { const h = process.argv.find((a) => a.startsWith(`--${name}=`)); return h ? h.slice(h.indexOf("=") + 1) : null; }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const cmd = process.argv[2];
-  if (cmd === "apply") {
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  if (process.argv[2] === "apply") {
     const projectRoot = resolve(arg("project"));
     const pluginRoot = resolve(arg("plugin"));
-    const artifactsSpec = JSON.parse(readFileSync(arg("artifacts"), "utf-8"));
-    const artifacts = artifactsSpec.map((a) => ({
-      src: join(pluginRoot, a.srcRel),
-      dest: join(projectRoot, a.destRel),
-      framework: a.framework ?? null,
-    }));
+    const baseSkills = (arg("base-skills") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const artifacts = resolveArtifacts({ projectRoot, pluginRoot, baseSkills });
     const pkg = JSON.parse(readFileSync(join(pluginRoot, ".claude-plugin", "plugin.json"), "utf-8"));
-    const report = applySync({ projectRoot, artifacts, registry: loadRegistry(pluginRoot), sourceVersion: pkg.version });
+    const report = applySync({ projectRoot, pluginRoot, artifacts, registry: loadRegistry(pluginRoot), sourceVersion: pkg.version });
     console.log(JSON.stringify(report, null, 2));
   } else {
-    console.error("Usage: provenance-sync.mjs apply --project=<root> --plugin=<root> --artifacts=<jsonFile>");
+    console.error("Usage: provenance-sync.mjs apply --project=<root> --plugin=<root> [--base-skills=a,b]");
     process.exit(1);
   }
 }
 ```
-Adicionar `resolve` ao import de `node:path`.
 
 - [ ] **Step 4: Run → PASS**.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/lib/provenance-sync.mjs tests/integration/test-provenance-sync.mjs
-git commit -m "feat(sync): CLI apply (consumido pelas skills) + loadRegistry"
-```
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): CLI apply (resolve+aplica) + loadRegistry"`
 
 ---
 
-## Task 4: Gerador do registry (`gen-known-hashes.mjs`)
+## Task 5: Gerador do registry por HISTÓRICO DE COMMITS (`gen-known-hashes.mjs`)
 
 **Agent:** backend-specialist
-**Files:**
-- Create: `scripts/lib/gen-known-hashes.mjs`
-- Create: `tests/integration/test-gen-known-hashes.mjs`
-- Create: `assets/provenance/known-hashes.json` (gerado pelo script no Step 4)
+**Files:** Create `scripts/lib/gen-known-hashes.mjs`, `tests/integration/test-gen-known-hashes.mjs`, `assets/provenance/known-hashes.json` (gerado no Step 4)
 
 **Interfaces:**
 - Produces:
-  - `distributableFiles(root) -> string[]` (paths relativos de skills/**, agents/*.md, assets/standards/**/*.md/.js — os artefatos copiáveis).
-  - `genFromWorkingTree(pluginRoot) -> Set<string>` (sha256 de cada distributableFile do working tree).
-  - CLI `node scripts/lib/gen-known-hashes.mjs [--append]`: backfill de `git tag` (cada `git show <tag>:<path>` → sha256) + working tree; `--append` mescla com o registry existente (dedup); escreve `assets/provenance/known-hashes.json` ordenado.
+  - `distributableFiles(root) -> string[]` — só artefatos **verbatim**: `skills/**` (.md/.js) + `assets/standards/profiles/**` (.md/.js). **NÃO** agents, **NÃO** std-*.md raiz.
+  - `genFromWorkingTree(pluginRoot) -> Set<string>`.
+  - `genBackfill(pluginRoot) -> Set<string>` — working tree + para cada path, `git log --pretty=%H -- <path>` → `git show <sha>:<path>` → sha256. Emite aviso se `git log` falhar (shallow).
+  - CLI `[--append]`: `--append` mescla com registry existente (dedup); senão backfill completo. Escreve `assets/provenance/known-hashes.json` ordenado.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write failing test**
 
 ```javascript
 // tests/integration/test-gen-known-hashes.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
-import { genFromWorkingTree, distributableFiles } from "../../scripts/lib/gen-known-hashes.mjs";
+import { resolve, join } from "node:path";
+import { distributableFiles, genFromWorkingTree } from "../../scripts/lib/gen-known-hashes.mjs";
 import { hashFile } from "../../scripts/lib/provenance-sync.mjs";
-import { join } from "node:path";
-
 const REPO = resolve(import.meta.dirname, "../..");
-
-describe("gen-known-hashes", () => {
-  it("distributableFiles inclui skills e agents reais", () => {
-    const files = distributableFiles(REPO);
-    assert.ok(files.some((f) => f.startsWith("skills/")));
-    assert.ok(files.some((f) => f.startsWith("agents/")));
+describe("gen-known-hashes (verbatim only)", () => {
+  it("distributableFiles inclui skills e standards de profile; exclui agents e std raiz", () => {
+    const f = distributableFiles(REPO);
+    assert.ok(f.some((x) => x.startsWith("skills/")));
+    assert.ok(f.some((x) => x.startsWith("assets/standards/profiles/")));
+    assert.ok(!f.some((x) => x.startsWith("agents/")), "agents fora");
+    assert.ok(!f.some((x) => /^assets\/standards\/std-.*\.md$/.test(x)), "std raiz fora");
   });
-  it("genFromWorkingTree contém o hash de um artefato conhecido e é deduplicado (Set)", () => {
+  it("genFromWorkingTree é Set e contém hash de uma skill atual", () => {
     const set = genFromWorkingTree(REPO);
-    const known = hashFile(join(REPO, "agents", "odoo-specialist.md"));
-    assert.ok(set.has(known), "registry deve conter o hash do agente atual");
     assert.ok(set instanceof Set);
+    assert.ok(set.has(hashFile(join(REPO, "skills", "odoo-development", "SKILL.md"))));
   });
 });
 ```
 
 - [ ] **Step 2: Run → FAIL**.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement** (walk verbatim; `git log --pretty=%H -- <path>` por arquivo; `git show <sha>:<path>`; `execFileSync` array-args; try/catch com aviso em shallow). Detalhe de `genBackfill`:
 
 ```javascript
-// scripts/lib/gen-known-hashes.mjs
-import { readdirSync, statSync, writeFileSync, existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
-const SKIP = new Set(["node_modules", ".git", "dist", "build", "__pycache__"]);
-
-function walk(root, sub, out) {
-  let entries;
-  try { entries = readdirSync(join(root, sub), { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (e.name.startsWith(".") || SKIP.has(e.name)) continue;
-    const rel = sub ? join(sub, e.name) : e.name;
-    if (e.isDirectory()) walk(root, rel, out);
-    else if (e.isFile()) out.push(rel);
-  }
+function commitsTouching(pluginRoot, relPath) {
+  try { return execFileSync("git", ["log", "--pretty=%H", "--", relPath], { cwd: pluginRoot, encoding: "utf-8" }).split("\n").map((s)=>s.trim()).filter(Boolean); }
+  catch { return null; } // null = git indisponível/shallow
 }
-
-// Artefatos distribuíveis: skills/**, agents/*.md, assets/standards/** (.md + machine/*.js)
-export function distributableFiles(pluginRoot) {
-  const out = [];
-  walk(pluginRoot, "skills", out);
-  walk(pluginRoot, "agents", out);
-  walk(pluginRoot, join("assets", "standards"), out);
-  return out.filter((f) => f.endsWith(".md") || f.endsWith(".js"));
+function blobHashAt(pluginRoot, sha, relPath) {
+  try { return createHash("sha256").update(execFileSync("git", ["show", `${sha}:${relPath}`], { cwd: pluginRoot })).digest("hex"); }
+  catch { return null; }
 }
-
-export function genFromWorkingTree(pluginRoot) {
-  const set = new Set();
-  for (const rel of distributableFiles(pluginRoot)) {
-    try { set.add(createHash("sha256").update(readFileSync(join(pluginRoot, rel))).digest("hex")); }
-    catch { /* skip */ }
-  }
-  return set;
-}
-
-function gitTags(pluginRoot) {
-  try { return execFileSync("git", ["tag"], { cwd: pluginRoot, encoding: "utf-8" }).split("\n").map((s) => s.trim()).filter(Boolean); }
-  catch { return []; }
-}
-
-function hashAtTag(pluginRoot, tag, relPath) {
-  try {
-    const buf = execFileSync("git", ["show", `${tag}:${relPath}`], { cwd: pluginRoot });
-    return createHash("sha256").update(buf).digest("hex");
-  } catch { return null; }
-}
-
 export function genBackfill(pluginRoot) {
   const set = genFromWorkingTree(pluginRoot);
-  const files = distributableFiles(pluginRoot);
-  for (const tag of gitTags(pluginRoot)) {
-    for (const rel of files) {
-      const h = hashAtTag(pluginRoot, tag, rel);
-      if (h) set.add(h);
-    }
+  let shallowWarned = false;
+  for (const rel of distributableFiles(pluginRoot)) {
+    const commits = commitsTouching(pluginRoot, rel);
+    if (commits === null) { if (!shallowWarned) { console.error("WARN: git indisponível/shallow — registry só do working tree"); shallowWarned = true; } continue; }
+    for (const sha of commits) { const h = blobHashAt(pluginRoot, sha, rel); if (h) set.add(h); }
   }
   return set;
 }
-
-function registryPath(pluginRoot) { return join(pluginRoot, "assets", "provenance", "known-hashes.json"); }
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const append = process.argv.includes("--append");
-  const set = append ? genFromWorkingTree(pluginRoot) : genBackfill(pluginRoot);
-  const p = registryPath(pluginRoot);
-  if (append && existsSync(p)) {
-    try { JSON.parse(readFileSync(p, "utf-8")).hashes?.forEach((h) => set.add(h)); } catch { /* */ }
-  }
-  const { mkdirSync } = await import("node:fs");
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, JSON.stringify({ schema: 1, hashes: [...set].sort() }, null, 2) + "\n");
-  console.log(`known-hashes.json: ${set.size} hashes (${append ? "append" : "backfill"})`);
-}
 ```
+`distributableFiles`: walk de `skills` e `assets/standards/profiles`, filtrando `.md`/`.js`.
 
-- [ ] **Step 4: Run test → PASS**; depois gerar o registry real:
-
-```bash
-node --test tests/integration/test-gen-known-hashes.mjs
-node scripts/lib/gen-known-hashes.mjs   # backfill → escreve assets/provenance/known-hashes.json
-```
-Expected: arquivo criado com N hashes (inclui working tree + tags).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/lib/gen-known-hashes.mjs tests/integration/test-gen-known-hashes.mjs assets/provenance/known-hashes.json
-git commit -m "feat(sync): gerador do registry de hashes históricos (backfill git tags + working tree)"
-```
+- [ ] **Step 4: Run test → PASS**; depois gerar o registry real: `node scripts/lib/gen-known-hashes.mjs` (escreve `assets/provenance/known-hashes.json`).
+- [ ] **Step 5: Commit** — `git add scripts/lib/gen-known-hashes.mjs tests/... assets/provenance/known-hashes.json && git commit -m "feat(sync): registry por histórico de commits (verbatim only)"`
 
 ---
 
-## Task 5: Integrar no `bump-version.sh` (append por release)
+## Task 6: `bump-version.sh` faz append do registry
 
 **Agent:** devops-specialist
-**Files:**
-- Modify: `scripts/bump-version.sh`
-- Create: `tests/integration/test-bump-appends-registry.mjs`
+**Files:** Modify `scripts/bump-version.sh`, Create `tests/integration/test-bump-appends-registry.mjs`
 
-**Interfaces:**
-- Consumes: `gen-known-hashes.mjs --append`.
-- Produces: após o bump, o script chama `node scripts/lib/gen-known-hashes.mjs --append` (atualiza o registry com os hashes da versão nova).
-
-- [ ] **Step 1: Write the failing test** (verifica que o script referencia o gerador)
+- [ ] **Step 1: Write failing test** — asserta `scripts/bump-version.sh` contém `gen-known-hashes.mjs --append`.
 
 ```javascript
-// tests/integration/test-bump-appends-registry.mjs
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { describe, it } from "node:test"; import assert from "node:assert/strict";
+import { readFileSync } from "node:fs"; import { resolve } from "node:path";
 const SH = readFileSync(resolve(import.meta.dirname, "../../scripts/bump-version.sh"), "utf-8");
-describe("bump-version.sh", () => {
-  it("chama gen-known-hashes --append após o bump", () => {
-    assert.match(SH, /gen-known-hashes\.mjs\s+--append/);
-  });
-});
+describe("bump-version.sh", () => { it("append do registry", () => assert.match(SH, /gen-known-hashes\.mjs\s+--append/)); });
 ```
 
 - [ ] **Step 2: Run → FAIL**.
-
-- [ ] **Step 3: Implement** — adicionar ao fim de `scripts/bump-version.sh` (após o loop de bump e o echo final):
+- [ ] **Step 3: Implement** — ao fim de `scripts/bump-version.sh`:
 
 ```bash
-# Atualiza o registry de hashes históricos com os artefatos da versão nova
 if [ -f "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" ]; then
   node "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" --append || echo "WARN: falha ao atualizar known-hashes.json"
 fi
 ```
 
 - [ ] **Step 4: Run → PASS**.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/bump-version.sh tests/integration/test-bump-appends-registry.mjs
-git commit -m "feat(sync): bump-version.sh atualiza o registry de hashes no release"
-```
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): bump-version.sh atualiza registry no release"`
 
 ---
 
-## Task 6: Skills passam a invocar a lib (`context-sync` + `project-init`)
+## Task 7: Skills invocam a lib (`context-sync` + `project-init`) — agents fora
 
 **Agent:** documentation-writer
-**Files:**
-- Modify: `skills/context-sync/SKILL.md`
-- Modify: `skills/project-init/SKILL.md`
-- Create: `tests/integration/test-sync-skills-reference-provenance.mjs`
+**Files:** Modify `skills/context-sync/SKILL.md`, `skills/project-init/SKILL.md`, Create `tests/integration/test-sync-skills-reference-provenance.mjs`
 
-**Interfaces:**
-- Consumes: CLI `provenance-sync.mjs apply` (Task 3).
-- Produces: prosa das skills referenciando a invocação do CLI + reporte de `preserved`.
-
-- [ ] **Step 1: Write the failing test** (doc-lint: skills referenciam a lib e o relatório)
+- [ ] **Step 1: Write failing test (doc-lint)**
 
 ```javascript
-// tests/integration/test-sync-skills-reference-provenance.mjs
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { describe, it } from "node:test"; import assert from "node:assert/strict";
+import { readFileSync } from "node:fs"; import { resolve, join } from "node:path";
 const REPO = resolve(import.meta.dirname, "../..");
 const CS = readFileSync(join(REPO, "skills/context-sync/SKILL.md"), "utf-8");
 const PI = readFileSync(join(REPO, "skills/project-init/SKILL.md"), "utf-8");
-import { join } from "node:path";
 describe("skills invocam provenance-sync", () => {
-  it("context-sync referencia provenance-sync.mjs apply", () => assert.match(CS, /provenance-sync\.mjs apply/));
-  it("context-sync menciona preservados/editados localmente", () => assert.match(CS, /preserv|editad/i));
-  it("project-init referencia provenance-sync.mjs", () => assert.match(PI, /provenance-sync\.mjs/));
+  it("context-sync chama provenance-sync.mjs apply", () => assert.match(CS, /provenance-sync\.mjs apply/));
+  it("context-sync reporta preservados/refused", () => assert.match(CS, /preserv|refused|editad/i));
+  it("context-sync deixa agents fora da lib", () => assert.match(CS, /agent.*(fill|fluxo|fora)/i));
+  it("project-init referencia provenance-sync", () => assert.match(PI, /provenance-sync\.mjs/));
 });
 ```
 
 - [ ] **Step 2: Run → FAIL**.
-
-- [ ] **Step 3: Implement** — em `skills/context-sync/SKILL.md`, substituir a regra "ausente → copiar / existe → pular" (linha ~140-142) por:
-
-```markdown
-A cópia de skills/agents/standards é **provenance-aware** — NÃO decida por existência/`status`.
-Monte a lista de artefatos a partir de `frameworkContributions` (skills/agents/standardsWithOrigin)
-+ base set, como `[{srcRel, destRel, framework}]`, grave em um arquivo temporário e invoque:
-
-`node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/provenance-sync.mjs" apply --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}" --artifacts=<tmp.json>`
-
-A lib decide por hash (deploy intocado → atualiza; editado localmente → preserva) e grava
-`.context/.provenance.json`. Reporte ao usuário o JSON retornado, destacando `preserved`
-(editados localmente — pular e revisar manualmente).
-```
-
-Em `skills/project-init/SKILL.md`, no fluxo de re-scaffold (HARD-GATE que delega ao sync), adicionar nota de que a atualização de artefatos existentes é feita via `provenance-sync.mjs apply` (não mais `status: filled → SKIP` para decidir update). O SKIP por `status: filled` permanece válido só para o scaffold inicial (arquivos do zero).
-
+- [ ] **Step 3: Implement** — em `context-sync/SKILL.md`, substituir a regra "ausente → copiar / existe → pular" (linha ~140-142) por: para **skills + standards**, invocar `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/provenance-sync.mjs" apply --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}" --base-skills=<lista base>`; a lib resolve/decide/copia (contido)/atualiza `.context/.provenance.json`; reportar `{added,updated,current,preserved,refused}`, destacando `preserved` (editados — revisar) e `refused` (recusados). **Agents continuam pelo fluxo `fillSingle`/enrich — NÃO passam pela lib.** Em `project-init/SKILL.md`: re-scaffold delega ao sync (mesma invocação); `status: filled → SKIP` permanece só para scaffold do zero; atualização de skills/standards existentes passa pela lib.
 - [ ] **Step 4: Run → PASS**.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add skills/context-sync/SKILL.md skills/project-init/SKILL.md tests/integration/test-sync-skills-reference-provenance.mjs
-git commit -m "feat(sync): context-sync e project-init invocam provenance-sync (fim do skip cego)"
-```
+- [ ] **Step 5: Commit** — `git commit -m "feat(sync): context-sync/project-init invocam provenance-sync (agents fora)"`
 
 ---
 
-## Task 7: E2E de sync provenance-aware sobre projeto-fixture
+## Task 8: E2E de sync provenance-aware (caso motivador)
 
 **Agent:** test-writer
-**Files:**
-- Create: `tests/integration/test-provenance-sync-e2e.mjs`
+**Files:** Create `tests/integration/test-provenance-sync-e2e.mjs`
 
-**Interfaces:**
-- Consumes: `applySync` + `loadManifest` + `hashFile`.
-- Produces: E2E cobrindo o caso motivador (untouched stale → update; edited → preserve; new → add) numa cópia de projeto em tmpdir.
-
-- [ ] **Step 1: Write the failing test → na verdade já deve passar com a lib pronta; este é o gate integrado**
+- [ ] **Step 1: Write test (gate integrado sobre a lib)**
 
 ```javascript
-// tests/integration/test-provenance-sync-e2e.mjs
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it } from "node:test"; import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from "node:os"; import { join } from "node:path";
 import { applySync, loadManifest, hashFile } from "../../scripts/lib/provenance-sync.mjs";
 
-describe("E2E — sync provenance-aware (caso motivador)", () => {
-  it("stale intocado atualiza; editado preserva; novo adiciona; 2ª sync é no-op", () => {
-    const plug = mkdtempSync(join(tmpdir(), "e2e-plug-"));
-    const proj = mkdtempSync(join(tmpdir(), "e2e-proj-"));
-    // plugin v2
-    for (const n of ["dev", "front", "l10n"]) {
-      mkdirSync(join(plug, "skills", n), { recursive: true });
-      writeFileSync(join(plug, "skills", n, "SKILL.md"), `v2-${n}`);
-    }
-    // projeto: dev = deploy antigo intocado; front = editado; l10n = ausente
-    mkdirSync(join(proj, ".context", "skills", "dev"), { recursive: true });
-    writeFileSync(join(proj, ".context", "skills", "dev", "SKILL.md"), "v1-dev");
-    mkdirSync(join(proj, ".context", "skills", "front"), { recursive: true });
-    writeFileSync(join(proj, ".context", "skills", "front", "SKILL.md"), "FRONT-editado");
-
-    const registry = new Set([hashFile(join(proj, ".context", "skills", "dev", "SKILL.md"))]); // dev v1 é release antiga
-    const artifacts = ["dev", "front", "l10n"].map((n) => ({
-      src: join(plug, "skills", n, "SKILL.md"),
-      dest: join(proj, ".context", "skills", n, "SKILL.md"),
-      framework: "odoo",
-    }));
-
-    const r1 = applySync({ projectRoot: proj, artifacts, registry, sourceVersion: "2.0.0" });
-    assert.equal(r1.updated.length, 1); // dev
-    assert.equal(r1.preserved.length, 1); // front
-    assert.equal(r1.added.length, 1); // l10n
-    assert.equal(readFileSync(join(proj, ".context", "skills", "dev", "SKILL.md"), "utf-8"), "v2-dev");
-    assert.equal(readFileSync(join(proj, ".context", "skills", "front", "SKILL.md"), "utf-8"), "FRONT-editado");
-
-    // 2ª sync: dev/l10n agora == plugin (current), front ainda editado (recorded ausente p/ front → registry miss → edited)
-    const r2 = applySync({ projectRoot: proj, artifacts, registry, sourceVersion: "2.0.0" });
-    assert.equal(r2.updated.length, 0);
-    assert.equal(r2.added.length, 0);
-    assert.equal(r2.current.length, 2); // dev, l10n
-    assert.equal(r2.preserved.length, 1); // front
+describe("E2E provenance-aware (caso motivador)", () => {
+  it("stale intocado atualiza; editado preserva; novo adiciona; 2ª sync no-op", () => {
+    const plug = mkdtempSync(join(tmpdir(), "e2e-plug-")); const proj = mkdtempSync(join(tmpdir(), "e2e-proj-"));
+    for (const n of ["dev","front","l10n"]) { mkdirSync(join(plug,"skills",n),{recursive:true}); writeFileSync(join(plug,"skills",n,"SKILL.md"), `v2-${n}`); }
+    mkdirSync(join(proj,".context","skills","dev"),{recursive:true}); writeFileSync(join(proj,".context","skills","dev","SKILL.md"), "v1-dev");
+    mkdirSync(join(proj,".context","skills","front"),{recursive:true}); writeFileSync(join(proj,".context","skills","front","SKILL.md"), "FRONT-editado");
+    const registry = new Set([hashFile(join(proj,".context","skills","dev","SKILL.md"))]);
+    const artifacts = ["dev","front","l10n"].map((n) => ({ src: join(plug,"skills",n,"SKILL.md"), dest: join(proj,".context","skills",n,"SKILL.md"), framework: "odoo" }));
+    const r1 = applySync({ projectRoot: proj, pluginRoot: plug, artifacts, registry, sourceVersion: "2.0.0" });
+    assert.equal(r1.updated.length, 1); assert.equal(r1.preserved.length, 1); assert.equal(r1.added.length, 1);
+    assert.equal(readFileSync(join(proj,".context","skills","dev","SKILL.md"),"utf-8"), "v2-dev");
+    assert.equal(readFileSync(join(proj,".context","skills","front","SKILL.md"),"utf-8"), "FRONT-editado");
+    const r2 = applySync({ projectRoot: proj, pluginRoot: plug, artifacts, registry, sourceVersion: "2.0.0" });
+    assert.equal(r2.updated.length, 0); assert.equal(r2.added.length, 0); assert.equal(r2.current.length, 2); assert.equal(r2.preserved.length, 1);
     assert.ok(loadManifest(proj).artifacts.length >= 2);
   });
 });
 ```
 
-- [ ] **Step 2: Run → PASS** — `node --test tests/integration/test-provenance-sync-e2e.mjs`.
-
-- [ ] **Step 3: Suíte completa de proveniência**
-
-Run: `node --test tests/integration/test-provenance-sync.mjs tests/integration/test-provenance-sync-e2e.mjs tests/integration/test-gen-known-hashes.mjs tests/integration/test-bump-appends-registry.mjs tests/integration/test-sync-skills-reference-provenance.mjs`
-Expected: tudo verde.
-
-- [ ] **Step 4: Regressão do repo** — rodar a suíte de integração inteira (`node --test tests/integration/*.mjs`, ignorando o CLI `assert-no-decision-leak.mjs`) e confirmar zero novas falhas.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add tests/integration/test-provenance-sync-e2e.mjs
-git commit -m "test(sync): E2E provenance-aware (untouched→update, edited→preserve, new→add)"
-```
+- [ ] **Step 2: Run → PASS**.
+- [ ] **Step 3: Suíte da feature** — `node --test tests/integration/test-provenance-sync.mjs tests/integration/test-provenance-sync-e2e.mjs tests/integration/test-gen-known-hashes.mjs tests/integration/test-bump-appends-registry.mjs tests/integration/test-sync-skills-reference-provenance.mjs` → verde.
+- [ ] **Step 4: Regressão** — `node --test tests/integration/*.mjs` (ignorar o CLI `assert-no-decision-leak.mjs`) → zero novas falhas.
+- [ ] **Step 5: Commit** — `git commit -m "test(sync): E2E provenance-aware (untouched→update, edited→preserve, new→add)"`
 
 ---
 
 ## Self-Review
 
 **Cobertura do spec:**
-- D1 (registry histórico) → Task 4 (gen-known-hashes + backfill git tags) + Task 3 (loadRegistry). ✓
-- D2 (preservar+reportar) → Task 2 (`edited`→preserved) + Task 6 (skill reporta `preserved`). ✓
-- D3 (`.context/.provenance.json`) → Task 1 (load/saveManifest). ✓
-- D4 (skills+agents+standards; stacks fora) → Task 4 `distributableFiles` (skills/agents/standards); stacks não incluídos. ✓
-- D5 (lib determinística, não prosa) → Tasks 1-3 (lib/CLI) + Task 6 (skills invocam). ✓
-- Tabela 3-way (6 linhas) → Task 1 testes + Task 2/7 efeitos. ✓
-- Bootstrap registry → Task 4 backfill + Task 5 append no bump. ✓
-- Testes em tmpdir → todas as tasks. ✓
+- D1 (registry por commits) → Task 5 (`genBackfill` via `git log`/`git show`). ✓
+- D2 (preservar+reportar) → Task 2 (`edited`→preserved) + Task 7 (skill reporta). ✓
+- D3 (`.context/.provenance.json`) → Task 1. ✓
+- D4 (skills+standards; agents/std-raiz fora) → Task 3 `resolveArtifacts` + Task 5 `distributableFiles` (exclui agents/std-raiz) + Task 7 (agents fora). ✓
+- D5 (lib decide E resolve, não prosa) → Tasks 1-4 + Task 7. ✓
+- D6 (contenção isWithinDir + symlink) → Task 2 (+ teste RED de traversal/symlink). ✓
+- Tabela 7 linhas (incl. pluginHash null) → Task 1. ✓
+- Órfãos (A3) → spec decisão explícita; `applySync` itera candidatos, órfão do manifesto é inerte. ✓
+- Report relativo (W4) → Task 2 (`rel`). ✓
 
-**Placeholder scan:** sem TBD/TODO; código real em todas as tasks de código; tasks de prosa (6) têm doc-lint verificável.
+**Placeholder scan:** sem TBD/TODO; código real nas tasks de código; Task 7 (prosa) tem doc-lint.
 
-**Type consistency:** `hashFile`, `decideArtifact({projHash,pluginHash,recorded,registry})`, `loadManifest`/`saveManifest`, `applySync({projectRoot,artifacts,registry,sourceVersion})→{added,updated,current,preserved}`, `loadRegistry`, `distributableFiles`/`genFromWorkingTree`/`genBackfill` — nomes e assinaturas consistentes entre Tasks 1→7.
+**Type consistency:** `hashFile`, `decideArtifact`, `loadManifest`/`saveManifest`, `applySync({projectRoot,pluginRoot,artifacts,registry,sourceVersion})→{added,updated,current,preserved,refused}`, `resolveArtifacts({projectRoot,pluginRoot,baseSkills})`, `loadRegistry`, `distributableFiles`/`genFromWorkingTree`/`genBackfill` — consistentes Tasks 1→8.
 
-> Nota: Task 6 (prosa) ajusta a regra das skills; o critério de done é o doc-lint (referência ao CLI + `preserved`). A correção real de comportamento é exercida pelos E2E (Task 7) sobre a lib.
+> Pré-leitura obrigatória (Task 2): `scripts/lib/path-guard.mjs` (`isWithinDir(child, parent)` — confirmar ordem dos args) e `scripts/reversa-import/write.mjs` (recusa de symlink).

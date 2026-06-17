@@ -21,26 +21,30 @@ Hoje a cópia é guiada por prosa nas skills, com testes grosseiros:
 
 | # | Decisão | Escolha |
 |---|---------|---------|
-| D1 | Migração (projetos sem proveniência) | **Registry de hashes históricos no plugin** — projeto cujo hash bate com qualquer release publicada = intocado → atualiza; não bate = editado → preserva |
+| D1 | Migração (projetos sem proveniência) | **Registry de hashes históricos no plugin**, gerado por **histórico de commits** (não por git tags — só existe `v1.0.0`; releases são commits). Projeto cujo hash bate com qualquer versão histórica daquele artefato = intocado → atualiza; não bate = editado → preserva |
 | D2 | Conflito (arquivo editado localmente) | **Preservar + reportar** (sem merge UI; lista "editado localmente — pulado: `<path>`") |
 | D3 | Store de proveniência | **Manifesto único `.context/.provenance.json`** |
-| D4 | Escopo de artefatos | **skills + agents + standards** (stacks ficam fora — shape de manifest, comportamento atual preservado) |
-| D5 | Execução da decisão | **Lib determinística testada** (`scripts/lib/provenance-sync.mjs`), invocada pelas skills — não por prosa |
+| D4 | Escopo de artefatos | **skills + standards** (copiados verbatim). **Agents FORA** — são scaffold de template preenchido por projeto (`fillSingle`/enrich), nunca byte-idênticos ao plugin; seguem o fluxo próprio. Stacks fora (shape de manifest). |
+| D5 | Execução da decisão | **Lib determinística testada** (`scripts/lib/provenance-sync.mjs`), invocada pelas skills — não por prosa. Inclui a **resolução de paths** (profiles compostos → lista `{src,dest,framework}`) na lib, não na prosa. |
+| D6 | Contenção (segurança) | **`isWithinDir` (path-guard)** — `src` contido no plugin, `dest` contido em `.context/`; **recusa de symlink** na cópia (espelha `reversa-import/write.mjs`). Traversal/symlink → `refused` reportado. |
 
 ## Arquitetura
 
 ```
 PLUGIN
-├── assets/provenance/known-hashes.json   ⟵ NOVO  set de sha256 de todos os artefatos já publicados
-├── scripts/lib/provenance-sync.mjs       ⟵ NOVO  lib + CLI: decisão 3-way, aplica cópias, atualiza manifesto, reporta
-├── scripts/lib/gen-known-hashes.mjs      ⟵ NOVO  gera/append o registry (backfill via git tags + append no release)
-├── scripts/bump-version.sh               + chama gen-known-hashes no release
-├── skills/context-sync/SKILL.md          passa a invocar provenance-sync (substitui regra "ausente → skip")
-└── skills/project-init/SKILL.md          idem (substitui regra "status: filled → skip") no scaffold de artefatos existentes
+├── assets/provenance/known-hashes.json   ⟵ NOVO  set de sha256 de cada versão histórica dos artefatos verbatim
+├── scripts/lib/provenance-sync.mjs       ⟵ NOVO  lib + CLI: resolve artefatos + decisão 3-way + cópia contida + manifesto + report
+├── scripts/lib/gen-known-hashes.mjs      ⟵ NOVO  gera/append o registry (backfill via HISTÓRICO DE COMMITS + append no release)
+├── scripts/lib/path-guard.mjs            (reuso) isWithinDir — contenção de src/dest
+├── scripts/bump-version.sh               + chama gen-known-hashes --append no release
+├── skills/context-sync/SKILL.md          passa a invocar provenance-sync (substitui regra "ausente → skip") — só skills+standards
+└── skills/project-init/SKILL.md          idem no re-scaffold (substitui "status: filled → skip" para artefatos verbatim existentes)
 
 PROJETO (.context/)
 └── .context/.provenance.json             ⟵ NOVO  { schema, artifacts:[{path, hash, sourceVersion, framework}] }
 ```
+
+> **Escopo verbatim:** a proveniência por hash cobre **skills** (`cp -r`) e **standards de profile** (`assets/standards/profiles/<fw>/`). **Agents NÃO** — são preenchidos por projeto no deploy (`fillSingle`/enrich), nunca byte-idênticos; seguem o fluxo atual. **Standards default da raiz** (`assets/standards/std-*.md`) são live-loaded, nunca copiados — fora também.
 
 ### Store de proveniência (`.context/.provenance.json`)
 
@@ -59,30 +63,36 @@ Espelha o `manifest.json` do reversa. Centralizado, não toca o conteúdo dos ar
 ```json
 { "schema": 1, "hashes": ["<sha256>", "<sha256>", "..."] }
 ```
-Set **deduplicado** de sha256 de todo artefato distribuível (skills/**, agents/*.md, assets/standards/profiles/**, assets/standards/std-*.md) em **cada release publicada**. Usado só na migração: responde "esse arquivo é output de alguma release? → intocado". Não precisa mapear versão (a atualização sempre vai para o bundle atual).
+Set **deduplicado** de sha256 dos artefatos **verbatim** (`skills/**`, `assets/standards/profiles/**` — `.md` e `machine/*.js`) ao longo de **cada versão no histórico de commits** (não tags). Usado só na migração: responde "esse arquivo é output de alguma versão passada? → intocado". Não precisa mapear versão (a atualização sempre vai para o bundle atual). **Agents e std-*.md raiz NÃO entram** (não são copiados verbatim).
 
 ### Decisão 3-way (por artefato) — `provenance-sync.mjs`
 
-Entradas: `projHash` (arquivo no projeto, ou null), `pluginHash` (bundle atual), `recorded` (hash no manifesto, ou null), `registry` (set de hashes históricos).
+Entradas: `projHash` (arquivo no projeto, ou null), `pluginHash` (bundle atual, ou null), `recorded` (hash no manifesto, ou null), `registry` (set de hashes históricos).
 
 | Situação | Ação |
 |---|---|
-| projeto ausente | **ADD** — copia, grava hash no manifesto |
+| `pluginHash == null` (src ilegível/ausente) | **SKIP** — reporta `refused`, nunca grava `hash:null` |
+| projeto ausente (`projHash == null`) | **ADD** — copia, grava hash no manifesto |
 | `projHash === pluginHash` | **CURRENT** — no-op; garante entrada no manifesto |
 | `recorded != null` & `projHash === recorded` | **UNTOUCHED** — atualiza p/ plugin, regrava hash |
 | `recorded != null` & `projHash !== recorded` | **EDITED** — preserva + reporta |
 | `recorded == null` & `projHash ∈ registry` | **UNTOUCHED (stale)** — atualiza + semeia manifesto |
 | `recorded == null` & `projHash ∉ registry` | **EDITED (assumido)** — preserva + reporta |
 
-Após ADD/UPDATE: grava o hash novo (do plugin) no manifesto, com `sourceVersion` (versão atual do plugin) e `framework` (origem). EDITED nunca é tocado e não altera o manifesto.
+Após ADD/UPDATE: grava o hash novo (do plugin) no manifesto, com `sourceVersion` (= última versão em que a lib tocou/confirmou o artefato — não a versão de origem real) e `framework` (origem). EDITED nunca é tocado e não altera o manifesto.
+
+**Órfãos (decisão explícita):** se um artefato é descontinuado no plugin, ele some da lista de candidatos → `applySync` nunca o vê → permanece no projeto e no manifesto (entrada inerte). **Não fazemos prune** (YAGNI); o manifesto pode conter entradas de artefatos não mais distribuídos, sem efeito sobre a decisão.
 
 ### Integração nas skills
 
-- `context-sync/SKILL.md`: a etapa de cópia de skills/agents/standards passa a invocar `node scripts/lib/provenance-sync.mjs apply --project=<root> --plugin=$CLAUDE_PLUGIN_ROOT --artifacts=<json>` (ou o CLI resolve os artefatos via `frameworkContributions` + base set). O CLI retorna o relatório `{added, updated, preserved, current}`; a skill reporta ao usuário.
-- `project-init/SKILL.md`: no fluxo de re-scaffold (quando `.context/` já existe e delega ao sync), mesma invocação. No scaffold do zero, todos são ADD (sem mudança de comportamento).
-- A regra "preservar edição local" continua honrada — agora **com precisão** (via hash), não por existência/`status`.
+- A **resolução de artefatos** (profiles compostos `odoo`+`nxz` → lista `{src,dest,framework}` para skills + standards de profile, usando `frameworkContributions`/`standardsWithOrigin`) é feita **na lib** (`resolveArtifacts`), não na prosa — fortalece D5 e tira o ponto frágil da skill.
+- `context-sync/SKILL.md`: a etapa de cópia de **skills + standards** passa a invocar `node scripts/lib/provenance-sync.mjs apply --project=<root> --plugin=$CLAUDE_PLUGIN_ROOT`. O CLI resolve os artefatos, decide, copia (contido), atualiza o manifesto e retorna `{added, updated, current, preserved, refused}`; a skill reporta. **Agents seguem o fluxo atual** (`fillSingle`/enrich), fora desta lib.
+- `project-init/SKILL.md`: re-scaffold delega ao sync (mesma invocação). Scaffold do zero → todos ADD. O `status: filled → SKIP` permanece só para o scaffold inicial; a **atualização** de artefatos verbatim existentes passa pela lib.
+- "Preservar edição local" continua honrado — agora **com precisão** (via hash), não por existência/`status`.
 
 ### Relatório (D2)
+
+O `report` carrega paths **relativos** ao projeto (não absolutos de tmpdir):
 
 ```
 Sync provenance-aware:
@@ -90,33 +100,40 @@ Sync provenance-aware:
   ↑ atualizados:  M  (deploys intocados → versão nova)
   = já atuais:    K
   ⚠ preservados:  J  (editados localmente — revise manualmente)
-      - .context/agents/odoo-specialist.md
+      - .context/skills/odoo-development/SKILL.md
+  ⛔ recusados:    R  (traversal/symlink/src ilegível — fora de .context ou inseguro)
 ```
 
 ## Bootstrap do registry (migração)
 
-O registry precisa conter hashes de releases **passadas** (senão deploys antigos não são reconhecidos). `gen-known-hashes.mjs`:
-1. **Backfill único:** varre `git tag` (releases), e para cada artefato distribuível faz `git show <tag>:<path>` → sha256 → adiciona ao set. Também inclui os hashes do `assets/`/`skills/`/`agents/` do working tree atual (cobre versões sem tag).
-2. **Append por release:** `bump-version.sh` chama `gen-known-hashes.mjs --append` após o bump, adicionando os hashes da versão nova.
+O registry precisa conter hashes de versões **passadas** (senão deploys antigos não são reconhecidos). **Git tags NÃO servem** (só existe `v1.0.0`; releases são commits). `gen-known-hashes.mjs`:
+1. **Backfill por histórico de commits:** para cada artefato verbatim (`skills/**`, `assets/standards/profiles/**`), `git log --pretty=%H -- <path>` lista os commits que tocaram aquele path; para cada commit, `git show <sha>:<path>` → sha256 → adiciona ao set. Inclui também o working tree atual. (Exato e independente de convenção de tag/release; pega toda versão de cada arquivo, inclusive entre releases.) Renomeação de path causa falso-negativo benigno (hash antigo perdido → vira `edited`), nunca falso-positivo.
+2. **Append por release:** `bump-version.sh` chama `gen-known-hashes.mjs --append` após o bump (adiciona os hashes da versão nova ao set existente).
 
-Geração é passo **maintainer-side** (precisa de git/working tree); o projeto consome só o JSON embarcado.
+Performance: O(arquivos × commits-que-tocaram-cada-arquivo) — alguns milhares de `git show` no pior caso; é **maintainer-side, one-shot**. Em checkout shallow (CI) o histórico é parcial → `gen` emite **aviso** (não falha). Geração precisa de git/working tree; o projeto consome só o JSON embarcado.
 
 ## Estratégia de testes (TDD real)
 
-- `scripts/lib/provenance-sync.mjs` — testes unit cobrindo as **6 linhas** da tabela de decisão + migração (registry hit/miss), com fixtures em **tmpdir** (nunca in-place).
-- E2E: simular sync sobre **cópia** de um projeto-fixture (skill antiga intocada → atualiza; skill editada → preserva; skill nova → add), validando o manifesto resultante e o relatório.
-- `gen-known-hashes.mjs` — teste que o set é deduplicado e contém os hashes do working tree atual.
+- `scripts/lib/provenance-sync.mjs` — testes unit cobrindo as **7 linhas** da tabela de decisão (incl. `pluginHash==null`) + migração (registry hit/miss), com fixtures em **tmpdir** (nunca in-place).
+- **Segurança (RED obrigatório):** `srcRel: "../../../etc/passwd"` e `destRel: "../../escape.md"` → ambos em `refused`, nenhum byte escrito fora de `.context/`, processo não derruba. `src` symlink → `refused`. (valida via `report.refused` e "nada apareceu fora do tmpdir aninhado").
+- E2E: simular sync sobre **cópia** de um projeto-fixture (skill antiga intocada → atualiza; skill editada → preserva; skill nova → add; 2ª sync = no-op), validando manifesto e report (paths relativos).
+- `gen-known-hashes.mjs` — set deduplicado, contém os hashes do working tree; backfill por commits testado contra um repo git temporário (não o working tree real, p/ não flakar).
 - Guard: qualquer destino de escrita começa em `tmpdir()` nos testes.
 
 ## Riscos
 
-- **Backfill via git tags** é pesado/uma-vez; release sem tag fica de fora → mitigação: incluir também os hashes do working tree atual no backfill.
-- **Crescimento do registry** → set deduplicado (sha256 hex; ~64 bytes/entrada; milhares de entradas = dezenas de KB, aceitável).
-- **Falso "intocado"**: colisão sha256 é desprezível; mas um arquivo editado que por acaso volte a bater com uma release antiga seria tratado como intocado (cenário irreal).
-- **Skills são prosa LLM** → a decisão fica na lib testável (CLI determinístico); a skill só orquestra e reporta, reduzindo ambiguidade.
+- **Backfill por commits** é O(arquivos×commits) e maintainer-side; checkout shallow → cobertura parcial (aviso emitido). Mitigação: rodar no clone completo no release.
+- **Path traversal / symlink** (entrada `artifacts` cruza fronteira de I/O) → mitigado por `isWithinDir` (src⊂plugin, dest⊂.context) + recusa de symlink, espelhando `reversa-import/write.mjs`. Sem o guard, a garantia "preservar edição local" não vale fora de `.context/`.
+- **Agents fora do escopo** — proveniência por hash não se aplica a artefatos transformados no deploy; tentar copiá-los verbatim regrediria o agent preenchido. Resolvido excluindo-os (D4).
+- **Crescimento do registry** → set deduplicado (sha256 hex; dezenas de KB, aceitável).
+- **Falso "intocado"**: colisão sha256 desprezível; arquivo editado que volte a bater com versão antiga (irreal) seria tratado como intocado.
+- **Skills são prosa LLM** → decisão E resolução de paths na lib testável; a skill só orquestra e reporta.
 
 ## Fora de escopo
 
+- **Agents** — transformados no deploy (`fillSingle`/enrich); proveniência por hash não se aplica (D4). Seguem o fluxo atual.
+- **Standards default da raiz** (`assets/standards/std-*.md`) — live-loaded, nunca copiados.
 - **Stacks** (entradas de manifest, shape diferente) — comportamento atual de seed preservado; provável follow-up.
 - Merge UI / 3-way textual de conteúdo editado (D2 = preservar+reportar; YAGNI).
+- Flag `--accept=<path>` para re-baseline de arquivo editado (follow-up; evita re-report eterno).
 - Rollback/undo de sync (o manifesto permite auditar, mas reverter não é escopo).
