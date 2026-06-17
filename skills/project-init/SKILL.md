@@ -540,26 +540,31 @@ scaffoldVersion: "2.0.0"
 
 ## Step 3c-5: Scaffold Profile Standards + Stacks (all tiers, when a profile matches)
 
-The framework detector (`frameworkContributions`) also returns `standards` (ids of
-profile-scoped enforcement Standards) and `stacks` (versioned doc sources). Unlike the
+The framework detector (`frameworkContributions`) returns `standards` (ids of
+profile-scoped enforcement Standards), `standardsWithOrigin` (`[{id, framework}]` — the
+profile each std belongs to) and `stacks` (versioned doc sources). Unlike the
 ~20 universal default Standards — which are **live-merged** from the plugin at lint-time
 and never copied — profile Standards are **framework-conditional** and therefore
 **copied into the project** (same model as profile agents/skills), so their linters run
 under the project's own `machine/` sandbox.
 
-**Profile Standards (copy):** for every id in the detector's `standards` list, copy both
-the prose and its bundled linter from the profile bundle into the project's engineering
-standards layer:
+**Profile Standards (copy):** with profile composition (e.g. an NXZ project matches BOTH
+`odoo` and `nxz`), the same `standards` list mixes ids from different profile bundles.
+Use **`standardsWithOrigin`** to resolve the correct source dir per id — never assume a
+single `<framework>`:
 ```bash
 mkdir -p .context/engineering/standards/machine
-for id in <detector.standards>; do
-  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/${id}.md" \
+# detector.standardsWithOrigin = [{id, framework}, ...]
+for entry in <detector.standardsWithOrigin>; do   # id + framework por entrada
+  id="${entry.id}"; fw="${entry.framework}"
+  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/${fw}/${id}.md" \
      ".context/engineering/standards/${id}.md"
-  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/machine/${id}.js" \
+  cp "${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/${fw}/machine/${id}.js" \
      ".context/engineering/standards/machine/${id}.js"
 done
 ```
-E.g. an Odoo project copies the `std-odoo-*` set from `assets/standards/profiles/odoo/`.
+E.g. an NXZ project copies `std-odoo-naming-conventions` from `profiles/odoo/` and
+`std-odoo-oca-separation` from `profiles/nxz/` — each from its own origin.
 **Never overwrite** a `.context/engineering/standards/<id>.md` that already exists with
 user edits, and honor `.context/standards.local.yaml` `disable:` — skip disabled ids.
 
