@@ -320,10 +320,15 @@ Antes de iniciar QUALQUER tarefa, este agente DEVE:
 
 ### Docker e Ambiente
 
+> **Ambiente concreto vem do projeto.** Service-name do container, nomes de DB, portas e
+> caminhos são específicos de cada projeto e ficam em `.context/odoo-project.md` (template em
+> `templates/agents/odoo-project-context.example.md`). Abaixo, padrões genéricos — substitua
+> `<service>`/`<db>` pelos valores do projeto.
+
 | Aprendizado | Detalhes |
 |-------------|----------|
-| Service name e `app` (NAO `odoo`) | `docker compose exec -T app ...` |
-| `exec -T` NAO invalida cache | `docker compose restart app` apos update |
+| Service-name do container varia por projeto | Conferir em `.context/odoo-project.md`; usar `docker compose run` pelo nome correto |
+| `exec -T` NAO invalida cache | Reiniciar o container do Odoo apos update de modulo |
 | `run --rm` NAO preserva pip | Usar `exec` para manter estado |
 | `--no-http` NAO impede bind de porta | Usar `--http-port=0` |
 | `-u` NAO instala modulos novos | Para primeira instalacao, usar `-i` |
