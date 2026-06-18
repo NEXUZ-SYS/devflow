@@ -54,6 +54,10 @@ Cada unidade tem um propósito, interface bem definida, e é testável isoladame
 **1. Captura de observações** *(estende `hooks/post-tool-use`, já `async`)*
 Append-only em `observations.jsonl` por projeto. Sem LLM. Grava timestamp, tool,
 alvo (redigido), desfecho. Gated por config + profile. Sem repo git → não captura.
+- **Append e rotação sob o `withLock` existente** (`adr-update-index.mjs`, PID-liveness + stale recovery) — não inventa lock novo (I3).
+- **Rotação atômica por byte-cap** (não por contagem de linhas): escreve `.tmp` com o tail, `rename()` por cima, tudo dentro do mesmo lock. O mining mantém um **checkpoint/offset de consumo** para a rotação nunca descartar observações não-mineradas.
+- **Dois efeitos separados (I1):** (a) *append da observação* = efeito colateral puro, seguro em `async`; (b) *sugestão "atingiu N → rode mine"* = nudge **best-effort** (padrão do napkin nudge). O nudge NÃO é gatilho confiável — o gatilho primário é o comando `/devflow instinct mine` e o auto-mine in-session em autonomia ≥assisted.
+- **Redação antes do append (N4):** roda na unidade 1, nunca no recall. Caveat: `≥9 dígitos` pode mutilar SHAs/timestamps/linhas em comandos git — usar allowlist de contexto (não redigir dentro de paths/SHAs) ou aceitar o tradeoff documentado.
 
 **2. Instinct store** *(lib Node zero-dep `.mjs` — núcleo testável)*
 Camada de dados pura + I/O. Resolve project-hash (git remote), file-locking,
@@ -67,12 +71,22 @@ Bash não chamam LLM): o hook conta observações e injeta sugestão; o mining r
 via comando ou auto em autonomia ≥assisted.
 
 **4. Recall/injeção** *(estende `hooks/session-start`, leitura pura)*
-Lê instincts `active` (`confidence ≥ 0.6`, project + global), formata digest
-**bounded** e injeta no contexto. Prioriza maior confiança ao exceder o cap.
+Lê um **índice pré-materializado** (`index.json` por escopo — project + global),
+NÃO varre o diretório `instincts/*.md` (C2). O índice é mantido pelo store
+(unidade 2) ao criar/reforçar, exatamente como `adr-update-index.mjs` materializa
+o README. O `SessionStart` lê 2 JSONs + 1 sort, formata digest **bounded** e
+injeta. **Time-budget hard** (não-bloqueante): se exceder ~50ms aborta e injeta
+nada, herdando o invariante "ALWAYS exit 0 / nunca quebra a sessão"
+(`post-merge-mempalace.sh`).
 
-**5. Pontes de saída** *(no fluxo de mine/promote, supervisionado)*
-Ao cruzar `confidence ≥ 0.8` ou promover a global: **propõe** entrada no napkin
-e/ou grava memória no MemPalace (quando disponível). Nunca escreve calado.
+**5. Pontes de saída** *(elegibilidade no store + ação in-session — N1)*
+A **decisão** "este instinct é elegível para ponte" (cruzou 0.8 / promovido) é
+matemática de confiança e vive no store puro (unidade 2, testável sem mocks). A
+**ação** (propor napkin / gravar MemPalace) é orquestração in-session. Ao agir:
+o instinct é a **fonte canônica**; a ponte MemPalace grava uma **referência**
+(id + trigger + action), não uma cópia paralela que diverge (I2). Reusa a
+detecção de disponibilidade do MemPalace já existente nos hooks (não reimplementa).
+Nunca escreve calado.
 
 **6. Superfície CLI/comando**
 `instinct-cli.mjs` (status/mine/promote/prune/list) + comando `/devflow instinct <sub>`
@@ -119,19 +133,21 @@ updated: 2026-06-17
 ```
 
 **Modelo de confiança:**
-- Novo instinct nasce **0.3**; reforço consistente **+0.1** (cap 0.9); correção explícita do usuário **+0.2**.
+- Novo instinct nasce **0.3**; reforço consistente **+0.1** (cap 0.9).
+- **Correção do usuário (+0.2) só é atribuída pelo mining LLM (unidade 3), NUNCA pelo hook** (C1). Um hook Bash não vê a correção em linguagem natural; quem infere "o usuário corrigiu X→Y" é o LLM in-session, que tem o transcript. O hook só registra reforço por repetição de outcome.
 - **Limiares:** `≥0.6` → elegível p/ recall; `≥0.8` → elegível p/ ponte.
 - **status:** `pending` (<0.6) → `active` (≥0.6) → `archived` (manual/decaído).
 - **TTL:** instinct `pending` com `confidence<0.3` há >30 dias é podado (`prune`).
 
-**Promoção:** mesmo trigger+action normalizado em **≥2 hashes de projeto distintos** → copiado para `global/`, `scope: global`.
+**Identidade e promoção (I4):** a chave de identidade NÃO é normalização lexical do trigger (frágil em texto livre pt-BR). O **mining LLM faz o match semântico** contra instincts existentes e **reusa o `id` canônico** quando é o mesmo aprendizado; a normalização lexical é só um pré-filtro barato. Promoção: mesmo `id` canônico visto em **≥2 hashes de projeto distintos** (via `projects.json`) → copiado para `global/`, `scope: global`.
 
 ## Privacidade e opt-in (alinhado ADR-005)
 
 - `enabled: false` por default — nova seção `instincts:` no `.devflow.yaml`.
 - Profile-gating `DEVFLOW_INSTINCT_PROFILE=off|minimal|standard` (espelha `ECC_HOOK_PROFILE`).
+- **Precedência explícita dos 3 toggles (N2):** opt-out por sessão (env) **>** `DEVFLOW_INSTINCT_PROFILE` (env) **>** `instincts.profile`/`instincts.enabled` (`.devflow.yaml`). `enabled:false` no YAML é o piso; qualquer env só restringe, nunca habilita o que o YAML desligou.
 - Local-by-default: store XDG, nunca commitado; observações não saem da máquina.
-- Redação na captura: nunca loga token/credencial; PII best-effort (email, IPv4, ≥9 dígitos).
+- Redação na captura: nunca loga token/credencial; PII best-effort (email, IPv4, ≥9 dígitos — ver caveat N4).
 - Opt-out por sessão via env. Sem repo git → sem captura.
 
 ## Configuração (`.devflow.yaml`)
@@ -159,12 +175,29 @@ Todo grupo de tarefas começa por teste falhando (RED→GREEN→REFACTOR). Teste
 - **E2E (fluxo completo):** observações → mine (mock do LLM/inferência) → store → recall → ponte propõe napkin/MemPalace. Em sandbox tmpdir destrutível.
 - **Privacidade:** teste explícito de que token/credencial nunca aparece no JSONL nem no digest.
 
-## Pontos para revisão do architect (Step 3)
+## Revisão do architect (Step 3) — achados incorporados
 
-- Viabilidade do gate Bash→LLM (hook conta, sugere; mining in-session).
-- Risco de sobreposição com MemPalace mining (`autoMine: post-merge`) — garantir papéis distintos.
-- Tamanho/rotação do `observations.jsonl` (precedente de memory-explosion do ECC).
+Veredito: **VIÁVEL** sem redesenho estrutural. Achados resolvidos no spec acima:
+- **C1** (correção só pelo mining LLM) → modelo de confiança.
+- **C2** (recall lê índice pré-materializado + time-budget) → unidade 4.
+- **I1** (append async ≠ nudge best-effort) → unidade 1.
+- **I2** (instinct canônico, ponte grava referência) → unidade 5.
+- **I3** (`withLock` + rotação atômica tmp+rename + checkpoint) → unidade 1.
+- **I4** (identidade via match semântico no mining) → identidade/promoção.
+- **N1** (elegibilidade no store, ação in-session) → unidade 5.
+- **N2** (precedência dos toggles) → privacidade/opt-in.
+- **N4** (ordem/caveat da redação) → unidade 1.
+
+**Arquivos-precedente que o plano DEVE referenciar:**
+- `scripts/adr-update-index.mjs` — `withLock` (PID-liveness, ~L71-119) p/ append/rotação; padrão de índice materializado p/ o recall.
+- `scripts/adr-audit.mjs` — precedente de lib zero-dep `.mjs` (unidade 2).
+- `hooks/post-tool-use` — napkin nudge (padrão do nudge de mine); detecção MemPalace a reusar; canal `additionalContext`.
+- `hooks/session-start` — detecção MemPalace; padrão `2>/dev/null || true` p/ recall não-bloqueante.
+- `scripts/post-merge-mempalace.sh` — invariante "ALWAYS exit 0".
 
 ## Oportunidade de ADR (Step 3.5)
 
-Decisão arquitetural provável de registro: **store de aprendizado próprio + disciplina opt-in/local herdada da ADR-005**. Avaliar relação com ADR-005 (extends?) na etapa 3.5.
+**Confirmado pelo architect (N3):** a decisão **estende** a ADR-005 (mesma família —
+telemetria/observação local, opt-in, `enabled:false`, redação PII, lazy-load). NÃO
+contradiz. Ação recomendada: `adr:evolve` (minor) na ADR-005 adicionando o instinct
+store como segundo consumidor da disciplina — evita duplicar guardrails de privacidade.
