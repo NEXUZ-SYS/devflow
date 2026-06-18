@@ -161,10 +161,35 @@ output=$(cd "$SANDBOX" && echo '{"tool_name":"Edit","tool_input":{"file_path":"/
 assert_contains "empty-cwd napkin emits ask" "$output" '"permissionDecision": "ask"'
 assert_not_contains "empty-cwd napkin does not deny" "$output" '"permissionDecision": "deny"'
 
-# Test 14: Project source with empty cwd → still DENY (no-config guard intact for project code)
+# Test 14: Project source on PROTECTED branch with empty cwd → still DENY.
+# With the PWD fallback the config IS located (PWD = sandbox on main), so the deny
+# now comes from branch protection — not the no-config guard — proving the fallback
+# does not over-allow protected-branch edits.
 echo "Test 14: Project source with empty cwd still denies (no over-allow)"
 output=$(cd "$SANDBOX" && echo '{"tool_name":"Edit","tool_input":{"file_path":"/home/user/proj/src/foo.js"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
 assert_contains "empty-cwd source still denies" "$output" '"permissionDecision": "deny"'
+
+# The cwd-fallback bug (docs/2026-06-18-pre-tool-use-cwd-fallback-bug.md):
+# When the harness omits cwd, the config gate must still locate
+# .context/.devflow.yaml via the PWD fallback (as the permissions/grounding/branch
+# blocks already do). Otherwise every Edit/Write on a valid project is denied as
+# "no config" even on a non-protected working branch.
+
+# Test 15: Project file, empty cwd, on a NON-protected branch → ALLOW (was: no-config deny)
+echo "Test 15: Project file with empty cwd on feature branch is allowed (PWD fallback)"
+FALLBACK_SB=$(setup_sandbox)
+(
+  cd "$FALLBACK_SB"
+  git checkout -q -b feature/work
+)
+output=$(cd "$FALLBACK_SB" && echo '{"tool_name":"Edit","tool_input":{"file_path":"'"$FALLBACK_SB"'/src/foo.js"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
+assert_empty "empty-cwd project file allowed via PWD fallback" "$output"
+
+# Test 16: Project file, missing cwd field, on a NON-protected branch → ALLOW
+echo "Test 16: Project file with missing cwd field on feature branch is allowed"
+output=$(cd "$FALLBACK_SB" && echo '{"tool_name":"Write","tool_input":{"file_path":"'"$FALLBACK_SB"'/src/bar.js"}}' | bash "$HOOK" 2>/dev/null || true)
+assert_empty "missing-cwd project file allowed via PWD fallback" "$output"
+rm -rf "$FALLBACK_SB"
 
 echo ""
 echo "=== Results ==="
