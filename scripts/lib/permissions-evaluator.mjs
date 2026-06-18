@@ -27,6 +27,26 @@ const EMPTY_CONFIG = Object.freeze({
   callback: { url: null },
 });
 
+// GAP-OBS-1: build an ACTIONABLE deny reason that rides the stdout `reason`
+// channel (CLI → hook → user) when the evaluator fail-closes. Built ONLY from
+// static, DevFlow-controlled marker strings — never interpolates user-supplied
+// YAML values (anti prompt-injection). Raw technical errors stay on stderr
+// (console.error), which the hook discards.
+function buildDenyReason(cfg) {
+  const markers = detectLegacySchema(cfg);
+  const lines = [
+    "permissions.yaml inválido — bloqueio fail-closed (mode:deny) em todo o repositório.",
+  ];
+  if (markers.length > 0) {
+    lines.push("Sinais de formato legado/não-conforme:");
+    for (const m of markers) lines.push(`  - ${m}`);
+    lines.push("→ Migre para o schema devflow-permissions/v0: rode /devflow init ou /devflow config.");
+  } else {
+    lines.push("→ Há erros de validação no arquivo. Rode /devflow config para regenerá-lo no schema devflow-permissions/v0.");
+  }
+  return lines.join("\n");
+}
+
 export function loadPermissions(projectRoot) {
   const path = join(projectRoot, ".context", "permissions.yaml");
   if (!existsSync(path)) return { ...EMPTY_CONFIG };
@@ -36,17 +56,32 @@ export function loadPermissions(projectRoot) {
     parsed = parseFrontmatter(wrapped).data || {};
   } catch (err) {
     console.error(`[permissions-evaluator] parse error: ${err.message}`);
-    // Fail-closed (M1 fix from Semana 3 audit): force mode:deny on parse failure
-    return { ...EMPTY_CONFIG, mode: "deny" };
+    // Fail-closed (M1 fix from Semana 3 audit): force mode:deny on parse failure.
+    // GAP-OBS-1: distinct, actionable reason (NOT the legacy-format message).
+    // err.message stays on stderr only (it could echo file content → injection).
+    return {
+      ...EMPTY_CONFIG,
+      mode: "deny",
+      __denyReason:
+        "permissions.yaml não pôde ser lido (YAML inválido/sintaxe) — bloqueio fail-closed (mode:deny). " +
+        "Corrija a sintaxe do arquivo ou rode /devflow config para regenerá-lo.",
+    };
   }
   const cfg = {
     spec: parsed.spec || EMPTY_CONFIG.spec,
     evaluationOrder: parsed.evaluationOrder || EMPTY_CONFIG.evaluationOrder,
     deny: parsed.deny || EMPTY_CONFIG.deny,
     allow: parsed.allow || EMPTY_CONFIG.allow,
+    // NOTE: keep the raw `mode` (do not coerce). A legacy `mode: {default: ask}`
+    // must survive as an object so detectLegacySchema can flag it — `||` would
+    // keep the object anyway, but we rely on the raw shape downstream.
     mode: parsed.mode || EMPTY_CONFIG.mode,
     callback: parsed.callback || EMPTY_CONFIG.callback,
     claudeCodeCompat: parsed.claudeCodeCompat || {},
+    // GAP-PERM-ROOT: thread the raw `version` field through so the schema
+    // validator can flag legacy files (v0 uses `spec`, never `version`).
+    // `undefined` for a conformant v0 file — never treated as a legacy signal.
+    version: parsed.version,
   };
   // M1 fix: validate schema at load time. If schema errors found (e.g., a
   // glob with extglob/negação would silently fail-open at match time),
@@ -55,7 +90,10 @@ export function loadPermissions(projectRoot) {
   if (errors.length > 0) {
     console.error(`[permissions-evaluator] schema errors — falling back to mode:deny (fail-closed):`);
     for (const e of errors) console.error(`  - ${e}`);
-    return { ...cfg, mode: "deny" };
+    // GAP-OBS-1: attach an actionable reason (controlled markers only). It rides
+    // the stdout `reason` to the hook → user; the raw `errors` above stay on
+    // stderr (discarded by the hook) to avoid echoing user YAML into the reason.
+    return { ...cfg, mode: "deny", __denyReason: buildDenyReason(cfg) };
   }
   return cfg;
 }
@@ -74,8 +112,45 @@ function validateGlobs(patterns, label, errors) {
   }
 }
 
+// ─── Legacy / non-conformant schema detection (GAP-PERM-ROOT) ──────────────
+// DISJUNCTIVE: any single marker fires. This is load-bearing for SECURITY —
+// it guarantees a legacy-shaped file is always schema-invalid, so the
+// fail-closed (mode:deny) path can never be bypassed once the generic `mode`
+// check below is narrowed to strings. Markers are static, DevFlow-controlled
+// strings (no user-supplied YAML values) so they are safe to surface to the
+// LLM via the deny reason (anti prompt-injection).
+export function detectLegacySchema(cfg) {
+  const markers = [];
+  if (!cfg || typeof cfg !== "object") return markers;
+  if (Array.isArray(cfg.deny)) {
+    markers.push("'deny' é uma lista (v0 espera objeto {fs,exec,net})");
+  }
+  if (Array.isArray(cfg.allow)) {
+    markers.push("'allow' é uma lista (v0 espera objeto {fs:{read,write},exec,tool})");
+  }
+  if (cfg.mode != null && typeof cfg.mode !== "string") {
+    markers.push("'mode' não é string (v0 espera 'prompt' | 'accept' | 'deny')");
+  }
+  if (cfg.version !== undefined) {
+    markers.push("campo 'version' não pertence ao schema v0 (use 'spec: devflow-permissions/v0')");
+  }
+  return markers;
+}
+
 export function validatePermissionsSchema(cfg) {
   const errors = [];
+
+  // GAP-PERM-ROOT: detect legacy/non-conformant shape FIRST and emit a clear,
+  // actionable error instead of the cryptic "mode must be ... got '[object
+  // Object]'". Disjunctive — closes the fail-open hole (object `mode` is caught
+  // here even when the generic string check below skips it).
+  const legacyMarkers = detectLegacySchema(cfg);
+  if (legacyMarkers.length > 0) {
+    errors.push(
+      `formato legado/não-conforme — migre para devflow-permissions/v0 ` +
+      `(rode /devflow init ou /devflow config). Sinais: ${legacyMarkers.join("; ")}`
+    );
+  }
 
   if (cfg.spec && cfg.spec !== "devflow-permissions/v0") {
     errors.push(`spec must be 'devflow-permissions/v0', got '${cfg.spec}'`);
@@ -96,8 +171,11 @@ export function validatePermissionsSchema(cfg) {
     validateGlobs(cfg.allow.tool, "allow.tool", errors);
   }
 
-  // mode
-  if (cfg.mode && !["prompt", "accept", "deny"].includes(cfg.mode)) {
+  // mode — narrowed to STRING values only. A non-string `mode` (object/array/
+  // number) is already flagged by detectLegacySchema above; narrowing here
+  // avoids the cryptic "got '[object Object]'". An invalid string (e.g. 'ask')
+  // is still caught specifically.
+  if (typeof cfg.mode === "string" && !["prompt", "accept", "deny"].includes(cfg.mode)) {
     errors.push(`mode must be 'prompt' | 'accept' | 'deny', got '${cfg.mode}'`);
   }
 
@@ -230,7 +308,9 @@ export async function evaluatePermissions(event, cfg) {
   // ─── 3. MODE (default) ───────────────────────────────────────────────────
   const mode = cfg.mode || "prompt";
   if (mode === "accept") return { decision: "allow", reason: "mode: accept" };
-  if (mode === "deny")   return { decision: "deny", reason: "mode: deny" };
+  // GAP-OBS-1: when the deny is a fail-close (parse/schema error), surface the
+  // actionable __denyReason; an explicit user-set `mode: deny` keeps "mode: deny".
+  if (mode === "deny")   return { decision: "deny", reason: cfg.__denyReason || "mode: deny" };
   // mode === "prompt"
   return { decision: "prompt", reason: "mode: prompt (no rule matched)" };
 

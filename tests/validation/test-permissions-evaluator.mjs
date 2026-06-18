@@ -6,7 +6,25 @@ import assert from "node:assert/strict";
 import {
   evaluatePermissions,
   validatePermissionsSchema,
+  detectLegacySchema,
+  loadPermissions,
 } from "../../scripts/lib/permissions-evaluator.mjs";
+import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+
+// Helper: write a permissions.yaml into a throwaway tmpdir and load it.
+const TMP_ROOT = "./tests/validation/tmp/";
+function withTempPermissions(body, fn) {
+  mkdirSync(TMP_ROOT, { recursive: true });
+  const root = mkdtempSync(join(TMP_ROOT, "perm-gap-"));
+  try {
+    mkdirSync(join(root, ".context"), { recursive: true });
+    writeFileSync(join(root, ".context", "permissions.yaml"), body);
+    return fn(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 const BASE = {
   spec: "devflow-permissions/v0",
@@ -257,4 +275,155 @@ test("evaluation order strictly deny → allow → mode → callback", async () 
   const r = await evaluatePermissions({ tool: "Read", path: "src/secret.ts" }, cfg);
   assert.equal(r.decision, "deny", "deny must precede allow");
   assert.match(r.reason, /deny/i);
+});
+
+// ─── GAP-PERM-ROOT: legacy schema detection (disjunctive) ──────────────────
+// Each legacy marker must fire on its own (disjunction), so narrowing the
+// generic `mode` check to strings can never open a fail-open hole.
+
+test("detectLegacySchema: deny as Array (legacy list) → ≥1 marker", () => {
+  assert.ok(detectLegacySchema({ ...BASE, deny: [{ path: "**/.env*" }] }).length >= 1);
+});
+
+test("detectLegacySchema: allow as Array (legacy list) → ≥1 marker", () => {
+  assert.ok(detectLegacySchema({ ...BASE, allow: [{ path: "src/**" }] }).length >= 1);
+});
+
+test("detectLegacySchema: mode as object → ≥1 marker", () => {
+  assert.ok(detectLegacySchema({ ...BASE, mode: { default: "ask" } }).length >= 1);
+});
+
+test("detectLegacySchema: mode non-string (number) → ≥1 marker", () => {
+  assert.ok(detectLegacySchema({ ...BASE, mode: 3 }).length >= 1);
+});
+
+test("detectLegacySchema: version field present → ≥1 marker", () => {
+  assert.ok(detectLegacySchema({ ...BASE, version: 0 }).length >= 1);
+});
+
+test("detectLegacySchema: valid v0 config → no markers", () => {
+  assert.equal(detectLegacySchema(BASE).length, 0);
+});
+
+// ─── CRIT anti-fail-open: legacy ⇒ schema invalid ⇒ loadPermissions mode:deny ─
+// Guards the security inversion the auditor flagged: if narrowing the mode
+// check removed the only error, a legacy file would fall through to `prompt`
+// (fail-OPEN). These bind "legacy ⇒ invalid ⇒ deny" so that can't happen.
+
+test("CRIT anti-fail-open: full legacy config is schema-invalid", () => {
+  const legacyCfg = {
+    ...BASE,
+    version: 0,
+    deny: [{ path: "**/.env*" }],
+    allow: [{ path: "src/**" }],
+    mode: { default: "ask" },
+  };
+  assert.ok(validatePermissionsSchema(legacyCfg).length >= 1, "legacy must be schema-invalid");
+});
+
+test("CRIT anti-fail-open E1: mode object WITHOUT other legacy markers → still invalid", () => {
+  // deny/allow are valid v0 objects, no version — only `mode` is an object.
+  // After narrowing the generic mode check to strings, ONLY detectLegacySchema
+  // can catch this. Must never become a zero-error (fail-open) config.
+  const cfg = { ...BASE, mode: { default: "ask" } };
+  assert.ok(validatePermissionsSchema(cfg).length >= 1, "object mode alone must be schema-invalid");
+});
+
+test("CRIT anti-fail-open: loadPermissions on a legacy file fails closed to mode:deny", () => {
+  const cfg = withTempPermissions(
+    `version: 0
+deny:
+  - path: "**/.env*"
+allow:
+  - path: "src/**"
+mode:
+  default: ask
+`,
+    (root) => loadPermissions(root)
+  );
+  assert.equal(cfg.mode, "deny", "legacy config must fail-closed to mode:deny");
+});
+
+test("mode: invalid string ('ask') still errors specifically after narrowing", () => {
+  const errors = validatePermissionsSchema({ ...BASE, mode: "ask" });
+  assert.ok(errors.length >= 1);
+  assert.match(errors.join("\n"), /mode/i);
+});
+
+// ─── GAP-OBS-1: actionable deny reason (__denyReason) ──────────────────────
+
+test("GAP-OBS-1: legacy file → loadPermissions sets actionable __denyReason", () => {
+  const cfg = withTempPermissions(
+    `version: 0
+deny:
+  - path: "**/.env*"
+mode:
+  default: ask
+`,
+    (root) => loadPermissions(root)
+  );
+  assert.equal(cfg.mode, "deny");
+  assert.match(cfg.__denyReason, /legado|migre/i);
+});
+
+test("GAP-OBS-1: evaluatePermissions surfaces __denyReason in the deny reason", async () => {
+  const cfg = { ...BASE, mode: "deny", __denyReason: "MENSAGEM ACIONÁVEL — migre" };
+  const r = await evaluatePermissions({ tool: "Edit", path: "any/file.ts" }, cfg);
+  assert.equal(r.decision, "deny");
+  assert.equal(r.reason, "MENSAGEM ACIONÁVEL — migre");
+});
+
+test("GAP-OBS-1 regression: explicit mode:deny (valid cfg) keeps reason 'mode: deny'", async () => {
+  const cfg = { ...BASE, mode: "deny" }; // no __denyReason
+  const r = await evaluatePermissions({ tool: "Edit", path: "any/file.ts" }, cfg);
+  assert.equal(r.decision, "deny");
+  assert.equal(r.reason, "mode: deny");
+});
+
+test("GAP-OBS-1 regression: valid config has no __denyReason", () => {
+  const cfg = withTempPermissions(
+    `spec: devflow-permissions/v0
+deny:
+  fs: ["**/.env*"]
+allow:
+  fs:
+    write: ["src/**"]
+mode: prompt
+`,
+    (root) => loadPermissions(root)
+  );
+  assert.equal(cfg.__denyReason, undefined);
+});
+
+// ─── Anti prompt-injection: __denyReason never echoes user YAML values ─────
+
+test("anti-injection: __denyReason does not echo user-supplied YAML values", () => {
+  const cfg = withTempPermissions(
+    `version: 0
+deny:
+  - path: "ZZINJECTZZ"
+mode:
+  default: ZZINJECTZZ
+`,
+    (root) => loadPermissions(root)
+  );
+  assert.equal(cfg.mode, "deny");
+  assert.ok(cfg.__denyReason, "should have a deny reason");
+  assert.ok(
+    !cfg.__denyReason.includes("ZZINJECTZZ"),
+    "deny reason must not echo user-supplied YAML values"
+  );
+});
+
+// ─── E3: parse-error path has its own distinct message ─────────────────────
+
+test("E3: YAML parse error → distinct __denyReason (parse, not legacy)", () => {
+  const cfg = withTempPermissions(
+    `spec: *boom
+`,
+    (root) => loadPermissions(root)
+  );
+  assert.equal(cfg.mode, "deny");
+  assert.match(cfg.__denyReason, /YAML|parse|sintaxe|ler/i);
+  assert.ok(!/legado/i.test(cfg.__denyReason), "parse error must not claim legacy format");
 });

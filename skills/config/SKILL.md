@@ -485,25 +485,32 @@ AskUserQuestion:
 
 #### 5.3 Patch incremental
 
+> ⚠️ **Runtime cap:** no Claude Code o `AskUserQuestion` aceita **no máximo 4 opções por pergunta**. As 5 áreas são apresentadas como **um único call com duas perguntas** (3+2). A **união** das seleções das duas perguntas é o conjunto de áreas a configurar.
+
 ```
-AskUserQuestion:
-  question: "Quais áreas configurar agora? (as demais ficam intactas)"
-  header: "Áreas"
-  multiSelect: true
-  options:
-    - label: "Estratégia git e finalização"
-      description: "Estratégia, branches protegidas, CLI de PR, branch protection, auto-finish (P1–P5)"
-    - label: "MemPalace"
-      description: "Integração de memória + budget/palace + hook de auto-mine (P6–P8 + §4.5)"
-    - label: "docs-mcp-server"
-      description: "Índice de docs de stacks via MCP (§2.4)"
-    - label: "Doc-grounding"
-      description: "Sourcing obrigatório de fatos de stack via MCP (§2.5)"
-    - label: "Rotinas de manutenção"
-      description: "Semear .context/routines.json com o health-check periódico (§4.6)"
+AskUserQuestion (1 call, 2 perguntas):
+  questions:
+    - question: "Áreas a configurar agora (1/2)? (as não marcadas ficam intactas)"
+      header: "Áreas 1/2"
+      multiSelect: true
+      options:
+        - label: "Estratégia git e finalização"
+          description: "Estratégia, branches protegidas, CLI de PR, branch protection, auto-finish (P1–P5)"
+        - label: "MemPalace"
+          description: "Integração de memória + budget/palace + hook de auto-mine (P6–P8 + §4.5)"
+        - label: "docs-mcp-server"
+          description: "Índice de docs de stacks via MCP (§2.4)"
+    - question: "Áreas a configurar agora (2/2)? (as não marcadas ficam intactas)"
+      header: "Áreas 2/2"
+      multiSelect: true
+      options:
+        - label: "Doc-grounding"
+          description: "Sourcing obrigatório de fatos de stack via MCP (§2.5 — depende do docs-mcp-server)"
+        - label: "Rotinas de manutenção"
+          description: "Semear .context/routines.json com o health-check periódico (§4.6)"
 ```
 
-**Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la.
+**Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 (em ambas as perguntas) — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la. Trate a **união** das duas respostas como a lista final de unidades a aplicar.
 
 Para **cada** unidade selecionada, rodar **somente** o(s) bloco(s) de pergunta correspondente(s) e aplicar o resultado de forma **não-destrutiva** (ver "Regras de geração no modo patch", abaixo):
 
