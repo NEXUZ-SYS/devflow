@@ -47,10 +47,33 @@ test('redige email, IPv4 e sequências longas', () => {
   assert.equal(redact('id 1234567890'), 'id [NUM]');
 });
 
-test('nunca vaza tokens/credenciais', () => {
-  assert.match(redact('token ghp_abcdEFGH1234567890abcdEFGH1234567890'), /\[TOKEN\]/);
-  assert.match(redact('key sk-ant-api03-XYZ'), /\[TOKEN\]/);
+test('nunca vaza credenciais — uma classe por asserção (sec C1)', () => {
+  const cases = [
+    'AKIAIOSFODNN7EXAMPLE',                                  // AWS access key
+    'token ghp_abcdEFGH1234567890abcdEFGH1234567890',        // GitHub classic
+    'gho_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345',                  // GitHub oauth
+    'github_pat_11ABCDE_abcdefghijklmnop',                   // GitHub fine-grained
+    'key sk-ant-api03-XYZ123456',                            // Anthropic
+    'stripe sk_live_abcd1234efgh5678',                       // Stripe secret
+    'Authorization: Bearer eyJhbGci.eyJzdWIi.SflKxwRJ',      // JWT
+  ];
+  for (const c of cases) {
+    const out = redact(c);
+    assert.match(out, /\[TOKEN\]/, `deveria redigir: ${c}`);
+  }
   assert.doesNotMatch(redact('token ghp_abcdEFGH1234567890'), /ghp_/);
+});
+
+test('redige par chave=valor e credencial em URL (sec C1)', () => {
+  assert.match(redact('mysql --password=hunter2'), /password=\[REDACTED\]/i);
+  assert.match(redact('export PGPASSWORD=s3cr3t'), /PGPASSWORD=\[REDACTED\]/i);
+  assert.match(redact('postgres://user:senha@host/db'), /:\/\/\[REDACTED\]@/);
+  assert.doesNotMatch(redact('postgres://user:senha@host/db'), /senha/);
+});
+
+test('redação é best-effort: NÃO cobre PII com separadores (caveat ADR-005)', () => {
+  // documenta o limite — cartão/CPF formatados passam (best-effort, não PCI/PHI-grade)
+  assert.equal(redact('cpf 123.456.789-09'), 'cpf 123.456.789-09');
 });
 
 test('preserva SHA git e paths (allowlist N4)', () => {
@@ -69,9 +92,24 @@ Expected: FAIL — `Cannot find module './instinct-redact.mjs'`
 ```js
 // scripts/lib/instinct-redact.mjs
 // Redação best-effort para observações do instinct store (ADR-005 v1.1.0).
-// Ordem: tokens → email → IPv4 → sequências longas. SHAs/paths preservados.
+// Ordem: URL-cred → key=value → tokens → email → IPv4 → sequências longas.
+// SHAs/paths preservados. NÃO é PCI/PHI-grade (PII com separadores passa).
 
-const TOKEN_RE = /\b(ghp_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9-]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}|bearer\s+[A-Za-z0-9._-]{12,})\b/gi;
+// Credencial embutida em URL: scheme://user:senha@host  (reusa heurística do projectId)
+const URLCRED_RE = /:\/\/[^/@\s:]+:[^/@\s]+@/g;
+// Par chave=valor sensível: --password=x, PGPASSWORD=x, api_key: x, token=x
+const KV_RE = /\b(password|passwd|pwd|secret|token|api[-_]?key|auth|pgpassword|mysql_pwd)\b(\s*[=:]\s*|\s+)(\S+)/gi;
+// Tokens conhecidos (uma alternativa por classe de credencial real).
+const TOKEN_RE = new RegExp([
+  'AKIA[0-9A-Z]{16}',                                   // AWS access key id
+  'gh[opsur]_[A-Za-z0-9]{16,}',                         // GitHub classic/oauth/server/user/refresh
+  'github_pat_[A-Za-z0-9_]{20,}',                       // GitHub fine-grained
+  '(?:sk|pk|rk)[-_](?:live|test|proj|ant)[-_A-Za-z0-9]+', // Stripe/OpenAI/Anthropic
+  'xox[baprs]-[A-Za-z0-9-]{8,}',                        // Slack
+  'eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+', // JWT
+  '-----BEGIN[^-]+PRIVATE KEY-----',                    // PEM
+  'bearer\\s+[A-Za-z0-9._-]{12,}',                      // bearer ...
+].join('|'), 'gi');
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 // Sequência ≥9 dígitos PUROS (não dentro de hash/path). SHA git é hex c/ letras → não casa \d+.
@@ -80,12 +118,16 @@ const LONGNUM_RE = /(?<![\w./])\d{9,}(?![\w./])/g;
 export function redact(text) {
   if (typeof text !== 'string' || !text) return text ?? '';
   return text
+    .replace(URLCRED_RE, '://[REDACTED]@')
+    .replace(KV_RE, (_m, k) => `${k}=[REDACTED]`)
     .replace(TOKEN_RE, '[TOKEN]')
     .replace(EMAIL_RE, '[EMAIL]')
     .replace(IPV4_RE, '[IP]')
     .replace(LONGNUM_RE, '[NUM]');
 }
 ```
+
+> Limite documentado (caveat ADR-005): redação numérica é best-effort e NÃO cobre PII com separadores (cartão/CPF/telefone formatados). O store é local-by-default e nunca commitado.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -257,20 +299,25 @@ export function baseDir() {
   return join(homedir(), '.local', 'share', 'devflow-instincts');
 }
 
-export function projectId(remoteUrl) {
-  let n = String(remoteUrl || '')
+// I5: normalização SEM credencial — reusada pelo hash E pelo remote guardado no registry
+export function normalizeRemote(remoteUrl) {
+  return String(remoteUrl || '')
     .replace(/:\/\/[^@]+@/, '://')          // strip credenciais
     .replace(/^[A-Za-z][\w+.-]*:\/\//, '')  // strip scheme
     .replace(/^[^@/:]+@([^:/]+):/, '$1/')   // scp-like → host/path
     .replace(/\.git\/?$/, '')
     .replace(/\/+$/, '')
     .toLowerCase();
-  return createHash('sha256').update(n).digest('hex').slice(0, 12);
+}
+
+export function projectId(remoteUrl) {
+  return createHash('sha256').update(normalizeRemote(remoteUrl)).digest('hex').slice(0, 12);
 }
 
 export const projectDir = (id) => join(baseDir(), 'projects', id);
 export const instinctsDir = (id) => join(projectDir(id), 'instincts');
 export const observationsFile = (id) => join(projectDir(id), 'observations.jsonl');
+export const projectsRegistry = () => join(baseDir(), 'projects.json'); // I5: hash→{name,remote(normalizado),last_seen,counts}
 export const globalDir = () => join(baseDir(), 'global', 'instincts');
 export const indexFile = (id, scope) =>
   scope === 'global' ? join(baseDir(), 'global', 'index.json') : join(projectDir(id), 'index.json');
@@ -356,6 +403,23 @@ test('withLock serializa escrita concorrente', async () => {
   })));
   assert.equal(max, 1);
 });
+
+test('upsert global grava em global/ e indexa em scope global (C2)', async () => {
+  await sandbox();
+  const meta = { trigger: 't', action: 'a', domain: 'workflow', scope: 'global', projectName: 'x' };
+  const inst = await store.upsertInstinct('g1', meta, 0.3);
+  assert.equal(inst.scope, 'global');
+  const idx = await store.loadIndex(undefined, 'global');
+  assert.equal(idx.length, 1);
+  assert.equal(idx[0].id, 'g1');
+});
+
+test('upsert redige credencial em trigger/action (sec I4)', async () => {
+  await sandbox();
+  const meta = { trigger: 'curl --password=hunter2', action: 'a', domain: 'workflow', scope: 'project', projectId: 'p1', projectName: 'x' };
+  const inst = await store.upsertInstinct('r1', meta, 0);
+  assert.doesNotMatch(inst.trigger, /hunter2/);
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -368,8 +432,9 @@ Expected: FAIL — módulo não encontrado
 ```js
 // scripts/lib/instinct-store.mjs
 import { open, unlink, readFile, writeFile, mkdir, readdir, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { statusFor } from './instinct-confidence.mjs';
+import { redact } from './instinct-redact.mjs';
 import * as P from './instinct-paths.mjs';
 
 const LOCK_EXPIRY_MS = 30000;
@@ -421,6 +486,7 @@ updated: ${i.updated}
 
 function parse(md) {
   const m = md.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return null;                  // I1: arquivo sem frontmatter → caller pula
   const fm = {};
   for (const line of m[1].split('\n')) {
     const k = line.slice(0, line.indexOf(':')).trim();
@@ -431,24 +497,32 @@ function parse(md) {
   return fm;
 }
 
-export async function upsertInstinct(id, meta, delta) {
-  const dir = P.instinctsDir(meta.projectId === undefined ? '' : (meta.scope === 'global' ? null : meta.projectId));
+export async function upsertInstinct(id, meta, delta, opts = {}) {
+  // C2: lock sobre o diretório-alvo real (global trava o dir global, não projects/undefined)
   const targetDir = meta.scope === 'global' ? P.globalDir() : P.instinctsDir(meta.projectId);
-  return withLock(P.projectDir(meta.projectId), async () => {
+  const lockDir = meta.scope === 'global' ? dirname(P.globalDir()) : P.projectDir(meta.projectId);
+  return withLock(lockDir, async () => {
     await mkdir(targetDir, { recursive: true });
     const file = join(targetDir, `${id}.md`);
     let confidence = 0.3, observations = 0;
     try {
       const fm = parse(await readFile(file, 'utf-8'));
-      confidence = Number(fm.confidence); observations = Number(fm.observations);
+      if (fm) { confidence = Number(fm.confidence); observations = Number(fm.observations); }
     } catch {}
-    confidence = Math.round(Math.min(0.9, confidence + delta) * 10) / 10;
+    confidence = opts.absoluteConfidence != null
+      ? Math.round(Math.min(0.9, opts.absoluteConfidence) * 10) / 10   // promote: confiança agregada
+      : Math.round(Math.min(0.9, confidence + delta) * 10) / 10;
     observations += 1;
-    const inst = { id, trigger: meta.trigger, action: meta.action, domain: meta.domain,
-      scope: meta.scope, projectId: meta.projectId, projectName: meta.projectName,
+    const inst = { id,
+      trigger: redact(String(meta.trigger || '')),   // I4: instinct vai pro digest/recall → redigir
+      action: redact(String(meta.action || '')),     // I4
+      domain: meta.domain, scope: meta.scope, projectId: meta.projectId, projectName: meta.projectName,
       observations, confidence, status: statusFor(confidence),
       updated: new Date().toISOString().slice(0, 10) };
-    await writeFile(file, ser(inst));
+    // I2: escrita atômica tmp+rename (igual à rotação e ao rebuildIndex)
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, ser(inst));
+    await rename(tmp, file);
     await rebuildIndex(meta.projectId, meta.scope);
     return inst;
   });
@@ -460,7 +534,9 @@ export async function rebuildIndex(projectId, scope) {
   try { files = (await readdir(dir)).filter((f) => f.endsWith('.md')); } catch {}
   const idx = [];
   for (const f of files) {
-    const fm = parse(await readFile(join(dir, f), 'utf-8'));
+    let fm;
+    try { fm = parse(await readFile(join(dir, f), 'utf-8')); } catch { fm = null; }
+    if (!fm) continue;                  // I1.2: pula .md corrompido em vez de abortar a varredura
     idx.push({ id: fm.id, trigger: fm.trigger, action: fm.action,
       confidence: Number(fm.confidence), status: fm.status });
   }
@@ -544,6 +620,23 @@ test('checkpoint evita reconsumo', async () => {
   assert.equal(r.observations.length, 1);
   assert.equal(r.observations[0].target, 'b.mjs');
 });
+
+test('rotação descarta só consumidas, preserva não-mineradas e não reprocessa (C4/I3)', async () => {
+  await sandbox();
+  process.env.DEVFLOW_INSTINCT_MAX_BYTES = '120'; // cap minúsculo p/ forçar rotação
+  for (let i = 0; i < 6; i++) await obs.appendObservation('p1', { tool: 'Edit', target: `f${i}.mjs`, outcome: 'ok' });
+  // consome as 3 primeiras
+  let r = await obs.readUnconsumed('p1');
+  const firstThree = r.observations.slice(0, 3);
+  await obs.setCheckpoint('p1', 3);
+  // mais um append → dispara rotação (cap 120 bytes)
+  await obs.appendObservation('p1', { tool: 'Edit', target: 'f6.mjs', outcome: 'ok' });
+  r = await obs.readUnconsumed('p1');
+  const targets = r.observations.map((o) => o.target);
+  assert.ok(targets.includes('f6.mjs'), 'não-minerada recém-escrita preservada');
+  assert.ok(!targets.includes(firstThree[0].target), 'consumida antiga descartada, não reprocessada');
+  delete process.env.DEVFLOW_INSTINCT_MAX_BYTES;
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -561,7 +654,8 @@ import { withLock } from './instinct-store.mjs';
 import { redact } from './instinct-redact.mjs';
 import * as P from './instinct-paths.mjs';
 
-export const MAX_BYTES = 256 * 1024;
+const maxBytes = () => Number(process.env.DEVFLOW_INSTINCT_MAX_BYTES) || 256 * 1024;
+export const MAX_BYTES = maxBytes();   // valor default (interface); a checagem usa maxBytes() dinâmico
 const ckptFile = (id) => join(P.projectDir(id), '.consumed-offset');
 
 export async function appendObservation(projectId, o) {
@@ -574,13 +668,18 @@ export async function appendObservation(projectId, o) {
     await mkdir(P.projectDir(projectId), { recursive: true });
     await appendFile(file, line);
     let size = 0; try { size = (await stat(file)).size; } catch {}
-    if (size > MAX_BYTES) {
+    if (size > maxBytes()) {
       const lines = (await readFile(file, 'utf-8')).split('\n').filter(Boolean);
-      const keep = lines.slice(Math.floor(lines.length / 2)).join('\n') + '\n';
+      let offset = 0;
+      try { offset = Number(await readFile(ckptFile(projectId), 'utf-8')) || 0; } catch {}
+      // C4: descarta SÓ linhas já consumidas (nunca não-mineradas); no máximo metade
+      const dropCount = Math.min(offset, Math.floor(lines.length / 2));
+      const keep = lines.slice(dropCount);
       const tmp = `${file}.tmp`;
-      await writeFile(tmp, keep);
+      await writeFile(tmp, keep.length ? keep.join('\n') + '\n' : '');
       await rename(tmp, file);
-      await writeFile(ckptFile(projectId), '0'); // rotação reseta checkpoint
+      // checkpoint reposicionado: consumidas-e-mantidas não reprocessam
+      await writeFile(ckptFile(projectId), String(offset - dropCount));
     }
   });
 }
@@ -751,6 +850,7 @@ import * as store from './lib/instinct-store.mjs';
 import { buildDigest } from './lib/instinct-recall.mjs';
 import { projectId as hashRemote } from './lib/instinct-paths.mjs';
 import { execFileSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -775,7 +875,11 @@ try {
     if (!pid) { process.stdout.write('{"observations":[],"offset":0}'); process.exit(0); }
     process.stdout.write(JSON.stringify(await obs.readUnconsumed(pid)));
   } else if (cmd === 'mine-apply') {
-    const items = JSON.parse(args.includes('--inline') ? args[args.indexOf('--inline') + 1] : '[]');
+    // C3: contrato primário --json=<file> (robusto a tamanho); --inline só conveniência de teste
+    let raw = '[]';
+    if (flag('json')) raw = await readFile(flag('json'), 'utf-8');
+    else if (args.includes('--inline')) raw = args[args.indexOf('--inline') + 1];
+    const items = JSON.parse(raw);
     for (const it of items) {
       await store.upsertInstinct(it.id, { trigger: it.trigger, action: it.action, domain: it.domain || 'workflow',
         scope: 'project', projectId: pid || 'p1', projectName: flag('project-name', 'unknown') }, it.delta ?? 0);
@@ -803,6 +907,156 @@ git commit -m "feat(instinct): CLI capture/recall/mine/status (Task 7)"
 ```
 
 **Agent:** backend-specialist. **Tests:** unit (spawn CLI).
+
+---
+
+### Task 7b: Promoção project→global + registry `projects.json` (I4/I5 review)
+
+**Files:**
+- Modify: `scripts/lib/instinct-store.mjs` (add `promoteAcrossProjects`, `touchRegistry`)
+- Modify: `scripts/instinct-cli.mjs` (subcomando `promote`; touchRegistry no `capture`)
+- Test: `scripts/lib/instinct-store.test.mjs` (add casos)
+
+**Interfaces:**
+- Produces:
+  - `promoteAcrossProjects(minProjects=2) → Promise<string[]>` — instinct com mesmo `id` em ≥N hashes de projeto distintos → copia p/ global com confiança = max observada
+  - `touchRegistry(projectId, {name, remote}) → Promise` — atualiza `projects.json` com remote **normalizado** (I5)
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+test('promove instinct visto em ≥2 projetos para global (MVP)', async () => {
+  await sandbox();
+  const mk = (pid) => ({ trigger: 'buscar', action: 'rg', domain: 'workflow', scope: 'project', projectId: pid, projectName: pid });
+  await store.upsertInstinct('use-rg', mk('p1'), 0.4); // 0.7
+  await store.upsertInstinct('use-rg', mk('p2'), 0.2); // 0.5
+  const promoted = await store.promoteAcrossProjects(2);
+  assert.deepEqual(promoted, ['use-rg']);
+  const g = await store.loadIndex(undefined, 'global');
+  assert.equal(g[0].id, 'use-rg');
+  assert.equal(g[0].confidence, 0.7); // max observada
+});
+
+test('touchRegistry guarda remote normalizado sem credencial (I5)', async () => {
+  await sandbox();
+  await store.touchRegistry('p1', { name: 'demo', remote: 'https://u:pw@github.com/o/r.git' });
+  const reg = JSON.parse(await (await import('node:fs/promises')).readFile(
+    (await import('./instinct-paths.mjs')).projectsRegistry(), 'utf-8'));
+  assert.doesNotMatch(JSON.stringify(reg), /pw@/);
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails** — `node --test scripts/lib/instinct-store.test.mjs` → FAIL (funções inexistentes)
+
+- [ ] **Step 3: Implement**
+
+```js
+// em instinct-store.mjs
+import { normalizeRemote } from './instinct-paths.mjs'; // já há `import * as P`; usar P.normalizeRemote
+
+export async function promoteAcrossProjects(minProjects = 2) {
+  const root = join(P.baseDir(), 'projects');
+  let projects = []; try { projects = await readdir(root); } catch { return []; }
+  const byId = new Map();
+  for (const pid of projects) {
+    let files = []; try { files = (await readdir(P.instinctsDir(pid))).filter((f) => f.endsWith('.md')); } catch {}
+    for (const f of files) {
+      let fm; try { fm = parse(await readFile(join(P.instinctsDir(pid), f), 'utf-8')); } catch { fm = null; }
+      if (!fm) continue;
+      const c = byId.get(fm.id) || { meta: fm, projects: new Set(), confidence: 0 };
+      c.projects.add(pid); c.confidence = Math.max(c.confidence, Number(fm.confidence));
+      byId.set(fm.id, c);
+    }
+  }
+  const promoted = [];
+  for (const [id, c] of byId) {
+    if (c.projects.size >= minProjects) {
+      await upsertInstinct(id, { trigger: c.meta.trigger, action: c.meta.action, domain: c.meta.domain,
+        scope: 'global', projectName: 'global' }, 0, { absoluteConfidence: c.confidence });
+      promoted.push(id);
+    }
+  }
+  return promoted;
+}
+
+export async function touchRegistry(projectId, { name, remote }) {
+  const file = P.projectsRegistry();
+  return withLock(P.baseDir(), async () => {
+    await mkdir(P.baseDir(), { recursive: true });
+    let reg = {}; try { reg = JSON.parse(await readFile(file, 'utf-8')); } catch {}
+    reg[projectId] = { name, remote: P.normalizeRemote(remote || ''), last_seen: new Date().toISOString().slice(0, 10) };
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, JSON.stringify(reg, null, 2)); await rename(tmp, file);
+  });
+}
+```
+CLI: adicionar ramo `promote` → `store.promoteAcrossProjects()` e chamar `touchRegistry` no `capture` (com `name`=basename do cwd, `remote`=git remote).
+
+- [ ] **Step 4: Run test to verify it passes** — PASS
+- [ ] **Step 5: Commit** — `git commit -m "feat(instinct): promoção project→global + registry (Task 7b)"`
+
+**Agent:** backend-specialist. **Tests:** unit (tmpdir).
+
+---
+
+### Task 7c: Prune por TTL (instincts pending estagnados)
+
+**Files:**
+- Modify: `scripts/lib/instinct-store.mjs` (`pruneStale`)
+- Modify: `scripts/instinct-cli.mjs` (subcomando `prune`)
+- Test: `scripts/lib/instinct-store.test.mjs`
+
+**Interfaces:**
+- Produces: `pruneStale(projectId, maxAgeDays=30) → Promise<string[]>` — remove `.md` com `status:pending` E `confidence<0.3` E `updated` > maxAgeDays atrás; rebuild index. Retorna ids removidos.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+test('prune remove pending<0.3 estagnado e preserva active', async () => {
+  await sandbox();
+  const m = (id, sc) => ({ trigger: id, action: id, domain: 'workflow', scope: 'project', projectId: 'p1', projectName: 'x' });
+  await store.upsertInstinct('keep', m('keep'), 0.3);     // 0.6 active → preserva
+  await store.upsertInstinct('stale', m('stale'), 0);     // 0.3 pending (limiar) → não < 0.3, não remove
+  // forja um pending antigo < 0.3 escrevendo updated no passado
+  await store._writeRaw('p1', 'old', { trigger: 'o', action: 'o', domain: 'workflow', scope: 'project',
+    projectId: 'p1', projectName: 'x', confidence: 0.2, observations: 1, status: 'pending', updated: '2000-01-01' });
+  const removed = await store.pruneStale('p1', 30);
+  assert.ok(removed.includes('old'));
+  const idx = await store.loadIndex('p1', 'project');
+  assert.ok(idx.find((i) => i.id === 'keep'));
+  assert.ok(!idx.find((i) => i.id === 'old'));
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails** — FAIL (`pruneStale`/`_writeRaw` inexistentes)
+
+- [ ] **Step 3: Implement** (`_writeRaw` é helper de teste que serializa um instinct arbitrário via `ser`+tmp+rename; `pruneStale` abaixo)
+
+```js
+export async function pruneStale(projectId, maxAgeDays = 30) {
+  const dir = P.instinctsDir(projectId);
+  let files = []; try { files = (await readdir(dir)).filter((f) => f.endsWith('.md')); } catch { return []; }
+  const cutoff = Date.now() - maxAgeDays * 86400000;
+  const removed = [];
+  await withLock(P.projectDir(projectId), async () => {
+    for (const f of files) {
+      let fm; try { fm = parse(await readFile(join(dir, f), 'utf-8')); } catch { fm = null; }
+      if (!fm) continue;
+      const old = new Date(fm.updated).getTime() < cutoff;
+      if (fm.status === 'pending' && Number(fm.confidence) < 0.3 && old) {
+        await unlink(join(dir, f)); removed.push(fm.id);
+      }
+    }
+  });
+  await rebuildIndex(projectId, 'project');
+  return removed;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes** — PASS
+- [ ] **Step 5: Commit** — `git commit -m "feat(instinct): prune por TTL (Task 7c)"`
+
+**Agent:** backend-specialist. **Tests:** unit (tmpdir).
 
 ---
 
@@ -854,8 +1108,11 @@ Adicionar ANTES do `exit 0` final (seguindo o padrão best-effort do napkin nudg
 # ── Instinct capture (gated, best-effort, nunca bloqueia) ──────────────
 if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ]; then
   TOOL_NAME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).tool_name||"")}catch{console.log("")}})' 2>/dev/null)
-  TARGET=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(j.tool_input?.file_path||j.tool_input?.command||"")}catch{console.log("")}})' 2>/dev/null)
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/instinct-cli.mjs" capture --tool="$TOOL_NAME" --target="$TARGET" --outcome=ok >/dev/null 2>&1 || true
+  # sec C2: p/ Bash captura SÓ o binário (1º token), descartando argumentos sensíveis; p/ Edit/Write o file_path
+  TARGET=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);let t=j.tool_input?.file_path||"";if(!t&&j.tool_input?.command){t=String(j.tool_input.command).trim().split(/\s+/)[0]}console.log(t)}catch{console.log("")}})' 2>/dev/null)
+  # outcome: erro se tool_response indica is_error (I6); senão ok
+  OUTCOME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s).tool_response;console.log(r&&(r.is_error||r.error)?"error":"ok")}catch{console.log("ok")}})' 2>/dev/null)
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/instinct-cli.mjs" capture --tool="$TOOL_NAME" --target="$TARGET" --outcome="${OUTCOME:-ok}" >/dev/null 2>&1 || true
 fi
 ```
 
@@ -1152,6 +1409,12 @@ test('captura → mine → recall → bridges (e2e)', async () => {
   assert.match(digest, /rg/);
   const bridges = JSON.parse(run(['bridges']));
   assert.equal(bridges[0].id, 'use-rg');
+
+  // sec (I3/N1): credencial capturada NUNCA aparece no store nem no digest
+  run(['capture', '--tool=Bash', '--target=mysql --password=hunter2', '--outcome=ok']);
+  const read2 = JSON.parse(run(['mine-read']));
+  assert.ok(!JSON.stringify(read2).includes('hunter2'), 'credencial não vaza no store');
+  assert.ok(!run(['recall']).includes('hunter2'), 'credencial não vaza no digest');
 });
 ```
 
@@ -1180,20 +1443,24 @@ git commit -m "test(instinct): e2e do fluxo completo (Task 13)"
 
 ## Self-Review
 
-**Spec coverage:**
-- Store/confiança/identidade/promoção/TTL → Tasks 2, 4 (TTL/prune: subcomando `prune` no CLI Task 7; promoção `promote` — implementação no CLI, coberta pelo contrato; nota: detecção ≥2 projetos é lógica do `promote`, a detalhar na execução do CLI).
+**Spec coverage (15 tasks; gaps da review R resolvidos):**
+- Store/confiança/identidade → Tasks 2, 4.
+- Promoção project→global + registry → **Task 7b** (`promoteAcrossProjects` ≥2 hashes; `touchRegistry` remote normalizado).
+- TTL/prune → **Task 7c** (`pruneStale` pending<0.3 >30d).
 - Captura + redação + rotação + checkpoint → Tasks 1, 5, 8.
 - Recall bounded + índice → Tasks 6, 9.
 - Mining + match semântico + correção (+0.2) → Task 10.
 - Pontes (elegibilidade pura + proposta) → Task 11.
 - Config + comando + precedência toggles → Task 12.
-- Privacidade/opt-in → Tasks 1, 7 (gating), 8/9 (gated).
+- Privacidade/opt-in → Tasks 1 (redação expandida sec C1), 7 (gating), 8/9 (gated, binary-only Bash sec C2), 13 (assert credencial nunca vaza).
 - E2E → Task 13.
 
-**Gaps conhecidos (resolver na execução, não bloqueiam o plano):**
-- `promote`/`prune` têm subcomando no CLI mas o corpo completo (detecção ≥2 hashes; TTL 30d) deve ganhar teste dedicado quando implementado — adicionar micro-tasks 7b/7c se a execução exigir.
-- A inferência LLM da Task 10 não é testável por unit determinístico; o e2e simula via `mine-apply`. Aceito (a parte determinística — store/CLI — é 100% testada).
+**Achados da Review R incorporados:**
+- code-reviewer: C1 (linha morta removida), C2 (withLock global + teste), C3 (mine-apply `--json`), C4/I3 (rotação×checkpoint sem perda + teste), I1 (parse null-guard + skip corrompido), I2 (escrita `.md` atômica), I4/I5 (Tasks 7b/7c), I6 (outcome do tool_response).
+- security-auditor: C1 (TOKEN_RE expandido: AWS/JWT/PEM/conn-string/`--password=`/Stripe/GH + KV + URL-cred, testes por classe), C2 (Bash binary-only), I4 (redação em trigger/action), I5 (remote normalizado no registry).
+
+**Gap aceito (não bloqueia):** inferência LLM da Task 10 não é testável por unit determinístico; o e2e simula via `mine-apply`. A parte determinística (store/CLI) é 100% testada.
 
 **Placeholder scan:** sem TBD/TODO de implementação; todo passo de código tem código real.
 
-**Type consistency:** `upsertInstinct(id, meta, delta)`, `loadIndex(projectId, scope)`, `buildDigest(projectId, opts)`, `appendObservation(projectId, obs)`, `eligibleForBridge(inst)` — nomes consistentes entre Tasks 2/4/6/7/11.
+**Type consistency:** `upsertInstinct(id, meta, delta, opts?)`, `loadIndex(projectId, scope)`, `buildDigest(projectId, opts)`, `appendObservation(projectId, obs)`, `eligibleForBridge(inst)`, `promoteAcrossProjects(n)`, `pruneStale(projectId, days)`, `touchRegistry(projectId, meta)` — consistentes entre tasks.
