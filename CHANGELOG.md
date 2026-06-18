@@ -5,6 +5,29 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.23.1] — 2026-06-18
+
+### Fixed — `pre-tool-use`: config não localizada quando o evento chega sem `cwd`
+
+O gate de configuração do hook `pre-tool-use` resolvia o caminho de
+`.context/.devflow.yaml` usando **apenas** `$CWD`, sem o fallback `${CWD:-$PWD}`
+aplicado nos demais blocos (permissions L46, grounding L115, project-root L178 e
+detecção de branch L227–231). Quando o harness do Claude Code **não envia `cwd`**
+no evento `PreToolUse`, `$CWD` chegava vazio → o hook concluía "sem config" e
+**negava 100% das edições** (`Edit`/`Write`), mesmo com `.context/.devflow.yaml`
+válido e em branch de trabalho não-protegida; `/devflow config` não resolvia
+(a config existe — o hook é que não a encontrava).
+
+- **Correção:** o bloco passa a usar `DEVFLOW_CONFIG="${CWD:-$PWD}/.context/.devflow.yaml"`,
+  alinhando-o aos demais pontos já robustos a `cwd` vazio. Como o `$PWD` do hook é a
+  raiz do projeto, a config volta a ser localizada.
+- **Sem over-allow:** em branch protegida com `cwd` vazio, a config é localizada via
+  `$PWD` e o deny passa a vir da branch protection (não mais do guard de no-config) —
+  edição de código-fonte segue bloqueada.
+- **Regressão coberta (TDD):** `tests/hooks/test-pre-tool-use.sh` ganha os testes 15 e 16
+  (arquivo de projeto, `cwd` vazio/ausente, branch de trabalho → libera). Suíte: 22/22.
+- Detalhes e evidência: `docs/2026-06-18-pre-tool-use-cwd-fallback-bug.md`.
+
 ## [1.20.0] — 2026-06-13
 
 ### Added — Cobertura de Standards: gaps de concern fechados (3 eixos)
