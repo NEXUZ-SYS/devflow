@@ -137,20 +137,24 @@ Re-rodar a detecção de framework e adicionar (nunca remover) agentes/skills qu
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
 ```
-Para cada `agent` retornado ausente em `.context/agents/`, scaffoldar a partir do template
-do plugin (preenchendo placeholders). Para cada `skill` retornada ausente em `.context/skills/`,
-copiar o diretório `${CLAUDE_PLUGIN_ROOT}/skills/<slug>/`. Não sobrescrever arquivos já editados.
+**Skills + standards de profile — sync provenance-aware (NÃO decida por existência/`status`):**
+invoque a lib determinística, que resolve os artefatos (profiles compostos `odoo`+`nxz` →
+skills + standards de profile via `standardsWithOrigin`), decide por hash (deploy **intocado**
+→ atualiza; **editado localmente** → preserva; novo → adiciona), copia de forma **contida**
+(`isWithinDir`, sem symlink) e grava `.context/.provenance.json`:
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/provenance-sync.mjs" apply \
+  --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}" --base-skills=<lista base separada por vírgula>
+```
+Reporte ao usuário o JSON retornado `{added, updated, current, preserved, refused}`, destacando
+**`preserved`** (editados localmente — revisar manualmente) e **`refused`** (recusados por
+contenção/symlink/src ilegível). Respeitar `.context/standards.local.yaml` `disable:` (pular ids).
 
-A detecção também retorna `standards` (ids), `standardsWithOrigin` (`[{id, framework}]` — a
-origem de cada std) e `stacks` (docs versionados). Como um projeto pode casar múltiplos
-profiles compostos (ex.: `odoo` + `nxz`), use `standardsWithOrigin` para resolver a pasta
-de origem por id — não assuma um único `<framework>`. Para cada entrada ausente em
-`.context/engineering/standards/`, copiar
-`${CLAUDE_PLUGIN_ROOT}/assets/standards/profiles/<framework>/<id>.md` **e**
-`.../machine/<id>.js` (usando o `framework` da entrada) para `.context/engineering/standards/`
-(+`machine/`). **Nunca**
-sobrescrever um std já customizado pelo projeto; respeitar `.context/standards.local.yaml`
-`disable:` (pular ids desabilitados). Para cada `stack` ausente no manifest, semear via
+**Agents NÃO passam pela lib** — eles são preenchidos por projeto (`context fillSingle`/enrich);
+para cada `agent` ausente em `.context/agents/`, scaffoldar do template e preencher; existentes
+seguem o fluxo de fill in-place. (A proveniência por hash só cobre artefatos verbatim.)
+
+Para cada `stack` ausente no manifest, semear via
 `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add --lib=<lib> --version=<ver> --discovery-hint=<url> --project=<PWD>`
 (idempotente; o scrape real é follow-up via `/devflow:scrape-stack-batch`).
 

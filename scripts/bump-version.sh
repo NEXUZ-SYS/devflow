@@ -46,3 +46,8 @@ done
 
 echo ""
 echo "Bumped: $CURRENT -> $NEW_VERSION ($BUMP_TYPE)"
+
+# Atualiza o registry de hashes históricos com os artefatos da versão nova (provenance-sync).
+if [ -f "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" ]; then
+  node "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" --append || echo "WARN: falha ao atualizar known-hashes.json"
+fi

@@ -565,6 +565,14 @@ done
 ```
 E.g. an NXZ project copies `std-odoo-naming-conventions` from `profiles/odoo/` and
 `std-odoo-oca-separation` from `profiles/nxz/` — each from its own origin.
+
+> **Scaffold inicial vs. atualização.** O `cp` acima é o scaffold do zero (projeto novo).
+> Para **atualizar** skills/standards verbatim já presentes (re-scaffold/sync), NÃO use
+> `cp` cego nem `status: filled → SKIP` para decidir — delegue ao sync provenance-aware
+> (`scripts/lib/provenance-sync.mjs apply`, ver `devflow:context-sync`): ele distingue
+> deploy intocado (atualiza) de edição local (preserva) por hash. Agents seguem o fluxo
+> de fill (fora da lib).
+
 **Never overwrite** a `.context/engineering/standards/<id>.md` that already exists with
 user edits, and honor `.context/standards.local.yaml` `disable:` — skip disabled ids.
 
