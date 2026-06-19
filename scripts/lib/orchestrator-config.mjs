@@ -40,3 +40,20 @@ export function orchestratorBlock(answers = {}) {
     "",
   ].join("\n");
 }
+
+/**
+ * Heurística de ativação do AO na fase E.
+ * Retorna { decision, reason }: "sequential" (fallback/desligado/fora de critério),
+ * "ask" (mode=suggest e critérios batem → caller pergunta) ou "parallel" (mode=auto).
+ */
+export function shouldParallelize({ config, scale, independentCount, aoAvailable }) {
+  const o = config && config.orchestrator;
+  if (!o || o.enabled === false) return { decision: "sequential", reason: "orchestrator desabilitado" };
+  if (!aoAvailable) return { decision: "sequential", reason: "AO indisponível (fallback sequencial)" };
+  const scales = (o.trigger && o.trigger.scales) || ["LARGE"];
+  if (!scales.includes(scale)) return { decision: "sequential", reason: `escala ${scale} fora de [${scales.join(", ")}]` };
+  const min = (o.trigger && o.trigger.minIndependentStories) ?? 3;
+  if (independentCount < min) return { decision: "sequential", reason: `${independentCount} stories independentes < mínimo ${min}` };
+  if (o.mode === "auto") return { decision: "parallel", reason: "mode=auto e critérios atendidos" };
+  return { decision: "ask", reason: "mode=suggest e critérios atendidos — confirmar com o operador" };
+}

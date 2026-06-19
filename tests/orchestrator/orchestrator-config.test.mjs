@@ -1,7 +1,7 @@
 // Testes para a lib orchestrator-config.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parsePluginUserScope, orchestratorBlock } from "../../scripts/lib/orchestrator-config.mjs";
+import { parsePluginUserScope, orchestratorBlock, shouldParallelize } from "../../scripts/lib/orchestrator-config.mjs";
 
 describe("parsePluginUserScope", () => {
   it("false quando só há project-scope", () => {
@@ -45,5 +45,29 @@ describe("orchestratorBlock", () => {
     const b = orchestratorBlock({ enabled: false });
     assert.match(b, /enabled: false/);
     assert.doesNotMatch(b, /maxWaveWidth/);
+  });
+});
+
+describe("shouldParallelize", () => {
+  const base = { orchestrator: { enabled: true, mode: "suggest", trigger: { scales: ["LARGE"], minIndependentStories: 3 } } };
+  it("sequential quando orchestrator ausente/disabled", () => {
+    assert.equal(shouldParallelize({ config: {}, scale: "LARGE", independentCount: 5, aoAvailable: true }).decision, "sequential");
+    assert.equal(shouldParallelize({ config: { orchestrator: { enabled: false } }, scale: "LARGE", independentCount: 5, aoAvailable: true }).decision, "sequential");
+  });
+  it("sequential quando AO indisponível (fallback)", () => {
+    assert.equal(shouldParallelize({ config: base, scale: "LARGE", independentCount: 5, aoAvailable: false }).decision, "sequential");
+  });
+  it("sequential quando escala fora de trigger.scales", () => {
+    assert.equal(shouldParallelize({ config: base, scale: "MEDIUM", independentCount: 5, aoAvailable: true }).decision, "sequential");
+  });
+  it("sequential quando independentes < min", () => {
+    assert.equal(shouldParallelize({ config: base, scale: "LARGE", independentCount: 2, aoAvailable: true }).decision, "sequential");
+  });
+  it("ask quando mode=suggest e critérios batem", () => {
+    assert.equal(shouldParallelize({ config: base, scale: "LARGE", independentCount: 4, aoAvailable: true }).decision, "ask");
+  });
+  it("parallel quando mode=auto e critérios batem", () => {
+    const cfg = { orchestrator: { ...base.orchestrator, mode: "auto" } };
+    assert.equal(shouldParallelize({ config: cfg, scale: "LARGE", independentCount: 4, aoAvailable: true }).decision, "parallel");
   });
 });
