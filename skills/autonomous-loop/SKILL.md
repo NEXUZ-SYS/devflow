@@ -55,26 +55,33 @@ Antes da seleção story-by-story, decidir se a fase E roda em **paralelo via AO
 - `decision: "sequential"` → seguir o loop atual (Steps 2-4). FIM deste step.
 - `decision: "ask"` → perguntar ao operador (AskUserQuestion: "N stories independentes em <escala> — paralelizar via AO (N workers) ou sequencial?"). Resposta decide.
 - `decision: "parallel"` → ir para o Step 1.7 (modo paralelo).
-- **Fallback:** se `AO_OK=false` em qualquer ponto, forçar `sequential` com aviso ("AO indisponível — rodando sequencial; para paralelizar, instale o plugin em --scope user").
+- **Fallback (AO_OK=false tem PRECEDÊNCIA sobre --parallel):** se `AO_OK=false` em qualquer ponto — incluindo quando o flag `--parallel` foi passado — forçar `sequential` imediatamente, com aviso explícito ao operador: "⚠ --parallel ignorado: AO indisponível; instale o plugin em --scope user (`ao install --scope user`)". Não ir para o Step 1.7 com AO ausente.
 
 ### Step 1.7: Execução em Ondas via AO (quando decision = parallel)
 
 **Setup (uma vez):**
 1. Gerar `.ao-rules` no repo do projeto via `aoRulesContent()`.
-2. Gerar `agent-orchestrator.yaml` (num dir de controle) via `agentOrchestratorYaml({ projectId: sanitizeProjectId(nome), repo, path, port, sessionPrefix })`.
+2. Gerar `agent-orchestrator.yaml` (num dir de controle) via `agentOrchestratorYaml({ projectId: sanitizeProjectId(nome), repo, path, port, sessionPrefix })`, onde `nome` é o basename do repositório git (`git rev-parse --show-toplevel | xargs basename`).
 3. `cd <dir-controle> && ao start <projectId>` (sobe dashboard + supervisor). Se falhar → **fallback sequencial**.
 
 **Loop de ondas (pipeline):**
+
+> **Teto de iterações:** Este loop respeita o mesmo teto do Step 1.5 (padrão: 50 iterações totais de execução de story). Ao atingir o teto, encerrar o loop e escalar para o humano, assim como no modo sequencial.
+
 1. Carregar stories de `.context/workflow/stories.yaml`; `norm = normalizeStories(stories)`; `maxW = maxWidthFrom(config)`.
-2. `done` = ids com `status: completed`; `inFlight` = ids com `status: in_progress` (sessão viva).
-3. `prontas = readyStories(norm, done, inFlight, maxW)`. Se vazio e nada in-flight e nem tudo done → erro de DAG (ciclo) → escalar.
+2. Separar três conjuntos disjuntos:
+   - `completedIds` = ids com `status: completed` (ÚNICO conjunto que satisfaz dependências de outras stories — dependentes de stories fora deste conjunto permanecem BLOQUEADAS).
+   - `inProgressIds` = ids com `status: in_progress` e sessão viva (usados apenas para o cap de largura `maxW`).
+   - `terminaisNaoCompletaveis` = ids com `status: escalated` OU (`status: failed` com `attempts >= max_retries_per_story`). **NÃO incluir em `completedIds`** — isso liberaria dependentes indevidamente.
+3. `prontas = readyStories(norm, completedIds, inProgressIds, maxW)`. Em seguida, **remover de `prontas` qualquer id em `terminaisNaoCompletaveis`** (não re-despachar terminais). Se `prontas` vazio e nada em `inProgressIds` e nem tudo done → erro de DAG (ciclo) ou todos os caminhos bloqueados por terminais → escalar.
 4. Para cada id em `prontas`: marcar `status: in_progress` em stories.yaml; `ao spawn <id> --prompt "/devflow scale:SMALL <story.title + acceptance>"` (cada worker roda DevFlow-mini com TDD; guardrails via `.ao-rules`).
 5. Polling: `curl -s localhost:<port>/api/sessions` (usar a porta definida no `agent-orchestrator.yaml` gerado — campo `port`; default 3000 — a mesma passada a `agentOrchestratorYaml`) (ou `ao status`) → quando a sessão de uma story abre PR, marcar a story `status: completed` (+ guardar a URL do PR). Reactions ci-failed/changes-requested ficam OFF no P3 (Plano 4 as ativa) — falha de worker → marcar `failed` e aplicar retry/escalonamento do loop atual.
-6. Repetir 3-5 até que toda story esteja em **estado terminal**: `completed`, `escalated`, ou `failed` sem retry restante (`attempts >= max_retries_per_story`). Stories `failed` com retries disponíveis voltam a ser elegíveis (reusar a lógica de retry/escalonamento dos Steps 4/5 do loop sequencial). Stories `escalated` e `failed`-definitivo NÃO entram em `done` (não viram PR), mas contam para o encerramento do loop. Pipeline: novas stories liberam assim que suas deps terminam (não espera a onda inteira).
+6. Repetir 3-5 até que toda story esteja em **estado terminal**: `completed`, `escalated`, ou `failed` sem retry restante (`attempts >= max_retries_per_story`). Stories `failed` com retries disponíveis voltam a ser elegíveis (reusar a lógica de retry/escalonamento dos Steps 4/5 do loop sequencial). Stories `escalated` e `failed`-definitivo NÃO entram em `completedIds` (não viram PR e não liberam dependentes), mas contam para o encerramento do loop. Pipeline: novas stories liberam assim que suas deps estão em `completedIds` (não espera a onda inteira).
 
 **Encerramento:**
 - Coletados todos os PRs → seguir para **V global** (fase Validation, no código integrado) e **C global** (fase Confirmation, merge ordenado pelo DAG via `computeWaves(norm)`, sem auto-merge).
 - `ao stop` ao final.
+- → ir para Step 6 (Final Report).
 
 ### Step 2: Story Selection
 

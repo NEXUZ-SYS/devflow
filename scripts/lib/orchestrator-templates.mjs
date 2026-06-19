@@ -29,8 +29,8 @@ defaults:
   workspace: worktree
 projects:
   ${projectId}:
-    repo: ${repo}
-    path: ${path}
+    repo: "${repo}"
+    path: "${path}"
     defaultBranch: main
     sessionPrefix: ${sessionPrefix}
     agentConfig:

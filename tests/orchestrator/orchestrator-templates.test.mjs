@@ -24,8 +24,8 @@ describe("agentOrchestratorYaml", () => {
   });
   it("injeta projectId, repo, path, port", () => {
     assert.match(y, /meu-app:/);
-    assert.match(y, /repo: org\/meu-app/);
-    assert.match(y, /path: \/home\/u\/meu-app/);
+    assert.match(y, /repo: "org\/meu-app"/);
+    assert.match(y, /path: "\/home\/u\/meu-app"/);
     assert.match(y, /port: 3100/);
   });
 });

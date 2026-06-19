@@ -27,6 +27,11 @@ describe("sanitizeProjectId", () => {
     assert.equal(sanitizeProjectId(""), "projeto");
     assert.equal(sanitizeProjectId(null), "projeto");
   });
+  it("remove pontos e underscores no início e no fim (chave YAML inválida)", () => {
+    assert.equal(sanitizeProjectId("..hidden"), "hidden");
+    assert.equal(sanitizeProjectId("_private_"), "private");
+    assert.equal(sanitizeProjectId(".dotfile."), "dotfile");
+  });
 });
 
 describe("maxWidthFrom", () => {

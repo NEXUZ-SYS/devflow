@@ -9,13 +9,14 @@ export function normalizeStories(stories) {
   }));
 }
 
-/** Sanitiza um nome para chave YAML / id de sessão (kebab seguro). */
+/** Sanitiza um nome para chave YAML / id de sessão (kebab seguro).
+ * Remove hífen, ponto e underscore das bordas para não gerar chave YAML inválida. */
 export function sanitizeProjectId(name) {
   const slug = String(name || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^[-._]+|[-._]+$/g, "");
   return slug || "projeto";
 }
 
