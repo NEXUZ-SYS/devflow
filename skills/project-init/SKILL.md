@@ -109,6 +109,41 @@ Apresentar via AskUserQuestion **apenas os instalados** (claude/opencode/omp), m
 - `omp` → garantir o manifesto `omp.extensions` e rodar o enriquecimento de agentes omp no Step 4.6.
 - `claude`/`opencode` → comportamento atual (nada extra).
 
+## Step 0.6: Integração com Agent Orchestrator (AO) — validar escopo do plugin
+
+Verificar se o projeto será operado via **Agent Orchestrator** (AO / `@aoagents/ao`) — orquestrador que roda cada worker em seu próprio **git worktree**, FORA do diretório do projeto. Disparar esta verificação quando QUALQUER um for verdadeiro:
+
+- o usuário informar que vai usar o AO / "agentes paralelos" / "frota de agentes" / "worktrees"; **ou**
+- a detecção automática indicar AO presente:
+
+```bash
+command -v ao >/dev/null 2>&1 && echo "AO: instalado"
+{ [ -d "$HOME/.agent-orchestrator" ] || [ -f "agent-orchestrator.yaml" ]; } && echo "AO: em uso"
+```
+
+**Se o AO for usado, o plugin DevFlow (e o superpowers, do qual depende) DEVE estar instalado no escopo `user` — não `project`.** Os workers do AO rodam em worktrees efêmeros (`~/.agent-orchestrator/.../worktrees/<sessão>`) que ficam fora do diretório do projeto. Plugins habilitados apenas no escopo `project` (via `.claude/settings.json` do projeto) **não resolvem** nesses worktrees: o worker recebe `Unknown command: /devflow` / `Unknown skill`, e o trilho DevFlow (PREVC/TDD) **não ativa** — o agente acaba "improvisando" sem a disciplina. Não é trust de diretório nem ausência de `.context/`; é o **escopo de instalação do plugin**.
+
+Validar o escopo e, se necessário, orientar (a reinstalação é **ação do usuário**, nunca automática):
+
+```bash
+# Existe instalação user-scope? (o plugin pode aparecer várias vezes em project-scope;
+# o que decide é existir PELO MENOS UMA entrada "Scope: user")
+claude plugin list 2>/dev/null | grep -A2 'devflow@NEXUZ-SYS' | grep -q 'Scope: user' \
+  && echo "devflow: ✅ user-scope OK" || echo "devflow: ⚠️ FALTA user-scope"
+claude plugin list 2>/dev/null | grep -A2 'superpowers@' | grep -q 'Scope: user' \
+  && echo "superpowers: ✅ user-scope OK" || echo "superpowers: ⚠️ FALTA user-scope"
+```
+
+- Ambos **`✅ user-scope OK`** → os workers do AO ativarão o DevFlow normalmente.
+- Algum **`⚠️ FALTA user-scope`** → avisar e orientar a reinstalar no escopo user:
+
+  ```bash
+  claude plugin install devflow@NEXUZ-SYS --scope user
+  claude plugin install superpowers@claude-plugins-official --scope user
+  ```
+
+  Confirmar com o usuário antes de prosseguir. Esta validação é específica do AO; runtimes nativos (claude/opencode/omp) não precisam dela.
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:
