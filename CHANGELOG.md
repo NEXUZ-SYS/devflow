@@ -5,6 +5,25 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.23.3] — 2026-06-19
+
+### Added — `/devflow init` valida o escopo do plugin para uso com Agent Orchestrator (AO)
+
+Novo **Step 0.6** no `project-init`: quando o projeto for operado via Agent Orchestrator
+(AO / `@aoagents/ao`) — detectado por `command -v ao`, `~/.agent-orchestrator/` ou
+`agent-orchestrator.yaml`, ou informado pelo usuário —, o init valida que os plugins
+DevFlow e superpowers estão instalados no escopo **`user`**, não `project`.
+
+- **Motivo:** os workers do AO rodam em git worktrees efêmeros **fora** do diretório do
+  projeto. Plugins habilitados apenas em escopo `project` (via `.claude/settings.json`)
+  não resolvem nesses worktrees — o worker recebe `Unknown command: /devflow` / `Unknown
+  skill` e o trilho PREVC/TDD **não ativa**, fazendo o agente "improvisar" sem disciplina.
+  Não é trust de diretório nem ausência de `.context/`; é o **escopo de instalação**.
+- **Orientação (ação do usuário):** `claude plugin install devflow@NEXUZ-SYS --scope user`
+  e `claude plugin install superpowers@claude-plugins-official --scope user`.
+- Descoberto e validado em PoC de integração AO × DevFlow (DevFlow rodando dentro de cada
+  worker do AO, com guardrails de git preservados).
+
 ## [1.23.2] — 2026-06-18
 
 ### Fixed — `permissions.yaml`: deny opaco vira acionável + detecção de schema legado (GAP-PERM-ROOT)
