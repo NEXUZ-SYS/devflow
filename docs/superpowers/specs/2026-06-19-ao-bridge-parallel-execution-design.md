@@ -57,7 +57,7 @@ Nova seção no `.context/.devflow.yaml`. **Dona:** `/devflow config`. O `/devfl
 orchestrator:
   enabled: true            # o projeto pode usar o AO
   provider: ao             # @aoagents/ao
-  mode: suggest            # auto | suggest | off   ← o gatilho
+  mode: suggest            # auto | suggest   ← o gatilho (para desabilitar, use enabled: false)
   trigger:
     scales: [LARGE]              # escalas em que sequer considerar paralelizar
     minIndependentStories: 3     # só paraleliza se a próxima onda tiver ≥ N
@@ -66,17 +66,16 @@ orchestrator:
 
 **Pré-condição (Step 0.6, já mergeado em v1.23.3):** só habilita se o plugin DevFlow+superpowers estiver em `--scope user` (workers do AO rodam em worktrees fora do projeto; project-scope não resolve lá). Sem isso → grava `enabled: false` e orienta a reinstalar no escopo user.
 
-**Pergunta na entrevista (config):** "Usar o Agent Orchestrator para execução paralela?" → opções que mapeiam para `mode`: **Sugerir quando compensar (suggest, default)** / **Automático (auto)** / **Não (off)**. Se != off: validar escopo (Step 0.6) e, opcionalmente, ajustar `trigger`/`maxWaveWidth`.
+**Pergunta na entrevista (config):** "Usar o Agent Orchestrator para execução paralela?" → **Sugerir quando compensar (`mode: suggest`, default)** / **Automático (`mode: auto`)** / **Não usar (`enabled: false`)**. Se != "Não usar": validar escopo (Step 0.6) e, opcionalmente, ajustar `trigger`/`maxWaveWidth`.
 
 **Patch incremental (config Step 5):** quando o `.devflow.yaml` já existe, a seção `orchestrator:` é adicionada/atualizada sem sobrescrever as demais.
 
 ## 5. Fluxo da fase E (modo autônomo)
 
 1. DevFlow lê `orchestrator:`. Avalia a **heurística de ativação**: `scale ∈ trigger.scales` **E** a próxima onda tem ≥ `minIndependentStories` stories independentes **E** AO disponível (instalado + user-scope).
-2. Aplica o `mode`:
+2. Se `enabled: false` → sequencial (só `--parallel` explícito aciona). Caso contrário, aplica o `mode`:
    - `suggest` (default) → **pergunta**: *"N stories independentes em <escala> — paralelizar via AO (N workers) ou rodar sequencial?"*.
    - `auto` → dispara sem perguntar.
-   - `off` → sequencial (só `--parallel` explícito aciona).
 3. Override por comando: `/devflow auto --parallel` / `--no-parallel` ganha do `.devflow.yaml`.
 4. Por onda:
    a. DevFlow gera (se ausente) o `agent-orchestrator.yaml`: `permissions: permissionless`, **todas as reactions `auto: false`** (sem auto-merge), `agentRulesFile: .ao-rules`.
