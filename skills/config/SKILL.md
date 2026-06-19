@@ -329,12 +329,19 @@ node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(
   `claude plugin install devflow@NEXUZ-SYS --scope user` (+ superpowers), e gravar `orchestrator.enabled: false`.
 - Se `USER_SCOPE_OK`, perguntar:
 
+```
 AskUserQuestion:
-- Pergunta: "Usar o Agent Orchestrator para execução paralela na fase E (para casos quando necessário)?"
-- Opções:
-  - "Sugerir quando compensar (recomendado)" → `mode: suggest`
-  - "Automático" → `mode: auto`
-  - "Não usar" → `enabled: false`
+  question: "Usar o Agent Orchestrator para execução paralela na fase E (para casos quando necessário)?"
+  header: "Agent Orchestrator"
+  multiSelect: false
+  options:
+    - label: "Sugerir quando compensar (Recomendado)"
+      description: "AO sugere ativação automática para tarefas LARGE com histórias independentes — mode: suggest"
+    - label: "Automático"
+      description: "AO ativa automaticamente sem intervenção — mode: auto"
+    - label: "Não usar"
+      description: "Desativar integração com o Agent Orchestrator — enabled: false"
+```
 
 ### 3. Gerar `.context/.devflow.yaml`
 
@@ -392,20 +399,29 @@ git:
     # blockToolPatterns: [] # (opcional) padrões extras de tool-name de MCP de internet a negar
   ```
 
-**Seção `orchestrator:`** — gerar com a lib (não escrever à mão):
+**Regras de geração para orchestrator:**
+- Se o Step 2.6 não foi alcançado/respondido (entrevista abreviada ou trunk-based): **não incluir** a seção `orchestrator:` (ausência = não configurado, consistente com as demais seções opcionais).
+- Se `NEEDS_USER_SCOPE` **ou** o usuário escolheu "Não usar": gerar o bloco mínimo via `orchestratorBlock({enabled:false})` e **anexar** (decisão consciente registrada explicitamente no YAML).
+- Se o usuário escolheu "Sugerir quando compensar" ou "Automático": gerar o bloco completo via `orchestratorBlock({mode:'<MODE>'})` (sem `enabled` — default é `true`) e **anexar**.
+
+Gerar com a lib (não escrever à mão):
 
 ```bash
-node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({mode:'<MODE>',enabled:<ENABLED>})))"
+# Quando enabled:false (NEEDS_USER_SCOPE ou "Não usar") — NÃO passar mode (lib ignora):
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({enabled:false})))"
+
+# Quando enabled:true — passar mode escolhido (suggest ou auto):
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({mode:'<MODE>'})))"
 ```
 
-Substituir `<MODE>` pela escolha do Step 2.6 e `<ENABLED>` por `true`/`false`. Anexar a saída ao `.devflow.yaml`.
+Substituir `<MODE>` por `suggest` (opção "Sugerir quando compensar") ou `auto` (opção "Automático"). Quando `enabled:false`, chamar sem `mode` — a lib descarta o campo. Anexar a saída ao `.devflow.yaml`.
 
 **Regras de geração no modo patch incremental (Step 5.3):**
 - **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
 - Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
 - `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (`|| cp` e merge dentro de `mcpServers`) — não sobrescrever.
 - Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
-- **`orchestrator:`** — se ausente, gerar via `orchestratorBlock()` e anexar; se presente, substituir o bloco inteiro preservando as demais seções.
+- **`orchestrator:`** — **somente** se o Step 2.6 foi respondido (não pulado): se ausente, gerar via `orchestratorBlock(...)` e anexar; se presente, substituir o bloco inteiro preservando as demais seções. Usar `{enabled:false}` quando "Não usar" ou `NEEDS_USER_SCOPE`; usar `{mode:'<MODE>'}` quando habilitado. Se o Step 2.6 foi pulado, **não tocar** na seção `orchestrator:` (ausência continua significando não configurado).
 
 ### 4. Confirmar e informar
 
