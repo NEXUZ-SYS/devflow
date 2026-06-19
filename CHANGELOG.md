@@ -5,6 +5,29 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — Seção `orchestrator:` no `.devflow.yaml` — configuração do Agent Orchestrator (AO)
+
+Novo suporte à seção `orchestrator:` no `.context/.devflow.yaml`, configurável via entrevista
+interativa no `devflow:config` (Step 2.6) e reutilizada no `devflow:project-init` (Step 0.6).
+
+- **Entrevista no `devflow:config` (Step 2.6):** pergunta opcional "Usar o Agent Orchestrator
+  para execução paralela na fase E?" com três opções: `Sugerir quando compensar (recomendado)` →
+  `mode: suggest` (default), `Automático` → `mode: auto`, `Não usar` → `enabled: false`.
+- **Pré-condição user-scope bloqueante:** antes de oferecer a pergunta, valida que `devflow@NEXUZ-SYS`
+  e `superpowers@` estão instalados em `--scope user` via `parsePluginUserScope()`. Se
+  `NEEDS_USER_SCOPE`, grava `orchestrator.enabled: false` e orienta o usuário a reinstalar no
+  escopo correto — sem oferecer ativação.
+- **Geração via lib (não à mão):** a seção é gerada por `orchestratorBlock()` de
+  `scripts/lib/orchestrator-config.mjs`. Defaults: `mode: suggest`, `scales: [LARGE]`,
+  `minIndependentStories: 3`, `maxWaveWidth: 4`; `enabled: false` emite bloco mínimo.
+- **Patch incremental (Step 5.3):** nova regra — se `orchestrator:` estiver ausente, gerar via
+  `orchestratorBlock()` e anexar; se presente, substituir o bloco inteiro preservando as demais seções.
+- **Reuso no `devflow:project-init` (Step 0.6):** após validar o escopo, se `USER_SCOPE_OK` e o
+  usuário indicou uso do AO, oferece configurar `orchestrator:` agora delegando ao fluxo do
+  `devflow:config` (Step 2.6 + `orchestratorBlock()`). Sem duplicar lógica.
+
 ## [1.23.3] — 2026-06-19
 
 ### Added — `/devflow init` valida o escopo do plugin para uso com Agent Orchestrator (AO)
