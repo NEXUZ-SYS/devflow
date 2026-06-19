@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Fase E ganha modo paralelo via AO (ondas com pipeline, Plano 3)
+
+A fase E do `autonomous-loop` agora suporta execução paralela via Agent Orchestrator (AO),
+com gate por heurística, fallback sequencial garantido e flags de override pontuais.
+
+- **Gate de execução paralela (Step 1.6):** antes da seleção story-by-story, avalia disponibilidade
+  do AO (`command -v ao` + plugins em user-scope), conta stories independentes via
+  `independentCount()` e consulta `shouldParallelize()` para decidir `sequential`, `parallel` ou
+  `ask` (ao operador). Fallback automático para `sequential` se AO indisponível.
+- **Execução em ondas via AO (Step 1.7):** setup único (`.ao-rules` + `agent-orchestrator.yaml`
+  via `aoRulesContent()`/`agentOrchestratorYaml()`), seguido de loop de pipeline: `readyStories()`
+  libera stories assim que suas dependências terminam (não espera onda inteira); polling via
+  `ao status` / `curl localhost:<port>/api/sessions`; workers rodam `/devflow scale:SMALL`
+  com TDD; encerramento com V+C globais e `computeWaves()` para ordem de merge.
+- **Fallback sequencial obrigatório:** qualquer falha no `ao start` cai no loop atual (Steps 2-4).
+- **Reactions desativadas neste Plano:** `ci-failed` e `changes-requested` ficam OFF; o Plano 4
+  as ativa. Merge permanece **sempre manual**.
+- **Flags de override:** `--parallel` força `parallel`; `--no-parallel` força `sequential`
+  (ambas ganham da configuração em `.devflow.yaml`). Documentadas no `commands/devflow.md`.
+
 ### Added — Orchestrador AO: lib de ondas, heurística e geradores de template (Plano 2)
 
 Peças internas para a integração paralela com Agent Orchestrator (AO), ainda não acionadas
