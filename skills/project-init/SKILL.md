@@ -144,6 +144,8 @@ claude plugin list 2>/dev/null | grep -A2 'superpowers@' | grep -q 'Scope: user'
 
   Confirmar com o usuário antes de prosseguir. Esta validação é específica do AO; runtimes nativos (claude/opencode/omp) não precisam dela.
 
+**Após validar o escopo:** se `USER_SCOPE_OK` e o usuário indicou uso do AO, oferecer configurar a seção `orchestrator:` agora — reusando a sub-rotina do `devflow:config` (Step 2.6 + geração via `orchestratorBlock()`). Se o usuário preferir decidir depois, apontar `/devflow config`. Não duplicar a lógica: delegar ao fluxo do config.
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:

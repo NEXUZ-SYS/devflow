@@ -5,6 +5,67 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — Fase E ganha modo paralelo via AO (ondas com pipeline, Plano 3)
+
+A fase E do `autonomous-loop` agora suporta execução paralela via Agent Orchestrator (AO),
+com gate por heurística, fallback sequencial garantido e flags de override pontuais.
+
+- **Gate de execução paralela (Step 1.6):** antes da seleção story-by-story, avalia disponibilidade
+  do AO (`command -v ao` + plugins em user-scope), conta stories independentes via
+  `independentCount()` e consulta `shouldParallelize()` para decidir `sequential`, `parallel` ou
+  `ask` (ao operador). Fallback automático para `sequential` se AO indisponível.
+- **Execução em ondas via AO (Step 1.7):** setup único (`.ao-rules` + `agent-orchestrator.yaml`
+  via `aoRulesContent()`/`agentOrchestratorYaml()`), seguido de loop de pipeline: `readyStories()`
+  libera stories assim que suas dependências terminam (não espera onda inteira); polling via
+  `ao status` / `curl localhost:<port>/api/sessions`; workers rodam `/devflow scale:SMALL`
+  com TDD; encerramento com V+C globais e `computeWaves()` para ordem de merge.
+- **Fallback sequencial obrigatório:** qualquer falha no `ao start` cai no loop atual (Steps 2-4).
+- **Reactions desativadas neste Plano:** `ci-failed` e `changes-requested` ficam OFF; o Plano 4
+  as ativa. Merge permanece **sempre manual**.
+- **Flags de override:** `--parallel` força `parallel`; `--no-parallel` força `sequential`
+  (ambas ganham da configuração em `.devflow.yaml`). Documentadas no `commands/devflow.md`.
+
+### Added — Orchestrador AO: lib de ondas, heurística e geradores de template (Plano 2)
+
+Peças internas para a integração paralela com Agent Orchestrator (AO), ainda não acionadas
+(o Plano 3 as orquestra). Inclui:
+
+- **Lib de ondas (`computeWaves`/`readyStories`):** pipelineamento com cap de largura máxima
+  e redução de stories prontas, computando qual wave executar em paralelo (Scripts/Plano 1).
+- **Heurística de ativação (`shouldParallelize`):** decide se a fase E segue `sequential`,
+  `parallel` ou `ask` (ao operador) com base em config, escala, número de stories independentes
+  e disponibilidade do AO. Critérios configuráveis em `orchestrator.trigger.scales` e
+  `.minIndependentStories`.
+- **Geradores de template:** `aoRulesContent()` (guardrails de git + trilho DevFlow) e
+  `agentOrchestratorYaml()` (YAML de configuração com `permissions: permissionless`,
+  `agentRulesFile: .ao-rules`, e `approved-and-green` sempre com `auto: false` — merge
+  manual neste plano; o Plano 4 ativa `ci-failed`/`changes-requested`).
+
+Código puro (sem E/S), testado (26 testes, 17 em orchestrator/: waves 9 + config 13 + templates 4).
+
+### Added — Seção `orchestrator:` no `.devflow.yaml` — configuração do Agent Orchestrator (AO)
+
+Novo suporte à seção `orchestrator:` no `.context/.devflow.yaml`, configurável via entrevista
+interativa no `devflow:config` (Step 2.6) e reutilizada no `devflow:project-init` (Step 0.6).
+
+- **Entrevista no `devflow:config` (Step 2.6):** pergunta opcional "Usar o Agent Orchestrator
+  para execução paralela na fase E?" com três opções: `Sugerir quando compensar (recomendado)` →
+  `mode: suggest` (default), `Automático` → `mode: auto`, `Não usar` → `enabled: false`.
+- **Pré-condição user-scope bloqueante:** antes de oferecer a pergunta, valida que `devflow@NEXUZ-SYS`
+  e `superpowers@` estão instalados em `--scope user` via `parsePluginUserScope()`. Se
+  `NEEDS_USER_SCOPE`, grava `orchestrator.enabled: false` e orienta o usuário a reinstalar no
+  escopo correto — sem oferecer ativação.
+- **Geração via lib (não à mão):** a seção é gerada por `orchestratorBlock()` de
+  `scripts/lib/orchestrator-config.mjs`. Defaults: `mode: suggest`, `scales: [LARGE]`,
+  `minIndependentStories: 3`, `maxWaveWidth: 4`; `enabled: false` emite bloco mínimo.
+- **Patch incremental (Step 5.3):** nova regra — se `orchestrator:` estiver ausente, gerar via
+  `orchestratorBlock()` e anexar; se presente, substituir o bloco inteiro preservando as demais seções.
+- **Reuso no `devflow:project-init` (Step 0.6):** após validar o escopo, se `USER_SCOPE_OK` e o
+  usuário indicou uso do AO, oferece configurar `orchestrator:` agora delegando ao fluxo do
+  `devflow:config` (Step 2.6 + `orchestratorBlock()`). Sem duplicar lógica.
+
 ## [1.23.3] — 2026-06-19
 
 ### Added — `/devflow init` valida o escopo do plugin para uso com Agent Orchestrator (AO)
