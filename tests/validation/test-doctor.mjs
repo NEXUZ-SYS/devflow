@@ -187,4 +187,45 @@ test("grounding-mcp: OK when active and docsMcpServer present in .mcp.json", asy
   assert.equal(r.status, "OK");
 });
 
+// ── permissions-health (GAP-PERM-ROOT proactive detection) ─────────
+test("permissions-health: registered in CHECKS", () => {
+  assert.ok(getCheck("permissions-health"), "permissions-health must be registered");
+});
+
+test("permissions-health: OK when no permissions.yaml (operates in mode:prompt)", async () => {
+  const dir = tmpRepo();
+  const r = await getCheck("permissions-health").run(ctx(dir));
+  assert.equal(r.status, "OK");
+});
+
+test("permissions-health: OK on valid devflow-permissions/v0", async () => {
+  const dir = tmpRepo();
+  writeFileSync(
+    join(dir, ".context", "permissions.yaml"),
+    'spec: devflow-permissions/v0\ndeny:\n  fs: ["**/.env*"]\nmode: prompt\n'
+  );
+  const r = await getCheck("permissions-health").run(ctx(dir));
+  assert.equal(r.status, "OK");
+});
+
+test("permissions-health: FAIL on legacy format (version/list/mode-object)", async () => {
+  const dir = tmpRepo();
+  writeFileSync(
+    join(dir, ".context", "permissions.yaml"),
+    'version: 0\ndeny:\n  - path: "**/.env*"\nmode:\n  default: ask\n'
+  );
+  const r = await getCheck("permissions-health").run(ctx(dir));
+  assert.equal(r.status, "FAIL");
+  assert.match(r.diagnosis.toLowerCase(), /legado|deny|mode|v0|lockout/);
+  assert.match((r.repair || "").toLowerCase(), /devflow config|devflow init|v0/);
+});
+
+test("permissions-health: FAIL on unparseable yaml (distinct from legacy)", async () => {
+  const dir = tmpRepo();
+  writeFileSync(join(dir, ".context", "permissions.yaml"), "spec: *boom\n");
+  const r = await getCheck("permissions-health").run(ctx(dir));
+  assert.equal(r.status, "FAIL");
+  assert.ok(r.repair, "should propose a repair");
+});
+
 // Cleanup note: tmpdirs are left to the OS; tests never delete the real palace.

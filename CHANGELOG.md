@@ -5,6 +5,55 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.23.2] — 2026-06-18
+
+### Fixed — `permissions.yaml`: deny opaco vira acionável + detecção de schema legado (GAP-PERM-ROOT)
+
+Um `.context/permissions.yaml` em **formato legado** (`version: 0`, `deny`/`allow`
+como listas de `{path}`, `mode: {default: ...}`) reprovava o validador de schema do
+`permissions-evaluator` e fazia **fail-closed `mode: deny` em todo o repositório** —
+mas o único sinal ao usuário era o opaco `[devflow permissions.yaml] mode: deny`,
+porque os erros de schema iam só para `stderr` (descartado pelo hook com `2>/dev/null`).
+Resultado: lockout total de `Edit`/`Write`, sem pista de que o arquivo estava malformado
+nem de como migrar.
+
+- **GAP-OBS-1 (observabilidade):** `loadPermissions` anexa um `__denyReason` **acionável**
+  (multilinha, com dica de migração) quando faz fail-closed; `evaluatePermissions` usa
+  `cfg.__denyReason || "mode: deny"` no branch de deny — um `mode: deny` explícito
+  (legítimo) mantém o motivo `mode: deny`. O motivo trafega pelo **stdout** do CLI → hook
+  → usuário (o hook já prefixa e imprime), **sem mudar a lógica do hook**.
+- **GAP-PERM (detecção de legado):** novo `detectLegacySchema(cfg)` **disjuntivo**
+  (marcadores: `deny`/`allow` é lista, `mode` não-string, campo `version` presente) emite
+  um erro claro "formato legado/não-conforme — migre para `devflow-permissions/v0` (rode
+  `/devflow init` ou `/devflow config`)" no lugar do críptico "got '[object Object]'". O
+  check genérico de `mode` foi restrito a strings — com o detector como fallback p/ `mode`
+  não-string, fechando o risco de **fail-OPEN** (sem o detector, o narrowing removeria o
+  único erro do config legado e cairia em `prompt`).
+- **Anti-injeção:** o `__denyReason` é montado **só** com marcadores DevFlow-controlados,
+  nunca ecoando valores crus do YAML do usuário; o erro técnico bruto fica só em
+  `console.error`.
+- **GAP-PORT-1:** o menu 5.3 ("patch incremental") da skill `devflow:config` tinha **5
+  opções** num único `AskUserQuestion` — acima do cap de **4 opções/pergunta** do Claude
+  Code. Dividido em **1 call com 2 perguntas (3+2)**, preservando `docs-mcp-server`
+  selecionável sem forçar `Doc-grounding`.
+- **`devflow-doctor` — detecção proativa:** novo check `permissions-health` (severity
+  `critical`) carrega o `.context/permissions.yaml` e reusa o `detectLegacySchema` para
+  **diagnosticar antes do lockout**. Reporta `FAIL` ("formato legado/não-conforme →
+  fail-closed mode:deny repo-wide") com repair `/devflow config`. Distingue legado de YAML
+  não-parseável. Enquanto o evaluator/hook sinaliza **reativamente** (no deny de um
+  Edit/Write), o doctor sinaliza **proativamente** (no diagnóstico).
+
+**Decisão de escopo:** o fail-closed em schema inválido é o comportamento **correto** por
+segurança — o defeito era a falta de sinal, não o deny. O `doctor` é o lugar certo para a
+**migração oferecida** (repair apontando `/devflow config`); a auto-migração silenciosa do
+arquivo fica fora (não se reescreve a config de segurança do usuário sem confirmação).
+
+**Testes:** +16 unit no evaluator (incl. invariantes anti-fail-open e anti-injeção),
++5 unit no doctor (`permissions-health`), +1 E2E no hook (`pre-tool-use`: deny
+JSON-parseável e acionável), +1 lint estrutural da skill `config`. Suíte rastreada
+**1531/1531**. Bug:
+`devflow-e2e-sandbox/docs/validation/2026-06-18-bug-permissions-schema-drift.md`.
+
 ## [1.23.1] — 2026-06-18
 
 ### Fixed — `pre-tool-use`: config não localizada quando o evento chega sem `cwd`
