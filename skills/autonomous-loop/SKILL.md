@@ -34,6 +34,48 @@ If validation fails, escalate to human immediately.
 
 Track the total number of story execution attempts in the loop. If the total exceeds a hard ceiling (default: 50 iterations), exit the loop and generate the final report. This prevents infinite loops from stories that flip-flop between `failed` and `in_progress`.
 
+## Step 1.6: Gate de Execução Paralela (AO)
+
+Antes da seleção story-by-story, decidir se a fase E roda em **paralelo via AO** ou **sequencial** (loop atual). Procedimento (o agente executa, lendo os arquivos e chamando as libs):
+
+1. **Disponibilidade do AO** (`AO_OK`): `command -v ao` resolve **E** o plugin está em user-scope. Reusar o comando de detecção do Step 0.6 do `project-init` (`parsePluginUserScope` sobre `claude plugin list` para `devflow@NEXUZ-SYS` e `superpowers@`). Qualquer falha → `AO_OK=false`.
+2. Ler `.context/.devflow.yaml` (seção `orchestrator`) e `.context/workflow/stories.yaml` (stories com `id` + `blocked_by`).
+3. **Nº de independentes** (`N`): passar as stories como JSON e computar —
+   ```bash
+   node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-dispatch.mjs').then(m=>process.stdout.write(String(m.independentCount($STORIES_JSON))))"
+   ```
+   onde `$STORIES_JSON` é o array `[{id, blocked_by}]` extraído do stories.yaml.
+4. **Decisão** —
+   ```bash
+   node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.shouldParallelize({config:$CFG_JSON, scale:'$SCALE', independentCount:$N, aoAvailable:$AO_OK}).decision))"
+   ```
+   onde `$CFG_JSON` é `{orchestrator: {...}}` extraído do `.devflow.yaml`, `$SCALE` é a escala do workflow, `$N` é o passo 3, `$AO_OK` é o passo 1.
+
+- Override por flag: `--parallel` força `parallel`; `--no-parallel` força `sequential` (ganha do `.devflow.yaml`).
+- `decision: "sequential"` → seguir o loop atual (Steps 2-4). FIM deste step.
+- `decision: "ask"` → perguntar ao operador (AskUserQuestion: "N stories independentes em <escala> — paralelizar via AO (N workers) ou sequencial?"). Resposta decide.
+- `decision: "parallel"` → ir para o Step 1.7 (modo paralelo).
+- **Fallback:** se `AO_OK=0` em qualquer ponto, forçar `sequential` com aviso ("AO indisponível — rodando sequencial; para paralelizar, instale o plugin em --scope user").
+
+## Step 1.7: Execução em Ondas via AO (quando decision = parallel)
+
+**Setup (uma vez):**
+1. Gerar `.ao-rules` no repo do projeto via `aoRulesContent()`.
+2. Gerar `agent-orchestrator.yaml` (num dir de controle) via `agentOrchestratorYaml({ projectId: sanitizeProjectId(nome), repo, path, port, sessionPrefix })`.
+3. `cd <dir-controle> && ao start <projectId>` (sobe dashboard + supervisor). Se falhar → **fallback sequencial**.
+
+**Loop de ondas (pipeline):**
+1. Carregar stories de `.context/workflow/stories.yaml`; `norm = normalizeStories(stories)`; `maxW = maxWidthFrom(config)`.
+2. `done` = ids com `status: completed`; `inFlight` = ids com `status: in_progress` (sessão viva).
+3. `prontas = readyStories(norm, done, inFlight, maxW)`. Se vazio e nada in-flight e nem tudo done → erro de DAG (ciclo) → escalar.
+4. Para cada id em `prontas`: marcar `status: in_progress` em stories.yaml; `ao spawn <id> --prompt "/devflow scale:SMALL <story.title + acceptance>"` (cada worker roda DevFlow-mini com TDD; guardrails via `.ao-rules`).
+5. Polling: `curl -s localhost:<port>/api/sessions` (ou `ao status`) → quando a sessão de uma story abre PR, marcar a story `status: completed` (+ guardar a URL do PR). Reactions ci-failed/changes-requested ficam OFF no P3 (Plano 4 as ativa) — falha de worker → marcar `failed` e aplicar retry/escalonamento do loop atual.
+6. Repetir 3-5 até `done.length === stories.length`. Pipeline: novas stories liberam assim que suas deps terminam (não espera a onda inteira).
+
+**Encerramento:**
+- Coletados todos os PRs → seguir para **V global** (fase Validation, no código integrado) e **C global** (fase Confirmation, merge ordenado pelo DAG via `computeWaves(norm)`, sem auto-merge).
+- `ao stop` ao final.
+
 ### Step 2: Story Selection
 
 Select the next story to execute using this priority:
