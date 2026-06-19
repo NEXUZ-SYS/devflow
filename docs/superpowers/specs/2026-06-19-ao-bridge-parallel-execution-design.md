@@ -23,13 +23,15 @@ Esta feature integra o AO como **3ª pata do bridge**: a camada de **execução 
 
 **Não-objetivos (YAGNI / fora de escopo):**
 - Substituir o `autonomous-loop` sequencial — ele permanece como caminho default e fallback.
-- Ceder validação (V), confirmação (C) ou merge ao AO (auto-merge fica **OFF**).
+- Ceder a **decisão de merge** ou a **síntese do veredito** ao AO — o merge final é sempre do DevFlow/humano (`approved-and-green.auto: false`). **Nuance:** as *reactions* do AO (auto-fix de CI/review) SÃO usadas como **loop de feedback em V e C** (ver §3 e §6); o que nunca é cedido é a decisão de merge.
 - Suportar trackers além do GitHub nesta fase (Linear/GitLab ficam para depois).
 - Paralelizar fases que não a E.
 
 ## 3. Arquitetura — cérebro + músculos
 
 **DevFlow = cérebro** (planejamento, contexto, qualidade, integração). **AO = músculos** (execução paralela, lifecycle, reactions). Fronteira escolhida: **"A dentro de C"** — o DevFlow rege as ondas e só aciona o AO quando a escala/independência justifica e o AO está disponível.
+
+O AO traz **duas capacidades distintas, aplicadas a fases diferentes**: **paralelismo** (N workers simultâneos → fase **E**) e **reactions** (loop de auto-fix de CI/review → fases **V** e **C**). Em ambas, a **síntese do veredito** (V) e a **decisão de merge** (C) permanecem no DevFlow.
 
 ```
 DevFlow (cérebro)                          AO (músculos)
@@ -40,8 +42,10 @@ E  Execution ──→ por ONDA: ao batch-spawn ──→ N workers paralelos
                  (apenas stories prontas)      cada worker = DevFlow-mini (TDD)
                  ←── coleta PRs ←──────────────  worktree+branch+PR isolado
                                                  (reactions CI/review POR worker)
-V  Validation ── gates GLOBAIS (testes, security, spec)
-C  Confirm    ── ordem de merge respeitando o DAG — SEM auto-merge do AO
+V  Validation ── gates GLOBAIS (testes, security, spec) + síntese no DevFlow
+                 ←─ reactions: CI/teste falhou → auto-fix loop (workers de fix)
+C  Confirm    ── ordem de merge pelo DAG — SEM auto-merge (merge = humano/DevFlow)
+                 ←─ reactions pós-PR: CI/review → auto-fix até merge-ready → NOTIFICA
 ```
 
 **Invariantes:**
@@ -90,7 +94,7 @@ orchestrator:
 
 - **DAG de dependências:** `stories.yaml` ganha `depends_on: [story-id]`. As ondas são derivadas por ordenação topológica. **Pipeline > barreira:** uma story é liberada assim que **suas** dependências terminam (não espera a onda inteira) — maximiza wall-clock. `maxWaveWidth` limita quantos workers rodam simultaneamente.
 - **Tracking canônico (duas dimensões, sem divergência):** o **ledger do DevFlow** (`stories.yaml` + estado PREVC) é a verdade do **progresso**; o **`ao status`** é a verdade do **estado runtime de cada worker**. O DevFlow faz polling do `ao status`, mapeia worker→story e reflete em `/devflow-status`. Cada sistema é dono de uma dimensão distinta.
-- **Reactions:** reaproveitadas **dentro da onda** (CI falhou/review pediu mudança → reenvia ao worker). O V/C **global** permanece no DevFlow.
+- **Reactions (camada de V/C — o maior ganho do AO fora da E):** três níveis de uso. (a) **Dentro da onda (E):** CI/review por worker. (b) **V global:** teste/CI falhou → reaction re-despacha um worker de fix — loop de auto-correção em vez de escalar imediatamente. (c) **C global / pós-PR:** CI/review do PR → auto-fix até merge-ready → **notifica o humano** (`approved-and-green.auto: false` — merge nunca automático). A **síntese do veredito** (V), a **validação de integração holística** (rodada no código merged, não fragmentada) e a **decisão de merge** (C) permanecem centralizadas no DevFlow. Cap de `retries` + `escalateAfter` para não mascarar problema de design nem entrar em loop. Gates **determinísticos** (ex.: `adr-audit.mjs`) continuam scripts — não passam pelo AO.
 
 ## 7. Escopo de mudança (componentes)
 
@@ -104,6 +108,7 @@ orchestrator:
 | templates gerados | `.ao-rules` + `agent-orchestrator.yaml` (permissionless, auto-merge OFF) |
 | `docs/ao-integration.md` | guia de integração (análogo a `omp-integration.md`) |
 | `commands/devflow.md` | flags `--parallel`/`--no-parallel`; menção ao orquestrador no help |
+| **reactions (Plano 4)** | config `reactions:` no `agent-orchestrator.yaml` gerado (`auto: false` em `approved-and-green`); lib de monitoramento pós-PR (poll de CI/review → re-despacho de worker de fix); gate "notifica, nunca mergeia"; integração nos skills `prevc-validation` e `prevc-confirmation` |
 
 ## 8. Estratégia de testes (TDD)
 
@@ -122,6 +127,17 @@ orchestrator:
 | Worker permissionless tocar a main | `.ao-rules` + auto-merge OFF + (em produção) branch protection; validado no PoC |
 | Conflito de merge entre PRs da onda | ordem de merge pelo DAG; ondas pequenas; V global antes do merge |
 | Plugin em project-scope (workers não veem DevFlow) | Step 0.6 como pré-condição bloqueante |
+| Loop de reactions mascarar problema de design / loop infinito (V/C) | cap de `retries` + `escalateAfter` → escala pro humano; reaction nunca mergeia (`auto: false`) |
+| Validação fragmentada perder bug de integração | V de integração roda no código **merged** (holística), não em worktrees isolados |
+
+## Roadmap de planos
+
+Fatiado em planos sequenciais, cada um entregando software testável por si:
+
+- **Plano 1 — Config & Entrevista** (ENTREGUE, PR #53): seção `orchestrator:`, entrevista no config, validação de escopo (Step 0.6).
+- **Plano 2 — Lib de ondas + heurística + templates:** DAG/pipeline (`orchestrator-waves.mjs`), heurística de ativação, geração de `.ao-rules` e `agent-orchestrator.yaml`.
+- **Plano 3 — Fluxo da fase E:** despacho por ondas, coleta de PRs, V/C global, fallback; flags `--parallel`/`--no-parallel`.
+- **Plano 4 — Reactions (loop de feedback V/C):** auto-fix de CI/review na **V** (workers de fix) e **pós-PR no C** (até merge-ready → notifica), com cap de `retries`/`escalateAfter` e **merge sempre manual**. Depende do P3 (precisa dos PRs das ondas existindo). É o ganho do AO fora da E.
 
 ## 10. Referências
 
