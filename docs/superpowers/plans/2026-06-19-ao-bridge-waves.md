@@ -438,8 +438,8 @@ Adicionar uma entrada `### Added` descrevendo: lib de ondas (`computeWaves`/`rea
 
 - [ ] **Step 2: Rodar a suíte completa de orchestrator**
 
-Run: `node --test tests/orchestrator/`
-Expected: PASS — 17 testes (waves 9 + config 13 inclui... na verdade config 13, templates 4, waves 9 → confira a soma na saída; todos devem passar, 0 falhas).
+Run: `node --test tests/orchestrator/*.test.mjs`  (use o **glob** — `node --test <dir>` trata o diretório como módulo e falha com "Cannot find module")
+Expected: PASS — **26 testes** (config 13 + waves 9 + templates 4), 0 falhas.
 
 - [ ] **Step 3: Verificar exports**
 
