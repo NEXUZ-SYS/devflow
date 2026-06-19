@@ -317,6 +317,25 @@ AskUserQuestion:
 - **Se != off e houver >1 server de docs:** perguntar qual é o `docsMcpServer` canônico (listar os detectados).
 - **Se != off e nenhum docs-mcp-server detectado:** avisar que o modo ficará fail-closed para **todo** fato de stack — recomendar configurar o docs-mcp-server (§2.4) primeiro; permitir ativar mesmo assim.
 
+### 2.6 (opcional) Orquestrador de execução paralela (Agent Orchestrator)
+
+Validar a pré-condição (plugin em --scope user) antes de oferecer:
+
+```bash
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>{const o=require('child_process').execSync('claude plugin list 2>/dev/null').toString();const ok=m.parsePluginUserScope(o,'devflow@NEXUZ-SYS')&&m.parsePluginUserScope(o,'superpowers@');console.log(ok?'USER_SCOPE_OK':'NEEDS_USER_SCOPE')})"
+```
+
+- Se `NEEDS_USER_SCOPE`: NÃO oferecer ativação. Informar que, para usar o AO, é preciso
+  `claude plugin install devflow@NEXUZ-SYS --scope user` (+ superpowers), e gravar `orchestrator.enabled: false`.
+- Se `USER_SCOPE_OK`, perguntar:
+
+AskUserQuestion:
+- Pergunta: "Usar o Agent Orchestrator para execução paralela na fase E (para casos quando necessário)?"
+- Opções:
+  - "Sugerir quando compensar (recomendado)" → `mode: suggest`
+  - "Automático" → `mode: auto`
+  - "Não usar" → `enabled: false`
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -373,11 +392,20 @@ git:
     # blockToolPatterns: [] # (opcional) padrões extras de tool-name de MCP de internet a negar
   ```
 
+**Seção `orchestrator:`** — gerar com a lib (não escrever à mão):
+
+```bash
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({mode:'<MODE>',enabled:<ENABLED>})))"
+```
+
+Substituir `<MODE>` pela escolha do Step 2.6 e `<ENABLED>` por `true`/`false`. Anexar a saída ao `.devflow.yaml`.
+
 **Regras de geração no modo patch incremental (Step 5.3):**
 - **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
 - Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
 - `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (`|| cp` e merge dentro de `mcpServers`) — não sobrescrever.
 - Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
+- **`orchestrator:`** — se ausente, gerar via `orchestratorBlock()` e anexar; se presente, substituir o bloco inteiro preservando as demais seções.
 
 ### 4. Confirmar e informar
 
