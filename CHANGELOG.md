@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Orchestrador AO: lib de ondas, heurística e geradores de template (Plano 2)
+
+Peças internas para a integração paralela com Agent Orchestrator (AO), ainda não acionadas
+(o Plano 3 as orquestra). Inclui:
+
+- **Lib de ondas (`computeWaves`/`readyStories`):** pipelineamento com cap de largura máxima
+  e redução de stories prontas, computando qual wave executar em paralelo (Scripts/Plano 1).
+- **Heurística de ativação (`shouldParallelize`):** decide se a fase E segue `sequential`,
+  `parallel` ou `ask` (ao operador) com base em config, escala, número de stories independentes
+  e disponibilidade do AO. Critérios configuráveis em `orchestrator.trigger.scales` e
+  `.minIndependentStories`.
+- **Geradores de template:** `aoRulesContent()` (guardrails de git + trilho DevFlow) e
+  `agentOrchestratorYaml()` (YAML de configuração com `permissions: permissionless`,
+  `agentRulesFile: .ao-rules`, e `approved-and-green` sempre com `auto: false` — merge
+  manual neste plano; o Plano 4 ativa `ci-failed`/`changes-requested`).
+
+Código puro (sem E/S), testado (26 testes, 17 em orchestrator/: waves 9 + config 13 + templates 4).
+
 ### Added — Seção `orchestrator:` no `.devflow.yaml` — configuração do Agent Orchestrator (AO)
 
 Novo suporte à seção `orchestrator:` no `.context/.devflow.yaml`, configurável via entrevista
