@@ -81,3 +81,18 @@ test('touchRegistry guarda remote normalizado sem credencial (I5)', async () => 
     (await import('./instinct-paths.mjs')).projectsRegistry(), 'utf-8'));
   assert.doesNotMatch(JSON.stringify(reg), /pw@/);
 });
+
+test('prune remove pending<0.3 estagnado e preserva active', async () => {
+  await sandbox();
+  const m = (id, sc) => ({ trigger: id, action: id, domain: 'workflow', scope: 'project', projectId: 'p1', projectName: 'x' });
+  await store.upsertInstinct('keep', m('keep'), 0.3);     // 0.6 active → preserva
+  await store.upsertInstinct('stale', m('stale'), 0);     // 0.3 pending (limiar) → não < 0.3, não remove
+  // forja um pending antigo < 0.3 escrevendo updated no passado
+  await store._writeRaw('p1', 'old', { trigger: 'o', action: 'o', domain: 'workflow', scope: 'project',
+    projectId: 'p1', projectName: 'x', confidence: 0.2, observations: 1, status: 'pending', updated: '2000-01-01' });
+  const removed = await store.pruneStale('p1', 30);
+  assert.ok(removed.includes('old'));
+  const idx = await store.loadIndex('p1', 'project');
+  assert.ok(idx.find((i) => i.id === 'keep'));
+  assert.ok(!idx.find((i) => i.id === 'old'));
+});

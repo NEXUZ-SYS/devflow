@@ -144,6 +144,36 @@ export async function promoteAcrossProjects(minProjects = 2) {
   return promoted;
 }
 
+export async function pruneStale(projectId, maxAgeDays = 30) {
+  const dir = P.instinctsDir(projectId);
+  let files = []; try { files = (await readdir(dir)).filter((f) => f.endsWith('.md')); } catch { return []; }
+  const cutoff = Date.now() - maxAgeDays * 86400000;
+  const removed = [];
+  await withLock(P.projectDir(projectId), async () => {
+    for (const f of files) {
+      let fm; try { fm = parse(await readFile(join(dir, f), 'utf-8')); } catch { fm = null; }
+      if (!fm) continue;
+      const old = new Date(fm.updated).getTime() < cutoff;
+      if (fm.status === 'pending' && Number(fm.confidence) < 0.3 && old) {
+        await unlink(join(dir, f)); removed.push(fm.id);
+      }
+    }
+  });
+  await rebuildIndex(projectId, 'project');
+  return removed;
+}
+
+// Helper de teste: serializa um instinct arbitrário (via ser+tmp+rename) e reindexar.
+export async function _writeRaw(projectId, id, fields) {
+  const dir = P.instinctsDir(projectId);
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, `${id}.md`);
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, ser({ id, ...fields }));
+  await rename(tmp, file);
+  await rebuildIndex(projectId, 'project');
+}
+
 export async function touchRegistry(projectId, { name, remote }) {
   const file = P.projectsRegistry();
   return withLock(P.baseDir(), async () => {

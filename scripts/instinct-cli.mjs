@@ -31,6 +31,8 @@ try {
     } catch {}
   } else if (cmd === 'promote') {
     process.stdout.write(JSON.stringify(await store.promoteAcrossProjects()));
+  } else if (cmd === 'prune') {
+    if (pid) process.stdout.write(JSON.stringify(await store.pruneStale(pid, Number(flag('max-age-days', 30)))));
   } else if (cmd === 'recall') {
     if (!pid) process.exit(0);
     process.stdout.write(await buildDigest(pid, { maxChars: Number(flag('max-chars', 2000)) }));
