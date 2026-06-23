@@ -426,4 +426,14 @@ if [ -f "${OTEL_DIR}/.context/observability.yaml" ]; then
     | (cd "${OTEL_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
 fi
 
+# ── Instinct capture (gated, best-effort, nunca bloqueia) ──────────────
+if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ]; then
+  TOOL_NAME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).tool_name||"")}catch{console.log("")}})' 2>/dev/null)
+  # sec C2: p/ Bash captura SÓ o binário (1º token), descartando argumentos sensíveis; p/ Edit/Write o file_path
+  TARGET=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);let t=j.tool_input?.file_path||"";if(!t&&j.tool_input?.command){t=String(j.tool_input.command).trim().split(/\s+/)[0]}console.log(t)}catch{console.log("")}})' 2>/dev/null)
+  # outcome: erro se tool_response indica is_error (I6); senão ok
+  OUTCOME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s).tool_response;console.log(r&&(r.is_error||r.error)?"error":"ok")}catch{console.log("ok")}})' 2>/dev/null)
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/instinct-cli.mjs" capture --tool="$TOOL_NAME" --target="$TARGET" --outcome="${OUTCOME:-ok}" >/dev/null 2>&1 || true
+fi
+
 exit 0
