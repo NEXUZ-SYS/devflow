@@ -6,6 +6,7 @@ import { buildDigest } from './lib/instinct-recall.mjs';
 import { projectId as hashRemote } from './lib/instinct-paths.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -23,6 +24,13 @@ try {
   if (cmd === 'capture') {
     if (!enabled() || !pid) process.exit(0);
     await obs.appendObservation(pid, { tool: flag('tool'), target: flag('target'), outcome: flag('outcome', 'ok') });
+    // registry best-effort: name=basename(cwd), remote=git origin (ambos opcionais)
+    try {
+      const remote = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf-8' }).trim();
+      await store.touchRegistry(pid, { name: basename(process.cwd()), remote });
+    } catch {}
+  } else if (cmd === 'promote') {
+    process.stdout.write(JSON.stringify(await store.promoteAcrossProjects()));
   } else if (cmd === 'recall') {
     if (!pid) process.exit(0);
     process.stdout.write(await buildDigest(pid, { maxChars: Number(flag('max-chars', 2000)) }));

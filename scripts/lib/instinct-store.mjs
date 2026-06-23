@@ -118,3 +118,39 @@ export async function loadIndex(projectId, scope) {
   try { return JSON.parse(await readFile(P.indexFile(projectId, scope), 'utf-8')); }
   catch { return []; }
 }
+
+export async function promoteAcrossProjects(minProjects = 2) {
+  const root = join(P.baseDir(), 'projects');
+  let projects = []; try { projects = await readdir(root); } catch { return []; }
+  const byId = new Map();
+  for (const pid of projects) {
+    let files = []; try { files = (await readdir(P.instinctsDir(pid))).filter((f) => f.endsWith('.md')); } catch {}
+    for (const f of files) {
+      let fm; try { fm = parse(await readFile(join(P.instinctsDir(pid), f), 'utf-8')); } catch { fm = null; }
+      if (!fm) continue;
+      const c = byId.get(fm.id) || { meta: fm, projects: new Set(), confidence: 0 };
+      c.projects.add(pid); c.confidence = Math.max(c.confidence, Number(fm.confidence));
+      byId.set(fm.id, c);
+    }
+  }
+  const promoted = [];
+  for (const [id, c] of byId) {
+    if (c.projects.size >= minProjects) {
+      await upsertInstinct(id, { trigger: c.meta.trigger, action: c.meta.action, domain: c.meta.domain,
+        scope: 'global', projectName: 'global' }, 0, { absoluteConfidence: c.confidence });
+      promoted.push(id);
+    }
+  }
+  return promoted;
+}
+
+export async function touchRegistry(projectId, { name, remote }) {
+  const file = P.projectsRegistry();
+  return withLock(P.baseDir(), async () => {
+    await mkdir(P.baseDir(), { recursive: true });
+    let reg = {}; try { reg = JSON.parse(await readFile(file, 'utf-8')); } catch {}
+    reg[projectId] = { name, remote: P.normalizeRemote(remote || ''), last_seen: new Date().toISOString().slice(0, 10) };
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, JSON.stringify(reg, null, 2)); await rename(tmp, file);
+  });
+}

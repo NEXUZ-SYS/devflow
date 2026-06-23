@@ -18,3 +18,12 @@ test('capture + recall round-trip', async () => {
   const out = run(['recall'], env);
   assert.match(out, /rg/);
 });
+
+test('promote via CLI promove instinct cross-project para global', async () => {
+  const d = await mkdtemp(join(tmpdir(), 'cli-promo-'));
+  const item = JSON.stringify([{ id: 'rg', trigger: 'b', action: 'rg', domain: 'workflow', delta: 0.5 }]);
+  run(['mine-apply', '--inline', item], { DEVFLOW_INSTINCTS_DIR: d, DEVFLOW_INSTINCT_PID: 'p1' });
+  run(['mine-apply', '--inline', item], { DEVFLOW_INSTINCTS_DIR: d, DEVFLOW_INSTINCT_PID: 'p2' });
+  const promoted = JSON.parse(run(['promote'], { DEVFLOW_INSTINCTS_DIR: d, DEVFLOW_INSTINCT_PID: 'p1' }));
+  assert.ok(promoted.includes('rg'), 'rg promovido (visto em p1 e p2)');
+});
