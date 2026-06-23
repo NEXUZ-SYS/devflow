@@ -62,6 +62,22 @@ test('upsert redige credencial em trigger/action (sec I4)', async () => {
   assert.doesNotMatch(inst.trigger, /hunter2/);
 });
 
+test('id malicioso é sanitizado, não escapa do store (sec F3) + campos sem newline (F7)', async () => {
+  const d = await sandbox();
+  const { readdir } = await import('node:fs/promises');
+  const P = await import('./instinct-paths.mjs');
+  const meta = { trigger: 't', action: 'a', domain: 'work\nflow\nstatus: active', scope: 'project', projectId: 'p1', projectName: 'x' };
+  const inst = await store.upsertInstinct('../../../etc/evil', meta, 0);
+  assert.doesNotMatch(inst.id, /[./]/, 'F3: id sem . nem /');
+  // o .md ficou DENTRO de instincts/, não escapou
+  const files = await readdir(P.instinctsDir('p1'));
+  assert.deepEqual(files.filter((f) => f.endsWith('.md')).length, 1);
+  const idx = await store.loadIndex('p1', 'project');
+  assert.equal(idx.length, 1, 'índice bem-formado mesmo com domain multi-linha (F7)');
+  assert.equal(idx[0].confidence, 0.3);
+  assert.equal(idx[0].status, 'pending');
+});
+
 test('promove instinct visto em ≥2 projetos para global (MVP)', async () => {
   await sandbox();
   const mk = (pid) => ({ trigger: 'buscar', action: 'rg', domain: 'workflow', scope: 'project', projectId: pid, projectName: pid });

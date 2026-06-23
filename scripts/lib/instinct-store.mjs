@@ -7,6 +7,15 @@ import * as P from './instinct-paths.mjs';
 
 const LOCK_EXPIRY_MS = 30000;
 
+// F3: id vira sempre um slug seguro (sem ./, sem traversal) — usado no nome do .md.
+// Determinístico: mesmo input → mesmo slug (preserva identidade p/ promoção).
+export function safeId(id) {
+  const s = String(id || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  return s || 'unnamed';
+}
+// F7: campos bare do frontmatter (não JSON-quoted) nunca podem conter newline/control.
+const oneLine = (s) => String(s ?? '').replace(/[\r\n\t]+/g, ' ').trim();
+
 export async function withLock(dir, fn, retries = 5) {
   await mkdir(dir, { recursive: true });
   const lockFile = join(dir, '.lock');
@@ -66,6 +75,7 @@ function parse(md) {
 }
 
 export async function upsertInstinct(id, meta, delta, opts = {}) {
+  id = safeId(id);   // F3: nunca deixa o id virar path traversal no nome do .md
   // C2: lock sobre o diretório-alvo real (global trava o dir global, não projects/undefined)
   const targetDir = meta.scope === 'global' ? P.globalDir() : P.instinctsDir(meta.projectId);
   const lockDir = meta.scope === 'global' ? dirname(P.globalDir()) : P.projectDir(meta.projectId);
@@ -84,7 +94,8 @@ export async function upsertInstinct(id, meta, delta, opts = {}) {
     const inst = { id,
       trigger: redact(String(meta.trigger || '').slice(0, 500)),   // I4 + F8: cap antes de redigir
       action: redact(String(meta.action || '').slice(0, 500)),     // I4 + F8
-      domain: meta.domain, scope: meta.scope, projectId: meta.projectId, projectName: meta.projectName,
+      domain: oneLine(meta.domain), scope: oneLine(meta.scope), projectId: oneLine(meta.projectId), projectName: oneLine(meta.projectName), // F7
+
       observations, confidence, status: statusFor(confidence),
       updated: new Date().toISOString().slice(0, 10) };
     // I2: escrita atômica tmp+rename (igual à rotação e ao rebuildIndex)
@@ -165,6 +176,7 @@ export async function pruneStale(projectId, maxAgeDays = 30) {
 
 // Helper de teste: serializa um instinct arbitrário (via ser+tmp+rename) e reindexar.
 export async function _writeRaw(projectId, id, fields) {
+  id = safeId(id);   // F3
   const dir = P.instinctsDir(projectId);
   await mkdir(dir, { recursive: true });
   const file = join(dir, `${id}.md`);
