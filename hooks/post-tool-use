@@ -427,7 +427,9 @@ if [ -f "${OTEL_DIR}/.context/observability.yaml" ]; then
 fi
 
 # ── Instinct capture (gated, best-effort, nunca bloqueia) ──────────────
-if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ]; then
+# F4: guard CLAUDE_PLUGIN_ROOT (set -u) — sem ele a expansão na chamada da CLI
+# falha ANTES do `|| true` e quebra o invariante exit 0 (espelha o session-start).
+if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   TOOL_NAME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).tool_name||"")}catch{console.log("")}})' 2>/dev/null)
   # sec C2: p/ Bash captura SÓ o binário (1º token), descartando argumentos sensíveis; p/ Edit/Write o file_path
   TARGET=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);let t=j.tool_input?.file_path||"";if(!t&&j.tool_input?.command){t=String(j.tool_input.command).trim().split(/\s+/)[0]}console.log(t)}catch{console.log("")}})' 2>/dev/null)

@@ -17,3 +17,12 @@ test('post-tool-use captura observação quando enabled', async () => {
   const obs = await readFile(join(store, 'projects/p1/observations.jsonl'), 'utf-8');
   assert.match(obs, /"tool":"Edit"/);
 });
+
+test('post-tool-use sai 0 mesmo sem CLAUDE_PLUGIN_ROOT sob set -u (invariante F4)', () => {
+  const input = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'a.mjs' }, tool_response: {} });
+  const env = { ...process.env, DEVFLOW_INSTINCTS_ENABLED: '1', DEVFLOW_INSTINCT_PID: 'p1' };
+  delete env.CLAUDE_PLUGIN_ROOT;   // simula Cursor/OMP ou variante sem essa env
+  // execFileSync lança se exit != 0 — o hook NUNCA pode quebrar a sessão
+  assert.doesNotThrow(() =>
+    execFileSync('bash', [join(process.cwd(), 'hooks/post-tool-use')], { input, env }));
+});
