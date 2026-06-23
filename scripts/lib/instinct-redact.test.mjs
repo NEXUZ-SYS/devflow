@@ -33,6 +33,26 @@ test('redige par chave=valor e credencial em URL (sec C1)', () => {
   assert.doesNotMatch(redact('postgres://user:senha@host/db'), /senha/);
 });
 
+test('redige credencial em env-var UPPER_SNAKE com _ antes da keyword (sec F1)', () => {
+  assert.match(redact('CLIENT_SECRET=oauthsecretvalue'), /CLIENT_SECRET=\[REDACTED\]/);
+  assert.doesNotMatch(redact('CLIENT_SECRET=oauthsecretvalue'), /oauthsecretvalue/);
+  assert.doesNotMatch(redact('AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXKEYY'), /wJalrXUtnFEMI/);
+  assert.doesNotMatch(redact('OPENAI_API_KEY=sk-rawkey9876543210abcd'), /sk-rawkey|9876543210/);
+  assert.doesNotMatch(redact('GITHUB_TOKEN=ghp_abcdEFGH1234567890'), /ghp_/);
+  assert.match(redact('mysql --password=hunter2'), /password=\[REDACTED\]/i); // não regride Task 1
+});
+
+test('redige classes de token adicionais: sk-/xapp-/npm_/AIza/glpat- (sec F2)', () => {
+  const cases = [
+    'sk-abc123def456ghi789jkl',                  // OpenAI legacy
+    'xapp-1-A0B1C2D3E4F5G6H7',                    // Slack app-level
+    'npm_abcdefghijklmnopqrstuvwxyz0123456789',  // npm
+    'AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q7',  // Google API
+    'glpat-abcdefghij1234567890',                // GitLab PAT
+  ];
+  for (const c of cases) assert.match(redact('x ' + c), /\[TOKEN\]/, `deveria redigir: ${c}`);
+});
+
 test('redação é best-effort: NÃO cobre PII com separadores (caveat ADR-005)', () => {
   // documenta o limite — cartão/CPF formatados passam (best-effort, não PCI/PHI-grade)
   assert.equal(redact('cpf 123.456.789-09'), 'cpf 123.456.789-09');

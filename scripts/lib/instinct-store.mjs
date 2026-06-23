@@ -82,8 +82,8 @@ export async function upsertInstinct(id, meta, delta, opts = {}) {
       : Math.round(Math.min(0.9, confidence + delta) * 10) / 10;
     observations += 1;
     const inst = { id,
-      trigger: redact(String(meta.trigger || '')),   // I4: instinct vai pro digest/recall → redigir
-      action: redact(String(meta.action || '')),     // I4
+      trigger: redact(String(meta.trigger || '').slice(0, 500)),   // I4 + F8: cap antes de redigir
+      action: redact(String(meta.action || '').slice(0, 500)),     // I4 + F8
       domain: meta.domain, scope: meta.scope, projectId: meta.projectId, projectName: meta.projectName,
       observations, confidence, status: statusFor(confidence),
       updated: new Date().toISOString().slice(0, 10) };

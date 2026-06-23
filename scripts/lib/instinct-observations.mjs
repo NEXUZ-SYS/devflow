@@ -12,7 +12,7 @@ const ckptFile = (id) => join(P.projectDir(id), '.consumed-offset');
 export async function appendObservation(projectId, o) {
   const file = P.observationsFile(projectId);
   const rec = { ts: new Date().toISOString(), tool: o.tool,
-    target: redact(String(o.target || '')).slice(0, 500),
+    target: redact(String(o.target || '').slice(0, 500)),  // F8: slice ANTES de redact (limita input do regex)
     outcome: o.outcome || 'ok', signal: o.signal };
   const line = JSON.stringify(rec) + '\n';
   await withLock(P.projectDir(projectId), async () => {
