@@ -27,3 +27,14 @@ test('promote via CLI promove instinct cross-project para global', async () => {
   const promoted = JSON.parse(run(['promote'], { DEVFLOW_INSTINCTS_DIR: d, DEVFLOW_INSTINCT_PID: 'p1' }));
   assert.ok(promoted.includes('rg'), 'rg promovido (visto em p1 e p2)');
 });
+
+test('bridges lista só elegíveis (≥0.8 ou global)', async () => {
+  const d = await mkdtemp(join(tmpdir(), 'br-'));
+  const env = { DEVFLOW_INSTINCTS_DIR: d, DEVFLOW_INSTINCT_PID: 'p1' };
+  run(['mine-apply', '--inline', JSON.stringify([
+    { id: 'hi', trigger: 't', action: 'a', delta: 0.5 },   // 0.8 elegível
+    { id: 'lo', trigger: 't2', action: 'a2', delta: 0.2 }, // 0.5 não
+  ])], env);
+  const out = JSON.parse(run(['bridges'], env));
+  assert.deepEqual(out.map((x) => x.id), ['hi']);
+});

@@ -49,6 +49,10 @@ try {
       await store.upsertInstinct(it.id, { trigger: it.trigger, action: it.action, domain: it.domain || 'workflow',
         scope: 'project', projectId: pid || 'p1', projectName: flag('project-name', 'unknown') }, it.delta ?? 0);
     }
+  } else if (cmd === 'bridges') {
+    const { eligibleForBridge } = await import('./lib/instinct-confidence.mjs');
+    const idx = pid ? await store.loadIndex(pid, 'project') : [];
+    process.stdout.write(JSON.stringify(idx.filter((i) => eligibleForBridge({ confidence: i.confidence, scope: 'project' }))));
   } else if (cmd === 'status') {
     if (pid) process.stdout.write(await buildDigest(pid, { minConfidence: 0 }));
   }
