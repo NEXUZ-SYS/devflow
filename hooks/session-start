@@ -483,7 +483,16 @@ fi
 mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n</DEVFLOW_CONTEXT>"
+
+# ── Instinct recall (gated, bounded, nunca bloqueia) ───────────────────
+# Injeta o digest DENTRO do session_context (contrato JSON), não como texto solto.
+instinct_context=""
+if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  INSTINCT_DIGEST=$(timeout 1 node "${CLAUDE_PLUGIN_ROOT}/scripts/instinct-cli.mjs" recall --max-chars=2000 2>/dev/null || true)
+  [ -n "$INSTINCT_DIGEST" ] && instinct_context="$(escape_for_json "$INSTINCT_DIGEST")\n"
+fi
+
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n${instinct_context}</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
