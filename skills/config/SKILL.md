@@ -247,6 +247,34 @@ AskUserQuestion:
    - Carregar contexto numa nova sessão: `/devflow:devflow-memory wake-up` (ou `mempalace wake-up --wing <repo>`)
 6. Seguir para P7 e P8
 
+### 2.35 (opcional) Instinct System — loop de aprendizado automático
+
+O Instinct System observa seu tool-use via hooks e destila **instincts** (hábito → ação) pontuados por confiança (0.3→0.9), reinjetados no início da sessão. É **complementar — não redundante** — com a memória já existente do DevFlow:
+
+| Mecanismo | Papel | Como alimenta |
+|---|---|---|
+| **MemPalace** | memória semântica (grafo/diários) | mining **invocado** sob demanda |
+| **napkin** | runbook curado (erros/padrões) | **à mão** |
+| **auto-memory** (`MEMORY.md`) | fatos do usuário/projeto | escrita **manual** |
+| **Instinct System** | hábitos `trigger→ação` + confiança | **captura automática** via hooks |
+
+O Instinct é o único que **captura sozinho** (baixo atrito) e **acumula confiança**; quando um instinct amadurece (≥0.8), ele **PROPÕE** uma entrada no napkin / referência no MemPalace. Ou seja: ele **alimenta** os outros, **não os substitui nem duplica**. Não exige MCP (Node puro).
+
+**P-instincts: Ativar o Instinct System?** (default off — piso de privacidade ADR-005)
+```
+AskUserQuestion:
+  question: "Ativar o Instinct System? Ele observa AUTOMATICAMENTE seu tool-use e destila hábitos (trigger→ação) pontuados por confiança, reinjetados no SessionStart. COMPLEMENTA (não duplica) MemPalace/napkin: captura sozinho e PROPÕE entradas pra eles quando um hábito amadurece. Local-by-default, opt-in, nunca commitado."
+  header: "Instinct System"
+  multiSelect: false
+  options:
+    - label: "Não (Recomendado)"
+      description: "Mantém desligado (default). Pode ativar depois com /devflow instinct."
+    - label: "Sim, ativar"
+      description: "Captura automática + recall no SessionStart. Requer repo git (escopo por remote). Gera instincts.enabled: true."
+```
+
+**Regra de geração:** Se "Sim" → incluir a seção `instincts:` com `enabled: true` (ver §3). Se "Não" (default) → **não incluir** a seção (ausência = `enabled: false`). Em ambos os casos, deixar claro no resumo final que a ativação também pode mudar depois via `/devflow instinct` ou editando o YAML (precedência N2: env só restringe).
+
 ### 2.4 (opcional) docs-mcp-server — referência de stacks via MCP
 
 Substitui o paradigma antigo de `.context/stacks/refs/<lib>@<ver>.md` por um índice de documentação consultável via tools MCP (`scrape_docs`, `search_docs`, `list_libraries`). Store global em `~/.local/share/docs-mcp-server/` é compartilhado entre projetos (dedup).
@@ -341,8 +369,8 @@ git:
 - Se autoFinish = "Personalizar": incluir como objeto com as chaves selecionadas em `true`, as não selecionadas em `false`
 
 **Regras de geração para instincts (Instinct system):**
-- Default: **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
-- Se o usuário optar por habilitar, incluir seção (forma do spec; MVP enforça `enabled` + `recall.maxChars`):
+- Se **P-instincts = "Não" (default)** → **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
+- Se **P-instincts = "Sim, ativar"** → incluir a seção (forma do spec; MVP enforça `enabled` + `recall.maxChars`):
   ```yaml
   instincts:
     enabled: true
