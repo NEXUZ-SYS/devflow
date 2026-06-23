@@ -345,6 +345,32 @@ AskUserQuestion:
 - **Se != off e houver >1 server de docs:** perguntar qual é o `docsMcpServer` canônico (listar os detectados).
 - **Se != off e nenhum docs-mcp-server detectado:** avisar que o modo ficará fail-closed para **todo** fato de stack — recomendar configurar o docs-mcp-server (§2.4) primeiro; permitir ativar mesmo assim.
 
+### 2.6 (opcional) Orquestrador de execução paralela (Agent Orchestrator)
+
+Validar a pré-condição (plugin em --scope user) antes de oferecer:
+
+```bash
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>{const o=require('child_process').execSync('claude plugin list 2>/dev/null').toString();const ok=m.parsePluginUserScope(o,'devflow@NEXUZ-SYS')&&m.parsePluginUserScope(o,'superpowers@');console.log(ok?'USER_SCOPE_OK':'NEEDS_USER_SCOPE')})"
+```
+
+- Se `NEEDS_USER_SCOPE`: NÃO oferecer ativação. Informar que, para usar o AO, é preciso
+  `claude plugin install devflow@NEXUZ-SYS --scope user` (+ superpowers), e gravar `orchestrator.enabled: false`.
+- Se `USER_SCOPE_OK`, perguntar:
+
+```
+AskUserQuestion:
+  question: "Usar o Agent Orchestrator para execução paralela na fase E (para casos quando necessário)?"
+  header: "Agent Orchestrator"
+  multiSelect: false
+  options:
+    - label: "Sugerir quando compensar (Recomendado)"
+      description: "AO sugere ativação automática para tarefas LARGE com histórias independentes — mode: suggest"
+    - label: "Automático"
+      description: "AO ativa automaticamente sem intervenção — mode: auto"
+    - label: "Não usar"
+      description: "Desativar integração com o Agent Orchestrator — enabled: false"
+```
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -414,11 +440,29 @@ git:
     # blockToolPatterns: [] # (opcional) padrões extras de tool-name de MCP de internet a negar
   ```
 
+**Regras de geração para orchestrator:**
+- Se o Step 2.6 não foi alcançado/respondido (entrevista abreviada ou trunk-based): **não incluir** a seção `orchestrator:` (ausência = não configurado, consistente com as demais seções opcionais).
+- Se `NEEDS_USER_SCOPE` **ou** o usuário escolheu "Não usar": gerar o bloco mínimo via `orchestratorBlock({enabled:false})` e **anexar** (decisão consciente registrada explicitamente no YAML).
+- Se o usuário escolheu "Sugerir quando compensar" ou "Automático": gerar o bloco completo via `orchestratorBlock({mode:'<MODE>'})` (sem `enabled` — default é `true`) e **anexar**.
+
+Gerar com a lib (não escrever à mão):
+
+```bash
+# Quando enabled:false (NEEDS_USER_SCOPE ou "Não usar") — NÃO passar mode (lib ignora):
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({enabled:false})))"
+
+# Quando enabled:true — passar mode escolhido (suggest ou auto):
+node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({mode:'<MODE>'})))"
+```
+
+Substituir `<MODE>` por `suggest` (opção "Sugerir quando compensar") ou `auto` (opção "Automático"). Quando `enabled:false`, chamar sem `mode` — a lib descarta o campo. Anexar a saída ao `.devflow.yaml`.
+
 **Regras de geração no modo patch incremental (Step 5.3):**
 - **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
 - Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
 - `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (`|| cp` e merge dentro de `mcpServers`) — não sobrescrever.
 - Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
+- **`orchestrator:`** — **somente** se o Step 2.6 foi respondido (não pulado): se ausente, gerar via `orchestratorBlock(...)` e anexar; se presente, substituir o bloco inteiro preservando as demais seções. Usar `{enabled:false}` quando "Não usar" ou `NEEDS_USER_SCOPE`; usar `{mode:'<MODE>'}` quando habilitado. Se o Step 2.6 foi pulado, **não tocar** na seção `orchestrator:` (ausência continua significando não configurado).
 
 ### 4. Confirmar e informar
 
@@ -526,25 +570,32 @@ AskUserQuestion:
 
 #### 5.3 Patch incremental
 
+> ⚠️ **Runtime cap:** no Claude Code o `AskUserQuestion` aceita **no máximo 4 opções por pergunta**. As 5 áreas são apresentadas como **um único call com duas perguntas** (3+2). A **união** das seleções das duas perguntas é o conjunto de áreas a configurar.
+
 ```
-AskUserQuestion:
-  question: "Quais áreas configurar agora? (as demais ficam intactas)"
-  header: "Áreas"
-  multiSelect: true
-  options:
-    - label: "Estratégia git e finalização"
-      description: "Estratégia, branches protegidas, CLI de PR, branch protection, auto-finish (P1–P5)"
-    - label: "MemPalace"
-      description: "Integração de memória + budget/palace + hook de auto-mine (P6–P8 + §4.5)"
-    - label: "docs-mcp-server"
-      description: "Índice de docs de stacks via MCP (§2.4)"
-    - label: "Doc-grounding"
-      description: "Sourcing obrigatório de fatos de stack via MCP (§2.5)"
-    - label: "Rotinas de manutenção"
-      description: "Semear .context/routines.json com o health-check periódico (§4.6)"
+AskUserQuestion (1 call, 2 perguntas):
+  questions:
+    - question: "Áreas a configurar agora (1/2)? (as não marcadas ficam intactas)"
+      header: "Áreas 1/2"
+      multiSelect: true
+      options:
+        - label: "Estratégia git e finalização"
+          description: "Estratégia, branches protegidas, CLI de PR, branch protection, auto-finish (P1–P5)"
+        - label: "MemPalace"
+          description: "Integração de memória + budget/palace + hook de auto-mine (P6–P8 + §4.5)"
+        - label: "docs-mcp-server"
+          description: "Índice de docs de stacks via MCP (§2.4)"
+    - question: "Áreas a configurar agora (2/2)? (as não marcadas ficam intactas)"
+      header: "Áreas 2/2"
+      multiSelect: true
+      options:
+        - label: "Doc-grounding"
+          description: "Sourcing obrigatório de fatos de stack via MCP (§2.5 — depende do docs-mcp-server)"
+        - label: "Rotinas de manutenção"
+          description: "Semear .context/routines.json com o health-check periódico (§4.6)"
 ```
 
-**Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la.
+**Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 (em ambas as perguntas) — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la. Trate a **união** das duas respostas como a lista final de unidades a aplicar.
 
 Para **cada** unidade selecionada, rodar **somente** o(s) bloco(s) de pergunta correspondente(s) e aplicar o resultado de forma **não-destrutiva** (ver "Regras de geração no modo patch", abaixo):
 

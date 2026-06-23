@@ -280,11 +280,14 @@ if [ -n "$PLUGIN_ROOT_CHECK" ] && [ -n "$FILE_PATH" ]; then
 fi
 
 # --- Read .context/.devflow.yaml ---
+# Resolve the project root with the same ${CWD:-$PWD} fallback used by the
+# permissions (L46), grounding (L115) and project-root (L178) blocks, and by the
+# branch-detection block below (L227-231). When the harness omits cwd in the
+# PreToolUse event, $CWD is empty and the hook's own $PWD is the project root —
+# so the config is still located. Without this fallback the gate wrongly concludes
+# "no config" and denies every project edit even on a non-protected branch.
 
-DEVFLOW_CONFIG=""
-if [ -n "$CWD" ]; then
-  DEVFLOW_CONFIG="$CWD/.context/.devflow.yaml"
-fi
+DEVFLOW_CONFIG="${CWD:-$PWD}/.context/.devflow.yaml"
 
 # If no config exists → DENY with config instruction.
 # EXCEPTION: non-project files (auto-memory, napkin) are never hard-denied,

@@ -16,6 +16,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -239,7 +240,48 @@ const groundingMcp = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp];
+// GAP-PERM-ROOT: PROACTIVE detection of a malformed/legacy permissions.yaml.
+// The evaluator/hook already surface an actionable reason REACTIVELY (when an
+// Edit/Write is denied); this check catches it at diagnosis time, BEFORE the
+// repo-wide fail-closed lockout bites. Reuses the same detector the evaluator
+// uses, so the two never disagree.
+const permissionsHealth = {
+  id: "permissions-health",
+  title: "permissions.yaml válido (schema devflow-permissions/v0)",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const path = join(ctx.cwd, ".context", "permissions.yaml");
+    if (!existsSync(path)) {
+      return {
+        status: "OK",
+        diagnosis: "Sem .context/permissions.yaml — opera em mode:prompt (sem lockout).",
+        repair: "",
+      };
+    }
+    const cfg = loadPermissions(ctx.cwd);
+    // loadPermissions only sets __denyReason when it fail-closes (parse OR schema
+    // error). A valid config never has it.
+    if (cfg.__denyReason) {
+      const markers = detectLegacySchema(cfg);
+      const isLegacy = markers.length > 0;
+      return {
+        status: "FAIL",
+        diagnosis: isLegacy
+          ? `permissions.yaml em formato legado/não-conforme — fail-closed mode:deny em TODO o repositório (lockout de Edit/Write). Sinais: ${markers.join("; ")}.`
+          : "permissions.yaml inválido (YAML não parseável) — fail-closed mode:deny em TODO o repositório (lockout de Edit/Write).",
+        repair: "Migre para o schema devflow-permissions/v0: rode /devflow config (ou /devflow init).",
+      };
+    }
+    return {
+      status: "OK",
+      diagnosis: "permissions.yaml válido (schema devflow-permissions/v0).",
+      repair: "",
+    };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);

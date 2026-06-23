@@ -5,6 +5,158 @@ All notable changes to DevFlow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — Fase E ganha modo paralelo via AO (ondas com pipeline, Plano 3)
+
+A fase E do `autonomous-loop` agora suporta execução paralela via Agent Orchestrator (AO),
+com gate por heurística, fallback sequencial garantido e flags de override pontuais.
+
+- **Gate de execução paralela (Step 1.6):** antes da seleção story-by-story, avalia disponibilidade
+  do AO (`command -v ao` + plugins em user-scope), conta stories independentes via
+  `independentCount()` e consulta `shouldParallelize()` para decidir `sequential`, `parallel` ou
+  `ask` (ao operador). Fallback automático para `sequential` se AO indisponível.
+- **Execução em ondas via AO (Step 1.7):** setup único (`.ao-rules` + `agent-orchestrator.yaml`
+  via `aoRulesContent()`/`agentOrchestratorYaml()`), seguido de loop de pipeline: `readyStories()`
+  libera stories assim que suas dependências terminam (não espera onda inteira); polling via
+  `ao status` / `curl localhost:<port>/api/sessions`; workers rodam `/devflow scale:SMALL`
+  com TDD; encerramento com V+C globais e `computeWaves()` para ordem de merge.
+- **Fallback sequencial obrigatório:** qualquer falha no `ao start` cai no loop atual (Steps 2-4).
+- **Reactions desativadas neste Plano:** `ci-failed` e `changes-requested` ficam OFF; o Plano 4
+  as ativa. Merge permanece **sempre manual**.
+- **Flags de override:** `--parallel` força `parallel`; `--no-parallel` força `sequential`
+  (ambas ganham da configuração em `.devflow.yaml`). Documentadas no `commands/devflow.md`.
+
+### Added — Orchestrador AO: lib de ondas, heurística e geradores de template (Plano 2)
+
+Peças internas para a integração paralela com Agent Orchestrator (AO), ainda não acionadas
+(o Plano 3 as orquestra). Inclui:
+
+- **Lib de ondas (`computeWaves`/`readyStories`):** pipelineamento com cap de largura máxima
+  e redução de stories prontas, computando qual wave executar em paralelo (Scripts/Plano 1).
+- **Heurística de ativação (`shouldParallelize`):** decide se a fase E segue `sequential`,
+  `parallel` ou `ask` (ao operador) com base em config, escala, número de stories independentes
+  e disponibilidade do AO. Critérios configuráveis em `orchestrator.trigger.scales` e
+  `.minIndependentStories`.
+- **Geradores de template:** `aoRulesContent()` (guardrails de git + trilho DevFlow) e
+  `agentOrchestratorYaml()` (YAML de configuração com `permissions: permissionless`,
+  `agentRulesFile: .ao-rules`, e `approved-and-green` sempre com `auto: false` — merge
+  manual neste plano; o Plano 4 ativa `ci-failed`/`changes-requested`).
+
+Código puro (sem E/S), testado (26 testes, 17 em orchestrator/: waves 9 + config 13 + templates 4).
+
+### Added — Seção `orchestrator:` no `.devflow.yaml` — configuração do Agent Orchestrator (AO)
+
+Novo suporte à seção `orchestrator:` no `.context/.devflow.yaml`, configurável via entrevista
+interativa no `devflow:config` (Step 2.6) e reutilizada no `devflow:project-init` (Step 0.6).
+
+- **Entrevista no `devflow:config` (Step 2.6):** pergunta opcional "Usar o Agent Orchestrator
+  para execução paralela na fase E?" com três opções: `Sugerir quando compensar (recomendado)` →
+  `mode: suggest` (default), `Automático` → `mode: auto`, `Não usar` → `enabled: false`.
+- **Pré-condição user-scope bloqueante:** antes de oferecer a pergunta, valida que `devflow@NEXUZ-SYS`
+  e `superpowers@` estão instalados em `--scope user` via `parsePluginUserScope()`. Se
+  `NEEDS_USER_SCOPE`, grava `orchestrator.enabled: false` e orienta o usuário a reinstalar no
+  escopo correto — sem oferecer ativação.
+- **Geração via lib (não à mão):** a seção é gerada por `orchestratorBlock()` de
+  `scripts/lib/orchestrator-config.mjs`. Defaults: `mode: suggest`, `scales: [LARGE]`,
+  `minIndependentStories: 3`, `maxWaveWidth: 4`; `enabled: false` emite bloco mínimo.
+- **Patch incremental (Step 5.3):** nova regra — se `orchestrator:` estiver ausente, gerar via
+  `orchestratorBlock()` e anexar; se presente, substituir o bloco inteiro preservando as demais seções.
+- **Reuso no `devflow:project-init` (Step 0.6):** após validar o escopo, se `USER_SCOPE_OK` e o
+  usuário indicou uso do AO, oferece configurar `orchestrator:` agora delegando ao fluxo do
+  `devflow:config` (Step 2.6 + `orchestratorBlock()`). Sem duplicar lógica.
+
+## [1.23.3] — 2026-06-19
+
+### Added — `/devflow init` valida o escopo do plugin para uso com Agent Orchestrator (AO)
+
+Novo **Step 0.6** no `project-init`: quando o projeto for operado via Agent Orchestrator
+(AO / `@aoagents/ao`) — detectado por `command -v ao`, `~/.agent-orchestrator/` ou
+`agent-orchestrator.yaml`, ou informado pelo usuário —, o init valida que os plugins
+DevFlow e superpowers estão instalados no escopo **`user`**, não `project`.
+
+- **Motivo:** os workers do AO rodam em git worktrees efêmeros **fora** do diretório do
+  projeto. Plugins habilitados apenas em escopo `project` (via `.claude/settings.json`)
+  não resolvem nesses worktrees — o worker recebe `Unknown command: /devflow` / `Unknown
+  skill` e o trilho PREVC/TDD **não ativa**, fazendo o agente "improvisar" sem disciplina.
+  Não é trust de diretório nem ausência de `.context/`; é o **escopo de instalação**.
+- **Orientação (ação do usuário):** `claude plugin install devflow@NEXUZ-SYS --scope user`
+  e `claude plugin install superpowers@claude-plugins-official --scope user`.
+- Descoberto e validado em PoC de integração AO × DevFlow (DevFlow rodando dentro de cada
+  worker do AO, com guardrails de git preservados).
+
+## [1.23.2] — 2026-06-18
+
+### Fixed — `permissions.yaml`: deny opaco vira acionável + detecção de schema legado (GAP-PERM-ROOT)
+
+Um `.context/permissions.yaml` em **formato legado** (`version: 0`, `deny`/`allow`
+como listas de `{path}`, `mode: {default: ...}`) reprovava o validador de schema do
+`permissions-evaluator` e fazia **fail-closed `mode: deny` em todo o repositório** —
+mas o único sinal ao usuário era o opaco `[devflow permissions.yaml] mode: deny`,
+porque os erros de schema iam só para `stderr` (descartado pelo hook com `2>/dev/null`).
+Resultado: lockout total de `Edit`/`Write`, sem pista de que o arquivo estava malformado
+nem de como migrar.
+
+- **GAP-OBS-1 (observabilidade):** `loadPermissions` anexa um `__denyReason` **acionável**
+  (multilinha, com dica de migração) quando faz fail-closed; `evaluatePermissions` usa
+  `cfg.__denyReason || "mode: deny"` no branch de deny — um `mode: deny` explícito
+  (legítimo) mantém o motivo `mode: deny`. O motivo trafega pelo **stdout** do CLI → hook
+  → usuário (o hook já prefixa e imprime), **sem mudar a lógica do hook**.
+- **GAP-PERM (detecção de legado):** novo `detectLegacySchema(cfg)` **disjuntivo**
+  (marcadores: `deny`/`allow` é lista, `mode` não-string, campo `version` presente) emite
+  um erro claro "formato legado/não-conforme — migre para `devflow-permissions/v0` (rode
+  `/devflow init` ou `/devflow config`)" no lugar do críptico "got '[object Object]'". O
+  check genérico de `mode` foi restrito a strings — com o detector como fallback p/ `mode`
+  não-string, fechando o risco de **fail-OPEN** (sem o detector, o narrowing removeria o
+  único erro do config legado e cairia em `prompt`).
+- **Anti-injeção:** o `__denyReason` é montado **só** com marcadores DevFlow-controlados,
+  nunca ecoando valores crus do YAML do usuário; o erro técnico bruto fica só em
+  `console.error`.
+- **GAP-PORT-1:** o menu 5.3 ("patch incremental") da skill `devflow:config` tinha **5
+  opções** num único `AskUserQuestion` — acima do cap de **4 opções/pergunta** do Claude
+  Code. Dividido em **1 call com 2 perguntas (3+2)**, preservando `docs-mcp-server`
+  selecionável sem forçar `Doc-grounding`.
+- **`devflow-doctor` — detecção proativa:** novo check `permissions-health` (severity
+  `critical`) carrega o `.context/permissions.yaml` e reusa o `detectLegacySchema` para
+  **diagnosticar antes do lockout**. Reporta `FAIL` ("formato legado/não-conforme →
+  fail-closed mode:deny repo-wide") com repair `/devflow config`. Distingue legado de YAML
+  não-parseável. Enquanto o evaluator/hook sinaliza **reativamente** (no deny de um
+  Edit/Write), o doctor sinaliza **proativamente** (no diagnóstico).
+
+**Decisão de escopo:** o fail-closed em schema inválido é o comportamento **correto** por
+segurança — o defeito era a falta de sinal, não o deny. O `doctor` é o lugar certo para a
+**migração oferecida** (repair apontando `/devflow config`); a auto-migração silenciosa do
+arquivo fica fora (não se reescreve a config de segurança do usuário sem confirmação).
+
+**Testes:** +16 unit no evaluator (incl. invariantes anti-fail-open e anti-injeção),
++5 unit no doctor (`permissions-health`), +1 E2E no hook (`pre-tool-use`: deny
+JSON-parseável e acionável), +1 lint estrutural da skill `config`. Suíte rastreada
+**1531/1531**. Bug:
+`devflow-e2e-sandbox/docs/validation/2026-06-18-bug-permissions-schema-drift.md`.
+
+## [1.23.1] — 2026-06-18
+
+### Fixed — `pre-tool-use`: config não localizada quando o evento chega sem `cwd`
+
+O gate de configuração do hook `pre-tool-use` resolvia o caminho de
+`.context/.devflow.yaml` usando **apenas** `$CWD`, sem o fallback `${CWD:-$PWD}`
+aplicado nos demais blocos (permissions L46, grounding L115, project-root L178 e
+detecção de branch L227–231). Quando o harness do Claude Code **não envia `cwd`**
+no evento `PreToolUse`, `$CWD` chegava vazio → o hook concluía "sem config" e
+**negava 100% das edições** (`Edit`/`Write`), mesmo com `.context/.devflow.yaml`
+válido e em branch de trabalho não-protegida; `/devflow config` não resolvia
+(a config existe — o hook é que não a encontrava).
+
+- **Correção:** o bloco passa a usar `DEVFLOW_CONFIG="${CWD:-$PWD}/.context/.devflow.yaml"`,
+  alinhando-o aos demais pontos já robustos a `cwd` vazio. Como o `$PWD` do hook é a
+  raiz do projeto, a config volta a ser localizada.
+- **Sem over-allow:** em branch protegida com `cwd` vazio, a config é localizada via
+  `$PWD` e o deny passa a vir da branch protection (não mais do guard de no-config) —
+  edição de código-fonte segue bloqueada.
+- **Regressão coberta (TDD):** `tests/hooks/test-pre-tool-use.sh` ganha os testes 15 e 16
+  (arquivo de projeto, `cwd` vazio/ausente, branch de trabalho → libera). Suíte: 22/22.
+- Detalhes e evidência: `docs/2026-06-18-pre-tool-use-cwd-fallback-bug.md`.
+
 ## [1.20.0] — 2026-06-13
 
 ### Added — Cobertura de Standards: gaps de concern fechados (3 eixos)

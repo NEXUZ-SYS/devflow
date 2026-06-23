@@ -20,7 +20,7 @@ run_hook() {
 
 # ─── Test 1: deny on .env* file ─────────────────────────────────────────────
 TMP1=$(mktemp -d "$TMP_ROOT/perm-deny-XXXXXX")
-trap "rm -rf $TMP1 \${TMP2:-} \${TMP3:-}" EXIT
+trap "rm -rf $TMP1 \${TMP2:-} \${TMP3:-} \${TMP4:-}" EXIT
 
 mkdir -p "$TMP1/.context"
 cat > "$TMP1/.context/permissions.yaml" <<'EOF'
@@ -96,6 +96,50 @@ if ! echo "$out3" | grep -q "permissions.yaml"; then
   exit 1
 fi
 echo "PASS [test 3]: deny in permissions.yaml takes precedence over allow"
+
+# ─── Test 4: legacy permissions.yaml → actionable, JSON-parseable deny ──────
+# GAP-PERM-ROOT/GAP-OBS-1: a legacy-format file (version:0, list deny/allow,
+# mode:{default}) must fail-closed AND surface an actionable reason that points
+# to migration — not the opaque "mode: deny". Output must be valid JSON.
+TMP4=$(mktemp -d "$TMP_ROOT/perm-legacy-XXXXXX")
+mkdir -p "$TMP4/.context"
+cat > "$TMP4/.context/permissions.yaml" <<'EOF'
+version: 0
+deny:
+  - path: "**/.env*"
+allow:
+  - path: "src/**"
+mode:
+  default: ask
+EOF
+cd "$TMP4" && git init -q 2>/dev/null; cd - >/dev/null
+
+out4=$(run_hook "$TMP4" "Write" "src/foo.ts")
+
+# 4a — output is valid JSON (multiline reason must be properly escaped)
+if ! printf '%s' "$out4" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+  echo "FAIL [test 4a]: hook output is not valid JSON"
+  echo "Output: $out4"
+  exit 1
+fi
+echo "PASS [test 4a]: legacy config → hook emits valid JSON"
+
+# 4b — decision is deny (fail-closed preserved)
+if ! echo "$out4" | grep -q '"permissionDecision": "deny"'; then
+  echo "FAIL [test 4b]: expected deny on legacy permissions.yaml"
+  echo "Output: $out4"
+  exit 1
+fi
+echo "PASS [test 4b]: legacy config fails closed (deny)"
+
+# 4c — reason is actionable: mentions legacy/migration, not just "mode: deny"
+reason4=$(printf '%s' "$out4" | python3 -c "import json,sys; print(json.load(sys.stdin)['hookSpecificOutput']['permissionDecisionReason'])" 2>/dev/null || echo "")
+if ! printf '%s' "$reason4" | grep -qiE "legado|migre|devflow config|devflow init"; then
+  echo "FAIL [test 4c]: deny reason is not actionable (no migration hint)"
+  echo "Reason: $reason4"
+  exit 1
+fi
+echo "PASS [test 4c]: legacy config → actionable deny reason ($(printf '%s' "$reason4" | head -1 | cut -c1-60)...)"
 
 echo ""
 echo "ALL PASS: pre-tool-use applies permissions.yaml deny-first"

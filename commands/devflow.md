@@ -112,6 +112,8 @@ SCALE
 AUTONOMY
   /devflow auto <d>                Fully autonomous with smart escalation
   /devflow auto --from-prd         Autonomous from existing PRD (skip brainstorming)
+  /devflow auto <d> --parallel      Força execução em ondas via AO (se disponível)
+  /devflow auto <d> --no-parallel   Força execução sequencial (ignora orchestrator)
   /devflow autonomy:supervised <d> Human approves each phase (default)
   /devflow autonomy:assisted <d>   Human in planning+review, autonomous execution
   /devflow autonomy:autonomous <d> All phases autonomous, escalates on failure
@@ -475,4 +477,5 @@ LAYOUT_VERSION=""
 - `autonomy:X` — optional autonomy mode (supervised/assisted/autonomous)
 - `auto` — alias for `autonomy:autonomous`
 - `--from-prd` — generate stories.yaml from existing PRD (skip brainstorming)
+- `--parallel` / `--no-parallel` — override pontual do gatilho do orchestrator (ganha do `.devflow.yaml`)
 - Everything else is passed as the task description to the PREVC flow orchestrator
