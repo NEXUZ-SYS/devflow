@@ -1,0 +1,60 @@
+name: Tag + GitHub Release
+
+# Quando um RELEASE PR mergeia na main (plugin.json muda de versão), cria a tag
+# vX.Y.Z e publica uma GitHub Release com as notas extraídas do CHANGELOG —
+# populando a página /releases automaticamente. Idempotente: não recria se a tag
+# já existe.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude-plugin/plugin.json"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Criar tag + GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Ler versão e checar tag
+        id: v
+        run: |
+          V=$(grep -oE '"version": "[0-9]+\.[0-9]+\.[0-9]+"' .claude-plugin/plugin.json | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$V" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v$V já existe — nada a fazer."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Versão a publicar: v$V"
+          fi
+
+      - name: Extrair notas do CHANGELOG
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          if ! node scripts/lib/changelog-extract.mjs "${{ steps.v.outputs.version }}" --file CHANGELOG.md > RELEASE_NOTES.md; then
+            echo "Release v${{ steps.v.outputs.version }} (sem seção correspondente no CHANGELOG)." > RELEASE_NOTES.md
+          fi
+          echo "----- notas -----"; head -5 RELEASE_NOTES.md
+
+      - name: Criar tag + Release
+        if: steps.v.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.v.outputs.version }}" \
+            --title "v${{ steps.v.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md \
+            --target "${{ github.sha }}"

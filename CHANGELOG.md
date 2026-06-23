@@ -20,6 +20,9 @@ GitHub. O bump passa a ser **único por release**.
   concordam e que a transição vs a base é um único passo semver válido (none/patch/minor/major);
   rejeita inconsistência, regressão e salto. Exposto como **`.github/workflows/version-guard.yml`**
   (check de PR) e reusado pelo hook local.
+- **`.github/workflows/tag-release.yml`** + **`scripts/lib/changelog-extract.mjs`** (com TDD): quando o
+  release PR mergeia na `main`, cria a tag `vX.Y.Z` e publica a **GitHub Release** com as notas
+  extraídas da seção do CHANGELOG — populando a página `/releases` automaticamente (idempotente).
 
 ### Changed — hook de pré-commit agora VALIDA (não bumpa mais)
 
