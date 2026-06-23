@@ -42,6 +42,15 @@ test('redige credencial em env-var UPPER_SNAKE com _ antes da keyword (sec F1)',
   assert.match(redact('mysql --password=hunter2'), /password=\[REDACTED\]/i); // não regride Task 1
 });
 
+test('redige AWS secret em var-name sem keyword padrão: ACCESS_KEY=/AWS_ACCESS= (sec F2-residual)', () => {
+  const sec = 'wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEYZ'; // 39c base64-ish
+  assert.doesNotMatch(redact('ACCESS_KEY=' + sec), /wJalr/, 'ACCESS_KEY=');
+  assert.doesNotMatch(redact('AWS_ACCESS=' + sec), /wJalr/, 'AWS_ACCESS=');
+  assert.doesNotMatch(redact('aws_secret_access_key: ' + sec), /wJalr/, 'forma snake completa');
+  // não regride: path com run longo de [A-Za-z0-9/] NÃO é over-redigido (N4)
+  assert.match(redact('/home/u/Documentos/code/devflow/scripts/lib/instinct-redact'), /scripts\/lib\/instinct-redact/);
+});
+
 test('redige classes de token adicionais: sk-/xapp-/npm_/AIza/glpat- (sec F2)', () => {
   const cases = [
     'sk-abc123def456ghi789jkl',                  // OpenAI legacy
