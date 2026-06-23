@@ -340,6 +340,17 @@ git:
 - Se autoFinish = "Sim, tudo": incluir `autoFinish: true`
 - Se autoFinish = "Personalizar": incluir como objeto com as chaves selecionadas em `true`, as não selecionadas em `false`
 
+**Regras de geração para instincts (Instinct system):**
+- Default: **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
+- Se o usuário optar por habilitar, incluir seção mínima:
+  ```yaml
+  instincts:
+    enabled: true
+    profile: balanced        # conservative | balanced | aggressive
+    recall_max_chars: 2000
+  ```
+- Precedência (N2): env `DEVFLOW_INSTINCTS_ENABLED=0` (opt-out) > env `DEVFLOW_INSTINCT_PROFILE` > YAML. `enabled: false` é o piso. Detalhes em `/devflow instinct`.
+
 **Regras de geração para mempalace:**
 - Se mempalace desativado ou pulado: **não incluir** a seção `mempalace:` (ausência = desativado)
 - Se habilitado com defaults: incluir seção mínima:

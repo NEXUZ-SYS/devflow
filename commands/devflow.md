@@ -63,6 +63,7 @@ Parse the first argument and route to the matching section below. Do NOT treat k
 | `import-reversa` | `/devflow import-reversa` section | Yes → `devflow:import-reversa` |
 | `language` | `/devflow language` section | Yes → `devflow:language` |
 | `prd` | `/devflow prd` section | Yes → `devflow:prd-generation` |
+| `instinct` / `instinct:*` | `/devflow:devflow-instinct` command | `mine` → `devflow:instinct-ops`; demais → `instinct-cli.mjs` |
 | `auto` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
 | `autonomy:*` | `/devflow auto` section | Yes → `devflow:prevc-flow` |
 | `scale:*` | `/devflow [description]` section | Yes → `devflow:prevc-flow` |
