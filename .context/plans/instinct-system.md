@@ -13,15 +13,15 @@ phases:
   - id: "phase-R"
     name: "Review"
     prevc: "R"
-    status: pending
+    status: completed
   - id: "phase-E"
     name: "Execution"
     prevc: "E"
-    status: pending
+    status: completed
   - id: "phase-V"
     name: "Validation"
     prevc: "V"
-    status: pending
+    status: completed
 ---
 
 # Instinct System (MVP) — Plano (dotcontext tracking)
