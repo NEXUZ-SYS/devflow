@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Instinct System (continuous learning) — v1.24.0
+
+Loop de aprendizado automático importado do ECC. Hooks observam tool-use → destila *instincts* (gatilho→ação) pontuados por confiança (0.3→0.9) num store Node zero-dep XDG project-scoped → recall bounded no SessionStart → pontes que **propõem** napkin/MemPalace (complementar, não duplica). Libs: `instinct-redact` (redação PII/credenciais — env-var `UPPER_SNAKE`, AWS/GH/Stripe/JWT/PEM/Slack/Google/GitLab, URL-cred), `instinct-confidence`, `instinct-paths` (XDG + hash do remote), `instinct-store` (withLock + índice + promoção project→global + prune TTL + `safeId` anti-traversal), `instinct-observations` (append/rotação/checkpoint), `instinct-recall` (digest bounded + sanitização anti prompt-injection), `instinct-config` (ativação N2). CLI `instinct-cli` (capture/recall/mine/promote/prune/bridges/status), hooks `post-tool-use` (captura gated) + `session-start` (recall no `additionalContext`), skill `devflow:instinct-ops` (mining), comando `/devflow instinct`. **Ativação N2 estrita**: opt-in pelo YAML (`instincts.enabled: true`), env só restringe; pergunta enquadrada no `/devflow config` (distinta de MemPalace/napkin/auto-memory). Auditoria adversarial de segurança: 8 achados corrigidos via TDD (path-traversal, stored prompt-injection, fail-closed do hook, vazamentos de credencial). ADR-005 → v1.1.0 (disciplina consumer-agnostic). 51 testes (unit+integração+e2e).
+
 ### Added — Fase E ganha modo paralelo via AO (ondas com pipeline, Plano 3)
 
 A fase E do `autonomous-loop` agora suporta execução paralela via Agent Orchestrator (AO),
