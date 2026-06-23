@@ -17,6 +17,15 @@ test('projectId estável e normaliza credenciais/.git', () => {
   assert.match(a, /^[0-9a-f]{12}$/);
 });
 
+test('normalizeRemote remove credencial com @ na senha e query-string (sec F5)', () => {
+  assert.equal(p.normalizeRemote('http://user:p@ss@github.com/o/r.git'), 'github.com/o/r');
+  assert.doesNotMatch(p.normalizeRemote('http://user:p@ss@github.com/o/r.git'), /p@ss|:\/\/user/);
+  assert.doesNotMatch(p.normalizeRemote('https://github.com/o/r.git?token=secret123'), /secret123|token/);
+  // não regride: credencial simples + .git continua estável
+  assert.equal(p.projectId('https://x:y@github.com/NEXUZ-SYS/devflow.git'),
+               p.projectId('https://github.com/NEXUZ-SYS/devflow'));
+});
+
 test('paths derivam de baseDir + id', () => {
   process.env.DEVFLOW_INSTINCTS_DIR = '/tmp/s';
   const id = 'abc123abc123';

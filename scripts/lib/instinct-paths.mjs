@@ -14,9 +14,10 @@ export function baseDir() {
 // I5: normalização SEM credencial — reusada pelo hash E pelo remote guardado no registry
 export function normalizeRemote(remoteUrl) {
   return String(remoteUrl || '')
-    .replace(/:\/\/[^@]+@/, '://')          // strip credenciais
+    .replace(/:\/\/[^/]*@/, '://')          // F5: strip credenciais até o ÚLTIMO @ antes do host (senha pode conter @)
     .replace(/^[A-Za-z][\w+.-]*:\/\//, '')  // strip scheme
     .replace(/^[^@/:]+@([^:/]+):/, '$1/')   // scp-like → host/path
+    .replace(/\?.*$/, '')                    // F5: strip query-string (pode conter token=…)
     .replace(/\.git\/?$/, '')
     .replace(/\/+$/, '')
     .toLowerCase();
