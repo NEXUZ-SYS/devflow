@@ -709,9 +709,9 @@ After scaffolding `.context/`, check if `.context/.devflow.yaml` exists:
 1. **If NOT exists** → Invoke `devflow:config` skill to run the interactive interview
 2. **If exists** → Skip (preserve existing configuration)
 
-The config skill interview includes git strategy (P1-P5), MemPalace integration (P6-P8, conditional on MCP availability), **docs-mcp-server** integration (P9, conditional on availability), and **doc-grounding** (P10, opt-in — força fatos de stack externo a virem só do MCP de docs, bloqueia web e fail-closed). All handled in a single interview flow.
+The config skill interview includes git strategy (P1-P5), MemPalace integration (P6-P8, conditional on MCP availability), the **Instinct System** (§2.35, opt-in/default off — loop de aprendizado automático que captura tool-use e PROPÕE entradas pro napkin/MemPalace; complementar, não redundante), **docs-mcp-server** integration (P9, conditional on availability), and **doc-grounding** (P10, opt-in — força fatos de stack externo a virem só do MCP de docs, bloqueia web e fail-closed). All handled in a single interview flow.
 
-This ensures every project initialized with DevFlow has a git strategy configured, plus optional opt-in for semantic memory (MemPalace), stack documentation indexing (docs-mcp-server), and doc-grounding enforcement.
+This ensures every project initialized with DevFlow has a git strategy configured, plus optional opt-in for semantic memory (MemPalace), the Instinct System (automatic learning loop), stack documentation indexing (docs-mcp-server), and doc-grounding enforcement.
 
 **docs-mcp-server note:** when the user opts in, the config skill writes the MCP entry to `.mcp.json`. The new server requires a **Claude Code restart** to register — the skill must surface this explicitly so the user knows the `mcp__docs-mcp-server__*` tools won't be available in the current session.
 

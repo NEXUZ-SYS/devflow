@@ -6,14 +6,14 @@ scope: organizational
 source: local
 stack: universal
 category: infraestrutura
-status: Aprovado
-version: 1.0.0
+status: Proposto
+version: 1.1.0
 created: 2026-05-06
 supersedes: []
 refines: []
 protocol_contract: null
 decision_kind: gated
-summary: "Telemetria opt-in seguindo OTel GenAI semconv (gen_ai.*) + devflow.* extension namespace; reproducibility token via sha256(model+params+lockHash+toolsHash) em todo span; conteúdo (prompts/completions) só com env var explícita + redactPii."
+summary: Telemetria opt-in seguindo OTel GenAI semconv (gen_ai.*) + devflow.* extension namespace; reproducibility token via sha256(model+params+lockHash+toolsHash) em todo span; conteúdo (prompts/completions) só com env var explícita + redactPii.
 ---
 
 # ADR 005 — Observability OTel (GenAI semantic conventions)
@@ -48,6 +48,8 @@ DevFlow v0.13.x não tem observabilidade padronizada — logs ficam em `actions.
 - `redactPii: true` aplica strips em emails, IPs, números longos mesmo quando captura habilitada
 
 `decision_kind: gated` porque telemetria toca privacy + cost — gate de revisão futura quando time avaliar custo real e adicionar enforcement (Gate 5).
+
+**v1.1.0 — disciplina consumer-agnostic.** A disciplina opt-in/local-by-default/redação estabelecida aqui não é exclusiva dos spans OTel: ela governa **qualquer consumidor de observação local do DevFlow**. O segundo consumidor é o **instinct store** do continuous-learning (`docs/superpowers/specs/2026-06-17-instinct-system-design.md`) — store XDG project-scoped (`~/.local/share/devflow-instincts/`) que observa tool-use via hooks. Ele herda esta disciplina (`enabled:false` default, redação na captura, gating por profile `DEVFLOW_INSTINCT_PROFILE` espelhando o gate de `observability.yaml`), em vez de reimplementá-la. Os dois consumidores compartilham os guardrails de privacidade abaixo para não divergirem.
 
 ## Alternativas Consideradas
 
@@ -84,6 +86,9 @@ DevFlow v0.13.x não tem observabilidade padronizada — logs ficam em `actions.
 - NUNCA logar token API ou OAuth credentials mesmo com content capture
 - QUANDO `callback.url` em `permissions.yaml` é configurado, ENTÃO span deve registrar `devflow.permission.callback_invoked` para audit trail
 - QUANDO `decision_kind: gated` neste ADR, ENTÃO upgrade para Aprovado requer revisão de privacy + cost com time
+- SEMPRE aplicar esta disciplina (opt-in `enabled:false` default + redação na captura + lazy-load/gating) a TODO consumidor de observação local do DevFlow — os spans OTel `gen_ai.*`/`devflow.*` E o instinct store do continuous-learning — nunca só aos spans
+- NUNCA commitar o store de observação local do instinct system (`~/.local/share/devflow-instincts/`, XDG project-scoped) — local-by-default, mesma política de não-vazamento de conteúdo dos spans
+- QUANDO um novo consumidor de observação for adicionado (ex.: instinct store), ENTÃO ele DEVE herdar `enabled:false` default, redação de PII/credenciais na captura e gate por profile, sem reimplementar a disciplina
 
 ## Enforcement
 
@@ -100,3 +105,4 @@ DevFlow v0.13.x não tem observabilidade padronizada — logs ficam em `actions.
 - OTel GenAI semconv: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - Reference: `scripts/lib/otel.mjs` (4.1), `scripts/lib/repro-token.mjs` (4.2)
 - ADRs relacionadas: ADR-001 (path), ADR-002 (standards), ADR-003 (stacks), ADR-004 (permissions)
+- Segundo consumidor da disciplina (v1.1.0): `docs/superpowers/specs/2026-06-17-instinct-system-design.md` (instinct store / continuous-learning)
