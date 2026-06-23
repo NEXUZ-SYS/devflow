@@ -4,6 +4,7 @@ import * as obs from './lib/instinct-observations.mjs';
 import * as store from './lib/instinct-store.mjs';
 import { buildDigest } from './lib/instinct-recall.mjs';
 import { projectId as hashRemote } from './lib/instinct-paths.mjs';
+import { isEnabled } from './lib/instinct-config.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
@@ -17,12 +18,10 @@ function resolvePid() {
   try { return hashRemote(execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf-8' }).trim()); }
   catch { return null; } // sem repo git → no-op
 }
-const enabled = () => process.env.DEVFLOW_INSTINCTS_ENABLED === '1';
-
 try {
   const pid = resolvePid();
   if (cmd === 'capture') {
-    if (!enabled() || !pid) process.exit(0);
+    if (!(await isEnabled()) || !pid) process.exit(0);   // N2: opt-in via YAML, env só restringe
     await obs.appendObservation(pid, { tool: flag('tool'), target: flag('target'), outcome: flag('outcome', 'ok') });
     // registry best-effort: name=basename(cwd), remote=git origin (ambos opcionais)
     try {

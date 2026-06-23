@@ -25,31 +25,35 @@ Interface para o **Instinct system** — o loop de aprendizado que observa o too
 - `mine` é o único que invoca o LLM (a skill `devflow:instinct-ops` faz a inferência + match semântico). Os demais são chamadas determinísticas à CLI Node.
 - Todos os subcomandos são best-effort e nunca quebram a sessão (CLI sempre `exit 0`).
 
-## Configuração (`.context/.devflow.yaml`)
+## Como ativar
+
+O Instinct system é **opt-in pelo YAML** (piso de privacidade). Para ligar, no `.context/.devflow.yaml`:
 
 ```yaml
 instincts:
-  enabled: false             # opt-in (default off) — piso de privacidade (ADR-005 v1.1.0)  [MVP: enforçado]
-  profile: standard          # off | minimal | standard                                     [MVP: declarado; gating fino = fase 2]
+  enabled: true              # opt-in — ÚNICA forma de habilitar (env não habilita)
+  profile: standard          # off | minimal | standard
   recall:
-    minConfidence: 0.6       # limiar p/ entrar no digest                                   [MVP: default no código]
-    maxChars: 2000           # teto do digest no SessionStart                               [MVP: enforçado via --max-chars]
+    minConfidence: 0.6       # limiar p/ entrar no digest                  [MVP: default no código]
+    maxChars: 2000           # teto do digest no SessionStart              [MVP: enforçado via --max-chars]
   mine:
-    minObservations: 20      # limiar p/ sugerir mining na fronteira                        [fase 2: nudge]
+    minObservations: 20      # limiar p/ sugerir mining na fronteira       [fase 2: nudge]
   bridges:
-    napkin: propose          # off | propose                                               [skill instinct-ops]
-    mempalace: propose       # off | propose (só se MemPalace disponível)                   [skill instinct-ops]
+    napkin: propose          # off | propose                              [skill instinct-ops]
+    mempalace: propose       # off | propose (só se MemPalace disponível)  [skill instinct-ops]
 ```
 
-> **MVP enforça `enabled` (on/off) + `recall.maxChars`.** As demais chaves seguem o spec aprovado (`docs/superpowers/specs/2026-06-17-instinct-system-design.md`) e ficam declaradas; o gating fino por `profile` e o nudge por `mine.minObservations` são fase 2.
+Com `enabled: true` e dentro de um repo git (escopo por hash do `git remote origin`; ou `DEVFLOW_INSTINCT_PID=<id>`), captura e recall passam a rodar. Default é **off** (sem a seção `instincts:` ou `enabled: false`).
+
+> **MVP enforça:** `enabled` (opt-in via YAML) + os opt-outs de sessão (`DEVFLOW_INSTINCTS_ENABLED=0`, `DEVFLOW_INSTINCT_PROFILE=off`) + `recall.maxChars`. O gating fino por nível de `profile` (minimal vs standard) e o nudge por `mine.minObservations` são fase 2. Forma do YAML segue o spec aprovado (`docs/superpowers/specs/2026-06-17-instinct-system-design.md`).
 
 ### Precedência dos toggles (N2)
 
-A decisão de habilitar segue, do mais forte ao mais fraco:
+`enabled: false` no YAML é o **piso**; env só **RESTRINGE**, nunca habilita o que o YAML desligou:
 
 1. **Opt-out por sessão** (env): `DEVFLOW_INSTINCTS_ENABLED=0` desliga, ponto final.
-2. **Perfil por sessão** (env): `DEVFLOW_INSTINCT_PROFILE` (`off|minimal|standard`) sobrepõe o `profile` do YAML.
-3. **YAML**: `instincts.enabled` / `instincts.profile` no `.context/.devflow.yaml`.
+2. **Profile off por sessão** (env): `DEVFLOW_INSTINCT_PROFILE=off` desliga.
+3. **YAML** (`.context/.devflow.yaml`): `instincts.enabled: true` é a **única** forma de habilitar. `DEVFLOW_INSTINCTS_ENABLED=1` **não** habilita (env não liga o que o YAML não ligou).
 
 `enabled: false` é o **piso**: na ausência de sinal explícito, o sistema fica desligado (privacidade-por-padrão). O store XDG é local e nunca commitado.
 

@@ -426,10 +426,14 @@ if [ -f "${OTEL_DIR}/.context/observability.yaml" ]; then
     | (cd "${OTEL_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
 fi
 
-# ── Instinct capture (gated, best-effort, nunca bloqueia) ──────────────
-# F4: guard CLAUDE_PLUGIN_ROOT (set -u) — sem ele a expansão na chamada da CLI
-# falha ANTES do `|| true` e quebra o invariante exit 0 (espelha o session-start).
-if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+# ── Instinct capture (gated por N2, best-effort, nunca bloqueia) ───────
+# N2 (ADR-005): opt-in é o PISO no YAML (instincts.enabled: true); env só RESTRINGE
+# (DEVFLOW_INSTINCTS_ENABLED=0 | DEVFLOW_INSTINCT_PROFILE=off). awk block-scoped evita
+# spawn de node quando off (default). F4: guard CLAUDE_PLUGIN_ROOT sob set -u.
+INSTINCT_CFG="${CWD:-$PWD}/.context/.devflow.yaml"
+if [ "${DEVFLOW_INSTINCTS_ENABLED:-}" != "0" ] && [ "${DEVFLOW_INSTINCT_PROFILE:-}" != "off" ] \
+   && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$INSTINCT_CFG" ] \
+   && awk '/^instincts:[[:space:]]*$/{b=1;next} /^[^[:space:]#]/{b=0} b&&/^[[:space:]]+enabled:[[:space:]]*true[[:space:]]*(#.*)?$/{f=1} END{exit !f}' "$INSTINCT_CFG"; then
   TOOL_NAME=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).tool_name||"")}catch{console.log("")}})' 2>/dev/null)
   # sec C2: p/ Bash captura SÓ o binário (1º token), descartando argumentos sensíveis; p/ Edit/Write o file_path
   TARGET=$(printf '%s' "$INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);let t=j.tool_input?.file_path||"";if(!t&&j.tool_input?.command){t=String(j.tool_input.command).trim().split(/\s+/)[0]}console.log(t)}catch{console.log("")}})' 2>/dev/null)

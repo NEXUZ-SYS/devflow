@@ -484,10 +484,14 @@ mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
 
-# ── Instinct recall (gated, bounded, nunca bloqueia) ───────────────────
+# ── Instinct recall (gated por N2, bounded, nunca bloqueia) ────────────
+# N2 (ADR-005): opt-in é o PISO no YAML (instincts.enabled: true); env só RESTRINGE.
 # Injeta o digest DENTRO do session_context (contrato JSON), não como texto solto.
 instinct_context=""
-if [ "${DEVFLOW_INSTINCTS_ENABLED:-0}" = "1" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+INSTINCT_CFG="${project_root}/.context/.devflow.yaml"
+if [ "${DEVFLOW_INSTINCTS_ENABLED:-}" != "0" ] && [ "${DEVFLOW_INSTINCT_PROFILE:-}" != "off" ] \
+   && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$INSTINCT_CFG" ] \
+   && awk '/^instincts:[[:space:]]*$/{b=1;next} /^[^[:space:]#]/{b=0} b&&/^[[:space:]]+enabled:[[:space:]]*true[[:space:]]*(#.*)?$/{f=1} END{exit !f}' "$INSTINCT_CFG"; then
   INSTINCT_DIGEST=$(timeout 1 node "${CLAUDE_PLUGIN_ROOT}/scripts/instinct-cli.mjs" recall --max-chars=2000 2>/dev/null || true)
   [ -n "$INSTINCT_DIGEST" ] && instinct_context="$(escape_for_json "$INSTINCT_DIGEST")\n"
 fi
