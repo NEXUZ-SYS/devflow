@@ -342,12 +342,14 @@ git:
 
 **Regras de geração para instincts (Instinct system):**
 - Default: **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
-- Se o usuário optar por habilitar, incluir seção mínima:
+- Se o usuário optar por habilitar, incluir seção (forma do spec; MVP enforça `enabled` + `recall.maxChars`):
   ```yaml
   instincts:
     enabled: true
-    profile: balanced        # conservative | balanced | aggressive
-    recall_max_chars: 2000
+    profile: standard        # off | minimal | standard
+    recall:
+      minConfidence: 0.6
+      maxChars: 2000
   ```
 - Precedência (N2): env `DEVFLOW_INSTINCTS_ENABLED=0` (opt-out) > env `DEVFLOW_INSTINCT_PROFILE` > YAML. `enabled: false` é o piso. Detalhes em `/devflow instinct`.
 

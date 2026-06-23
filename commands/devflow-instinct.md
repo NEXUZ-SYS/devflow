@@ -29,17 +29,26 @@ Interface para o **Instinct system** — o loop de aprendizado que observa o too
 
 ```yaml
 instincts:
-  enabled: false          # piso de privacidade — opt-in explícito (ADR-005 v1.1.0)
-  profile: balanced       # conservative | balanced | aggressive (limiares de recall/ponte)
-  recall_max_chars: 2000  # teto do digest injetado no SessionStart
+  enabled: false             # opt-in (default off) — piso de privacidade (ADR-005 v1.1.0)  [MVP: enforçado]
+  profile: standard          # off | minimal | standard                                     [MVP: declarado; gating fino = fase 2]
+  recall:
+    minConfidence: 0.6       # limiar p/ entrar no digest                                   [MVP: default no código]
+    maxChars: 2000           # teto do digest no SessionStart                               [MVP: enforçado via --max-chars]
+  mine:
+    minObservations: 20      # limiar p/ sugerir mining na fronteira                        [fase 2: nudge]
+  bridges:
+    napkin: propose          # off | propose                                               [skill instinct-ops]
+    mempalace: propose       # off | propose (só se MemPalace disponível)                   [skill instinct-ops]
 ```
+
+> **MVP enforça `enabled` (on/off) + `recall.maxChars`.** As demais chaves seguem o spec aprovado (`docs/superpowers/specs/2026-06-17-instinct-system-design.md`) e ficam declaradas; o gating fino por `profile` e o nudge por `mine.minObservations` são fase 2.
 
 ### Precedência dos toggles (N2)
 
 A decisão de habilitar segue, do mais forte ao mais fraco:
 
 1. **Opt-out por sessão** (env): `DEVFLOW_INSTINCTS_ENABLED=0` desliga, ponto final.
-2. **Perfil por sessão** (env): `DEVFLOW_INSTINCT_PROFILE` sobrepõe o `profile` do YAML.
+2. **Perfil por sessão** (env): `DEVFLOW_INSTINCT_PROFILE` (`off|minimal|standard`) sobrepõe o `profile` do YAML.
 3. **YAML**: `instincts.enabled` / `instincts.profile` no `.context/.devflow.yaml`.
 
 `enabled: false` é o **piso**: na ausência de sinal explícito, o sistema fica desligado (privacidade-por-padrão). O store XDG é local e nunca commitado.
