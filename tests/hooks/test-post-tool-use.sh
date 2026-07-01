@@ -102,7 +102,7 @@ assert_not_contains "no branch finish" "$output" "BRANCH FINISH"
 
 # --- helpers: cwd temporário com git.versioning configurável ---
 PTU_TMPDIRS=()
-mk_cwd() { # $1 = valor de git.versioning ("" = ausente)
+mk_cwd() { # $1 = git.versioning ("" = ausente) ; $2 = has_bump (1 = cria scripts/bump-version.sh)
   local d; d=$(mktemp -d); PTU_TMPDIRS+=("$d")
   mkdir -p "$d/.context"
   if [ -n "${1:-}" ]; then
@@ -110,32 +110,48 @@ mk_cwd() { # $1 = valor de git.versioning ("" = ausente)
   else
     printf 'git:\n  strategy: branch-flow\n' > "$d/.context/.devflow.yaml"
   fi
+  if [ "${2:-0}" = "1" ]; then
+    mkdir -p "$d/scripts"
+    printf '#!/usr/bin/env bash\necho stub\n' > "$d/scripts/bump-version.sh"
+  fi
   echo "$d"
 }
 ptu_cleanup() { local d; for d in "${PTU_TMPDIRS[@]:-}"; do [ -n "$d" ] && rm -rf "$d"; done; return 0; }
 trap ptu_cleanup EXIT
 
-# Test 8: merge com versioning ausente (bump local) → emits bump warning
-echo "Test 8: merge (versioning ausente) emits bump warning"
-CWD8=$(mk_cwd "")
+# Test 8: merge, versioning ausente + tem mecanismo de bump → emits bump warning
+echo "Test 8: merge (versioning ausente, com mecanismo) emits bump warning"
+CWD8=$(mk_cwd "" 1)
 output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD8"'"}' | bash "$HOOK" 2>/dev/null)
-assert_contains "bump warning (versioning ausente)" "$output" "BUMP"
+assert_contains "bump warning (ausente + mecanismo)" "$output" "BUMP"
 
-# Test 9: git merge com versioning: local → emits bump warning
-echo "Test 9: merge (versioning: local) emits bump warning"
-CWD9=$(mk_cwd "local")
+# Test 9: git merge, versioning: local + mecanismo → emits bump warning
+echo "Test 9: merge (versioning: local, com mecanismo) emits bump warning"
+CWD9=$(mk_cwd "local" 1)
 output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$CWD9"'"}' | bash "$HOOK" 2>/dev/null)
-assert_contains "bump warning (versioning: local)" "$output" "BUMP"
+assert_contains "bump warning (local + mecanismo)" "$output" "BUMP"
 
-# Test 9b: merge com versioning: pipeline → SEM bump warning (bump é da pipeline de release)
+# Test 9b: merge, versioning: pipeline → SEM bump warning (bump é da pipeline)
 echo "Test 9b: merge (versioning: pipeline) suppresses bump warning"
-CWD9B=$(mk_cwd "pipeline")
+CWD9B=$(mk_cwd "pipeline" 1)
 output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD9B"'"}' | bash "$HOOK" 2>/dev/null)
-assert_not_contains "sem bump warning (versioning: pipeline)" "$output" "BUMP"
+assert_not_contains "sem bump warning (pipeline)" "$output" "BUMP"
+
+# Test 9c: merge, versioning: none → SEM bump warning (projeto não versiona)
+echo "Test 9c: merge (versioning: none) suppresses bump warning"
+CWD9C=$(mk_cwd "none" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD9C"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "sem bump warning (none)" "$output" "BUMP"
+
+# Test 9d: merge, versioning ausente + SEM mecanismo de bump → SEM bump warning (falso positivo eliminado)
+echo "Test 9d: merge (ausente, sem mecanismo) suppresses bump warning"
+CWD9D=$(mk_cwd "" 0)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$CWD9D"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "sem bump warning (sem mecanismo)" "$output" "BUMP"
 
 # Test 10: comando não-merge → sem bump warning
 echo "Test 10: non-merge command no bump warning"
-CWD10=$(mk_cwd "")
+CWD10=$(mk_cwd "" 1)
 output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"'"$CWD10"'"}' | bash "$HOOK" 2>/dev/null)
 assert_not_contains "no bump warning (non-merge)" "$output" "BUMP"
 

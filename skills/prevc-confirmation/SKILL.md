@@ -96,7 +96,8 @@ Se o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), a
 FIRST, read `git.versioning` from `.context/.devflow.yaml`:
 
 - **`versioning: pipeline`** — o bump é gerenciado por uma pipeline de release (ex.: GitHub Actions `release.yml` → release PR). **NÃO bumpe localmente.** Em vez disso, garanta que as mudanças estão registradas na seção `## [Unreleased]` do `CHANGELOG.md`. A versão sobe depois, **uma única vez**, pela pipeline — evitando o double-bump que reintroduz drift de versão. **Pule o resto deste Step 2** e vá direto para o Step 3 (commit).
-- **`versioning: local` ou ausente (padrão)** — siga o fluxo de bump local abaixo (comportamento atual, retrocompatível).
+- **`versioning: none`** — o projeto **não faz versionamento/release**. **NÃO bumpe** e pule o resto deste Step 2 (vá ao Step 3) — não há versão a subir.
+- **`versioning: local` ou ausente (padrão)** — siga o fluxo de bump local abaixo (comportamento atual, retrocompatível). O fluxo já pula o bump se nenhum mecanismo (`bump-version.sh`/`package.json` version) for detectado.
 </VERSIONING-MODE-GATE>
 
 <HARD-GATE>

@@ -150,7 +150,19 @@ AskUserQuestion:
       description: "Merge/PR automático na branch base"
 ```
 
-**P5b: Modo de versionamento (bump)**
+**P5b: Modo de versionamento (bump)** (condicional — só pergunta se o projeto versiona)
+
+Primeiro, detectar se há mecanismo de versão:
+```bash
+HAS_VERSIONING=false
+if [ -f "scripts/bump-version.sh" ]; then HAS_VERSIONING=true
+elif [ -f "package.json" ] && grep -q '"version"' package.json 2>/dev/null; then HAS_VERSIONING=true
+elif [ -f ".claude-plugin/plugin.json" ]; then HAS_VERSIONING=true
+fi
+```
+
+- **Se `HAS_VERSIONING=false`** (projeto não faz release) → **não pergunte**; grave `versioning: none` (finish não bumpa e o BUMP WARNING fica silencioso).
+- **Se `HAS_VERSIONING=true`** → pergunte:
 
 ```
 AskUserQuestion:
@@ -412,6 +424,7 @@ git:
 **Regras de geração (versionamento — P5b):**
 - Se "Bump local no finish (padrão)": **não incluir** a chave `versioning` (ausência = `local`, retrocompatível).
 - Se "Pipeline de release (CI)": incluir `versioning: pipeline` no bloco `git:`. Nesse modo o finish (`prevc-confirmation` Step 2) **pula o bump local** e o `BUMP WARNING` do PostToolUse é suprimido — o bump é único, feito pela pipeline de release.
+- Se **não há mecanismo de versão** (P5b não perguntada): incluir `versioning: none` no bloco `git:` — o finish não bumpa e o `BUMP WARNING` fica silencioso (projeto sem release).
 
 **Regras de geração para instincts (Instinct system):**
 - Se **P-instincts = "Não" (default)** → **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
