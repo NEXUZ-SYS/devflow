@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.25.0] — 2026-07-01
+
 ### Added — Pipeline de versionamento controlada (release CI + version-guard)
 
 Move o bump de versão do hook de pré-commit local — que bumpava **a cada commit** e causava o "pulo"
@@ -38,6 +40,22 @@ enquanto README/CHANGELOG paravam em `1.23.2`/`1.23.3` e o Instinct/AO ficavam s
 Reconciliado: o Instinct System vira **`1.24.0`** e o AO 3ª pata vira **`1.23.4`** (consolidando os
 auto-bumps); preenchidas as lacunas `1.21.0`/`1.22.0`/`1.23.0`. Version files permanecem em `1.24.0`
 (sem downgrade — alteração só documental).
+
+### Added — Finish respeita `git.versioning`: modos `local` / `pipeline` / `none`
+
+O finish do DevFlow passa a respeitar o modo de versionamento do projeto — elimina o double-bump
+(finish local + pipeline) e o falso `BUMP WARNING` em projetos sem release.
+
+- **`git.versioning`** no `.devflow.yaml` (3-way): `local` (default — bump no finish se houver
+  mecanismo), `pipeline` (bump é da CI; finish não bumpa — **este repo**), `none` (projeto sem
+  release; não bumpa, sem aviso).
+- **`hooks/post-tool-use`:** o `BUMP WARNING` só dispara quando o bump é local **e** há mecanismo de
+  bump (`bump-version.sh` / `package.json` com `version`) — suprimido em `pipeline`, `none` e
+  sem-mecanismo (corrige um falso positivo pré-existente).
+- **`skills/prevc-confirmation` Step 2:** `VERSIONING-MODE-GATE` pula o bump local em `pipeline`/`none`.
+- **`skills/config` P5b:** detecta mecanismo de versão; sem mecanismo → grava `versioning: none` sem
+  perguntar; com mecanismo → pergunta `local` vs `pipeline`.
+- TDD: `tests/hooks/test-post-tool-use.sh` 22/22 (incl. `none` e sem-mecanismo).
 
 ## [1.24.0] — 2026-06-23
 
