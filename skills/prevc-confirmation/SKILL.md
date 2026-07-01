@@ -92,8 +92,16 @@ Se o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), a
 
 ## Step 2: Version Bump
 
+<VERSIONING-MODE-GATE>
+FIRST, read `git.versioning` from `.context/.devflow.yaml`:
+
+- **`versioning: pipeline`** — o bump é gerenciado por uma pipeline de release (ex.: GitHub Actions `release.yml` → release PR). **NÃO bumpe localmente.** Em vez disso, garanta que as mudanças estão registradas na seção `## [Unreleased]` do `CHANGELOG.md`. A versão sobe depois, **uma única vez**, pela pipeline — evitando o double-bump que reintroduz drift de versão. **Pule o resto deste Step 2** e vá direto para o Step 3 (commit).
+- **`versioning: none`** — o projeto **não faz versionamento/release**. **NÃO bumpe** e pule o resto deste Step 2 (vá ao Step 3) — não há versão a subir.
+- **`versioning: local` ou ausente (padrão)** — siga o fluxo de bump local abaixo (comportamento atual, retrocompatível). O fluxo já pula o bump se nenhum mecanismo (`bump-version.sh`/`package.json` version) for detectado.
+</VERSIONING-MODE-GATE>
+
 <HARD-GATE>
-Version bump MUST happen BEFORE branch finalization (merge/PR). This prevents the version bump from being skipped when the merge is executed via any path (skill, hook, or direct Bash command).
+When `versioning` is NOT `pipeline`, version bump MUST happen BEFORE branch finalization (merge/PR). This prevents the version bump from being skipped when the merge is executed via any path (skill, hook, or direct Bash command).
 </HARD-GATE>
 
 ### Detect Project Capabilities

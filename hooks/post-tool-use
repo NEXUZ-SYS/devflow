@@ -222,8 +222,27 @@ print(d.get('tool_input', {}).get('command', ''))
   esac
 
   if [ "$IS_MERGE" = "true" ]; then
-    bump_warning="BUMP WARNING: Merge detectado via Bash sem garantia de version bump. Antes de finalizar, verifique se o bump de versão foi feito. Se não, execute o bump agora (scripts/bump-version.sh ou atualize README manualmente)."
-    reminder="${reminder}\n\n${bump_warning}"
+    # Respeita o modo de versionamento: quando o bump é gerenciado por uma
+    # pipeline de release (git.versioning: pipeline), o finish NÃO bumpa local —
+    # então não avisa (evita o double-bump que reintroduz drift de versão).
+    MERGE_CWD=$(printf '%s' "$INPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null || echo "")
+    MERGE_CWD="${MERGE_CWD:-$PWD}"
+    MERGE_VERSIONING=""
+    [ -f "$MERGE_CWD/.context/.devflow.yaml" ] && MERGE_VERSIONING=$(read_yaml_field "$MERGE_CWD/.context/.devflow.yaml" "versioning")
+    # Existe mecanismo de bump neste projeto?
+    MERGE_HAS_BUMP=false
+    if [ -f "$MERGE_CWD/scripts/bump-version.sh" ]; then
+      MERGE_HAS_BUMP=true
+    elif [ -f "$MERGE_CWD/package.json" ] && grep -q '"version"' "$MERGE_CWD/package.json" 2>/dev/null; then
+      MERGE_HAS_BUMP=true
+    fi
+    # Avisa só quando o bump é LOCAL (versioning local/ausente), NÃO é none/pipeline,
+    # e há mecanismo de bump. Assim projetos sem release (none/sem-mecanismo) e os
+    # que usam pipeline de CI não recebem falso nag.
+    if [ "$MERGE_VERSIONING" != "pipeline" ] && [ "$MERGE_VERSIONING" != "none" ] && [ "$MERGE_HAS_BUMP" = "true" ]; then
+      bump_warning="BUMP WARNING: Merge detectado via Bash sem garantia de version bump. Antes de finalizar, verifique se o bump de versão foi feito. Se não, execute o bump agora (scripts/bump-version.sh ou atualize README manualmente)."
+      reminder="${reminder}\n\n${bump_warning}"
+    fi
   fi
 fi
 

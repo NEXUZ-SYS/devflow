@@ -100,23 +100,60 @@ assert_contains "has handoff reminder" "$output" "HANDOFF"
 assert_not_contains "no commit prompt" "$output" "COMMIT"
 assert_not_contains "no branch finish" "$output" "BRANCH FINISH"
 
-# Test 8: Bash tool with gh pr merge → emits bump warning
-echo "Test 8: Bash with gh pr merge emits bump warning"
-output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
-assert_contains "has handoff reminder" "$output" "HANDOFF"
-assert_contains "has bump warning" "$output" "BUMP"
+# --- helpers: cwd temporário com git.versioning configurável ---
+PTU_TMPDIRS=()
+mk_cwd() { # $1 = git.versioning ("" = ausente) ; $2 = has_bump (1 = cria scripts/bump-version.sh)
+  local d; d=$(mktemp -d); PTU_TMPDIRS+=("$d")
+  mkdir -p "$d/.context"
+  if [ -n "${1:-}" ]; then
+    printf 'git:\n  strategy: branch-flow\n  versioning: %s\n' "$1" > "$d/.context/.devflow.yaml"
+  else
+    printf 'git:\n  strategy: branch-flow\n' > "$d/.context/.devflow.yaml"
+  fi
+  if [ "${2:-0}" = "1" ]; then
+    mkdir -p "$d/scripts"
+    printf '#!/usr/bin/env bash\necho stub\n' > "$d/scripts/bump-version.sh"
+  fi
+  echo "$d"
+}
+ptu_cleanup() { local d; for d in "${PTU_TMPDIRS[@]:-}"; do [ -n "$d" ] && rm -rf "$d"; done; return 0; }
+trap ptu_cleanup EXIT
 
-# Test 9: Bash tool with git merge → emits bump warning
-echo "Test 9: Bash with git merge emits bump warning"
-output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
-assert_contains "has handoff reminder" "$output" "HANDOFF"
-assert_contains "has bump warning" "$output" "BUMP"
+# Test 8: merge, versioning ausente + tem mecanismo de bump → emits bump warning
+echo "Test 8: merge (versioning ausente, com mecanismo) emits bump warning"
+CWD8=$(mk_cwd "" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD8"'"}' | bash "$HOOK" 2>/dev/null)
+assert_contains "bump warning (ausente + mecanismo)" "$output" "BUMP"
 
-# Test 10: Bash tool with non-merge command → no bump warning
-echo "Test 10: Bash with non-merge command no bump warning"
-output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
-assert_contains "has handoff reminder" "$output" "HANDOFF"
-assert_not_contains "no bump warning" "$output" "BUMP"
+# Test 9: git merge, versioning: local + mecanismo → emits bump warning
+echo "Test 9: merge (versioning: local, com mecanismo) emits bump warning"
+CWD9=$(mk_cwd "local" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$CWD9"'"}' | bash "$HOOK" 2>/dev/null)
+assert_contains "bump warning (local + mecanismo)" "$output" "BUMP"
+
+# Test 9b: merge, versioning: pipeline → SEM bump warning (bump é da pipeline)
+echo "Test 9b: merge (versioning: pipeline) suppresses bump warning"
+CWD9B=$(mk_cwd "pipeline" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD9B"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "sem bump warning (pipeline)" "$output" "BUMP"
+
+# Test 9c: merge, versioning: none → SEM bump warning (projeto não versiona)
+echo "Test 9c: merge (versioning: none) suppresses bump warning"
+CWD9C=$(mk_cwd "none" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"gh pr merge 7 --merge --delete-branch"},"cwd":"'"$CWD9C"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "sem bump warning (none)" "$output" "BUMP"
+
+# Test 9d: merge, versioning ausente + SEM mecanismo de bump → SEM bump warning (falso positivo eliminado)
+echo "Test 9d: merge (ausente, sem mecanismo) suppresses bump warning"
+CWD9D=$(mk_cwd "" 0)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git merge feature/foo"},"cwd":"'"$CWD9D"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "sem bump warning (sem mecanismo)" "$output" "BUMP"
+
+# Test 10: comando não-merge → sem bump warning
+echo "Test 10: non-merge command no bump warning"
+CWD10=$(mk_cwd "" 1)
+output=$(echo '{"tool_name":"Bash","tool_input":{"command":"git status"},"cwd":"'"$CWD10"'"}' | bash "$HOOK" 2>/dev/null)
+assert_not_contains "no bump warning (non-merge)" "$output" "BUMP"
 
 # Test 11: Bash merge output is valid JSON
 echo "Test 11: Bash merge output is valid JSON"

@@ -150,6 +150,32 @@ AskUserQuestion:
       description: "Merge/PR automático na branch base"
 ```
 
+**P5b: Modo de versionamento (bump)** (condicional — só pergunta se o projeto versiona)
+
+Primeiro, detectar se há mecanismo de versão:
+```bash
+HAS_VERSIONING=false
+if [ -f "scripts/bump-version.sh" ]; then HAS_VERSIONING=true
+elif [ -f "package.json" ] && grep -q '"version"' package.json 2>/dev/null; then HAS_VERSIONING=true
+elif [ -f ".claude-plugin/plugin.json" ]; then HAS_VERSIONING=true
+fi
+```
+
+- **Se `HAS_VERSIONING=false`** (projeto não faz release) → **não pergunte**; grave `versioning: none` (finish não bumpa e o BUMP WARNING fica silencioso).
+- **Se `HAS_VERSIONING=true`** → pergunte:
+
+```
+AskUserQuestion:
+  question: "Como o bump de versão é feito neste projeto?"
+  header: "Versionamento"
+  multiSelect: false
+  options:
+    - label: "Bump local no finish (padrão)"
+      description: "O finish do DevFlow bumpa a versão antes do merge (comportamento atual)"
+    - label: "Pipeline de release (CI)"
+      description: "O bump é feito uma única vez por uma pipeline (ex.: GitHub Actions). O finish NÃO bumpa local e o BUMP WARNING é suprimido."
+```
+
 **P6: MemPalace** (condicional — só aparece se MCP detectado ou se usuário quer configurar)
 
 Primeiro, detectar disponibilidade:
@@ -386,6 +412,7 @@ git:
   prCli: <resposta P3>
   branchProtection: <resposta P4>
   # autoFinish only present if user activated it
+  # versioning: pipeline — só presente se o usuário escolheu a pipeline de release (P5b)
 ```
 
 **Regras de geração:**
@@ -393,6 +420,11 @@ git:
 - Se autoFinish = "Não": **não incluir** a chave `autoFinish` (ausência = desativado)
 - Se autoFinish = "Sim, tudo": incluir `autoFinish: true`
 - Se autoFinish = "Personalizar": incluir como objeto com as chaves selecionadas em `true`, as não selecionadas em `false`
+
+**Regras de geração (versionamento — P5b):**
+- Se "Bump local no finish (padrão)": **não incluir** a chave `versioning` (ausência = `local`, retrocompatível).
+- Se "Pipeline de release (CI)": incluir `versioning: pipeline` no bloco `git:`. Nesse modo o finish (`prevc-confirmation` Step 2) **pula o bump local** e o `BUMP WARNING` do PostToolUse é suprimido — o bump é único, feito pela pipeline de release.
+- Se **não há mecanismo de versão** (P5b não perguntada): incluir `versioning: none` no bloco `git:` — o finish não bumpa e o `BUMP WARNING` fica silencioso (projeto sem release).
 
 **Regras de geração para instincts (Instinct system):**
 - Se **P-instincts = "Não" (default)** → **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
