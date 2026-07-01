@@ -8,6 +8,8 @@ git:
   prCli: gh
   branchProtection: true
   autoFinish: true
+  # Bump de versao e feito pela pipeline de release (Actions -> Release), nao no finish local.
+  versioning: pipeline
 
 mempalace:
   enabled: true
