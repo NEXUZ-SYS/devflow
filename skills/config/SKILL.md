@@ -150,6 +150,20 @@ AskUserQuestion:
       description: "Merge/PR automático na branch base"
 ```
 
+**P5b: Modo de versionamento (bump)**
+
+```
+AskUserQuestion:
+  question: "Como o bump de versão é feito neste projeto?"
+  header: "Versionamento"
+  multiSelect: false
+  options:
+    - label: "Bump local no finish (padrão)"
+      description: "O finish do DevFlow bumpa a versão antes do merge (comportamento atual)"
+    - label: "Pipeline de release (CI)"
+      description: "O bump é feito uma única vez por uma pipeline (ex.: GitHub Actions). O finish NÃO bumpa local e o BUMP WARNING é suprimido."
+```
+
 **P6: MemPalace** (condicional — só aparece se MCP detectado ou se usuário quer configurar)
 
 Primeiro, detectar disponibilidade:
@@ -386,6 +400,7 @@ git:
   prCli: <resposta P3>
   branchProtection: <resposta P4>
   # autoFinish only present if user activated it
+  # versioning: pipeline — só presente se o usuário escolheu a pipeline de release (P5b)
 ```
 
 **Regras de geração:**
@@ -393,6 +408,10 @@ git:
 - Se autoFinish = "Não": **não incluir** a chave `autoFinish` (ausência = desativado)
 - Se autoFinish = "Sim, tudo": incluir `autoFinish: true`
 - Se autoFinish = "Personalizar": incluir como objeto com as chaves selecionadas em `true`, as não selecionadas em `false`
+
+**Regras de geração (versionamento — P5b):**
+- Se "Bump local no finish (padrão)": **não incluir** a chave `versioning` (ausência = `local`, retrocompatível).
+- Se "Pipeline de release (CI)": incluir `versioning: pipeline` no bloco `git:`. Nesse modo o finish (`prevc-confirmation` Step 2) **pula o bump local** e o `BUMP WARNING` do PostToolUse é suprimido — o bump é único, feito pela pipeline de release.
 
 **Regras de geração para instincts (Instinct system):**
 - Se **P-instincts = "Não" (default)** → **não incluir** a seção `instincts:` (ausência = `enabled: false`, piso de privacidade ADR-005 v1.1.0).
