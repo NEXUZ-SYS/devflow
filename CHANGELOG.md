@@ -7,9 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Pipeline de versionamento controlada (release CI + version-guard)
+
+Move o bump de versão do hook de pré-commit local — que bumpava **a cada commit** e causava o "pulo"
+(ex.: `1.23.3 → 1.23.10` num único PR, pior com múltiplos worktrees) — para uma pipeline controlada no
+GitHub. O bump passa a ser **único por release**.
+
+- **`.github/workflows/release.yml`** (`workflow_dispatch`, input `patch|minor|major`): roda
+  `scripts/bump-version.sh`, valida a transição com o `version-guard` e abre um **release PR**
+  (`chore(release): vX.Y.Z`) — respeita a branch protection da `main` (sem push direto).
+- **`scripts/lib/version-guard.mjs`** (núcleo puro, zero-dep): valida que os 3 version files
+  concordam e que a transição vs a base é um único passo semver válido (none/patch/minor/major);
+  rejeita inconsistência, regressão e salto. Exposto como **`.github/workflows/version-guard.yml`**
+  (check de PR) e reusado pelo hook local.
+- **`.github/workflows/tag-release.yml`** + **`scripts/lib/changelog-extract.mjs`** (com TDD): quando o
+  release PR mergeia na `main`, cria a tag `vX.Y.Z` e publica a **GitHub Release** com as notas
+  extraídas da seção do CHANGELOG — populando a página `/releases` automaticamente (idempotente).
+
+### Changed — hook de pré-commit agora VALIDA (não bumpa mais)
+
+`scripts/pre-commit-version-check.sh` deixa de auto-bumpar e passa a rodar o `version-guard`: barra
+commits com version files inconsistentes, salto ou regressão, mas **nunca altera a versão**. Elimina a
+acumulação de bumps em desenvolvimento por subagents e **múltiplos worktrees**. Testes:
+`tests/scripts/test-version-guard.mjs` (7) + `tests/hooks/test-pre-commit-version-check.sh` (8).
+
+### Docs — reconciliação do "Histórico de Versões" (CHANGELOG + README)
+
+Os version files chegaram a `1.23.10` por auto-bumps (`1.23.4`–`1.23.10` = ruído, não releases),
+enquanto README/CHANGELOG paravam em `1.23.2`/`1.23.3` e o Instinct/AO ficavam soltos em `[Unreleased]`.
+Reconciliado: o Instinct System vira **`1.24.0`** e o AO 3ª pata vira **`1.23.4`** (consolidando os
+auto-bumps); preenchidas as lacunas `1.21.0`/`1.22.0`/`1.23.0`. Version files permanecem em `1.24.0`
+(sem downgrade — alteração só documental).
+
+## [1.24.0] — 2026-06-23
+
 ### Added — Instinct System (continuous learning) — v1.24.0
 
 Loop de aprendizado automático importado do ECC. Hooks observam tool-use → destila *instincts* (gatilho→ação) pontuados por confiança (0.3→0.9) num store Node zero-dep XDG project-scoped → recall bounded no SessionStart → pontes que **propõem** napkin/MemPalace (complementar, não duplica). Libs: `instinct-redact` (redação PII/credenciais — env-var `UPPER_SNAKE`, AWS/GH/Stripe/JWT/PEM/Slack/Google/GitLab, URL-cred), `instinct-confidence`, `instinct-paths` (XDG + hash do remote), `instinct-store` (withLock + índice + promoção project→global + prune TTL + `safeId` anti-traversal), `instinct-observations` (append/rotação/checkpoint), `instinct-recall` (digest bounded + sanitização anti prompt-injection), `instinct-config` (ativação N2). CLI `instinct-cli` (capture/recall/mine/promote/prune/bridges/status), hooks `post-tool-use` (captura gated) + `session-start` (recall no `additionalContext`), skill `devflow:instinct-ops` (mining), comando `/devflow instinct`. **Ativação N2 estrita**: opt-in pelo YAML (`instincts.enabled: true`), env só restringe; pergunta enquadrada no `/devflow config` (distinta de MemPalace/napkin/auto-memory). Auditoria adversarial de segurança: 8 achados corrigidos via TDD (path-traversal, stored prompt-injection, fail-closed do hook, vazamentos de credencial). ADR-005 → v1.1.0 (disciplina consumer-agnostic). 51 testes (unit+integração+e2e).
+
+## [1.23.4] — 2026-06-19
+
+Consolida o trabalho do **Agent Orchestrator (AO)** — a 3ª pata do bridge (Planos 1–3) — num único
+release. (Durante o desenvolvimento, o auto-bump local levou os version files a `1.23.10`; os patches
+`1.23.4`–`1.23.10` são ruído, consolidados aqui. Os version files atuais estão em `1.24.0`, do Instinct
+System.)
 
 ### Added — Fase E ganha modo paralelo via AO (ondas com pipeline, Plano 3)
 
@@ -160,6 +201,51 @@ válido e em branch de trabalho não-protegida; `/devflow config` não resolvia
 - **Regressão coberta (TDD):** `tests/hooks/test-pre-tool-use.sh` ganha os testes 15 e 16
   (arquivo de projeto, `cwd` vazio/ausente, branch de trabalho → libera). Suíte: 22/22.
 - Detalhes e evidência: `docs/2026-06-18-pre-tool-use-cwd-fallback-bug.md`.
+
+## [1.23.0] — 2026-06-17
+
+### Added — Sync provenance-aware (`context-sync` / `project-init`)
+
+O sync deixa de pular cegamente todo artefato existente e passa a distinguir, por hash, **deploy
+intocado** (auto-atualiza para a versão nova do plugin) de **edição local real** (preserva + reporta),
+para skills e standards de profile (agents seguem o fluxo `fillSingle`).
+
+- Nova lib determinística `scripts/lib/provenance-sync.mjs`: `resolveArtifacts`, `decideArtifact`
+  (incl. `pluginHash==null`), `applySync` contido (`isWithinDir` src⊂plugin / dest⊂`.context`,
+  recusa de symlink, report em paths relativos), CLI `apply`.
+- Manifesto `.context/.provenance.json` (por projeto) + registry `assets/provenance/known-hashes.json`
+  (270 hashes) gerado por histórico de commits (`gen-known-hashes.mjs`), com `bump-version.sh --append`.
+- Resolve o caso real: deploys antigos intocados (ex.: `odoo-development@1.19.1`) voltam a atualizar.
+- Segurança: testes RED de path-traversal + symlink. 22 testes; regressão do repo 396/396.
+
+## [1.22.0] — 2026-06-17
+
+### Added — Artefatos Odoo multi-versão (12–18) em 3 camadas
+
+Reestrutura os artefatos Odoo separando framework genérico de conhecimento de empresa.
+
+- **L1** (`odoo-development` + `frontend-specialist-odoo`): core genérico país-agnóstico cobrindo
+  Odoo 12–18 (frontend legacy widgets 12–14 → OWL1/2/3), env desacoplado, grounding híbrido.
+- **L2** nova skill `odoo-l10n-br` (localização BR: l10n_br/NFC-e/SEFAZ/DANFE).
+- **L3** nova skill `odoo-nxz-overlay` (arquitetura/grafo/bridges NXZ), só em projetos NXZ via novo
+  `profiles/nxz.yaml` que compõe sobre o profile odoo.
+- `detect-framework.mjs` ganha detecção por `dirPrefixes`/`manifestContent` + `standardsWithOrigin`.
+  Novo stack `backend/odoo.md`. Suíte de lint TDD (8 critérios). 75 testes + repo 330/330.
+
+## [1.21.0] — 2026-06-15
+
+### Added — Importador Reversa → DevFlow
+
+Skill `devflow:import-reversa` + comando `/devflow import-reversa <source>` + lib
+`scripts/reversa-import/`. Aterrissa um projeto gerado pelo Reversa como projeto DevFlow executável
+com **fidelidade híbrida** (executar + preservar).
+
+- Deriva PRD faseado, ADRs, `plans.json`, esqueletos de plano e `stories.yaml` da 1ª onda
+  (decompõe o resto via `--from-prd`); preserva os artefatos originais em `.context/imported/reversa/`.
+- Arquitetura na fronteira do **IR** (parsers → IR → emitters), pipeline puro + escrita
+  não-destrutiva. Pre-flight Readiness Gate + Plan Consistency Validation (7 checks).
+- Segurança: `toSlug`+`isWithinDir` (anti path-traversal), recusa de symlink, `stripInjection` (SI-6).
+  96 testes; repo 329/329.
 
 ## [1.20.0] — 2026-06-13
 
