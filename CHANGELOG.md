@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — Path-drift legado ↔ DDC v2 (achado-mãe da validação E2E) — PR 1
+
+Componentes em bash/prosa hardcodavam os paths legados `.context/{adrs,standards}`, enquanto o canônico
+DDC v2 é `.context/engineering/{adrs,standards}`. Consequência: em projeto DDC v2 canônico, o enforcement
+de **ADRs** ficava totalmente ausente (session-start não injetava guardrails). Correções com TDD (RED→GREEN):
+
+- **`scripts/lib/context-paths.mjs`** — novo CLI `resolve-read <key> [root]` (imprime os dirs de leitura
+  existentes, canonical primeiro) para consumo por hooks bash que não importam ESM.
+- **`hooks/session-start`** — injeta ADRs do canônico `engineering/adrs` (+ fallbacks legados) via o CLI,
+  fechando o achado-mãe; N6 warning preservado.
+- **`hooks/post-tool-use`** — nudge de standards (Camada 2) reconhece `engineering/standards` (v2).
+- **`skills/adr-filter/SKILL.md`** — resolve o diretório de ADRs pelo canônico v2 (sem `node -e`, SI-1).
+- **`scripts/devflow-standards.mjs`** (`standards audit`) — localiza o std em `engineering/standards`.
+- **`skills/project-init/SKILL.md`** — HARD-GATE green-field reconhece projeto DDC v2 populado
+  (engineering/business/product/operations), evitando re-init falso (GAP-INIT-1).
+- **`scripts/lib/doctor.mjs`** — novo check `adr-injection` (WARN quando ADRs aprovadas vivem só em path
+  legado), a rede que teria pego o achado-mãe (DOCTOR-1).
+
 ## [1.25.0] — 2026-07-01
 
 ### Added — Pipeline de versionamento controlada (release CI + version-guard)

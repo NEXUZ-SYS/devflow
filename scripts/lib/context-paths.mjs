@@ -55,3 +55,16 @@ export function resolveReadPaths(projectRoot, key) {
   }
   return reads;
 }
+
+// CLI: `node context-paths.mjs resolve-read <key> [projectRoot]`
+// Imprime os dirs de leitura existentes (canonical primeiro), um por linha.
+// Usado por hooks bash que não podem importar ESM diretamente.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd, key, root] = process.argv.slice(2);
+  if (cmd === "resolve-read" && key) {
+    const projectRoot = root || process.cwd();
+    for (const p of resolveReadPaths(projectRoot, key)) {
+      if (existsSync(p)) console.log(p);
+    }
+  }
+}
