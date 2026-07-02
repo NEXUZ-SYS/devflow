@@ -47,6 +47,14 @@ done
 echo ""
 echo "Bumped: $CURRENT -> $NEW_VERSION ($BUMP_TYPE)"
 
+# Corte do CHANGELOG (atômico com o bump): [Unreleased] -> [NEW_VERSION] + data,
+# com um [Unreleased] novo e vazio no topo. Mantém version-files e CHANGELOG
+# consistentes. Se o [Unreleased] estava vazio, o changelog-guard (via
+# version-guard) falha o release PR — fail-loud, não publica release sem notas.
+if [ -f "$REPO_ROOT/CHANGELOG.md" ] && [ -f "$REPO_ROOT/scripts/lib/changelog-cut.mjs" ]; then
+  node "$REPO_ROOT/scripts/lib/changelog-cut.mjs" "$NEW_VERSION" --date "$(date -u +%F)" --file "$REPO_ROOT/CHANGELOG.md"
+fi
+
 # Atualiza o registry de hashes históricos com os artefatos da versão nova (provenance-sync).
 if [ -f "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" ]; then
   node "$REPO_ROOT/scripts/lib/gen-known-hashes.mjs" --append || echo "WARN: falha ao atualizar known-hashes.json"

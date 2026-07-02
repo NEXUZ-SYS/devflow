@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { checkReleaseChangelog } from "./changelog-guard.mjs";
 
 const VERSION_FILES = [
   ".claude-plugin/plugin.json",
@@ -133,6 +134,24 @@ function main(argv) {
     console.error(`[version-guard] FAIL: transição ${base} → ${cons.version} inválida — ${tr.reason}.`);
     console.error("  Esperado: igual (sem bump), ou +1 patch / +1 minor / +1 major. O bump é feito pela pipeline de release (1 por release).");
     process.exit(1);
+  }
+  // Release detectado (houve bump) → exigir seção de CHANGELOG não-vazia (fail-loud).
+  // Num PR de feature normal (kind=none) o conteúdo acumula em [Unreleased] e não há
+  // seção da versão ainda — por isso o guard só dispara quando kind != none.
+  if (tr.kind !== "none") {
+    let clText = "";
+    try {
+      clText = readFileSync(join(root, "CHANGELOG.md"), "utf8");
+    } catch {
+      /* sem CHANGELOG.md — o guard reporta ausência da seção */
+    }
+    const cg = checkReleaseChangelog(clText, cons.version);
+    if (!cg.ok) {
+      console.error(`[version-guard] FAIL: ${cg.reason}.`);
+      console.error("  Um bump de versão exige a seção correspondente no CHANGELOG. O scripts/bump-version.sh corta [Unreleased]→[X.Y.Z] automaticamente; se a versão foi editada à mão, adicione a seção (não publique release sem notas).");
+      process.exit(1);
+    }
+    console.log(`[version-guard] OK: ${cg.reason}.`);
   }
   console.log(`[version-guard] OK: ${base} → ${cons.version} (${tr.kind}).`);
   process.exit(0);
