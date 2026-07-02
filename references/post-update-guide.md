@@ -123,8 +123,9 @@ test -f .devflow-language || test -f ~/.devflow-language
 **O que é:** Proteção automática de branch que bloqueia edições diretas em main/master e cria branches de trabalho.
 
 **Detecção:** Verificar se `.context/.devflow.yaml` tem git strategy configurado
+(schema aninhado: chave `strategy:` indentada sob `git:` — não uma chave achatada no topo)
 ```bash
-grep -q "gitStrategy:" .context/.devflow.yaml 2>/dev/null
+grep -qE '^[[:space:]]+strategy:[[:space:]]*[^[:space:]]' .context/.devflow.yaml 2>/dev/null
 ```
 
 **Se NÃO configurado:**

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — Detecção / observabilidade — PR 4
+
+- **`references/post-update-guide.md`** — a detecção de "git strategy já configurada" no `/devflow update`
+  Step 6 usava `gitStrategy:` (chave inexistente); passa a casar o schema aninhado real (`strategy:`
+  indentado sob `git:`), evitando sugerir `/devflow config` num projeto já configurado (UPD-1).
+- **`commands/devflow.md`** — o Step 7 (detecção de drift v1→v2) só olhava `.layout-version`; agora
+  reconhece **v2 estrutural** (presença de `.context/engineering/`) como já-migrado, evitando o
+  falso-positivo de migração em projetos v2 sem o marcador (UPD-2).
+- **`hooks/session-start`** — o bloco de doc-grounding injetava o protocolo "consulte
+  `mcp__…__search_docs`" mesmo com o `docs-mcp-server` **ausente** da sessão; agora condiciona a
+  `docs_mcp_available` e, quando o MCP não está registrado, emite uma **nota de indisponibilidade**
+  (sem instruir a consultar um MCP inexistente; mantém o espírito fail-closed) (CP-2b).
+
 ### Changed — Guardrails de disciplina nas skills — PR 3
 
 Adiciona guardrails de disciplina (presença de instrução anti-atalho/escalação) às skills, com testes de disciplina (grep) e um teste de regressão de enforcement. Correções com TDD:
