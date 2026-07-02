@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.26.0] — 2026-07-02
+
 ### Tests — Cobertura de regressão L1 — PR 6
 
 Fecha a dívida de cobertura L1 dos achados E2E. **Achado de auditoria (honestidade):** ao verificar o
