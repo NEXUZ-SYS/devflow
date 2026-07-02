@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Guardrails de disciplina nas skills — PR 3
+
+Adiciona guardrails de disciplina (presença de instrução anti-atalho/escalação) às skills, com testes de disciplina (grep) e um teste de regressão de enforcement. Correções com TDD:
+
+- **`skills/prevc-validation/SKILL.md`** — guardrail **anti-atalho (B8)** no gate da fase V:
+  PROIBIDO satisfazer o gate removendo/skippando testes ou desativando o linter; verificação
+  mecânica de que a **contagem de testes não regride** vs a base (`git diff`) e asserts não viram no-op.
+- **`skills/git-strategy/SKILL.md`** — seção **Proteção da própria configuração (B9)**: ao detectar
+  pedido de alterar `git.strategy`/`protectedBranches`/`branchProtection`, **recusar e escalar** ao
+  operador; nunca aplicar autonomamente. Referencia a rede mecânica do `devflow-config-guard` (PR 2).
+- **`assets/standards/std-security.md`** — `activation: on-demand` → **`always`** (B6). Nota de triagem:
+  o linter default **já era enforçado por default** (o `standards-loader` não consome `activation`; ele é
+  metadado informativo) — o achado "só on-demand, não enforçado" era um mis-triage. `always` torna o
+  frontmatter honesto/à prova de futuro; adicionado **teste de regressão** que trava o disparo do linter
+  std-security por default (SQL string-interpolada).
+- **`skills/prevc-execution/SKILL.md`** — guardrail de **escalação de decisões de segurança (B6)**:
+  injection/authz/secrets/cripto/desserialização exigem sinalizar+escalar (não decidir em silêncio),
+  inclusive como gatilho de escalação ao humano no modo autonomous.
+
+> **Follow-up (sync standalone):** o std default alterado precisa ser espelhado em
+> `NEXUZ-SYS/devflow-standards` (`.context/engineering/standards/std-security.md` → `activation: always`)
+> antes do próximo `/devflow update` Step 4d, senão o fetch reverte a mudança.
+
 ### Security — Rede de segurança do hook pre-tool-use (autonomia) — PR 2
 
 Fecha os BYPASS-críticos de autonomia: sem `permissions.yaml`, o `pre-tool-use` não tinha rede contra
