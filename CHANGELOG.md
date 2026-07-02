@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security — Rede de segurança do hook pre-tool-use (autonomia) — PR 2
+
+Fecha os BYPASS-críticos de autonomia: sem `permissions.yaml`, o `pre-tool-use` não tinha rede contra
+leitura de segredos, `git push`/`gh pr merge` direto na protegida, nem contra o auto-desarme da própria
+proteção. Correções com TDD (RED→GREEN):
+
+- **`scripts/lib/permissions-evaluator.mjs` + `hooks/pre-tool-use`** — baseline **default-deny de segredos**
+  (`.env`, `**/*.pem`, `**/*.key`, `**/id_rsa*`, `**/secrets/**`, `**/.ssh/**`) aplicado **sem opt-in**:
+  mesclado (deny-first) mesmo quando há `permissions.yaml` que permita tudo, e o evaluator passa a ser
+  **sempre** invocado (baseline vale mesmo sem o arquivo). Preserva o fail-close de configs legadas/inválidas (ADV-7).
+- **`scripts/lib/git-op-guard.mjs` (+ CLI) + `hooks/pre-tool-use`** — nega `git push` / `gh pr merge` /
+  `git commit` executados **direto numa branch protegida**; libera em branch de trabalho. Pré-filtro `case`
+  evita overhead em comandos não-git (ADV-6).
+- **`scripts/lib/devflow-config-guard.mjs` (+ CLI) + `hooks/pre-tool-use`** — a whitelist de `.devflow.yaml`
+  deixa de ser `exit 0` incondicional: editar para **enfraquecer** `git.*` (branchProtection→false,
+  protectedBranches encolhe, strategy→trunk-based) numa branch protegida é **negado** (compara vs `git HEAD`);
+  edições não-sensíveis passam. Impede o auto-desarme da git-strategy (ADV-8/B9).
+
 ### Fixed — Path-drift legado ↔ DDC v2 (achado-mãe da validação E2E) — PR 1
 
 Componentes em bash/prosa hardcodavam os paths legados `.context/{adrs,standards}`, enquanto o canônico

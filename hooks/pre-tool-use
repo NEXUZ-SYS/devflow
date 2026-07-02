@@ -37,14 +37,18 @@ print(d.get('cwd', ''))
 # Loads .context/permissions.yaml and evaluates deny → allow → mode → callback.
 # A 'deny' decision exits the hook immediately with permissionDecision=deny;
 # 'allow' continues to existing branch protection (defense-in-depth);
-# 'prompt' falls through to the legacy logic (no behavior change for users
-# who haven't configured permissions.yaml — empty config returns 'prompt').
+# 'prompt' falls through to the legacy logic.
+#
+# ADV-7: the evaluator ALWAYS runs — even without a permissions.yaml — so the
+# baseline default-deny of secrets (loadPermissions returns it when the file is
+# absent) is enforced. Cost: 1 node process per tool-call in projects without a
+# permissions.yaml (accepted trade-off; secrets protection is not opt-in).
 #
 # Uses event.cwd (not PWD) so the hook reads the permissions.yaml of the
 # user's project, not the plugin install dir.
 
 PERMS_DIR="${CWD:-$PWD}"
-if [ -f "${PERMS_DIR}/.context/permissions.yaml" ]; then
+if true; then  # ADV-7: sempre avaliar (baseline default-deny vale sem permissions.yaml)
   EVENT_PATH=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -155,6 +159,42 @@ PYEOF
     ;;
 esac
 
+# --- ADV-6: guard destructive git ops on protected branches ---
+# git push / gh pr merge / git commit run DIRECTLY on a protected branch must go
+# through PREVC phase C / devflow:git-strategy — this closes the gap that the
+# Edit/Write gate (below) leaves open for Bash. Self-contained; a cheap `case`
+# pre-filter means the node guard only runs for git-ish commands. Fail-open on
+# any error (never blocks non-git Bash). SI-1: CLI invoked as a file via stdin.
+if [ "$TOOL_NAME" = "Bash" ]; then
+  GIT_BASH_CMD=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('tool_input', {}).get('command', ''))
+" 2>/dev/null || echo "")
+  case "$GIT_BASH_CMD" in
+    *"git push"*|*"gh pr merge"*|*"git commit"*)
+      GITGUARD_OUT=$(printf '%s' "$INPUT" | (cd "${CWD:-$PWD}" && node "${PLUGIN_ROOT}/scripts/lib/git-op-guard-cli.mjs") 2>/dev/null || echo "")
+      GITGUARD_DECISION=$(printf '%s' "$GITGUARD_OUT" | python3 -c "
+import json, sys
+try: print(json.load(sys.stdin).get('decision', ''))
+except: print('')
+" 2>/dev/null || echo "")
+      if [ "$GITGUARD_DECISION" = "deny" ]; then
+        GITGUARD_REASON=$(printf '%s' "$GITGUARD_OUT" | python3 -c "
+import json, sys
+try:
+    reason = json.load(sys.stdin).get('reason', 'git op bloqueada na branch protegida')
+except:
+    reason = 'git op bloqueada na branch protegida'
+print(json.dumps(f'[devflow git-guard] {reason}')[1:-1])
+" 2>/dev/null || echo "git op bloqueada na branch protegida")
+        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$GITGUARD_REASON"
+        exit 0
+      fi
+      ;;
+  esac
+fi
+
 # --- Only act on Edit and Write (legacy branch-protection logic) ---
 
 if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
@@ -216,7 +256,29 @@ if [ -n "$FILE_PATH" ]; then
       exit 0
       ;;
     # DevFlow config file (config skill needs to write this)
+    # ADV-8/B9: the config skill may legitimately edit this, but weakening the
+    # git.* protection fields (branchProtection, protectedBranches, strategy) on a
+    # protected branch is denied — auto-disarm must be escalated to the operator.
+    # Non-weakening edits (and any edit on a work branch) still pass through.
     */.context/.devflow.yaml)
+      CFGGUARD_OUT=$(printf '%s' "$INPUT" | (cd "${CWD:-$PWD}" && node "${PLUGIN_ROOT}/scripts/lib/devflow-config-guard-cli.mjs") 2>/dev/null || echo "")
+      CFGGUARD_DECISION=$(printf '%s' "$CFGGUARD_OUT" | python3 -c "
+import json, sys
+try: print(json.load(sys.stdin).get('decision', ''))
+except: print('')
+" 2>/dev/null || echo "")
+      if [ "$CFGGUARD_DECISION" = "deny" ]; then
+        CFGGUARD_REASON=$(printf '%s' "$CFGGUARD_OUT" | python3 -c "
+import json, sys
+try:
+    reason = json.load(sys.stdin).get('reason', '.devflow.yaml enfraquece a proteção git')
+except:
+    reason = '.devflow.yaml enfraquece a proteção git'
+print(json.dumps(f'[devflow config-guard] {reason}')[1:-1])
+" 2>/dev/null || echo ".devflow.yaml enfraquece a proteção git")
+        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$CFGGUARD_REASON"
+        exit 0
+      fi
       exit 0
       ;;
   esac
