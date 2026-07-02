@@ -8,11 +8,16 @@ description: "Use when initializing DevFlow in a new project — scaffolds .cont
 Initialize a project with `.context/` containing project-aware agents, skills, and documentation. Uses dotcontext when available for the richest output, falls back to DevFlow's own scaffolding when not.
 
 <HARD-GATE>
-Se `.context/docs/` já existe, este projeto já tem contexto — não é uma inicialização do zero.
-Neste caso, **delegue para `devflow:context-sync`** que atualiza o conteúdo existente.
+Se **qualquer** camada de contexto já existe **com conteúdo** — `.context/docs/`,
+`.context/engineering/`, `.context/business/`, `.context/product/` ou
+`.context/operations/` — este projeto já tem contexto e **não** é uma inicialização
+do zero. Neste caso, **delegue para `devflow:context-sync`** que atualiza o conteúdo
+existente. (Um `.context/` que contém apenas `.devflow.yaml`/`.layout-version` e
+diretórios vazios ainda conta como green-field.)
 
 Fluxo:
-1. Verificar se `.context/docs/` existe
+1. Verificar se **alguma** de `.context/docs/`, `.context/engineering/`,
+   `.context/business/`, `.context/product/`, `.context/operations/` existe e contém arquivos
 2. **SIM** → Invocar skill `devflow:context-sync` (sync completo) e PARAR
 3. **NÃO** → Prosseguir com inicialização normal (scaffold + fill)
 
