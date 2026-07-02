@@ -14,9 +14,10 @@
 //   today,                     // YYYY-MM-DD (for future date-aware checks)
 // }
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
+import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -281,7 +282,69 @@ const permissionsHealth = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth];
+// Conta ADRs com `status: Aprovado` num diretório (ignora README.md).
+function countApprovedAdrs(dir) {
+  if (!existsSync(dir)) return 0;
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  let n = 0;
+  for (const entry of entries) {
+    if (entry === "README.md" || !entry.endsWith(".md")) continue;
+    let content;
+    try {
+      content = readFileSync(join(dir, entry), "utf-8");
+    } catch {
+      continue;
+    }
+    if (/^status:\s*['"]?Aprovado['"]?\s*$/m.test(content)) n++;
+  }
+  return n;
+}
+
+// DOCTOR-1: ADRs aprovadas devem viver no canônico DDC v2 (engineering/adrs)
+// para serem injetadas limpo pelo session-start. Se só existirem em path legado,
+// o session-start ainda injeta (com aviso N6) — o doctor orienta a migração.
+// Esta é a rede que teria pego o achado-mãe de path-drift.
+const adrInjection = {
+  id: "adr-injection",
+  title: "ADRs aprovadas no path canônico DDC v2 (engineering/adrs)",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const canonical = contextPaths(ctx.cwd).adrs; // .context/engineering/adrs
+    let inCanonical = 0;
+    let inLegacyOnly = 0;
+    const legacyDirs = [];
+    for (const dir of resolveReadPaths(ctx.cwd, "adrs")) {
+      const approved = countApprovedAdrs(dir);
+      if (approved === 0) continue;
+      if (dir === canonical) inCanonical += approved;
+      else { inLegacyOnly += approved; legacyDirs.push(dir); }
+    }
+    if (inCanonical === 0 && inLegacyOnly === 0) {
+      return { status: "OK", diagnosis: "Nenhuma ADR aprovada encontrada — nada a injetar.", repair: "" };
+    }
+    if (inCanonical === 0 && inLegacyOnly > 0) {
+      const rel = legacyDirs.map(d => d.replace(`${ctx.cwd}/`, "")).join(", ");
+      return {
+        status: "WARN",
+        diagnosis: `${inLegacyOnly} ADR(s) aprovada(s) vivem só em path legado (${rel}); o session-start injeta com aviso N6.`,
+        repair: "Migre as ADRs para .context/engineering/adrs/ (canônico DDC v2) — ex.: /devflow update migration.",
+      };
+    }
+    return {
+      status: "OK",
+      diagnosis: `${inCanonical} ADR(s) aprovada(s) no canônico engineering/adrs.`,
+      repair: "",
+    };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);

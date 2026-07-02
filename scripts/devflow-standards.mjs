@@ -16,7 +16,7 @@ import { join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { loadStandards } from "./lib/standards-loader.mjs";
 import { validateSubset } from "./lib/glob.mjs";
-import { contextPaths } from "./lib/context-paths.mjs";
+import { contextPaths, resolveReadPaths } from "./lib/context-paths.mjs";
 import { isWithinDir } from "./lib/path-guard.mjs";
 
 const SCAFFOLD_TEMPLATE = (id) => `---
@@ -731,10 +731,16 @@ async function cmdAudit(targetId, projectRoot) {
     console.error("Usage: devflow standards audit <id>");
     return 2;
   }
-  // Resolve id → file path
-  const stdsDir = `${projectRoot}/.context/standards`;
+  // Resolve id → file path (DDC v2: canônico engineering/standards + fallback legado)
   const fname = targetId.startsWith("std-") ? `${targetId}.md` : `std-${targetId}.md`;
-  const filePath = `${stdsDir}/${fname}`;
+  const readDirs = resolveReadPaths(projectRoot, "standards");
+  let filePath = null;
+  for (const dir of readDirs) {
+    const cand = `${dir}/${fname}`;
+    if (existsSync(cand)) { filePath = cand; break; }
+  }
+  // Não encontrado em nenhum path → aponta o canônico para o S0 reportar "not found".
+  if (!filePath) filePath = `${readDirs[0]}/${fname}`;
   const r = auditStandard(filePath, projectRoot);
   console.log(`=== Audit: ${fname} ===`);
   console.log(`Resumo: ${r.summary.pass} PASS · ${r.summary.fail} FAIL · ${r.summary.warn} WARN\n`);

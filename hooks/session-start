@@ -173,21 +173,23 @@ NAPKIN_TMPL
   napkin_context="\\n<NAPKIN_RUNBOOK>\\n${napkin_escaped}\\n</NAPKIN_RUNBOOK>\\n"
 fi
 
-# --- Detect and inject ADR guardrails (Semana 0 dual-read) ---
+# --- Detect and inject ADR guardrails (DDC v2 path resolution) ---
 #
-# Canonical path: .context/adrs/ (v1.0+)
-# Legacy path:    .context/docs/adrs/ (deprecated, removed in v1.2)
-# Both are scanned during transition. If only legacy contributes ADRs, emit
-# LEGACY_PATH_DETECTED warning to stderr (per N6).
+# Canonical path (DDC v2): .context/engineering/adrs/
+# Legacy fallbacks:        .context/adrs/ (v1.x), .context/docs/adrs/ (deprecated)
+# Dirs resolved via context-paths.mjs (resolve-read adrs), canonical first.
+# If only a legacy path contributes ADRs, emit a LEGACY warning to stderr (N6).
 
 adr_context=""
-adr_dir_new="${project_root}/.context/adrs"
-adr_dir_legacy="${project_root}/.context/docs/adrs"
-
-# Build list of existing ADR directories (canonical first)
+# Resolve os dirs de ADR: canonical engineering/adrs primeiro, depois fallbacks
+# legados existentes (.context/adrs, .context/docs/adrs). SI-1: plugin path como
+# argumento de subcomando, nunca interpolado em `node -e`.
 adr_dirs=()
-[ -d "$adr_dir_new" ] && adr_dirs+=("$adr_dir_new")
-[ -d "$adr_dir_legacy" ] && adr_dirs+=("$adr_dir_legacy")
+while IFS= read -r d; do
+  [ -n "$d" ] && adr_dirs+=("$d")
+done < <(node "${PLUGIN_ROOT}/scripts/lib/context-paths.mjs" resolve-read adrs "${project_root}" 2>/dev/null || true)
+adr_dir_legacy="${project_root}/.context/docs/adrs"
+adr_dir_new="${project_root}/.context/engineering/adrs"
 
 if [ "${#adr_dirs[@]}" -gt 0 ]; then
   adr_count=0

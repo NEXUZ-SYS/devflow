@@ -12,9 +12,9 @@ Seleciona as ADRs relevantes a uma task específica em vez de dumpar todas as ap
 - **Automaticamente** — durante `devflow:prevc-planning` Step 1, **depois** que a task está definida
 - **Sob demanda** — usuário diz "filtre as ADRs para esta task X", ou menciona ter muitas ADRs ativas e querer foco
 
-**Não invoque** se `.context/adrs/README.md` não existir. Skill é no-op nesse caso.
+**Não invoque** só se NENHUM diretório de ADRs resolvido tiver `README.md`. Resolva os diretórios via `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/context-paths.mjs resolve-read adrs .` (canônico `engineering/adrs` primeiro, com fallback para os legados `.context/adrs/` e `.context/docs/adrs/` que existam). A skill é no-op apenas quando nenhum deles contém `README.md`.
 
-> **Dual-read transitório (v1.0.x/v1.1.x):** Se `.context/adrs/README.md` não existir, verifique também `.context/docs/adrs/README.md` (path legado). Se apenas legado existir, carregue de lá e emita aviso "LEGACY_PATH_DETECTED — migre para `.context/adrs/` antes de v1.2 (ver ADR-001)". Path legado é removido em v1.2.
+> **Resolução de path (DDC v2):** o diretório canônico é `.context/engineering/adrs/`. `resolve-read adrs` também inclui os fallbacks legados `.context/adrs/` (v1.x) e `.context/docs/adrs/` (deprecated) que existam no disco, canônico primeiro. Se apenas um path legado contribuir, emita aviso "LEGACY_PATH_DETECTED — migre para `.context/engineering/adrs/` (ver ADR-001)".
 
 ## Anuncie ao iniciar
 
@@ -24,7 +24,7 @@ Seleciona as ADRs relevantes a uma task específica em vez de dumpar todas as ap
 
 ### Step 1 — Ler o índice
 
-Leia `.context/adrs/README.md`. Extraia a tabela com:
+Resolva o diretório de ADRs via `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/context-paths.mjs resolve-read adrs .` (canônico `engineering/adrs` primeiro) e leia o `README.md` do primeiro diretório resolvido que o contenha. Extraia a tabela com:
 - **v2 schema (14 cols)** — número, título, **versão**, categoria, stack, escopo, status, **kind**, contrato, refines, supersedes, criada, guardrails (count), arquivo
 - **v1 schema (legacy)** — número, título, escopo, status, guardrails, stack, arquivo
 
@@ -83,7 +83,7 @@ Para cada ADR aprovada, aplicar em ordem:
 
 ### Step 5 — Carregar guardrails
 
-Para cada ADR que passou em Step 4, abra `.context/adrs/<nn>-<slug>.md` e extraia a seção `## Guardrails` (SEMPRE/NUNCA/QUANDO).
+Para cada ADR que passou em Step 4, abra `<dir-de-adrs>/<nn>-<slug>.md` — o mesmo diretório resolvido no Step 1 (canônico `engineering/adrs`) — e extraia a seção `## Guardrails` (SEMPRE/NUNCA/QUANDO).
 
 ### Step 6 — Emitir bloco
 

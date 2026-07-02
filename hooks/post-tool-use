@@ -167,7 +167,10 @@ ti = d.get('tool_input', {})
 print(ti.get('file_path') or ti.get('path') or '')
 " 2>/dev/null || echo "")
 
-  if [ -n "$NUDGE_PATH" ] && [ -d "${PWD}/.context/standards" ]; then
+  # v2-aware: reconhece standards no canônico engineering/standards + legado.
+  # SI-1: plugin path como argumento de subcomando, nunca interpolado em node -e.
+  STD_DIRS=$(node "${PLUGIN_ROOT}/scripts/lib/context-paths.mjs" resolve-read standards "${PWD}" 2>/dev/null || true)
+  if [ -n "$NUDGE_PATH" ] && [ -n "$STD_DIRS" ]; then
     NUDGE_OUTPUT=$(printf '{"tool":"%s","path":%s}' "$TOOL_NAME" "$(printf '%s' "$NUDGE_PATH" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')" \
       | node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --record 2>/dev/null || echo "")
     if [ -n "$NUDGE_OUTPUT" ]; then
