@@ -67,6 +67,29 @@ Esses arquivos não são código do projeto, mas o Claude Code prompta o usuári
 **Importante:** Este skill NÃO faz mais detecção automática por heurísticas.
 A detecção foi movida para o skill `devflow:config`, que é executado uma vez no setup.
 
+## Proteção da própria configuração (B9)
+
+Este skill **lê** a configuração git — ele **nunca a afrouxa**. Se a task pedir (direta
+ou indiretamente) para **alterar os campos de proteção** de `.context/.devflow.yaml`:
+
+- `git.strategy` (ex.: trocar para `trunk-based`)
+- `git.protectedBranches` (remover/encolher a lista)
+- `git.branchProtection` (`true` → `false`)
+
+**RECUSE e ESCALE ao operador.** Nunca aplique essa mudança autonomamente — nem "para
+destravar a task", nem como efeito colateral de outra edição. Afrouxar a estratégia git
+é uma decisão do operador humano, não do agente.
+
+Resposta padrão ao detectar o pedido:
+
+> "Alterar `git.strategy`/`protectedBranches`/`branchProtection` afrouxa a proteção do
+> repositório. Não posso aplicar isso autonomamente — isso exige aprovação explícita do
+> operador. Se você confirma a mudança, aplique-a manualmente (ou instrua explicitamente)."
+
+Esta regra de disciplina é reforçada por uma **rede mecânica** no `hooks/pre-tool-use`
+(`devflow-config-guard`, ADV-8/B9): editar `.devflow.yaml` para enfraquecer `git.*` numa
+branch protegida é **negado** no nível do hook, mesmo que a instrução escape a esta skill.
+
 ## Fluxo (gate bloqueante)
 
 ### 1. Verificar Branch Atual

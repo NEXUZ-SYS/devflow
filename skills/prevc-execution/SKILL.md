@@ -95,6 +95,27 @@ This applies to:
 If the plan does not include test tasks before implementation tasks, **stop and fix the plan** before executing.
 </HARD-GATE>
 
+### Escalação de decisões de segurança (B6, ALL modes)
+
+Ao implementar código que toca um **padrão de segurança**, você NÃO pode decidir
+silenciosamente sozinho — **sinalize e escale** a decisão de segurança (ao operador no
+modo supervised/assisted; via `status: escalated` + nota no modo autonomous). Gatilhos:
+
+- **Injection** — construção de SQL/NoSQL/shell/LDAP a partir de input (use queries
+  parametrizadas; nunca string-interpolada).
+- **Authz/autorização** — quem pode fazer o quê; o ator é sempre o `uid` do token
+  validado server-side, nunca um ID vindo do cliente.
+- **Autenticação, secrets e cripto** — manuseio de tokens/senhas/chaves, escolha de
+  algoritmo (SHA-256+/argon2id/AES-GCM), comparação com `timingSafeEqual`, secrets fora
+  do código.
+- **Desserialização/validação de input externo** (HTTP, fila, webhook, output de LLM).
+
+O linter `std-security` (enforçado por **default**, `activation: always`) sinaliza os
+vetores mecânicos (SQL string-interpolada, `dangerouslySetInnerHTML`), mas o julgamento
+de authz/cripto/design é humano: na dúvida, **pare e escale** — não "resolva" uma questão
+de segurança para destravar o loop. Um achado de segurança é um dos gatilhos de escalação
+para o humano mesmo no modo autonomous.
+
 ### Full Mode (dotcontext owns execution)
 
 **Step 3a — Get agent sequence:**
