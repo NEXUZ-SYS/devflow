@@ -256,7 +256,29 @@ if [ -n "$FILE_PATH" ]; then
       exit 0
       ;;
     # DevFlow config file (config skill needs to write this)
+    # ADV-8/B9: the config skill may legitimately edit this, but weakening the
+    # git.* protection fields (branchProtection, protectedBranches, strategy) on a
+    # protected branch is denied — auto-disarm must be escalated to the operator.
+    # Non-weakening edits (and any edit on a work branch) still pass through.
     */.context/.devflow.yaml)
+      CFGGUARD_OUT=$(printf '%s' "$INPUT" | (cd "${CWD:-$PWD}" && node "${PLUGIN_ROOT}/scripts/lib/devflow-config-guard-cli.mjs") 2>/dev/null || echo "")
+      CFGGUARD_DECISION=$(printf '%s' "$CFGGUARD_OUT" | python3 -c "
+import json, sys
+try: print(json.load(sys.stdin).get('decision', ''))
+except: print('')
+" 2>/dev/null || echo "")
+      if [ "$CFGGUARD_DECISION" = "deny" ]; then
+        CFGGUARD_REASON=$(printf '%s' "$CFGGUARD_OUT" | python3 -c "
+import json, sys
+try:
+    reason = json.load(sys.stdin).get('reason', '.devflow.yaml enfraquece a proteção git')
+except:
+    reason = '.devflow.yaml enfraquece a proteção git'
+print(json.dumps(f'[devflow config-guard] {reason}')[1:-1])
+" 2>/dev/null || echo ".devflow.yaml enfraquece a proteção git")
+        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$CFGGUARD_REASON"
+        exit 0
+      fi
       exit 0
       ;;
   esac
