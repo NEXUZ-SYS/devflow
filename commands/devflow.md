@@ -387,22 +387,27 @@ Then show a consolidated "Next Steps" section with only the features that are **
 
 **Step 7 — Structural drift detection:**
 
-After Step 6, read `.context/.layout-version` in the current project directory (if `.context/` exists):
+After Step 6, read `.context/.layout-version` in the current project directory (if `.context/` exists). Also detect a **structurally-v2** layout: a `.context/` that already has the `engineering/` DDC layer is on v2 even when the `.layout-version` marker is missing (older v2 projects predate the marker, or it was never written):
 
 ```bash
 LAYOUT_VERSION=""
 [ -f ".context/.layout-version" ] && LAYOUT_VERSION=$(cat ".context/.layout-version" | tr -d '[:space:]')
+
+# v2 estrutural: a pasta engineering/ é o sinal de que o layout já é DDC v2,
+# mesmo sem o marcador. Evita falso-positivo de migração (UPD-2).
+STRUCTURAL_V2=false
+[ -d ".context/engineering" ] && STRUCTURAL_V2=true
 ```
 
 - If `.context/` does **not** exist: skip this step (no layout to check).
-- If `.context/` exists **and** `LAYOUT_VERSION` is missing or `< 2`: include the following entry in the "Available features" section of the Step 6 output (alongside any other unconfigured features). **Never execute this automatically** — it is always opt-in.
+- If `.context/` exists **and** `STRUCTURAL_V2` is `false` **and** `LAYOUT_VERSION` is missing or `< 2`: include the following entry in the "Available features" section of the Step 6 output (alongside any other unconfigured features). **Never execute this automatically** — it is always opt-in.
 
 ```
 ▸ Migração de layout de contexto (v1 → v2) — 4 camadas de conhecimento DDC
   Para ativar:  /devflow update migration
 ```
 
-- If `LAYOUT_VERSION` is already `2`: this entry does NOT appear (already migrated).
+- If `LAYOUT_VERSION` is already `2` **or** `STRUCTURAL_V2` is `true`: this entry does NOT appear (already migrated — por marcador ou por estrutura `engineering/`).
 
 **Important:** This command runs shell commands directly. It does NOT invoke any skill.
 
