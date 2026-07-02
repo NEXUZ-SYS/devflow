@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Higiene / menores — PR 5
+
+- **`skills/{prevc-confirmation,prevc-execution,config,autonomous-loop}` + `scripts/lib/*`** — elimina as
+  **10 ocorrências de `node -e` interpoladas** (SI-1): cada snippet virou um subcomando CLI nos libs
+  (`adr-pending`, `path-resolver`, `orchestrator-config`, `orchestrator-dispatch`, `devflow-yaml-merge`),
+  invocado como `node <arquivo> <args>` (path como argv, dados via argv/stdin). Fecha o vetor de injeção do
+  autonomous-loop (`$STORIES_JSON`/`$CFG_JSON` interpolados) e o teste-invariante SI-1 foi **fortalecido**
+  para pegar qualquer `$` num `node -e` (o regex antigo perdia 5 das 10).
+- **`skills/knowledge/references/taxonomy-of-knowledge.yaml`** — `business-compliance` deixa de forçar
+  `activation: always`; passa a `on-demand` (consistente com business-model/metrics), evitando injeção
+  eager compulsória (F-build-3).
+- **`scripts/devflow-stacks.mjs`** — `eject` emite **aviso em stderr** quando `CLAUDE_PLUGIN_ROOT` não está
+  definido e cai no fallback derivado do script (ajuda a diagnosticar "stack não encontrado") (F-build-2).
+- **`scripts/lib/stacks-filter.mjs` + `skills/stack-filter/SKILL.md`** — documenta que a seleção de stacks é
+  **nível de projeto** por design (casa por dependências declaradas, invariante à task), não uma filtragem
+  semântica por task como knowledge/adr-filter; ajusta a mensagem para não prometer "filtragem por task" (STK-P3).
+
 ### Fixed — Detecção / observabilidade — PR 4
 
 - **`references/post-update-guide.md`** — a detecção de "git strategy já configurada" no `/devflow update`
