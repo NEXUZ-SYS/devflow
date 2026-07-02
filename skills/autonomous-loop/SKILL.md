@@ -42,12 +42,12 @@ Antes da seleção story-by-story, decidir se a fase E roda em **paralelo via AO
 2. Ler `.context/.devflow.yaml` (seção `orchestrator`) e `.context/workflow/stories.yaml` (stories com `id` + `blocked_by`).
 3. **Nº de stories na primeira onda** (`N`) — prontas a iniciar (sem dependências pendentes): passar as stories como JSON e computar —
    ```bash
-   node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-dispatch.mjs').then(m=>process.stdout.write(String(m.independentCount($STORIES_JSON))))"
+   printf '%s' "$STORIES_JSON" | node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-dispatch.mjs" independent-count
    ```
    onde `$STORIES_JSON` é o array `[{id, blocked_by}]` extraído do stories.yaml.
 4. **Decisão** —
    ```bash
-   node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.shouldParallelize({config:$CFG_JSON, scale:'$SCALE', independentCount:$N, aoAvailable:$AO_OK}).decision))"
+   printf '%s' "$CFG_JSON" | node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs" should-parallelize "$SCALE" "$N" "$AO_OK"
    ```
    onde `$CFG_JSON` é `{orchestrator: {...}}` extraído do `.devflow.yaml`, `$SCALE` é a escala do workflow, `$N` é o passo 3, `$AO_OK` é o passo 1.
 

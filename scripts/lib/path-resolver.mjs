@@ -25,3 +25,13 @@ export function resolveAdrPath(projectRoot) {
     isLegacy: !canonicalExists && hasLegacy,
   };
 }
+
+// CLI: node path-resolver.mjs adr-globs → imprime "<dir>/*.md ..." dos readPaths
+// de ADR (canonical primeiro). Consumido por skills sem `node -e` (SI-1).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd] = process.argv.slice(2);
+  if (cmd === "adr-globs") {
+    const { readPaths } = resolveAdrPath(process.cwd());
+    process.stdout.write(readPaths.map(d => d + "/*.md").join(" "));
+  }
+}
