@@ -382,13 +382,20 @@ PYEOF
   g_server=$(printf '%s' "$g_server" | tr -cd 'a-zA-Z0-9._-'); g_server=${g_server:-docs-mcp-server}
 
   if [ -n "$g_mode" ] && [ "$g_mode" != "off" ]; then
-    grounding_instruction="DOC-GROUNDING ATIVO (mode: ${g_mode}). Fonte canonica de fatos de stack: o MCP de documentacao (mcp__${g_server}__search_docs / find_version / list_libraries).
+    if [ "$docs_mcp_available" = "true" ]; then
+      grounding_instruction="DOC-GROUNDING ATIVO (mode: ${g_mode}). Fonte canonica de fatos de stack: o MCP de documentacao (mcp__${g_server}__search_docs / find_version / list_libraries).
 PROTOCOLO para qualquer afirmacao sobre lib/framework/API/versao EXTERNA:
 1. Consulte o MCP ANTES de afirmar.
 2. Responda CITANDO lib@versao + o trecho retornado.
 3. Se o MCP retornar vazio/timeout/erro: em 'docs-only' PARE e diga 'nao ha doc indexada ou o MCP falhou — nao vou responder de memoria de treino', e ofereca /devflow:scrape-stack-batch. Em 'docs-first', so entao complemente, com disclosure explicito 'fonte: conhecimento de treino, nao verificado no MCP'.
 ESCOPO: vale para conhecimento de STACK EXTERNO. Raciocinio geral, o codigo DO PROPRIO projeto (verificavel por Read/Grep/Glob) e o contexto da conversa seguem livres.
 LIMITE (honestidade): este modo bloqueia ferramentas web (hard, via pre-tool-use) + exige citacao + fail-closed; NAO e trava nos pesos do modelo — e compromisso reforcado por essas barreiras."
+    else
+      # CP-2b: grounding configurado, mas o docs-mcp-server NAO esta registrado
+      # nesta sessao. Nao instrua consultar um MCP inexistente — marque a
+      # indisponibilidade e mantenha o espirito fail-closed (nao inventar).
+      grounding_instruction="DOC-GROUNDING configurado (mode: ${g_mode}), mas o MCP de documentacao '${g_server}' esta INDISPONIVEL nesta sessao (sem entrada docs-mcp-server em .mcp.json). NAO consulte mcp__${g_server}__* — as ferramentas nao existem aqui. Para qualquer afirmacao sobre lib/framework/API/versao EXTERNA: declare a incerteza explicitamente ('fonte: conhecimento de treino, nao verificado — MCP de doc ausente') OU configure o docs-mcp-server / rode /devflow:scrape-stack-batch antes. Espirito fail-closed mantido: nao invente resultados de um MCP que nao existe."
+    fi
     g_escaped=$(escape_for_json "$grounding_instruction")
     grounding_context="\\n<GROUNDING_MODE>\\n${g_escaped}\\n</GROUNDING_MODE>\\n"
   fi
