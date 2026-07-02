@@ -376,7 +376,7 @@ AskUserQuestion:
 Validar a pré-condição (plugin em --scope user) antes de oferecer:
 
 ```bash
-node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>{const o=require('child_process').execSync('claude plugin list 2>/dev/null').toString();const ok=m.parsePluginUserScope(o,'devflow@NEXUZ-SYS')&&m.parsePluginUserScope(o,'superpowers@');console.log(ok?'USER_SCOPE_OK':'NEEDS_USER_SCOPE')})"
+claude plugin list 2>/dev/null | node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs" check-user-scope "devflow@NEXUZ-SYS" "superpowers@"
 ```
 
 - Se `NEEDS_USER_SCOPE`: NÃO oferecer ativação. Informar que, para usar o AO, é preciso
@@ -481,10 +481,10 @@ Gerar com a lib (não escrever à mão):
 
 ```bash
 # Quando enabled:false (NEEDS_USER_SCOPE ou "Não usar") — NÃO passar mode (lib ignora):
-node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({enabled:false})))"
+node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs" block-disabled
 
 # Quando enabled:true — passar mode escolhido (suggest ou auto):
-node -e "import('$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs').then(m=>process.stdout.write(m.orchestratorBlock({mode:'<MODE>'})))"
+node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs" block-mode "<MODE>"
 ```
 
 Substituir `<MODE>` por `suggest` (opção "Sugerir quando compensar") ou `auto` (opção "Automático"). Quando `enabled:false`, chamar sem `mode` — a lib descarta o campo. Anexar a saída ao `.devflow.yaml`.
@@ -555,7 +555,7 @@ Ler o YAML atual e sondar o ambiente para montar um quadro de cada área configu
 
 ```bash
 # Seções de topo presentes no YAML
-SECTIONS=$(node -e 'import("'"$CLAUDE_PLUGIN_ROOT"'/scripts/lib/devflow-yaml-merge.mjs").then(m=>{const fs=require("fs");process.stdout.write(m.topLevelKeys(fs.readFileSync(".context/.devflow.yaml","utf8")).join(" "))})')
+SECTIONS=$(node "$CLAUDE_PLUGIN_ROOT/scripts/lib/devflow-yaml-merge.mjs" top-level-keys .context/.devflow.yaml)
 
 # Rotinas de manutenção
 [ -f .context/routines.json ] && echo "routines: sim" || echo "routines: nao"

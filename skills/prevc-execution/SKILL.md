@@ -169,7 +169,7 @@ workflow-manage({ action: "handoff", from: "<previous-agent>", to: "<next-agent>
 Se durante a implementação surgir uma **decisão arquitetural não prevista no plano** (escolha de lib/contrato, desvio de design), registre-a para o sweep do Confirmation, sem parar o trabalho:
 
 ```bash
-node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs').then(m => m.appendCandidate(process.cwd(), { phrase: '<frase-chave da decisão>', phase: 'E', relatedAdr: '<adrName ou vazio>' }))"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs" append-candidate "E" "<adrName ou vazio>" "<frase-chave da decisão>"
 ```
 Use `relatedAdr` (o `name` da ADR) quando a decisão tocar uma ADR existente; deixe vazio caso contrário. A dedup é automática.
 

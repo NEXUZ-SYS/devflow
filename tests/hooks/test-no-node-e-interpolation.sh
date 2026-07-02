@@ -10,7 +10,10 @@
 
 set -euo pipefail
 
-OFFENDERS=$(grep -rEn 'node -e.*\$\{|node -e.*"\$' hooks/ scripts/ skills/ 2>/dev/null || true)
+# SI-1: flag ANY `$` inside a `node -e` script — cobre ${VAR}, "$VAR e o $VAR sem
+# chaves (que o regex antigo perdia). A forma segura é sempre `node <arquivo> <args>`
+# (path como argv, dados via argv/stdin), nunca um script -e com interpolação.
+OFFENDERS=$(grep -rEn 'node -e.*\$' hooks/ scripts/ skills/ 2>/dev/null || true)
 
 if [ -n "$OFFENDERS" ]; then
   echo "FAIL [SI-1]: node -e with interpolated variables found:"

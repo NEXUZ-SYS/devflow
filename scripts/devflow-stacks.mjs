@@ -270,6 +270,15 @@ export async function cmdEject(rawLib, projectRoot, opts = {}) {
     return 1;
   }
   const pluginRoot = opts.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT;
+  // F-build-2: avisa quando caímos no fallback derivado do script (nem opts.pluginRoot
+  // nem CLAUDE_PLUGIN_ROOT definidos). Se o script foi movido/copiado, esse path pode
+  // não apontar para os assets do plugin — o aviso ajuda a diagnosticar "não encontrado".
+  if (!opts.pluginRoot && !process.env.CLAUDE_PLUGIN_ROOT) {
+    process.stderr.write(
+      `[devflow stacks] Aviso: CLAUDE_PLUGIN_ROOT não definido — usando fallback derivado do script (${pluginRoot}). ` +
+      `Se os stacks default não forem encontrados, exporte CLAUDE_PLUGIN_ROOT apontando para a raiz do plugin.\n`,
+    );
+  }
   const stacksAssets = resolve(pluginRoot, "assets", "stacks");
 
   // Resolve concern + arquivo varrendo assets/stacks/<concern>/<lib>*.md

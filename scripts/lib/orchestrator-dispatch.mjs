@@ -1,5 +1,6 @@
 // Helpers puros para o despacho paralelo via AO. Consome a lib de ondas.
 import { computeWaves } from "./orchestrator-waves.mjs";
+import { readFileSync } from "node:fs";
 
 /** Normaliza stories do stories.yaml para o formato das libs de ondas (blocked_by → depends_on). */
 export function normalizeStories(stories) {
@@ -31,4 +32,15 @@ export function independentCount(stories) {
   const norm = normalizeStories(stories);
   if (norm.length === 0) return 0;
   return computeWaves(norm)[0].length;
+}
+
+// CLI: echo "$STORIES_JSON" | node orchestrator-dispatch.mjs independent-count
+// Dados via stdin (não interpolados num `node -e` — SI-1).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd] = process.argv.slice(2);
+  if (cmd === "independent-count") {
+    let stories = [];
+    try { stories = JSON.parse(readFileSync(0, "utf-8") || "[]"); } catch { stories = []; }
+    process.stdout.write(String(independentCount(stories)));
+  }
 }

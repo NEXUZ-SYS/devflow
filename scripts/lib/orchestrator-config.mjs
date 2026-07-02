@@ -1,4 +1,5 @@
 // Funções puras para configurar a integração com o Agent Orchestrator (AO).
+import { readFileSync } from "node:fs";
 
 /**
  * Detecta se `claude plugin list` reporta o plugin em --scope user.
@@ -56,4 +57,32 @@ export function shouldParallelize({ config, scale, independentCount, aoAvailable
   if (independentCount < min) return { decision: "sequential", reason: `${independentCount} stories independentes < mínimo ${min}` };
   if (o.mode === "auto") return { decision: "parallel", reason: "mode=auto e critérios atendidos" };
   return { decision: "ask", reason: "mode=suggest e critérios atendidos — confirmar com o operador" };
+}
+
+// CLI: node orchestrator-config.mjs <check-user-scope <name...> | block-disabled |
+//   block-mode <mode> | should-parallelize <scale> <count> <ao>>
+// `check-user-scope` lê a saída de `claude plugin list` do stdin; `should-parallelize`
+// lê o config JSON do stdin. Sem `node -e` interpolado (SI-1) e sem execSync interno.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd, ...args] = process.argv.slice(2);
+  const readStdin = () => { try { return readFileSync(0, "utf-8"); } catch { return ""; } };
+  if (cmd === "check-user-scope") {
+    const output = readStdin();
+    const ok = args.length > 0 && args.every(name => parsePluginUserScope(output, name));
+    process.stdout.write(ok ? "USER_SCOPE_OK" : "NEEDS_USER_SCOPE");
+  } else if (cmd === "block-disabled") {
+    process.stdout.write(orchestratorBlock({ enabled: false }));
+  } else if (cmd === "block-mode") {
+    process.stdout.write(orchestratorBlock({ mode: args[0] }));
+  } else if (cmd === "should-parallelize") {
+    let config = {};
+    try { config = JSON.parse(readStdin() || "{}"); } catch { config = {}; }
+    const [scale, count, ao] = args;
+    const r = shouldParallelize({
+      config, scale,
+      independentCount: Number(count) || 0,
+      aoAvailable: ao === "true" || ao === "1",
+    });
+    process.stdout.write(r.decision);
+  }
 }

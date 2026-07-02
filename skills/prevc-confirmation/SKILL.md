@@ -153,18 +153,18 @@ Antes de finalizar o branch:
 
 1. Leia os candidatos capturados na Execution:
    ```bash
-   node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs').then(m => console.log(JSON.stringify(m.readCandidates(process.cwd()))))"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs" read-candidates
    ```
 2. Detecte ADRs tocadas no workflow (paths via `resolveAdrPath`, nunca hardcode — guardrail ADR-001/006):
    ```bash
-   ADR_GLOBS=$(node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/path-resolver.mjs').then(m => { const p = m.resolveAdrPath(process.cwd()); console.log(p.readPaths.map(d => d + '/*.md').join(' ')); })")
+   ADR_GLOBS=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/path-resolver.mjs" adr-globs)
    BASE=$(git merge-base HEAD "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@origin/@@' || echo main)")
    git diff --name-only "$BASE"...HEAD -- $ADR_GLOBS
    ```
 3. Para cada candidato **sem ADR já registrada**, classifique a relação e resolva a ação com `scripts/adr-decision.mjs decide`. Apresente as ofertas **em lote** (uma lista única evolve/create). **Respeite `skip_adr_offer`** — se ativo, pule o sweep silenciosamente.
 4. Limpe o estado:
    ```bash
-   node -e "import('${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs').then(m => m.clearPending(process.cwd()))"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs" clear-pending
    ```
 
 **Completion summary:** acrescente a seção **"ADRs criadas/evoluídas neste workflow"**, listando os nomes tocados (passo 2) e o resultado do sweep.

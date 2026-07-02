@@ -56,6 +56,13 @@ export function detectProjectDeps(projectRoot) {
 }
 
 /**
+ * Seleção **nível de projeto** (project-level) por design: casa os stacks pelas
+ * DEPENDÊNCIAS declaradas do projeto (package.json/pyproject/go.mod/Cargo.toml +
+ * alias map), não pela semântica da task. Responde "quais stacks o projeto usa",
+ * não "quais stacks esta task específica toca" — a relevância por task é papel
+ * dos filtros de knowledge/std (knowledge-filter/adr-filter), não deste. Por isso
+ * o resultado é invariante à task: mesma resposta para qualquer task no mesmo projeto.
+ *
  * @param merged  saída de loadStacksMerged ({ frameworks })
  * @param projectRoot
  * @param opts.alias  override do alias map (default: CURATED_ALIAS + fw.package)

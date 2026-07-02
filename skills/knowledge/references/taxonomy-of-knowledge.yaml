@@ -23,7 +23,7 @@ entries:
   - id: business-compliance
     layer: business
     summary: Restrições regulatórias/legais que vinculam o produto
-    activation: always
+    activation: on-demand
     owner: business-context
     sectionTemplate: ["## Regimes aplicáveis", "## Restrições vinculantes", "## Retenção e consentimento"]
   - id: business-model

@@ -6,6 +6,8 @@
 // YAML — operamos por blocos de texto delimitados por chaves de topo (coluna 0),
 // justamente para não reescrever o arquivo inteiro nem perder comentários inline.
 
+import { readFileSync } from "node:fs";
+
 const TOP_KEY = /^([A-Za-z_][\w-]*):/;
 
 /** Lista as chaves de seção de topo (coluna 0), na ordem de ocorrência. */
@@ -57,4 +59,13 @@ export function mergeSection(yaml, name, body) {
   if (preambleText) parts.push(preambleText);
   for (const s of sections) parts.push(s.text);
   return parts.join("\n\n") + "\n";
+}
+
+// CLI: node devflow-yaml-merge.mjs top-level-keys <arquivo>
+// Imprime as chaves de topo separadas por espaço. Sem `node -e` (SI-1).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd, file] = process.argv.slice(2);
+  if (cmd === "top-level-keys" && file) {
+    process.stdout.write(topLevelKeys(readFileSync(file, "utf-8")).join(" "));
+  }
 }

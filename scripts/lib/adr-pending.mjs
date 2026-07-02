@@ -50,3 +50,20 @@ export function appendCandidate(root, { phrase, phase, relatedAdr = null }) {
 export function clearPending(root) {
   rmSync(pendingPath(root), { force: true });
 }
+
+// CLI: node adr-pending.mjs <read-candidates | clear-pending | append-candidate <phase> <relatedAdr> <phrase...>>
+// Usado por skills sem `node -e` interpolado (SI-1). Args via argv (seguros).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const [cmd, a, b, ...rest] = process.argv.slice(2);
+  const root = process.cwd();
+  if (cmd === "read-candidates") {
+    console.log(JSON.stringify(readCandidates(root)));
+  } else if (cmd === "clear-pending") {
+    clearPending(root);
+  } else if (cmd === "append-candidate") {
+    const phase = a || "";
+    const relatedAdr = b && b.length ? b : null;
+    const phrase = rest.join(" ");
+    appendCandidate(root, { phrase, phase, relatedAdr });
+  }
+}

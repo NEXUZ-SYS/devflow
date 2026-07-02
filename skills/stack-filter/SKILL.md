@@ -5,7 +5,9 @@ description: "Use para selecionar apenas os stacks (tecnologias) relevantes à t
 
 # stack-filter — Filtragem Contextual de Stacks
 
-Seleciona os stacks (libs/frameworks/runtimes) relevantes a uma task específica em vez de listar todos os defaults do plugin. Análogo de `devflow:knowledge-filter`/`devflow:adr-filter` para a camada de stacks — complementa (não substitui) o índice filtrado que o `session-start` hook já injeta via `context-index-cli`.
+Seleciona os stacks (libs/frameworks/runtimes) do projeto em vez de listar todos os defaults do plugin. Complementa (não substitui) o índice filtrado que o `session-start` hook já injeta via `context-index-cli`.
+
+> **Design — seleção nível de projeto (não por task):** diferente de `devflow:knowledge-filter`/`devflow:adr-filter` (que filtram por semântica da task), a seleção de stacks é **project-level**: casa os frameworks pelas **dependências declaradas do projeto** (package.json/pyproject/go.mod/Cargo.toml + alias map), então é invariante à task — "quais stacks o projeto usa", não "quais esta task toca". O único sinal de task é o keyword-match que **libera** stacks sem-dependência-detectável (ex.: harness-engineering, gemini); ele não restringe os stacks já detectados por deps.
 
 **Announce at start:** "Invocando `devflow:stack-filter` — selecionando stacks do framework detectado para esta task."
 
