@@ -25,6 +25,8 @@ Racional: notas de release são um entregável; version-files e CHANGELOG são d
 fail-loud em vez de fail-silent. O **stamp** é responsabilidade do release (automatizado), o **conteúdo**
 é do PR (acumula em `[Unreleased]`).
 
+## [1.26.0] — 2026-07-02
+
 ### Tests — Cobertura de regressão L1 — PR 6
 
 Fecha a dívida de cobertura L1 dos achados E2E. **Achado de auditoria (honestidade):** ao verificar o
