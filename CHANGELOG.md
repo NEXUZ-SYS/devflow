@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Corte automático do CHANGELOG no release + changelog-guard (fail-loud)
+
+Fecha o gap em que uma release podia ser cortada **sem** notas: o `release.yml`/`bump-version.sh` bumpavam
+os version files mas não tocavam o CHANGELOG, e o `tag-release.yml` publicava com um fallback silencioso
+("sem seção correspondente"). Agora o corte é atômico com o bump e um bump sem notas **falha o release PR**.
+
+- **`scripts/lib/changelog-cut.mjs` (+ CLI)** — `cutRelease(text, version, date)`: renomeia `## [Unreleased]`
+  para `## [X.Y.Z] — data` e insere um `[Unreleased]` novo e vazio no topo. Idempotente. Chamado pelo
+  **`scripts/bump-version.sh`** logo após o bump dos version files (atômico).
+- **`scripts/lib/changelog-guard.mjs`** — `checkReleaseChangelog(text, version)`: exige uma seção
+  `## [X.Y.Z]` **não-vazia**. Integrado ao **`scripts/lib/version-guard.mjs`**: quando a transição é um
+  bump (`kind != none`), o guard roda e o release PR fica **vermelho** se a seção faltar/estiver vazia.
+  Num PR de feature (`kind = none`) o CHANGELOG não é exigido — o conteúdo acumula em `[Unreleased]`.
+
+Racional: notas de release são um entregável; version-files e CHANGELOG são duas metades do mesmo fato;
+fail-loud em vez de fail-silent. O **stamp** é responsabilidade do release (automatizado), o **conteúdo**
+é do PR (acumula em `[Unreleased]`).
+
 ### Tests — Cobertura de regressão L1 — PR 6
 
 Fecha a dívida de cobertura L1 dos achados E2E. **Achado de auditoria (honestidade):** ao verificar o
