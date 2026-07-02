@@ -37,14 +37,18 @@ print(d.get('cwd', ''))
 # Loads .context/permissions.yaml and evaluates deny → allow → mode → callback.
 # A 'deny' decision exits the hook immediately with permissionDecision=deny;
 # 'allow' continues to existing branch protection (defense-in-depth);
-# 'prompt' falls through to the legacy logic (no behavior change for users
-# who haven't configured permissions.yaml — empty config returns 'prompt').
+# 'prompt' falls through to the legacy logic.
+#
+# ADV-7: the evaluator ALWAYS runs — even without a permissions.yaml — so the
+# baseline default-deny of secrets (loadPermissions returns it when the file is
+# absent) is enforced. Cost: 1 node process per tool-call in projects without a
+# permissions.yaml (accepted trade-off; secrets protection is not opt-in).
 #
 # Uses event.cwd (not PWD) so the hook reads the permissions.yaml of the
 # user's project, not the plugin install dir.
 
 PERMS_DIR="${CWD:-$PWD}"
-if [ -f "${PERMS_DIR}/.context/permissions.yaml" ]; then
+if true; then  # ADV-7: sempre avaliar (baseline default-deny vale sem permissions.yaml)
   EVENT_PATH=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)

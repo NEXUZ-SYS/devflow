@@ -18,10 +18,38 @@ import { validateUrl } from "./url-validator.mjs";
 
 // ─── Loading ───────────────────────────────────────────────────────────────
 
+// ADV-7: baseline default-deny de segredos, aplicado SEM opt-in. Mesclado ao
+// deny.fs no config vazio (sem permissions.yaml) E no config carregado — como
+// a avaliação é deny-first, vence qualquer allow do projeto. Todos os padrões
+// passam em validateSubset (SI-5) e matchGlob (verificado).
+const DEFAULT_DENY_FS = Object.freeze([
+  ".env", ".env.*", "**/.env", "**/.env.*",
+  "**/*.pem", "**/*.key",
+  "**/id_rsa", "**/id_rsa.*",
+  "**/secrets/**",
+  "**/.ssh/**",
+]);
+
+// Mescla o baseline de segredos com o deny.fs do projeto (baseline primeiro).
+// Preserva shapes não-conformes (ex.: lista legada) INTACTOS para que o
+// validador de schema continue fail-close corretamente — nunca injeta baseline
+// num deny inválido (senão o sinal legado se perderia).
+function withBaselineDeny(parsedDeny) {
+  if (parsedDeny != null && (Array.isArray(parsedDeny) || typeof parsedDeny !== "object")) {
+    return parsedDeny;
+  }
+  const d = parsedDeny || {};
+  return {
+    fs: [...DEFAULT_DENY_FS, ...(Array.isArray(d.fs) ? d.fs : [])],
+    exec: Array.isArray(d.exec) ? d.exec : [],
+    net: Array.isArray(d.net) ? d.net : [],
+  };
+}
+
 const EMPTY_CONFIG = Object.freeze({
   spec: "devflow-permissions/v0",
   evaluationOrder: ["deny", "allow", "mode", "callback"],
-  deny: { fs: [], exec: [], net: [] },
+  deny: { fs: [...DEFAULT_DENY_FS], exec: [], net: [] },
   allow: { fs: { read: [], write: [] }, exec: [], tool: [] },
   mode: "prompt",
   callback: { url: null },
@@ -70,7 +98,7 @@ export function loadPermissions(projectRoot) {
   const cfg = {
     spec: parsed.spec || EMPTY_CONFIG.spec,
     evaluationOrder: parsed.evaluationOrder || EMPTY_CONFIG.evaluationOrder,
-    deny: parsed.deny || EMPTY_CONFIG.deny,
+    deny: withBaselineDeny(parsed.deny),
     allow: parsed.allow || EMPTY_CONFIG.allow,
     // NOTE: keep the raw `mode` (do not coerce). A legacy `mode: {default: ask}`
     // must survive as an object so detectLegacySchema can flag it — `||` would
