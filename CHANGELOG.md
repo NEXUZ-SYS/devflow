@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Tests — Cobertura de regressão L1 — PR 6
+
+Fecha a dívida de cobertura L1 dos achados E2E. **Achado de auditoria (honestidade):** ao verificar o
+estado real, a maior parte da dívida L1 **já estava paga** por suítes existentes (algumas adicionadas neste
+mesmo ciclo de PRs). Em vez de fabricar testes redundantes (content-check), foram adicionados apenas os que
+exercitam um caminho genuinamente não coberto:
+
+- **L1-gap-1 (context-sync):** `test-context-sync-preserve.mjs` — cobre o caminho REAL do sync
+  (`node provenance-sync.mjs apply` end-to-end: loadManifest + registry de `known-hashes.json` + report),
+  provando a garantia anti-regressão-silenciosa (arquivo editado localmente → **preservado**, não sobrescrito).
+  O teste unit existente já cobria a decisão/`applySync` via Set injetado; este cobre o CLI.
+- **L1-gap-3 (branch-protection):** `test-pre-tool-use-protected-branches.sh` — confirma que **todas** as
+  entradas de `protectedBranches` são enforçadas (edição em `develop`, a 2ª da lista, com o branch real em
+  checkout → deny), não só a primeira. (O restante do branch-protection já é coberto por `test-pre-tool-use.sh`.)
+- **L1-gap-2 (MemPalace):** **já coberto** — `test-post-merge-mempalace.sh` exercita os caminhos fail-safe
+  (mempalace CLI ausente → no-op exit 0; seção ausente → no-op) e `instinct-recall` tem suíte própria. As
+  skills `memory-ops`/`memory-recall` envolvem o MCP externo (sem lib determinística in-repo) — nada a
+  fabricar. Nenhum teste redundante foi adicionado.
+
 ### Changed — Higiene / menores — PR 5
 
 - **`skills/{prevc-confirmation,prevc-execution,config,autonomous-loop}` + `scripts/lib/*`** — elimina as
