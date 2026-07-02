@@ -4,7 +4,7 @@ description: Higiene mínima de segurança em todo código de produção
 version: 1.1.0
 source: devflow-default
 applyTo: ["**/*.{ts,tsx,js,jsx,py,go}"]
-activation: on-demand
+activation: always
 relatedAdrs: []
 enforcement:
   linter: machine/std-security.js
