@@ -47,9 +47,10 @@ DETERMINÍSTICO ── Standards (ADR-002 / ADR-007)
   std-design-antipatterns.md   → regras "slop" (cara de IA), warn/advisory
   std-visual-quality.md        → legibilidade/tipografia/layout ("quality")
   machine/std-design-*.js      → 45 regras portadas (adapter jsdom), bundled-only
-  a11y puro (low-contrast, skipped-heading, tiny-text, alt) → DELEGADO ao
-      std-accessibility existente (não duplica; std-visual-quality o referencia)
-  concern 'design' → .context/standards/concerns.local.yaml
+  a11y ESTÁTICO (aprovado na classificação A0) → DELEGADO ao std-accessibility
+      (applyTo ampliado p/ css/html; `alt` já coberto — não reintroduz;
+       a11y não-estático → guidance na skill)
+  concern 'design' → taxonomy do plugin (entries:), como accessibility/i18n
   dispara no hooks/post-tool-use EXISTENTE (run-linter-cli) — sem hook novo
 
 GUIDANCE ── skills/frontend-design/SKILL.md
@@ -66,10 +67,10 @@ KNOWLEDGE WIRING ── agents/product-context.md aponta a delegação → front
 INICIALIZAÇÃO ── modo `frontend-design init` (register brand/product + knowledge +
   waivers/opt-out + concern), plugado no devflow:project-init + post-update-guide
 
-LIVE (bridge, v1) ── modo `live` → adaptador fino nativo:
-  1) garante feature branch (git-strategy) + consentimento
-  2) sinaliza a sessão p/ o pre-tool-use PERMITIR as edições do live
-  3) invoca `npx impeccable live` (gated: checa Node≥24)
+LIVE (bridge, v1) ── modo `live` → adaptador fino nativo (SEM marcador):
+  1) hard-gate: recusa em branch protegida; em feature branch o hook já permite
+  2) valida Node≥24 + versão + integridade sha512; consentimento por-invocação
+  3) invoca `npx impeccable@<pinned> live`   (pre-tool-use INALTERADO)
 
 EXTENSÃO ── doc "instalar standalone" (Chrome Web Store); não reconstruída
 COMANDO ── commands/devflow-design.md → /devflow:design roteia os 23 modos
@@ -80,11 +81,12 @@ COMANDO ── commands/devflow-design.md → /devflow:design roteia os 23 modos
 ### 5.1 Standards (núcleo determinístico)
 - **Fonte upstream:** `cli/engine/registry/antipatterns.mjs` (45 IDs) + `cli/engine/rules/checks.mjs` (6 funções) + adapter `cli/engine/detect-antipatterns.mjs` (jsdom).
 - **Porte:** cada regra vira uma checagem no contrato de linter DevFlow (recebe `filePath` em `argv[2]`, emite `VIOLATION: <msg>`, `process.exit(1)`), rodando via **jsdom** (não o adapter browser). Parsing estático via `css-tree`/`htmlparser2`/`css-select` (mesmas deps do detector; sem LLM/rede).
-- **Divisão em dois `std-*`:**
-  - `std-design-antipatterns.md` → as ~27 regras `slop` (estéticas). Shipadas **warn/advisory** por serem opinativas.
-  - `std-visual-quality.md` → as regras `quality` de legibilidade/tipografia/layout (line-length, leading, tracking, cramped-padding, design-system-*).
-- **Delegação de a11y:** as regras puramente de acessibilidade (`low-contrast`, `skipped-heading`, `tiny-text`, imagem sem `alt`) **não são reimplementadas** — são delegadas ao `std-accessibility` existente. `std-visual-quality.md` referencia o `std-accessibility` na seção de escopo para deixar a fronteira explícita. (Mapa exato regra→destino é entregue no plano.)
-- **Concern:** registra `design` em `.context/standards/concerns.local.yaml` (a taxonomy do plugin **não** é editada em runtime — hard rule do standards-builder).
+- **Decidibilidade estática primeiro (Revisão R):** só vira **linter** a regra decidível por parsing estático de **um arquivo**. As que exigem DOM renderizado (`getComputedStyle`), estado cross-file ou tokens do projeto (`low-contrast`, `gray-on-color`, `tiny-text`, `skipped-heading`, `tight-leading`, `layout-transition`, `text-overflow`, `clipped-overflow-container`, `design-system-*`) viram **guidance** na skill — não linter falso. A classificação (Task A0 do plano) precede o port.
+- **Divisão dos `std-*`:**
+  - `std-design-antipatterns.md` → regras `slop` estáticas. Shipadas **warn/advisory** por serem opinativas.
+  - `std-visual-quality.md` → regras `quality` **estáticas** de legibilidade/tipografia/layout. Referencia o `std-accessibility` na seção de escopo (a11y mora lá).
+- **Delegação de a11y (escopo corrigido):** as regras a11y **estáticas** que A0 aprovar entram no `std-accessibility` — que hoje é **tsx/jsx-only**; se aplicarem a `.css`/`.html`, o `applyTo`+guard do `std-accessibility` é **ampliado** (senão ficam inertes). `alt` **já é coberto** pelo `std-accessibility` atual → não reintroduzir. As a11y não-estáticas viram guidance.
+- **Concern:** registrado na **taxonomy do plugin** (`skills/standards-builder/references/taxonomy-of-concerns.yaml`, chave `entries:`) como os defaults `accessibility`/`internationalization` — pois os `std-design-*` são **defaults bundled**. (`concerns.local.yaml` é só o caminho **per-projeto/runtime** para stds de design customizados — a "hard rule" de não editar a taxonomy vale para runtime, não para o desenvolvimento do próprio plugin.)
 - **Distribuição (D2):** `assets/standards/std-design-*.md` + entradas no `assets/standards/MANIFEST.txt`; `.md` publicados também no repo standalone **`NEXUZ-SYS/devflow-standards`** (`.context/engineering/standards/`) no mesmo release; `.js` **bundled-only** (ADR-007, anti-RCE); `applyTo: ['**/*.{tsx,jsx,vue,svelte,html,css}']`.
 
 ### 5.2 Skill `frontend-design` (guidance)
@@ -116,8 +118,8 @@ Modo `frontend-design init` (reaproveita o `init` dos 23):
 
 **Reconciliação `--from-impeccable`:** se o projeto já tem o impeccable cru (`.claude/skills/impeccable/`, hook no `settings.json`, `.impeccable/config.json`), o init **detecta e oferece** (consent-gated): desligar o PostToolUse do impeccable (evita findings/waivers duplos), **importar** os waivers de `.impeccable/config.json` + comentários `impeccable-disable` para o sistema de Standards, e aposentar a skill `impeccable` em favor de `frontend-design`.
 
-### 5.6 Live (bridge, v1)
-Adaptador fino nativo que: (1) garante feature branch e consentimento; (2) sinaliza a sessão para o `hooks/pre-tool-use` **permitir** as edições in-place geradas pelo `live` (senão o branch-protection barra); (3) **valida Node≥24 + versão do CLI (ver §5.8)** e invoca `npx impeccable@<pinned> live`. Re-port nativo do runtime = fora do v1.
+### 5.6 Live (bridge, v1) — redesenho da Revisão R
+Adaptador fino nativo, **sem marcador no `pre-tool-use`** (o `hooks/pre-tool-use` fica **inalterado**). `live` é **hard-gate de feature branch**: (1) se a branch atual é protegida → **recusa** com instrução para criar feature branch; em feature branch o `pre-tool-use` **já permite** as edições in-place que o `live` gera — não há bypass a introduzir; (2) valida **Node≥24 + versão + integridade sha512** do CLI (ver §5.8); (3) **consentimento por-invocação** exibindo comando+versão+hash; (4) só então invoca `npx impeccable@<pinned> live`. Re-port nativo do runtime = fora do v1. **Motivo do redesenho (R):** um marcador de sessão só teria efeito em branch protegida (onde o gate deve barrar) e `.context/runtime/` é forjável — os dois revisores classificaram como enfraquecimento do branch-protection.
 
 ### 5.7 Extensão + atribuição
 - **Extensão Chrome:** não reconstruída; doc "como instalar standalone".
@@ -126,7 +128,7 @@ Adaptador fino nativo que: (1) garante feature branch e consentimento; (2) sinal
 ### 5.8 Ciclo de vida da dependência externa (impeccable CLI)
 **Escopo do acoplamento:** o CLI/detector do impeccable é dependência **apenas do modo `live`**. Regras (Standards) e guidance (skill) são portadas nativas → **zero dependência de runtime** do impeccable para o núcleo. Não há "versão instalada" a validar no enforcement nem na guidance — só no `live`.
 
-**Versão fixada:** o bridge fixa uma versão testada (`impeccable@<pinned>`), controlando o contrato (upstream é BETA/movente). Casado com o risco de drift (§9) e citado no `NOTICE`.
+**Versão + integridade fixadas (Revisão R):** o bridge fixa versão **e hash de integridade sha512** (`npm view impeccable@<pinned> dist.integrity`), controlando o contrato (upstream é BETA/movente) e mitigando account-takeover/republish. Pin de versão sozinho é insuficiente. Ambos citados no `NOTICE`; o bridge **verifica o integrity antes de rodar**. `live` executa código de terceiros **fora do TCB** do DevFlow — nada que ele produz herda a confiança do núcleo.
 
 **Mecanismo (D5):** `npx impeccable@<pinned> live` **efêmero**, sob consentimento — **não** usa install global nem o `npx impeccable install` oficial (que mesclaria em `settings.json` e religaria o hook do impeccable).
 
@@ -135,7 +137,7 @@ Adaptador fino nativo que: (1) garante feature branch e consentimento; (2) sinal
 **Aplicação (3 touchpoints):**
 1. **`/devflow update` (guarded, estilo Step 4):** se o projeto é front-end **e** `live` foi optado, valida `impeccable --version` vs pinned e propõe update **só se presente**. **Nunca auto-instala.** Ausente/offline = no-op.
 2. **post-update-guide (Step 6):** front-end detectado **e** CLI ausente → entrada `▸ Iteração ao vivo (live) — requer impeccable CLI + Node≥24. Para ativar: /devflow:design live` (com o comando de instalação).
-3. **Runtime do bridge (`/devflow:design live`):** valida (a) Node≥24 e (b) presença + versão ≥ pinned. Se faltar/desatualizar → **propõe o comando exato e pede consentimento** (fetch de rede + execução de terceiros → consent-gated), então prossegue. **Não** roda `npx` silenciosamente.
+3. **Runtime do bridge (`/devflow:design live`):** valida (a) **hard-gate de feature branch** (recusa em branch protegida), (b) Node≥24, (c) presença + versão ≥ pinned **+ integridade sha512**. Se faltar/desatualizar/divergir → **propõe o comando exato e pede consentimento por-invocação exibindo comando+versão+hash** (fetch de rede + execução de terceiros → consent-gated), então prossegue. **Não** roda `npx` silenciosamente; **não** usa marcador que afrouxe o `pre-tool-use`.
 
 ## 6. Auto-detecção de front-end (mecanismo do D4)
 - **Sinais:** deps em `package.json` (react, vue, svelte, @sveltejs/kit, next, astro, solid, preact, lit, angular) **ou** presença de arquivos `**/*.{tsx,jsx,vue,svelte}`.
@@ -178,6 +180,20 @@ Contém decisões arquiteturais: (a) "detecção de design como Standards nativo
 - **ADR-009** (doc-grounding): não afeta — o detector é local/determinístico, sem fatos de lib externa.
 - **Versionamento pipeline:** **não** editar `plugin.json`/`marketplace.json`/`.cursor-plugin` manualmente; bump só via `release.yml`.
 - **Licença:** Apache-2.0 preservada com `NOTICE`/atribuição.
+
+## 11.5 Endurecimento de segurança (Revisão R)
+
+Achados dos revisores (architect + security) incorporados ao design/plano:
+- **`live` sem marcador** — hard-gate de feature branch, `pre-tool-use` inalterado; pin de **integridade** sha512 + consentimento por-invocação; execução de terceiros declarada **fora do TCB** (§5.6, §5.8).
+- **jsdom seguro** — nunca `runScripts: "dangerously"`/`resources: "usable"`; teste de não-execução (fixture com `<script>`/`onerror` → zero exec/fetch).
+- **Linter puro** — teste estático rejeita `eval`/`Function`/`child_process`/`fetch`/`http` nos `.js`.
+- **`reconcile` seguro** — edição **cirúrgica** de `settings.json` (backup + revalida, preserva outros hooks); rule-ids importados **validados contra allowlist**; config malformado tratado.
+- **Input não-confiável** — `detect-frontend`/`importWaivers` com `JSON.parse` em try/catch; glob sem seguir symlink, excluindo `node_modules`/`.git`.
+- **Supply-chain** — deps de parsing (`jsdom`/`css-tree`/`htmlparser2`/`css-select`) pinadas + `npm audit`; `impeccable` **nunca** em `dependencies` (só `npx` efêmero consentido).
+- **`.gitignore`** — `.context/runtime/` e `scripts/design/.pinned-version` não-versionáveis.
+- **Correção de contrato** — concern na chave real `entries:` da taxonomy (não `concerns:`); frontmatter dos std espelha os defaults; `known-hashes` acumula (não substitui) o hash antigo do `std-accessibility`.
+
+**Bug corrigido (crítico):** o plano original registrava o concern sob `concerns:` (chave inexistente; loader lê `entries:`) e portava as 45 regras às cegas (parte exige DOM renderizado). Ambos endereçados (Task A0 + A1 reescrita).
 
 ## 12. Referências
 **Upstream (pbakaus/impeccable):** `skill/SKILL.src.md`, `skill/reference/*.md`, `cli/engine/registry/antipatterns.mjs`, `cli/engine/rules/checks.mjs`, `cli/engine/detect-antipatterns.mjs`, `skill/reference/live.md`, `LICENSE` (Apache-2.0).
