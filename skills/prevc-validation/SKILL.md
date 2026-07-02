@@ -244,6 +244,34 @@ The Validation phase gate requires:
 - Security checklist cleared (if applicable)
 - No blocking issues identified
 
+### Guardrail anti-atalho (B8)
+
+**PROIBIDO satisfazer o gate por atalho.** O gate mede a saúde real do código, não a
+cor verde. É explicitamente proibido:
+
+- **Remover, apagar ou skippar testes** (`.skip`, `xit`, `@pytest.mark.skip`, comentar
+  o teste) para fazer a suíte "passar".
+- **Desativar ou enfraquecer o linter** (baixar severidade, adicionar exceção ampla,
+  apagar regra) para limpar um erro.
+- **Transformar asserts em no-op** (trocar por `assert true`, remover o corpo, afrouxar
+  a asserção) para mascarar uma falha.
+
+**Verificação mecânica obrigatória** — antes de declarar VALIDATED, compare com a base:
+
+1. A **contagem de testes não pode cair** vs a base. Conte antes/depois e confirme que
+   não regrediu:
+   ```bash
+   # nº de casos de teste no diff da base (ajuste os padrões à stack)
+   git diff --stat "$(git merge-base HEAD main)"..HEAD -- '*test*' '*spec*'
+   # e conte test(/it(/def test_ na base vs no HEAD — o total não pode diminuir
+   ```
+2. Inspecione o `git diff` dos arquivos de teste: nenhum assert pode ter virado no-op,
+   nenhum caso pode ter sido silenciosamente removido/skippado.
+
+Se um teste precisa MESMO ser removido/alterado (ex.: comportamento mudou de propósito),
+isso é uma **decisão de design** — documente a justificativa e escale ao operador; não é
+um atalho para o gate.
+
 Present validation summary:
 ```markdown
 ## Validation Summary
