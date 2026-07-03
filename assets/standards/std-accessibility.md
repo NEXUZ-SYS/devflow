@@ -1,14 +1,18 @@
 ---
 id: std-accessibility
 description: WCAG 2.2 AA em todo fluxo de UI — a11y é requisito funcional, não polimento
-version: 1.1.0
+version: 1.2.0
 source: devflow-default
-applyTo: ["**/*.{tsx,jsx}"]
+applyTo: ["**/*.{tsx,jsx,css,html}"]
 activation: on-demand
-relatedAdrs: []
+relatedAdrs: ["ADR-010"]
 enforcement:
   linter: machine/std-accessibility.js
 ---
+<!-- v1.2.0: linter absorve as regras a11y estáticas do impeccable (skipped-heading, tiny-text);
+     applyTo ampliado p/ css/html. Regras JSX (div/span onClick sem role, tabIndex+, img sem alt)
+     preservadas e rodam só em tsx/jsx. Ver ADR-010 e docs/design-rules-classification.md. -->
+
 ## Princípios
 
 - Baseline obrigatório: WCAG 2.2 nível AA em todo fluxo público; bug de acessibilidade tem severidade igual a bug funcional
