@@ -1,0 +1,7 @@
+/* DEVE violar: texto com gradiente é "AI tell" (slop) */
+.hero-title {
+  background: linear-gradient(90deg, #ff00ff, #00ffff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
