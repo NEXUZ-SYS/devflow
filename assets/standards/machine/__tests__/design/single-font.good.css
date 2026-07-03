@@ -1,0 +1,3 @@
+/* NÃO deve violar: display + corpo pareados (duas familias) */
+.title { font-family: 'Georgia', serif; }
+.body { font-family: 'Verdana', sans-serif; }

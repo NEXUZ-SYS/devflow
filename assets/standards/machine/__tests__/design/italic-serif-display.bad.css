@@ -1,0 +1,6 @@
+/* DEVE violar: serif italico gigante como heroi */
+h1 {
+  font-style: italic;
+  font-family: 'Playfair Display', serif;
+  font-size: 64px;
+}

@@ -1,0 +1,6 @@
+/* NÃO deve violar: serif display roman (nao italico) */
+h1 {
+  font-style: normal;
+  font-family: 'Playfair Display', serif;
+  font-size: 64px;
+}

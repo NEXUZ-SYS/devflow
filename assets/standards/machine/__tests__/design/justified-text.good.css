@@ -1,0 +1,5 @@
+/* NÃO deve violar: justificado COM hifenizacao */
+.article {
+  text-align: justify;
+  hyphens: auto;
+}

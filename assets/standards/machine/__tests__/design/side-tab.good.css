@@ -1,0 +1,5 @@
+/* NÃO deve violar: borda neutra fina em todos os lados */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}

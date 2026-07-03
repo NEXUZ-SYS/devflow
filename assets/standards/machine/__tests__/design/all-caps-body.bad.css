@@ -1,0 +1,4 @@
+/* DEVE violar: corpo em maiusculas */
+.article-body {
+  text-transform: uppercase;
+}

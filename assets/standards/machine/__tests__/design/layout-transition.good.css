@@ -1,0 +1,4 @@
+/* NÃO deve violar: animar transform (composited) */
+.box {
+  transition: transform 0.3s ease;
+}

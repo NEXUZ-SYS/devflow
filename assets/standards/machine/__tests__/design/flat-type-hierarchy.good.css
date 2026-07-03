@@ -1,0 +1,4 @@
+/* NÃO deve violar: contraste tipografico claro (ratio >= 2.0) */
+h1 { font-size: 48px; }
+h2 { font-size: 24px; }
+p  { font-size: 16px; }

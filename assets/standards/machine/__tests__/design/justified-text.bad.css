@@ -1,0 +1,4 @@
+/* DEVE violar: justificado sem hyphens: auto */
+.article {
+  text-align: justify;
+}

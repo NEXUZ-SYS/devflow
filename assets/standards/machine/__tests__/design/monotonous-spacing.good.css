@@ -1,0 +1,6 @@
+/* NÃO deve violar: ritmo variado de espacamento */
+.a { padding: 8px; }
+.b { padding: 16px; }
+.c { padding: 24px; }
+.d { padding: 32px; }
+.e { margin: 40px; }

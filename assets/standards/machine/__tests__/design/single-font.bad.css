@@ -1,0 +1,24 @@
+/* single-font.bad.css — uma única familia tipografica para a pagina inteira */
+:root {
+  --ink: #1f2937;
+}
+body {
+  font-family: 'Georgia', serif;
+  color: #1f2937;
+  background: #ffffff;
+  line-height: 1.6;
+}
+h1 {
+  font-size: 40px;
+}
+p {
+  font-size: 16px;
+}
+.note { color: #374151; }
+.tag { color: #4b5563; }
+.meta { color: #6b7280; }
+.foot { color: #9ca3af; }
+.link { color: #2563eb; }
+.warn { color: #b91c1c; }
+.ok { color: #15803d; }
+/* linhas extras garantem o gate de >= 20 linhas do heuristico single-font */

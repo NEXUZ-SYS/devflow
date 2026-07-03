@@ -1,0 +1,4 @@
+/* DEVE violar: tracking largo em corpo (> 0.05em) */
+.article {
+  letter-spacing: 0.12em;
+}

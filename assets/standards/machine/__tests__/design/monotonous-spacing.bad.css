@@ -1,0 +1,11 @@
+/* DEVE violar: mesmo espacamento em todo lugar */
+.a { padding: 16px; }
+.b { padding: 16px; }
+.c { padding: 16px; }
+.d { padding: 16px; }
+.e { padding: 16px; }
+.f { margin: 16px; }
+.g { margin: 16px; }
+.h { margin: 16px; }
+.i { gap: 16px; }
+.j { gap: 16px; }

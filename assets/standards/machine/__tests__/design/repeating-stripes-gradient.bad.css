@@ -1,0 +1,4 @@
+/* DEVE violar (advisory): listras de repeating-gradient */
+.bg {
+  background: repeating-linear-gradient(45deg, #000 0 10px, #111 10px 20px);
+}

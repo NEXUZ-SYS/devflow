@@ -1,0 +1,5 @@
+/* DEVE violar: faixa/borda colorida grossa em um lado do card (AI tell) */
+.card {
+  border-left: 4px solid #ef4444;
+  border-radius: 8px;
+}
