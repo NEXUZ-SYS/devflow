@@ -151,6 +151,17 @@ claude plugin list 2>/dev/null | grep -A2 'superpowers@' | grep -q 'Scope: user'
 
 **Após validar o escopo:** se `USER_SCOPE_OK` e o usuário indicou uso do AO, oferecer configurar a seção `orchestrator:` agora — reusando a sub-rotina do `devflow:config` (Step 2.6 + geração via `orchestratorBlock()`). Se o usuário preferir decidir depois, apontar `/devflow config`. Não duplicar a lógica: delegar ao fluxo do config.
 
+## Step 0.7: Subsistema de design (auto-detecção de front-end)
+
+Detectar se o projeto é front-end e, em caso positivo, ativar o subsistema de design (guia `frontend-design` + Standards de design). **Default-on por auto-detecção** — não pergunta "você quer design?"; as escritas do bootstrap são anunciadas, e as reconciliações destrutivas (impeccable cru) são consent-gated. Ver ADR-010.
+
+```bash
+DESIGN_FE=$(node "$CLAUDE_PLUGIN_ROOT/scripts/design/detect-frontend.mjs" . 2>/dev/null | grep -q '"isFrontend": true' && echo true || echo false)
+```
+
+- Se `DESIGN_FE=false` (backend-only): **pular** — nada a fazer (os linters de design têm `applyTo` front-end, ficam inertes).
+- Se `DESIGN_FE=true`: o enforcement determinístico (linters `std-design-*`) já se aplica automaticamente. **Após o scaffold do `.context/` (Steps 3–4)**, rodar `/devflow:design init` para o bootstrap de contexto (register brand/product em `.context/.devflow.yaml`, scaffold do knowledge `product-design-system`/`tone-of-voice`/`business-icp` via `/devflow:knowledge`, semear tokens, waivers/opt-out). Passo **não-bloqueante**; se o usuário recusar, apontar `/devflow:design init` para depois. NÃO rodar antes do `.context/` existir (o init precisa da camada de knowledge para escrever).
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:
