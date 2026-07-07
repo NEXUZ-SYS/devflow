@@ -14,6 +14,10 @@ Thumbs.db
 # DevFlow runtime artifacts (auto-generated)
 .context/cache/
 .context/harness/
+.context/runtime/
+
+# Design subsystem — versão-fonte fixada do impeccable (efêmera, não-versionável)
+scripts/design/.pinned-version
 
 # DevFlow — estado efêmero de captura de decisões (PREVC)
 .context/workflow/.adr-pending.json

@@ -1,0 +1,4 @@
+/* DEVE violar (advisory): imagem escala no hover */
+img:hover {
+  transform: scale(1.05);
+}

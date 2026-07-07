@@ -1,0 +1,8 @@
+/* NÃO deve violar: cor sólida com contraste */
+.hero-title {
+  color: #111111;
+}
+.surface {
+  /* gradiente em superfície (não em texto) é permitido */
+  background: linear-gradient(90deg, #eee, #ddd);
+}

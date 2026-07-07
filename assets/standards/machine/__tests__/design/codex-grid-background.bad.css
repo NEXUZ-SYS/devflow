@@ -1,0 +1,7 @@
+/* DEVE violar (advisory): grade de duas linhas hairline por gradiente */
+.grid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

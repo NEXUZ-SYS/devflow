@@ -920,3 +920,61 @@ entries:
       - frontend
       - backend
       - bff
+
+  - id: design-antipatterns
+    summary: Detecção determinística de "AI tells" de design (slop) em front-end gerado por IA
+    category: ui
+    defaultApplyTo:
+      - "**/*.{tsx,jsx,vue,svelte,html,css}"
+    inverseHints:
+      - tailwind
+      - css
+      - design
+      - frontend
+      - ui
+    principleTemplate: |
+      Front-end não deve convergir para a monocultura visual que agentes de IA produzem.
+      Banir "AI tells": texto em gradiente, borda-acento em cantos arredondados, glassmorphism
+      por default, grids de cards idênticos, eyebrow/kicker em toda seção, marcadores numerados
+      de seção, stripes/gradientes repetidos. Cor em OKLCH com contraste verificado; tipografia
+      com hierarquia real (não um único peso/família); espaçamento com ritmo, não monótono.
+    antiPatternTemplate:
+      - rule: "Texto com gradiente (-webkit-background-clip: text sobre linear-gradient)"
+        correct: "Cor sólida com contraste >= 4.5:1; gradiente só em superfícies, não em texto"
+      - rule: "Uma única fonte para display e corpo"
+        correct: "Par tipográfico com contraste de família/peso entre títulos e corpo"
+      - rule: "Grid de cards idênticos com a mesma borda/sombra"
+        correct: "Hierarquia visual: variar peso, tamanho e densidade conforme importância"
+    linterHints:
+      - "regex/AST estático: -webkit-background-clip:text + linear-gradient; repeating stripes"
+    relatedAdrCategories:
+      - arquitetura
+
+  - id: visual-quality
+    summary: Legibilidade, tipografia e layout de qualidade (não-a11y) em front-end
+    category: ui
+    defaultApplyTo:
+      - "**/*.{tsx,jsx,vue,svelte,html,css}"
+    inverseHints:
+      - css
+      - typography
+      - layout
+      - design
+      - ui
+    principleTemplate: |
+      Qualidade visual mensurável, complementar à acessibilidade: comprimento de linha de
+      leitura confortável (~65-75ch), evitar texto justificado na web, evitar caixa-alta em
+      corpo, tracking em faixa legível, imagens com src válido. Fronteira com std-accessibility:
+      contraste, ordem de heading e tamanho mínimo são a11y e moram lá — este std cuida de
+      legibilidade e layout de qualidade.
+    antiPatternTemplate:
+      - rule: "text-align: justify em corpo de texto na web"
+        correct: "Alinhamento à esquerda (ou start); justify cria rios e prejudica leitura"
+      - rule: "text-transform: uppercase em blocos de corpo"
+        correct: "Caixa-alta só em rótulos curtos; corpo em caixa normal"
+      - rule: "<img> com src vazio, '#' ou placeholder"
+        correct: "src real e resolvível; placeholder explícito só em estados de loading"
+    linterHints:
+      - "regex/AST estático: text-align:justify; text-transform:uppercase em corpo; img src vazio"
+    relatedAdrCategories:
+      - arquitetura

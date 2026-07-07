@@ -1,0 +1,4 @@
+/* DEVE violar: easing bounce (datado) */
+.ball {
+  animation: bounce 1s infinite;
+}

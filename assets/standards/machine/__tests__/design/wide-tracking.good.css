@@ -1,0 +1,4 @@
+/* NÃO deve violar: tracking sutil */
+.article {
+  letter-spacing: 0.02em;
+}

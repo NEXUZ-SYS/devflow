@@ -1,0 +1,4 @@
+/* NÃO deve violar: transicao sutil de opacidade */
+img {
+  transition: opacity 0.2s;
+}

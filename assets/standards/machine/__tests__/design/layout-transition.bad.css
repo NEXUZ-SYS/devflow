@@ -1,0 +1,4 @@
+/* DEVE violar: animar width causa layout thrash */
+.box {
+  transition: width 0.3s ease;
+}

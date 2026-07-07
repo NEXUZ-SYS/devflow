@@ -1,0 +1,38 @@
+DevFlow
+Copyright (c) 2026 NEXUZ-SYS
+Licensed under the MIT License (see LICENSE).
+
+================================================================================
+Third-party attributions
+================================================================================
+
+This product includes design guidance and deterministic detection rules
+adapted and ported from:
+
+  impeccable — https://github.com/pbakaus/impeccable
+  Copyright (c) Paul Bakaus and contributors
+  Licensed under the Apache License, Version 2.0.
+
+  Pinned source version: impeccable@cli-v3.2.0 (npm: impeccable@3.2.0)
+  Integrity: sha512-nTQUTa2LRR/qjwUTW61enVev8weUKJ0Nhppqug9yRGX1B5i9Qp3rhJNEG248TwO1yblOf9hPWQecoYhQKrDY/Q==
+
+Derived / adapted files (changes were made — the rules were ported to the
+DevFlow Standards linter contract, and the guidance was adapted to pt-BR and
+to the DevFlow knowledge/standards model):
+
+  - assets/standards/machine/std-design-antipatterns.js   (slop rules ported)
+  - assets/standards/machine/std-visual-quality.js         (quality rules ported)
+  - assets/standards/machine/std-accessibility.js          (a11y rules skipped-heading, tiny-text added)
+  - assets/standards/std-design-antipatterns.md, std-visual-quality.md
+  - skills/frontend-design/SKILL.md
+  - skills/frontend-design/references/*.md                 (23 mode guides adapted)
+  - docs/design-rules-classification.md
+
+The Apache-2.0 license text applies to the portions derived from impeccable;
+its copyright and attribution notices are retained per Section 4 of that
+license. The `live` capability invokes the upstream impeccable CLI at runtime
+via `npx` (opt-in, consent-gated); that code remains under Apache-2.0 and is
+not redistributed by DevFlow.
+
+impeccable itself credits Anthropic's "frontend-design" skill as prior art.
+================================================================================

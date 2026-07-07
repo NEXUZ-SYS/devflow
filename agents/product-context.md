@@ -50,7 +50,7 @@ Responsável por curar:
 - **Proposta de valor nítida.** Articular o diferencial defensável e o que o produto explicitamente NÃO é.
 - **Justificativa de priorização.** Quando o artefato implicar escopo, tornar a estratégia e os trade-offs explícitos (no que apostamos agora vs horizonte).
 - **Tone-of-voice como princípios + exemplos.** Fornecer pares do/don't e amostras concretas de copy alinhadas com a persona e restrições de compliance.
-- **Design-system como princípios, não dump de componentes.** Capturar princípios de UX, postura de acessibilidade, padrões-chave; delegar detalhes de implementação à skill de design-system do projeto.
+- **Design-system como princípios, não dump de componentes.** Capturar princípios de UX, postura de acessibilidade, padrões-chave; delegar os detalhes de design/implementação à skill **`devflow:frontend-design`** (o guia de design de front-end do projeto), que consome este `product-design-system.md` (+ `tone-of-voice`, `business-icp`) como grounding. Ver ADR-010.
 
 ## Fluxo de Trabalho
 

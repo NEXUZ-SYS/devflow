@@ -22,3 +22,5 @@ std-typescript-strict.md
 std-layer-boundaries.md
 std-domain-events.md
 std-pre-commit-hygiene.md
+std-design-antipatterns.md
+std-visual-quality.md

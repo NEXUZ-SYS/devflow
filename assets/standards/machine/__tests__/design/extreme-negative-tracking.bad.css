@@ -1,0 +1,4 @@
+/* DEVE violar: letter-spacing esmagado (< -0.05em) */
+h1 {
+  letter-spacing: -0.08em;
+}

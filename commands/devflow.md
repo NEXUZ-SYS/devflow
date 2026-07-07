@@ -341,6 +341,19 @@ Fetches the latest `assets/standards/*.md` snapshot from the standalone standard
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/update-default-standards.sh"
 ```
 
+**Step 4e — Design subsystem: impeccable CLI (guarded, only if present):**
+
+O modo `live` de `/devflow:design` faz bridge para o CLI upstream do impeccable. O DevFlow **nunca auto-instala** essa dependência. Este step só valida/atualiza o CLI **se ele já estiver presente** — mesmo idioma dos Steps 4/4c (guard por presença, no-op se ausente). Os linters de design e o guia `frontend-design` **não** dependem do CLI (só o `live` depende).
+
+```bash
+# Só se o CLI impeccable já está instalado (guard por presença — NUNCA auto-instala)
+if command -v impeccable >/dev/null 2>&1; then
+  CUR=$(impeccable --version 2>/dev/null | tr -d '[:space:]')
+  echo "impeccable CLI presente (v${CUR}); pin testado pelo DevFlow: 3.2.0. Atualizar é opt-in: npm i -g impeccable@latest"
+fi
+# Ausente = no-op limpo. O modo /devflow:design live propõe a instalação exata sob consentimento quando usado.
+```
+
 **Step 5 — Report update results:**
 
 After all steps complete, show a summary table with what was updated and their versions.
