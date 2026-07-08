@@ -1,130 +1,117 @@
-# Revisão prevc-confirmation — Plano de Implementação
+# Revisão prevc-confirmation — Plano de Implementação (rev. pós-review R)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) ou superpowers:executing-plans. Steps usam checkbox (`- [ ]`).
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development ou superpowers:executing-plans. Steps usam checkbox (`- [ ]`).
 >
-> **DevFlow workflow:** `review-prevc-confirmation` · **Scale:** MEDIUM (beira LARGE) · **Phase:** P→R
+> **DevFlow workflow:** `review-prevc-confirmation` · **Scale:** MEDIUM→LARGE · **Phase:** R→E
 > **Spec:** `docs/superpowers/specs/2026-07-08-review-prevc-confirmation-design.md` · **ADR:** `011-devflow-config-single-parser`
 
-**Goal:** Corrigir os 15 achados da auditoria da `prevc-confirmation`, com o parser único de config (`devflow-config.mjs`) na raiz, e uma suíte de **E2E de comportamento** da finalização.
+**Goal:** Corrigir os 15 achados da `prevc-confirmation`, com parser único de config (`devflow-config.mjs`) e a **lógica determinística da finalização extraída para helpers `.mjs` testáveis** (a skill invoca por referência). E2E hermético só onde há executável.
 
-**Architecture:** `scripts/lib/devflow-config.mjs` vira a fonte única de `git.autoFinish`/`git.versioning`; hook e skill consomem. A skill passa a tratar autoFinish per-step, gates verificáveis (CHANGELOG, out-de-escopo) e mergeStrategy por convenção. E2E roda a finalização de verdade em repo-fixture tmpdir + remote bare + stub de `gh`.
+**Architecture:** O que é comportamento vira **código testável** (`scripts/lib/devflow-config.mjs` + helpers de finalização). A `SKILL.md` passa a **referenciar** esses helpers (prosa mínima). Hook e skill consomem o mesmo parser. E2E dirige os **helpers/CLI** contra fixture git isolado (bare remote + stub `gh` + env higienizado) — nunca a prosa-LLM.
 
-**Tech Stack:** Node ESM (`node --test`), bash (hooks + testes `.sh`), git (fixtures + bare remote).
+**Tech Stack:** Node ESM (`node --test`), bash (hooks + `.sh`), git (fixtures + bare).
+
+## Mudanças desta revisão (pós-review R)
+- **[C-CRÍTICO]** E2E não testa prosa-LLM. Extrair a lógica determinística (base-sync/rebase, out-de-escopo, mergeStrategy, CHANGELOG gate) para helpers `.mjs`; E2E dirige os helpers. "#4 ancora **T2** (hook/lib), não T4."
+- **[B-ALTO]** Migrar `git.versioning` (hook L234) junto com `autoFinish` (senão viola ADR-011).
+- **[B-ALTO]** Fail-safe `$(node … 2>/dev/null || echo disabled)` sob `set -e`; regressão **não-circular** (golden do Python atual); paridade compara **classificação**, não bytes.
+- **[A-MÉDIO]** Parser: colon-anchored + escopo bloco `git:` + fronteira granular + `\s`(tab); cap de tamanho; grep negativo ampliado; +vetores RED (tab, substring, fora-de-git, granular+irmão, CRLF).
+- **[E/F]** Fatiar tasks; T3 com RED; **faseamento A→C com checkpoints**.
 
 ## Global Constraints
-- **Parser único (ADR-011):** ler `git.autoFinish`/`git.versioning` SÓ via `scripts/lib/devflow-config.mjs`; NUNCA `awk`/grep ad-hoc. Strip de comentário inline. Fallback idêntico com/sem PyYAML.
-- **Testes não mutam dirs versionados** (memória): E2E só em **tmpdir** + `git init --bare` como remote + **stub de `gh`**. Jamais no repo real.
-- **Repo do plugin; `versioning: pipeline`:** NÃO bumpar version files manual.
-- **Hook é sensível:** preservar 100% do comportamento atual (teste de regressão obrigatório antes de trocar o parser).
-- **pt-BR** em toda doc/skill.
-
-## Estrutura de arquivos
-- Create: `scripts/lib/devflow-config.mjs` · `tests/lib/devflow-config.test.mjs` · `tests/lib/devflow-config-parity.test.mjs`
-- Create: `tests/e2e/confirmation-finalize.e2e.test.mjs` + `tests/e2e/_harness.mjs` (fixture git+bare+gh-stub)
-- Modify: `hooks/post-tool-use` (adota a lib) · `skills/prevc-confirmation/SKILL.md` (Steps 0/1/2/3/4/C.x/6 + checklist) · `skills/config/SKILL.md` (cross-check P5×P5b) · `tests/validation/test-prevc-confirmation-autofinish.mjs` (relaxar `--squash`)
+- **Parser único (ADR-011):** `git.autoFinish` E `git.versioning` só via `scripts/lib/devflow-config.mjs`; NUNCA awk/grep/regex ad-hoc (inclui o hook L234). Strip de comentário inline. Fallback = `disabled`/`local` em TODO erro (ENOENT/read/parse), idêntico com/sem PyYAML.
+- **Hook `post-tool-use` é advisory** (async, injeta contexto; não nega) — o gate de branch-protection é o `pre-tool-use` (não tocado). Preservar o "sempre-sai-0": toda `$(node …)` recebe `2>/dev/null || echo <default>`.
+- **Saída canônica do granular:** `{bump,commit,push,merge}` normalizado (não-listada=false). Mudança de string intencional vs o `json.dumps` cru do Python — consumidor do hook (L419-421) e paridade comparam **classificação**.
+- **E2E isolado (memória):** fixture em `mktemp -d` **fora da árvore do repo**; `origin` = `git init --bare` local (nunca URL); env do spawn higienizado (`HOME`/`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` em tmp, `unset GH_TOKEN GITHUB_TOKEN`, `GH_CONFIG_DIR=<tmp>`, `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=/bin/true`); PATH com stub `gh` só no filho; stub inerte (loga argv, simula no bare, sem eval/rede/rm); asserção de que `gh` real nunca rodou.
+- Repo do plugin; `versioning: pipeline` (não bumpar version files manual). Finalizar honrando autoFinish:true.
 
 ---
 
-## Task 1: `devflow-config.mjs` — parser único (raiz D1)
+# FASE A — Parser único (núcleo; isola o toque no hook sensível) · checkpoint no fim
 
+## Task A1: `devflow-config.mjs` — parser único + CLI
 **Files:** Create `scripts/lib/devflow-config.mjs`, `tests/lib/devflow-config.test.mjs`
-**Interfaces:** Produces `readAutoFinish(src)→'disabled'|'all'|{bump,commit,push,merge}` e `readVersioning(src)→'local'|'pipeline'|'none'` (src = texto do yaml).
+**Interfaces:** Produces `readAutoFinish(src)→'disabled'|'all'|{bump,commit,push,merge}`, `readVersioning(src)→'local'|'pipeline'|'none'`. CLI: `node devflow-config.mjs read-autofinish <path>` / `read-versioning <path>` imprime o token (via `import.meta.url` guard).
 
-- [ ] **Step 1 (RED):** escrever `tests/lib/devflow-config.test.mjs`:
-```js
-import { test } from 'node:test'; import assert from 'node:assert/strict';
-import { readAutoFinish, readVersioning } from '../../scripts/lib/devflow-config.mjs';
-test('escalar true → all', () => assert.equal(readAutoFinish('git:\n  autoFinish: true\n'), 'all'));
-test('escalar false → disabled', () => assert.equal(readAutoFinish('git:\n  autoFinish: false\n'), 'disabled'));
-test('ausente → disabled', () => assert.equal(readAutoFinish('git:\n  prCli: gh\n'), 'disabled'));
-test('comentário inline não vaza', () => assert.equal(readAutoFinish('git:\n  autoFinish: true  # nota\n'), 'all'));
-test('granular parcial → objeto com não-listada=false', () => {
-  assert.deepEqual(readAutoFinish('git:\n  autoFinish:\n    bump: true\n    merge: false\n'),
-    { bump: true, commit: false, push: false, merge: false });
-});
-test('yaml inválido → fallback disabled', () => assert.equal(readAutoFinish('::: not yaml :::'), 'disabled'));
-test('versioning pipeline/none/local/default', () => {
-  assert.equal(readVersioning('git:\n  versioning: pipeline\n'), 'pipeline');
-  assert.equal(readVersioning('git:\n  versioning: none\n'), 'none');
-  assert.equal(readVersioning('git:\n  prCli: gh\n'), 'local');
-});
-```
-- [ ] **Step 2:** `node --test tests/lib/devflow-config.test.mjs` → FAIL (módulo ausente).
-- [ ] **Step 3 (GREEN):** implementar `devflow-config.mjs` — parser mínimo de subset YAML do bloco `git:` (regex line-based, sem dep): localizar o bloco `git:`, ler `autoFinish` (escalar após strip de `\s+#.*$`; se a linha `autoFinish:` não tem valor, coletar sub-chaves indentadas `bump/commit/push/merge`), `versioning`. Sem `eval`/exec/rede. Try/catch → fallback (`'disabled'`/`'local'`).
-- [ ] **Step 4:** `node --test` → PASS (todos).
-- [ ] **Step 5:** teste "linter puro" (grep no source: sem `eval`/`child_process`/`fetch`) + commit.
+- [ ] **Step 1 (RED):** `tests/lib/devflow-config.test.mjs` — vetores: escalar true/false, ausente, comentário inline (`true  # x`), granular parcial (`{bump:true,merge:false}`→4 chaves normalizadas), **tab-indent**, **chave-substring** (`autoFinishMode: true` NÃO casa), **`autoFinish:` fora do bloco `git:`** (ignora), **granular seguido de irmão** (`versioning:` na linha após as sub-chaves — para no irmão), **CRLF**, YAML inválido→`disabled`, arquivo > cap→`disabled`. Idem `readVersioning` (local/pipeline/none/default). Rodar → FAIL.
+- [ ] **Step 2:** implementar: localizar bloco `git:` (abre em `^git:`, fecha na 1ª linha não-indentada); dentro dele `^\s*autoFinish:\s*(.*)$` (colon-anchored, `\s` p/ tab); strip `\s+#.*$`; escalar→disabled/all; sem valor→coletar sub-chaves indentadas até dedent/irmão; `readVersioning` análogo. `readFileSync` com **cap** (ex.: 256KB→fallback) em try/catch → fallback. Sem `eval`/`vm`/`child_process`/`fetch`/`import()` dinâmico/`process.env`. CLI guard.
+- [ ] **Step 3:** rodar → PASS. **Step 4:** teste "linter puro" (grep negativo ampliado). **Step 5:** commit.
 
-## Task 2: Hook adota a lib (regressão-segura)
+## Task A2: Hook adota a lib (autoFinish **e** versioning), fail-safe
+**Files:** Modify `hooks/post-tool-use` (`parse_auto_finish` ~79-106; `read_yaml_field "versioning"` L234; consumidor L379-425). Create `tests/hooks/test-post-tool-use-config-golden.sh`
+**Interfaces:** Consumes A1.
 
-**Files:** Modify `hooks/post-tool-use` (funções `parse_auto_finish` ~79-106; leitura de versioning). Create `tests/skills/test-hook-config-parser.sh`
-**Interfaces:** Consumes Task 1.
+- [ ] **Step 1 (RED, golden não-circular):** capturar o **comportamento atual do Python** (rode o hook/heredoc antes do swap) como **literais golden** para autoFinish {true/false/ausente/granular/inline-comment} e versioning {local/pipeline/none/ausente} + o caminho de supressão do merge-warning (L215-250). O teste roda o hook e compara com os golden. Rodar → estabelece a baseline (documenta a normalização granular como diferença intencional).
+- [ ] **Step 2:** trocar `parse_auto_finish` por `AUTO_FINISH=$(node "${PLUGIN_ROOT}/scripts/lib/devflow-config.mjs" read-autofinish "$YAML_PATH" 2>/dev/null || echo disabled)`; trocar o `read_yaml_field … versioning` (L234) por `$(node … read-versioning … 2>/dev/null || echo local)`. `${PLUGIN_ROOT}` (BASH_SOURCE), nunca `$CLAUDE_PLUGIN_ROOT`. Remover heredocs órfãos.
+- [ ] **Step 3:** rodar golden → PASS (classificação, não bytes). Rodar testes existentes do hook → sem regressão. **Step 4:** commit.
 
-- [ ] **Step 1 (RED/regressão):** escrever `tests/skills/test-hook-config-parser.sh` que roda o hook (ou a função extraída) contra fixtures de `.devflow.yaml` (escalar/granular/ausente) e assere a MESMA classificação que `devflow-config.mjs` (chama `node .../devflow-config.mjs` e compara). Rodar → FAIL (hook ainda usa Python inline; provar divergência no granular).
-- [ ] **Step 2:** substituir o `parse_auto_finish` inline por chamada `node "${PLUGIN_ROOT}/scripts/lib/devflow-config.mjs" read-autofinish "$YAML_PATH"` (adicionar CLI à lib: `if (import.meta.url===...) { imprime a classificação }`). Preservar a saída consumida em 379-425 (`disabled|all|{json}`).
-- [ ] **Step 3:** rodar o teste + os testes existentes do hook (se houver) → PASS, sem regressão.
-- [ ] **Step 4:** commit.
-
-## Task 3: Teste de paridade hook×skill (+ sem PyYAML)
-
+## Task A3: Paridade lib × Python-com-PyYAML (RED próprio)
 **Files:** Create `tests/lib/devflow-config-parity.test.mjs`
+- [ ] **Step 1 (RED):** golden da semântica **Python-com-PyYAML** (o autoritativo) para os mesmos vetores; assere que a lib classifica igual (incl. caso "sem PyYAML" → a lib não depende, mesma saída). Escrever de forma que **falharia** contra o bug de divergência (granular). Rodar → PASS após A2 (trava-contrato). **Step 2:** commit. **⛳ Checkpoint Fase A** (parser único aterrissado; hook alinhado).
 
-- [ ] **Step 1 (RED):** para cada fixture (escalar true/false, ausente, granular {merge:false}, comentário inline), asserir que a saída da lib (via CLI) == a classificação que o hook produz. Incluir caso "sem PyYAML" (a lib não depende de PyYAML → mesma saída). Rodar → deve passar após Task 2 (é o trava-contrato).
-- [ ] **Step 2:** commit.
+---
 
-## Task 4: Step 4 da skill — autoFinish per-step + base-sync + mergeStrategy + out-de-escopo (#1,#2,#9,#10,#15)
+# FASE B — Helpers determinísticos + wiring da skill · checkpoint no fim
 
-**Files:** Modify `skills/prevc-confirmation/SKILL.md` (Step 4, ~186-263, e Step 0). Modify `tests/skills/test-confirmation-autofinish.sh` (estende). Modify `tests/validation/test-prevc-confirmation-autofinish.mjs` (#9).
+> Extrair a lógica que hoje é prosa para código testável; a skill passa a **invocar por referência**.
 
-- [ ] **Step 1 (RED):** estender `test-confirmation-autofinish.sh` assertando: (a) Step 4 lê autoFinish via `devflow-config.mjs`, NÃO via `awk`; (b) trata as 4 sub-flags per-step ("executa só as true; não-listada/false=SKIP"); (c) anúncio usa `<STRATEGY_FLAG resolvido>`, não hardcoda `--squash`; (d) detecção de convenção usa `--first-parent`; (e) conflito real de rebase = pausa (não segue meio-rebaseado); (f) out-de-escopo bloqueia ANTES do bump/commit (não só no Step 4). Relaxar o `.mjs` que exige `--squash`. Rodar → FAIL.
-- [ ] **Step 2:** editar Step 4 + Step 0 conforme o design §4.2/§4.5/§4.6 do spec. Remover o `awk`; referenciar `devflow-config.mjs`.
-- [ ] **Step 3:** rodar → PASS + regressão (tests/skills). Commit.
+## Task B1: `scripts/lib/finalize/base-sync.mjs` (#15 base-sync/rebase)
+**Files:** Create lib + `tests/lib/finalize/base-sync.test.mjs`
+**Interfaces:** `analyzeBase(cwd, {baseRef}) → { behind:int, action:'ok'|'rebase'|'pause', reason }` (não executa git destrutivo por si; `rebaseOnto()` separado com resultado `{ok}|{conflict, remedy}`).
+- [ ] **Step 1 (RED):** fixture git tmpdir + bare; casos: em dia→`ok`; atrás→`rebase`; rebase limpo→`{ok}`; conflito real→`{conflict, remedy}` (não deixa árvore meio-rebaseada — `rebase --abort`). Rodar → FAIL.
+- [ ] **Step 2:** implementar (usa `git -C <cwd>` isolado). **Step 3:** PASS. **Step 4:** commit.
 
-## Task 5: Step 2 — versioning gate + CHANGELOG gate + avisos (#4,#5,#6,#7,#8)
+## Task B2: `scripts/lib/finalize/scope-guard.mjs` (#15 out-de-escopo)
+**Files:** Create lib + teste
+**Interfaces:** `outOfScopeCommits(cwd, baseRef) → [{sha,subject}]`; usado como gate que **bloqueia antes do bump/commit**.
+- [ ] **Step 1 (RED):** fixture com commit alheio em `origin/main..HEAD` → retorna-o com remédio `rebase --onto`; branch limpa → `[]`. Rodar → FAIL. **Step 2:** impl. **Step 3:** PASS. **Step 4:** commit.
 
-**Files:** Modify `skills/prevc-confirmation/SKILL.md` (Steps 1,2,3). Modify `tests/skills/test-confirmation-bump.mjs`/`test-prevc-confirmation-autofinish.mjs` conforme couber; Create casos no `test-confirmation-autofinish.sh`.
+## Task B3: `scripts/lib/finalize/merge-strategy.mjs` (#9/#10)
+**Files:** Create lib + teste
+**Interfaces:** `resolveMergeStrategy(cwd, {configStrategy}) → 'merge'|'squash'|'rebase'` — config > convenção (`git log origin/main --first-parent -5`: `Merge pull request` → merge; `… (#N)` → squash) > fallback `squash`.
+- [ ] **Step 1 (RED):** fixture (a) histórico merge-commit → `merge`; (b) squash first-parent `(#N)` → `squash`; config explícita vence. Rodar → FAIL. **Step 2:** impl (`--first-parent`, não `--merges`). **Step 3:** PASS. **Step 4:** commit.
 
-- [ ] **Step 1 (RED):** teste assertando: (a) modo pipeline exige `## [Unreleased]` não-vazio via `changelog-extract.mjs` (gate bloqueante); (b) `bump:true`+pipeline → aviso ALTO (não silencioso); (c) mensagem de commit ramifica por modo (sem "bump" em pipeline/none); (d) removido o texto stale "(como neste projeto)"; (e) histórico de versão do README condicionado a `versioning: local`. Rodar → FAIL.
-- [ ] **Step 2:** editar Steps 1/2/3 conforme §4.3/§4.4.
-- [ ] **Step 3:** PASS + commit.
+## Task B4: `scripts/lib/finalize/changelog-gate.mjs` (#5)
+**Files:** Create lib (reusa `changelog-extract.mjs` `extractSection`) + teste
+**Interfaces:** `assertUnreleasedNonEmpty(changelogText) → {ok}|{empty}`.
+- [ ] **Step 1 (RED):** `## [Unreleased]` com conteúdo→`ok`; vazio→`empty`. Rodar → FAIL. **Step 2:** impl. **Step 3:** PASS. **Step 4:** commit.
 
-## Task 6: Step C.x ADR sweep + checklist + path (#3,#12,#14)
+## Task B5: `devflow:config` cross-check (#4)
+**Files:** Modify `skills/config/SKILL.md` (~418-427). Create `tests/skills/test-config-crosscheck.sh`
+- [ ] **Step 1 (RED):** recusa/avisa `autoFinish.bump:true` + `versioning ∈ {pipeline,none}`. → FAIL. **Step 2:** editar geração. **Step 3:** PASS. **Step 4:** commit.
 
-**Files:** Modify `skills/prevc-confirmation/SKILL.md` (Step C.x, checklist 16-25).
+## Task B6: `SKILL.md` — wiring por referência aos helpers + fixes de prosa (#1,#2,#3,#6,#7,#8,#12,#13,#14)
+**Files:** Modify `skills/prevc-confirmation/SKILL.md` (Steps 0/1/2/3/4/C.x/6 + checklist). Modify `tests/skills/test-confirmation-autofinish.sh` (estende, estrutural).
+- [ ] **Step 1 (RED, estrutural):** grep-asserts: Step 4 lê autoFinish via `devflow-config.mjs` (sem `awk`) e trata per-step (bump/commit/push/merge, não-listada=SKIP); base-sync/scope-guard/merge-strategy/changelog-gate referenciados pelos **helpers** (não reimplementados em prosa); out-de-escopo bloqueia **antes** do bump; anúncio usa `<STRATEGY_FLAG resolvido>`; C.x roda **antes** do Step 3 (ou commit dedicado das ADRs antes do merge) e está no checklist junto com 8.5; `adr-decision.mjs` com `${CLAUDE_PLUGIN_ROOT}`; Step 3 msg ramifica por modo (sem "bump" em pipeline/none); remove texto stale "(como neste projeto)"; Step 1 histórico condicionado a `versioning: local`; Step 6 Lite paths DDC v2. → FAIL.
+- [ ] **Step 2:** editar a SKILL.md conforme. **Step 3:** PASS + regressão `tests/skills`. **Step 4:** commit. **⛳ Checkpoint Fase B.**
 
-- [ ] **Step 1 (RED):** teste `.sh`: (a) C.x roda ANTES do Step 3 OU há commit dedicado das ADRs tocadas antes do merge; (b) checklist inclui C.x e 8.5; (c) `adr-decision.mjs` prefixado com `${CLAUDE_PLUGIN_ROOT}`. Rodar → FAIL.
-- [ ] **Step 2:** editar. **Step 3:** PASS + commit.
+---
 
-## Task 7: devflow:config cross-check (#4-config)
+# FASE C — E2E hermético + relax · checkpoint final
 
-**Files:** Modify `skills/config/SKILL.md` (regras de geração ~418-427). Create `tests/skills/test-config-autofinish-versioning-crosscheck.sh`.
+## Task C1: `tests/e2e/_harness.mjs` (fixture isolado)
+**Files:** Create `tests/e2e/_harness.mjs`
+**Interfaces:** `makeFixture()→{dir,bare,ghLog,env,cleanup}` — `mktemp -d` fora do repo; `git init` + `git init --bare` remote (path); `git -C` sempre; env higienizado (ver Global Constraints); stub `gh` inerte no PATH do filho; seed de commits/CHANGELOG/`.devflow.yaml` parametrizável.
+- [ ] **Step 1:** implementar + um self-test que assere o isolamento (**`gh` real nunca chamado**; `git remote get-url origin` = bare do tmp; `HOME` isolado). **Step 2:** commit.
 
-- [ ] **Step 1 (RED):** teste assertando que o config skill recusa/avisa o par `autoFinish.bump:true` + `versioning ∈ {pipeline,none}`. Rodar → FAIL.
-- [ ] **Step 2:** adicionar a regra de cross-check na geração. **Step 3:** PASS + commit.
+## Task C2: E2E hook+lib (config → classificação) — cenários #1,#2,#3,#4,#14
+**Files:** Create `tests/e2e/hook-config.e2e.test.mjs`
+- [ ] **Step 1 (RED→GREEN por A1/A2):** para `.devflow.yaml` (escalar true/false, ausente, granular {bump,commit,~merge}, versioning none) rodar o caminho hook+lib e asserir a classificação/instrução emitida. Ancora **A2** (não a prosa). **Step 2:** commit.
 
-## Task 8: Step 6 Lite paths DDC v2 (#13)
+## Task C3: E2E dos helpers determinísticos — cenários #8,#9,#10,#11,#5
+**Files:** Create `tests/e2e/finalize-helpers.e2e.test.mjs`
+- [ ] **Step 1 (RED→GREEN por B1-B4):** dirigir os helpers no fixture: base defasada→rebase limpo (#8); conflito real→pausa sem árvore meio-rebaseada (#9); commit fora-de-escopo→lista+remédio (#10); mergeStrategy merge vs squash por convenção (#11); CHANGELOG `[Unreleased]` vazio→gate bloqueia (#5). **Step 2:** commit.
 
-**Files:** Modify `skills/prevc-confirmation/SKILL.md` (Step 6, ~311-316).
-
-- [ ] **Step 1 (RED):** teste `.sh` que os paths do Step 6 Lite não usam `.context/docs/` v1 (usam `.context/engineering/` ou `context-paths.mjs`). Rodar → FAIL. **Step 2:** editar. **Step 3:** PASS + commit.
-
-## Task 9: Suíte E2E de comportamento (14 cenários)
-
-**Files:** Create `tests/e2e/_harness.mjs` + `tests/e2e/confirmation-finalize.e2e.test.mjs`
-**Interfaces:** harness `makeFixture()→{dir,remote,gh}` — cria repo git em tmpdir, `git init --bare` remote, stub de `gh` (script no PATH que loga o comando e simula merge), seed de commits/CHANGELOG/.devflow.yaml.
-
-- [ ] **Step 1 (RED, harness + exemplar):** escrever `_harness.mjs` (fixture git tmpdir + bare remote + gh-stub) e o **cenário exemplar #4** (autoFinish granular `{bump:true,commit:true,merge:false}` × versioning local → bumpa+commita, NÃO merge, NÃO menu). Rodar → FAIL (comportamento atual cai no menu — é o RED que ancora Task 4).
-- [ ] **Step 2 (GREEN dependente):** confirmar que, após Task 4, o cenário #4 passa.
-- [ ] **Step 3 (demais cenários):** implementar os 13 restantes (inventário abaixo), cada um com fixture próprio, RED→GREEN contra os fixes das Tasks 4-8.
-- [ ] **Step 4:** `node --test tests/e2e/*.e2e.test.mjs` → todos PASS. Commit por lote.
-
-**Inventário E2E (do spec §5):** (1) autoFinish true×local; (2) false→menu; (3) ausente→menu; (4) granular {bump,commit,~merge}×local; (5) granular {merge}×pipeline (sem double-bump, CHANGELOG check); (6) pipeline sem [Unreleased]→bloqueia; (7) pipeline msg-commit sem "bump"; (8) base defasada→rebase limpo; (9) base defasada→conflito real→pausa; (10) commit fora-de-escopo→pausa antes do bump; (11) mergeStrategy convenção (merge vs squash first-parent); (12) ADR sweep→ADR entra no PR; (13) paridade parser (coberto por Task 3, referência); (14) versioning:none.
+## Task C4: Relaxar o teste que exige `--squash` (#9)
+**Files:** Modify `tests/validation/test-prevc-confirmation-autofinish.mjs` (~L44)
+- [ ] **Step 1:** trocar a asserção fixa `--squash` por "estratégia resolvida coerente" (aceita merge/squash/rebase conforme convenção). Rodar a suíte → verde. **Step 2:** commit. **⛳ Checkpoint Fase C.**
 
 ## Self-Review
-- **Cobertura do spec:** §4.1→T1/T2/T3; §4.2/§4.5/§4.6→T4; §4.3(CHANGELOG)+§4.4→T5; §4.3(ADR)→T6; §4.4(config)→T7; §4.6(Lite)→T8; §5(E2E)→T9. Sem lacuna.
-- **Test-first:** todo task começa por RED. Tipos: T1 unit; T2/T3 integração/paridade; T9 E2E (obrigatório — a skill orquestra finalização de branch, fluxo crítico, memória "testes não mutam versionado").
-- **Placeholders:** exemplares com código real (T1, T9-#4); demais E2E com inventário + comportamento esperado explícito (não "TODO").
+- **Cobertura:** 15 achados → #1(A1/A2/B6) #2(B6) #3(B6) #4(B5) #5(B4/C3) #6(B6) #7(B6) #8(B1/C3) #9(B1/C3/C4) #10(B2/C3) #11(B3/C3) #12(B6) #13(B6) #14(B6) #15(B1/B2). Paridade→A3/C2. Isolamento→C1. Sem órfão.
+- **Test-first:** todo task começa por RED (inclusive A3, agora com golden próprio). Helpers com unit+E2E; skill com estrutural (correto — prosa não é E2E-ável).
+- **Faseamento:** A (parser, checkpoint) → B (helpers+skill, checkpoint) → C (E2E, checkpoint). Parser primeiro (destrava).
 
-## Gate P→R
-- [x] Spec aprovado (D1/D2) + ADR-011 (gate 13/13)
-- [x] Plano test-first (T1→T9, E2E obrigatório)
-- [ ] Aprovação do operador (R) antes de E
+## Gate R→E
+- [x] Spec aprovado + ADR-011 registrada (`Proposto`; enforcement fecha quando A1/A3 aterrissam)
+- [x] Review R incorporado (BLOCK do architect resolvido: helpers extraídos, E2E re-escopado, versioning+fail-safe)
+- [ ] Aprovação do operador para R→E
