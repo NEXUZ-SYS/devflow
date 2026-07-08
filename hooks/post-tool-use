@@ -26,83 +26,14 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
-# --- Read YAML field helper ---
+# --- Config reads delegam a devflow-config.mjs (parser único, ADR-011) ---
+# git.autoFinish e git.versioning são lidos SÓ pela lib compartilhada — nunca
+# re-parseados aqui (fim do parser Python inline e da divergência com/sem PyYAML).
 
-read_yaml_field() {
-  local file="$1" field="$2"
-  python3 - "$file" "$field" << 'PYEOF'
-import sys
-file_path, field_name = sys.argv[1], sys.argv[2]
-try:
-    import yaml
-    with open(file_path) as f:
-        data = yaml.safe_load(f)
-    git = data.get('git', {})
-    val = git.get(field_name, '')
-    if isinstance(val, list):
-        print(' '.join(str(v) for v in val))
-    elif isinstance(val, bool):
-        print(str(val).lower())
-    elif isinstance(val, dict):
-        import json
-        print(json.dumps(val))
-    else:
-        print(str(val))
-except ImportError:
-    # Fallback: line-by-line parse for simple YAML (no PyYAML).
-    # Handles scalar values and [list] syntax. Does NOT handle nested dicts.
-    import re
-    in_git = False
-    for line in open(file_path):
-        stripped = line.strip()
-        if stripped == 'git:':
-            in_git = True
-            continue
-        if in_git and not line.startswith(' ') and not line.startswith('\t') and stripped:
-            break
-        if in_git and field_name + ':' in stripped:
-            match = re.match(r'\s*' + re.escape(field_name) + r':\s*(.*)', stripped)
-            if match:
-                val = match.group(1).strip()
-                if val.startswith('[') and val.endswith(']'):
-                    val = val[1:-1].replace(',', ' ').replace('"', '').replace("'", '')
-                print(val)
-                break
-    else:
-        # for/else: prints empty when field not found (loop completed without break)
-        print('')
-PYEOF
-}
-
-# --- Parse autoFinish config ---
-# Returns: "disabled" | "all" | JSON object like {"bump":true,"push":false}
+# Returns: "disabled" | "all" | JSON {"bump":true,"commit":false,"push":false,"merge":false}
+# Fail-safe: erro/ausência → "disabled" (preserva o "sempre-sai-0" sob `set -euo pipefail`).
 parse_auto_finish() {
-  local config_file="$1"
-  python3 - "$config_file" << 'PYEOF'
-import sys, json
-file_path = sys.argv[1]
-try:
-    import yaml
-    with open(file_path) as f:
-        data = yaml.safe_load(f)
-    git = data.get('git', {})
-    af = git.get('autoFinish')
-    if af is None:
-        print('disabled')
-    elif af is True:
-        print('all')
-    elif af is False:
-        print('disabled')
-    elif isinstance(af, dict):
-        print(json.dumps(af))
-    else:
-        print('disabled')
-except ImportError:
-    # No PyYAML: granular autoFinish unparseable, safe default
-    print('disabled')
-except Exception:
-    print('disabled')
-PYEOF
+  node "${PLUGIN_ROOT}/scripts/lib/devflow-config.mjs" read-autofinish "$1" 2>/dev/null || echo "disabled"
 }
 
 # --- Read stdin ---
@@ -231,7 +162,7 @@ print(d.get('tool_input', {}).get('command', ''))
     MERGE_CWD=$(printf '%s' "$INPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('cwd',''))" 2>/dev/null || echo "")
     MERGE_CWD="${MERGE_CWD:-$PWD}"
     MERGE_VERSIONING=""
-    [ -f "$MERGE_CWD/.context/.devflow.yaml" ] && MERGE_VERSIONING=$(read_yaml_field "$MERGE_CWD/.context/.devflow.yaml" "versioning")
+    [ -f "$MERGE_CWD/.context/.devflow.yaml" ] && MERGE_VERSIONING=$(node "${PLUGIN_ROOT}/scripts/lib/devflow-config.mjs" read-versioning "$MERGE_CWD/.context/.devflow.yaml" 2>/dev/null || echo local)
     # Existe mecanismo de bump neste projeto?
     MERGE_HAS_BUMP=false
     if [ -f "$MERGE_CWD/scripts/bump-version.sh" ]; then
