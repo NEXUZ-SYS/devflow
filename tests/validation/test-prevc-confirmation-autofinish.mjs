@@ -28,7 +28,7 @@ test('Step 4 documents autoFinish: true → execute directly path', () => {
   const step4 = extractSection(SKILL, '## Step 4');
   assert.match(step4, /autoFinish.*true/i);
   assert.match(step4, /EXECUTAR DIRETO|execu[ts][aã]o\s+direta/i);
-  assert.match(step4, /n[ãa]o\s+(invocar|apresentar)/i);
+  assert.match(step4, /sem menu|n[ãa]o\s+(invocar|apresentar|pergunt)/i);
 });
 
 test('Step 4 documents autoFinish: false / absent → invoke generic skill', () => {
@@ -40,7 +40,8 @@ test('Step 4 documents autoFinish: false / absent → invoke generic skill', () 
 test('Step 4 references gh pr merge for prCli: gh path', () => {
   const step4 = extractSection(SKILL, '## Step 4');
   assert.match(step4, /gh pr merge/);
-  assert.match(step4, /--squash/);
+  // Estratégia resolvida (config > convenção do repo > fallback), NÃO --squash hardcoded (#9/#10).
+  assert.match(step4, /STRATEGY_FLAG|merge-strategy\.mjs|estrat[ée]gia resolvid/i);
   assert.match(step4, /--delete-branch/);
 });
 

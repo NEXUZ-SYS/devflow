@@ -3,7 +3,7 @@
 // hooks/post-tool-use (parse_auto_finish + read_yaml_field), sem PyYAML.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readAutoFinish, readVersioning } from "../../scripts/lib/devflow-config.mjs";
+import { readAutoFinish, readVersioning, readField } from "../../scripts/lib/devflow-config.mjs";
 
 // ---- readAutoFinish: escalares ----
 test("escalar true → all", () => {
@@ -91,4 +91,18 @@ test("versioning comentário inline", () => {
 });
 test("versioning desconhecido → local (não pipeline/none)", () => {
   assert.equal(readVersioning("git:\n  versioning: weird\n"), "local");
+});
+
+// ---- readField (genérico, ex.: prCli) ----
+test("readField prCli", () => {
+  assert.equal(readField("git:\n  prCli: gh\n", "prCli"), "gh");
+});
+test("readField com comentário inline", () => {
+  assert.equal(readField("git:\n  prCli: gh  # via cli\n", "prCli"), "gh");
+});
+test("readField ausente → null", () => {
+  assert.equal(readField("git:\n  autoFinish: true\n", "prCli"), null);
+});
+test("readField não casa chave-substring", () => {
+  assert.equal(readField("git:\n  prCliMode: x\n", "prCli"), null);
 });

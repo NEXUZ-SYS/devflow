@@ -87,6 +87,17 @@ export function readAutoFinish(src) {
   }
 }
 
+// Leitura genérica de um campo escalar do bloco git: (ex.: prCli, strategy).
+// Retorna a string (comentário inline já removido) ou null se ausente.
+export function readField(src, name) {
+  try {
+    const f = findScalar(gitBlock(src), name);
+    return f ? f.raw : null;
+  } catch {
+    return null;
+  }
+}
+
 // local | pipeline | none  (default local — preserva o check != pipeline && != none do hook)
 export function readVersioning(src) {
   try {
@@ -111,20 +122,20 @@ function readTextOrNull(path) {
 
 function main(argv) {
   const cmd = argv[0];
-  const path = argv[1];
-  if (!cmd || !path) {
-    console.error("uso: devflow-config <read-autofinish|read-versioning> <path>");
-    process.exit(2);
-  }
-  const text = readTextOrNull(path);
   if (cmd === "read-autofinish") {
+    const text = readTextOrNull(argv[1]);
     const r = text == null ? "disabled" : readAutoFinish(text);
     process.stdout.write((typeof r === "string" ? r : JSON.stringify(r)) + "\n");
   } else if (cmd === "read-versioning") {
-    const r = text == null ? "local" : readVersioning(text);
-    process.stdout.write(r + "\n");
+    const text = readTextOrNull(argv[1]);
+    process.stdout.write((text == null ? "local" : readVersioning(text)) + "\n");
+  } else if (cmd === "read-field") {
+    const name = argv[1];
+    const text = readTextOrNull(argv[2]);
+    if (!name) { console.error("uso: devflow-config read-field <campo> <path>"); process.exit(2); }
+    process.stdout.write((text == null ? "" : (readField(text, name) ?? "")) + "\n");
   } else {
-    console.error(`devflow-config: comando desconhecido "${cmd}"`);
+    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>> <path>");
     process.exit(2);
   }
 }
