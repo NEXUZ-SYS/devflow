@@ -47,6 +47,13 @@ git diff --stat  # arquivos modificados não-stageados
 3. Só prosseguir com a pipeline depois da decisão
 
 **Anti-pattern:** usar `git add -A` ou `git add <file>` num arquivo que já estava `M` antes da sua sessão. Sempre confira o que está staging com `git diff --cached` antes de commitar.
+
+**Também checar commits fora-de-escopo NA BRANCH (não só working-tree):** a branch pode carregar um commit **committado** que não é desta feature (ex.: veio embarcado ao ramificar de uma main local defasada). Isso não aparece em `git status` — inspecionar o histórico:
+```bash
+git fetch origin
+git log --oneline origin/main..HEAD   # os commits que iriam para a main neste merge
+```
+Se algum commit não pertence a esta feature, ele é o gatilho da "única exceção de pausa" do Step 4 (com `autoFinish: true`): parar com motivo específico + remédio (`git rebase --onto origin/main <sha> HEAD` para dropá-lo), não um menu genérico.
 </HARD-GATE>
 
 ## Step 1: README Update
@@ -193,6 +200,18 @@ PR_CLI=$(grep -E "^\s*prCli:" .context/.devflow.yaml | head -1 | awk -F: '{print
 
 ### Quando `autoFinish: true` — execução direta
 
+`autoFinish: true` resolve as complicações **automaticamente** (não vira pergunta). O fluxo é: **(0) sincronizar base → (1) detectar PR/caminho → (2) merge → (3) cleanup.**
+
+**(0) Sincronizar base ANTES do merge (automático):** se a branch está **atrás de `origin/main`** (base defasada), fazer `git fetch` + **rebase sobre `origin/main`** automaticamente — NÃO perguntar, NÃO abrir menu.
+```bash
+git fetch origin
+BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+if [ "$BEHIND" -gt 0 ]; then
+  # base defasada → rebase da branch sobre origin/main (resolve conflitos triviais; se conflito real, ver "exceção de pausa")
+  git rebase origin/main
+fi
+```
+
 Detectar se há PR aberto + escolher caminho:
 
 ```bash
@@ -201,13 +220,16 @@ BRANCH=$(git branch --show-current)
 PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null)
 ```
 
+**Estratégia de merge (`mergeStrategy`):** resolver nesta ordem — **(1) `mergeStrategy` da config** (`merge|rebase|squash`) se presente; **(2) convenção do repo** — inspecionar os merges recentes de `origin/main` (`git log origin/main --merges -5`): se predominam "Merge pull request #N" → `--merge`; se commits únicos com título de PR → `--squash`; **(3) fallback** `--squash`. **NÃO** assumir `--squash` cegamente quando a convenção do repo é merge-commit.
+
 **Caminho A — PR existe + `prCli: gh`:**
 ```bash
-gh pr merge "$PR_NUMBER" --squash --delete-branch
+STRATEGY_FLAG="--merge"   # ou --squash/--rebase conforme resolução acima
+gh pr merge "$PR_NUMBER" "$STRATEGY_FLAG" --delete-branch
 git checkout main && git pull
 git branch -d "$BRANCH" 2>/dev/null || true   # já pode ter sumido após delete-branch
 ```
-- `--squash` é o default razoável. Se a config tiver `mergeStrategy: merge|rebase|squash`, respeitar.
+- Flag de estratégia vem da resolução `mergeStrategy` acima (config > convenção do repo > fallback).
 - `--delete-branch` limpa remote.
 - `git pull` sincroniza local.
 - `git branch -d` final limpa local (no-op se já sumiu).
@@ -225,6 +247,15 @@ git push origin --delete "$BRANCH" 2>/dev/null || true
 **Caminho C — Sem PR + main protegida server-side:**
 - Push da branch e abrir PR via `gh pr create` — depois rodar Caminho A.
 - Alternativa: usar `gh pr merge --admin` se o usuário tem permissão.
+
+### Única exceção de pausa (com `autoFinish: true`)
+
+`autoFinish: true` só pausa por **risco irreversível que a config não previu** — NUNCA por complicação rotineira (base defasada, precisa rebase, precisa abrir PR: tudo isso é resolvido automaticamente acima). Quando pausar, dar o **motivo específico + remédio proposto**, jamais um menu genérico de 4 opções.
+
+O gatilho concreto: **commit fora-de-escopo embarcado na branch** que iria para a main (detectado no Step 0). Nesse caso:
+> "Pausando o autoFinish: a branch carrega o commit `<sha>` (`<título>`) que não faz parte desta feature e iria para a main. Remédio: `git rebase --onto origin/main <sha> HEAD` para dropá-lo (recuperável via reflog). Confirmar antes de prosseguir?"
+
+Fora esse tipo de risco irreversível específico, **não pausar** — a config decidiu.
 
 **Anunciar antes de executar:**
 > "`autoFinish: true` detectado em `.context/.devflow.yaml`. Executando merge automático via `gh pr merge #<N> --squash --delete-branch`."
@@ -372,3 +403,5 @@ The Confirmation gate marks the workflow as complete:
 | "Context sync is optional" | In Full mode, it's what keeps all your AI tools aligned. Do it. |
 | "The PR description is enough" | PR descriptions are ephemeral. Project docs are permanent. |
 | "I'll clean up the branch later" | Later means never. Finalize now. |
+| "Trabalho concluído!" (com PR só aberto, sem merge) | NÃO. Finalizar a branch (merge) é a ÚLTIMA etapa. Enquanto não há merge, o estado é "aguardando finalização", nunca "concluído". Rótulo prematuro é impreciso. |
+| "autoFinish:true mas vou perguntar a estratégia" | NÃO. Config decidiu. Base defasada/rebase/abrir PR = resolvidos automaticamente. Só pausar por risco irreversível específico (commit fora-de-escopo), com motivo + remédio — nunca menu. |
