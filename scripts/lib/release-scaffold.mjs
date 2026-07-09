@@ -34,6 +34,9 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { isWithinDir } from "./path-guard.mjs";
 import { readField } from "./devflow-config.mjs";
+// Só as funções PURAS. `applySync`/`resolveArtifacts` são contidos a `.context/`
+// e recusariam os dests deste scaffold — por isso o applier/sync são próprios.
+import { loadRegistry, decideArtifact, hashFile } from "./provenance-sync.mjs";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ASSET_DIR = join(PLUGIN_ROOT, "assets", "release-scaffold");
@@ -324,6 +327,136 @@ export function applyScaffold(cwd, { dryRun = false, confirmed = false } = {}) {
     writeFileSync(destAbs, item.content);
     chmodSync(destAbs, item.mode);
     out.created.push(item.dest);
+  }
+
+  return out;
+}
+
+// ─── Diff (para a confirmação do update) ────────────────────────────────────
+
+const MAX_DIFF_LINES = 2000;
+
+/** Diff unificado mínimo, zero-dep (LCS por programação dinâmica). */
+export function lineDiff(oldText, newText, label = "") {
+  const a = String(oldText).split("\n");
+  const b = String(newText).split("\n");
+  if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) {
+    return `--- ${label} (${a.length} linhas)\n+++ asset (${b.length} linhas)\n[arquivo grande — diff omitido]`;
+  }
+
+  const dp = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const marked = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) marked.push([" ", a[i++], j++]);
+    else if (dp[i + 1][j] >= dp[i][j + 1]) marked.push(["-", a[i++]]);
+    else marked.push(["+", b[j++]]);
+  }
+  while (i < a.length) marked.push(["-", a[i++]]);
+  while (j < b.length) marked.push(["+", b[j++]]);
+
+  // Só as mudanças, com 2 linhas de contexto.
+  const keep = new Set();
+  marked.forEach(([sign], idx) => {
+    if (sign === " ") return;
+    for (let k = Math.max(0, idx - 2); k <= Math.min(marked.length - 1, idx + 2); k++) keep.add(k);
+  });
+
+  const body = [];
+  let gap = false;
+  marked.forEach(([sign, text], idx) => {
+    if (!keep.has(idx)) {
+      if (!gap) body.push("...");
+      gap = true;
+      return;
+    }
+    gap = false;
+    body.push(sign + text);
+  });
+
+  return [`--- ${label} (local)`, `+++ ${label} (asset do plugin)`, ...body].join("\n");
+}
+
+// ─── syncScaffold (update seguro) ───────────────────────────────────────────
+
+/**
+ * Update dos artefatos de scaffold já presentes no projeto.
+ *
+ * Regras (ADR-012 v1.1.0):
+ *   - AUSENTE  → skipped. O scaffold é opt-in; o update NUNCA recria.
+ *   - EDITADO  → preserved. Edição local nunca é sobrescrita.
+ *   - UNTOUCHED (deploy intocado) + asset mudou → é artefato CLASSE-CI:
+ *     `needsConfirm` com diff. NUNCA auto-overwrite.
+ *   - Com `confirm`, os `writer:'fs'` são atualizados; o workflow continua
+ *     saindo em `mustWriteViaTool` (D7b vale no update também).
+ *
+ * Reusa apenas `loadRegistry` + `decideArtifact` (funções puras) do
+ * provenance-sync — `applySync` é contido a `.context/`.
+ *
+ * @returns {{updated:string[], preserved:string[], skipped:string[], current:string[],
+ *            needsConfirm:{dest:string,diff:string}[], refused:{dest:string,reason:string}[],
+ *            mustWriteViaTool:{dest:string,content:string}[]}}
+ */
+export function syncScaffold(cwd, { confirm = false, registry = null, assetDir = ASSET_DIR } = {}) {
+  const reg = registry ?? loadRegistry(PLUGIN_ROOT);
+  const out = {
+    updated: [], preserved: [], skipped: [], current: [],
+    needsConfirm: [], refused: [], mustWriteViaTool: [],
+  };
+
+  for (const item of SCAFFOLD) {
+    const violation = containmentViolation(cwd, item.dest);
+    if (violation) {
+      out.refused.push({ dest: item.dest, reason: `contenção: ${violation}` });
+      continue;
+    }
+
+    const destAbs = join(cwd, item.dest);
+    if (!existsSync(destAbs)) {
+      out.skipped.push(item.dest); // opt-in: nunca recria
+      continue;
+    }
+
+    const assetAbs = join(assetDir, item.src);
+    const projHash = hashFile(destAbs);
+    const pluginHash = hashFile(assetAbs);
+    const { action } = decideArtifact({ projHash, pluginHash, recorded: null, registry: reg });
+
+    if (action === "skip" || action === "current") {
+      out.current.push(item.dest);
+      continue;
+    }
+    if (action === "edited") {
+      out.preserved.push(item.dest);
+      continue;
+    }
+
+    // action === "untouched": deploy intocado, asset mudou. Classe-CI ⇒ gate humano.
+    if (!confirm) {
+      out.needsConfirm.push({
+        dest: item.dest,
+        diff: lineDiff(readFileSync(destAbs, "utf8"), readFileSync(assetAbs, "utf8"), item.dest),
+      });
+      continue;
+    }
+
+    if (item.writer === "tool") {
+      // D7b — nem com confirmação escrevemos .github/** por node:fs.
+      out.mustWriteViaTool.push({ dest: item.dest, content: readFileSync(assetAbs, "utf8"), mode: item.mode });
+      continue;
+    }
+
+    mkdirSync(dirname(destAbs), { recursive: true });
+    writeFileSync(destAbs, readFileSync(assetAbs));
+    chmodSync(destAbs, item.mode);
+    out.updated.push(item.dest);
   }
 
   return out;

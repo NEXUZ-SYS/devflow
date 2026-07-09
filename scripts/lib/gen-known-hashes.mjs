@@ -33,9 +33,25 @@ export function distributableFiles(pluginRoot) {
   return out.filter((f) => f.endsWith(".md") || f.endsWith(".js"));
 }
 
+// Artefatos de scaffold de CI (ADR-012): assets/release-scaffold/** (.yml + .sh + .mjs).
+//
+// Walk SEPARADO, com seu próprio conjunto de extensões. Ampliar o filtro de
+// distributableFiles() para .yml/.mjs arrastaria os scripts de skills/** (hoje
+// 13 arquivos .mjs) para dentro do registry compartilhado.
+export function scaffoldFiles(pluginRoot) {
+  const out = [];
+  walk(pluginRoot, join("assets", "release-scaffold"), out);
+  return out.filter((f) => f.endsWith(".yml") || f.endsWith(".sh") || f.endsWith(".mjs"));
+}
+
+// União das duas famílias — é isto que entra no known-hashes.json.
+export function indexedFiles(pluginRoot) {
+  return [...distributableFiles(pluginRoot), ...scaffoldFiles(pluginRoot)];
+}
+
 export function genFromWorkingTree(pluginRoot) {
   const set = new Set();
-  for (const rel of distributableFiles(pluginRoot)) {
+  for (const rel of indexedFiles(pluginRoot)) {
     try { set.add(createHash("sha256").update(readFileSync(join(pluginRoot, rel))).digest("hex")); }
     catch { /* skip */ }
   }
@@ -57,7 +73,7 @@ function blobHashAt(pluginRoot, sha, relPath) {
 export function genBackfill(pluginRoot) {
   const set = genFromWorkingTree(pluginRoot);
   let warned = false;
-  for (const rel of distributableFiles(pluginRoot)) {
+  for (const rel of indexedFiles(pluginRoot)) {
     const commits = commitsTouching(pluginRoot, rel);
     if (commits === null) {
       if (!warned) { console.error("WARN: git indisponível/shallow — registry só do working tree"); warned = true; }
