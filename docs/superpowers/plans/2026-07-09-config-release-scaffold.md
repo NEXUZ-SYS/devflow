@@ -74,7 +74,7 @@
 **Interfaces:** Consumes Task A.
 
 - [ ] **Step 1 (RED):** asserts: (a) nenhum arquivo sob `assets/release-scaffold/` contém `CLAUDE_PLUGIN_ROOT`; (b) `release.yml` stageia o `CHANGELOG.md` (fix #71); (c) **nenhum `pull_request_target`** nem `pull_request` com acesso a secrets; (d) `workflow_dispatch` input `bump` é `type: choice`; (e) o `run:` usa **`env:`** (`BUMP: ${{ inputs.bump }}` + `bash scripts/bump-version.sh "$BUMP"`), **não** `${{ }}` inline; (f) `permissions:` é o mínimo (`contents: write`, `pull-requests: write`); (g) `changelog-cut.mjs` do asset é byte-idêntico ao de `scripts/lib/` **na criação** (garante origem; não é contrato futuro);
-  **(h) [N1 — anti-hardcode] o asset `release.yml` NÃO contém** `.claude-plugin`, `.cursor-plugin`, `known-hashes`, nem `grep` de manifest fixo (`plugin.json`);
+  **(h) [N1 — anti-hardcode] o asset `release.yml` NÃO contém** `.claude-plugin`, `.cursor-plugin`, `marketplace.json`, `known-hashes`, nem `grep` de manifest fixo (`plugin.json`);
   **(i) [N1] a versão nova vem do `bump-version.sh`** (via `steps.<id>.outputs.version` de `$GITHUB_OUTPUT`), nunca de um `grep` no workflow;
   **(j) [N1] o staging é genérico** (`git add -A` ou a lista `files=` emitida pelo script), sem pathspec fixo. Rodar → FAIL.
 - [ ] **Step 2:** criar os assets. Adaptar `release.yml` deste repo: paths genéricos (`scripts/bump-version.sh`); **remover** o step `version-guard` e o `known-hashes` (fora do v1); **genericizar a leitura da versão** (consumir `outputs.version`) **e o `git add`** (sem `.claude-plugin`/`.cursor-plugin`); ajustar o corpo do PR (checklist v1: "sem changelog-guard — confira as notas"). **Step 3:** PASS. **Step 4:** commit.
@@ -97,9 +97,13 @@
   8. multi-remote com um GitHub → `{github:true}`.
   8b. **[N2 userinfo] `https://github.com@evil.tld/x/y.git` → `{github:false}`** (host real = `evil.tld`).
   8c. **[N2 userinfo] `https://user@github.com/x/y.git` → `{github:true}`**.
+  8d. **[3º re-gate] `ssh://git@github.com:22/x/y.git` → `{github:true}`** (forma URL de SSH: ramo URL + last-`@` + strip de porta).
+  8e. **[3º re-gate] `https://github.com:443/x/y.git` → `{github:true}`** (porta) · `https://GitHub.com/x/y` → `{github:true}` (host **lowercased** antes do `===`).
   9. **`applyScaffold` sem `confirmed:true` → `refused` (nada escrito)** ← controle HIGH.
   **9b. [D7a — fecha o HIGH] `.context/workflow/status.yaml` com `autonomy: autonomous` + `confirmed:true` → `refused` (nada escrito).** O guard lê a **fonte real da autonomia** (a mesma de `hooks/post-tool-use:272-281`, não o `.devflow.yaml` — lá não existe esse campo) e recusa independentemente da flag. Casos: `assisted` → refused; `supervised` → permitido; `status.yaml` ausente → tratado como `supervised` (mesmo default do hook).
   **9c. [D7b] `.github/workflows/release.yml` NUNCA é escrito por `node:fs`** — sai em `mustWriteViaTool` (com `content`); só `scripts/**` é criado pelo applier.
+  **9d. [N6a] `verifyWritten(cwd)`** — após o workflow ser gravado (pela ferramenta `Write`), `hash(dest) === hash(asset)`; **1 byte alterado → `mismatch` fail-loud**. (O conteúdo transita pelo LLM; sem isto o único artefato que executa em CI seria o único sem garantia de bytes.)
+  **9e.** branch protegida → `applyScaffold` recusa (evita `scripts/**` órfãos quando o `Write` for negado).
   10. `confirmed:true, dryRun:true` → nada escrito, retorna plano.
   11. `confirmed:true` + gate ok → cria os arquivos `writer:'fs'`; **hash dest == hash asset** (verbatim).
   12. dest **já existe** → `preserved`; conteúdo original **intacto**.
@@ -129,7 +133,7 @@
 ## Task G: E2E isolado
 **Files:** Create `tests/e2e/release-scaffold.e2e.test.mjs`
 
-- [ ] **Step 1 (RED→GREEN por A-D):** fixture `mktemp -d` **fora da árvore**; `git init` + `origin` = **path local** (bare), jamais URL de rede; env: `HOME`/`GIT_CONFIG_GLOBAL`/`GH_CONFIG_DIR` em tmp, `GIT_CONFIG_SYSTEM=/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_TERMINAL_PROMPT=0`, `unset GH_TOKEN GITHUB_TOKEN`, identidade git local. Cenários: (1) `applyScaffold({confirmed:true})` → 3 arquivos verbatim; (2) `bash scripts/bump-version.sh minor` no fixture → version files + `CHANGELOG.md` cortado (`[1.3.0]` não-vazio); (3) **asserção positiva: nenhum `git push` e nenhum `gh` foi invocado** (stub que marca sentinel; ausência do sentinel = pass); (4) o gate GitHub é testado em unidade (Task C), **não** com URL real.
+- [ ] **Step 1 (RED→GREEN por A-D):** fixture `mktemp -d` **fora da árvore**; `git init` + `origin` = **path local** (bare), jamais URL de rede; env: `HOME`/`GIT_CONFIG_GLOBAL`/`GH_CONFIG_DIR` em tmp, `GIT_CONFIG_SYSTEM=/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_TERMINAL_PROMPT=0`, `unset GH_TOKEN GITHUB_TOKEN`, identidade git local. Cenários: (1) **[N6a, redação corrigida]** `applyScaffold({confirmed:true})` → **2 arquivos `writer:'fs'` materializados verbatim + 1 em `mustWriteViaTool`** (o workflow); o teste então **grava o workflow via ferramenta `Write`** e roda **`verifyWritten` → `hash(dest)===hash(asset)`**; mutar 1 byte antes do Write → `mismatch` fail-loud; (2) `bash scripts/bump-version.sh minor` no fixture → version files + `CHANGELOG.md` cortado (`[1.3.0]` não-vazio); (3) **asserção positiva: nenhum `git push` e nenhum `gh` foi invocado** (stub que marca sentinel; ausência do sentinel = pass); (4) o gate GitHub é testado em unidade (Task C), **não** com URL real.
   **Step 2:** commit.
 
 ## Self-Review
@@ -144,4 +148,9 @@
 - [x] **HIGH fechado mecanicamente:** D7a guard de autonomia (C.9b, lendo `status.yaml` — a fonte real) + D7b workflow gravado via ferramenta `Write` (C.9c, E.k) → não depende mais de `confirmed:true` (que era teatro contra o vetor autônomo)
 - [x] **N1** (asset `release.yml` genérico: interface A↔B via `$GITHUB_OUTPUT` + `git add` genérico + guard-test anti-hardcode B.1h-j)
 - [x] **N2** (userinfo no gate: C.8b/C.8c) · **N3** (ADR → `Aprovado` + Enforcement, Task 0) · **N4** (aviso "sem changelog-guard", E.l) · nits (assinatura `{confirm}`; walk separado no `gen-known-hashes`; symlink do pai C.13b)
-- [ ] Re-aprovação dos revisores + do operador para R→E
+- [x] **3º re-gate: PROCEED** — security declara **HIGH e MED-HIGH mitigados**. Condições vinculantes aplicadas: **N6b** (spec §3.2 lia `.devflow.yaml` → corrigido p/ `status.yaml`; ao pé da letra o D7a falharia aberto) e **N6a** (`verifyWritten`: o workflow — único que roda em CI — era o único **sem** garantia de bytes, pois o conteúdo transita pelo LLM). +`marketplace.json` na denylist, `ssh://…:port`/porta/lowercase no gate, `applyScaffold` recusa em branch protegida.
+- [x] **Enquadramento honesto:** **D7b é o controle mecânico** (`.github/**` fora de `allow.fs.write` → `mode: prompt`; branch protegida → DENY). **D7a é auxiliar e auto-contornável** (`status.yaml` é gravável e branch-exempt).
+- [ ] Aprovação do operador para R→E
+
+## Vetor residual conhecido (pré-existente, global — follow-up de produto)
+Um agente não-cooperativo escreve `.github/**` por **Bash** (`printf >`, `cp`), contornando D7a **e** D7b: o `hooks/pre-tool-use` só guarda `git push|gh pr merge|git commit` em Bash e faz `exit 0` para `TOOL_NAME != Edit/Write`. **Não é introduzido por esta feature** (é o buraco global "Bash escreve qualquer arquivo"). Follow-up: endurecer `permissions.yaml` contra escrita em `.github/**` via Bash.
