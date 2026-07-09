@@ -120,7 +120,7 @@ test("D.b cópia verbatim + asset inalterado → nada a fazer", () => {
   assert.equal(r.current.length, SCAFFOLD.length);
 });
 
-test("D.c [MED-HIGH] untouched + asset mudou → needsConfirm com diff, NÃO escreve", () => {
+test("D.1c [MED-HIGH] untouched + asset mudou → needsConfirm com diff, NÃO escreve", () => {
   const dir = newRepo();
   seedVerbatim(dir);
   const before = SCAFFOLD.map((i) => readFileSync(join(dir, i.dest), "utf8"));
@@ -252,6 +252,48 @@ test("F.2 applySync AUTO-SOBRESCREVE 'untouched' sem confirmação — daí o ne
   const r = syncScaffold(repo2, { registry: registryOfCurrentAssets(), assetDir: assetDirWithChange() });
   assert.equal(r.updated.length, 0);
   assert.equal(r.needsConfirm.length, SCAFFOLD.length);
+});
+
+// Achado do security review: dest existe mas é ILEGÍVEL (ex.: um diretório).
+// hashFile → null → decideArtifact devolve "add", que não é skip/current/edited e
+// caía no ramo `untouched`. Sem confirm, o lineDiff fazia readFileSync(dir) e
+// ESTOURAVA; com confirm, tentaria sobrescrever.
+test("D.h dest ilegível (diretório) → skipped, sem lançar", () => {
+  const dir = newRepo();
+  const target = SCAFFOLD.find((i) => i.writer === "fs");
+  mkdirSync(join(dir, target.dest), { recursive: true }); // dest é um DIRETÓRIO
+
+  let r;
+  assert.doesNotThrow(() => {
+    r = syncScaffold(dir, { registry: registryOfCurrentAssets(), assetDir: assetDirWithChange() });
+  }, "syncScaffold estourou num dest ilegível");
+
+  assert.ok(
+    r.skipped.includes(target.dest) || r.refused.some((x) => x.dest === target.dest),
+    `dest ilegível deveria ser skipped/refused, veio: ${JSON.stringify(r)}`,
+  );
+  assert.ok(!r.updated.includes(target.dest));
+  assert.ok(!r.needsConfirm.some((x) => x.dest === target.dest));
+});
+
+// NOTE 6 do code review: `apply` sai 1 quando há refused; `sync` saía 0 sempre.
+test("D.i CLI sync → exit 1 quando há refused (paridade com apply)", () => {
+  const dir = newRepo();
+  const outside = mkdtempSync(join(tmpdir(), "rss-out2-"));
+  CLEANUP.push(outside);
+  symlinkSync(outside, join(dir, "scripts"));
+
+  const cliPath = join(ROOT, "scripts", "lib", "release-scaffold.mjs");
+  let status = 0;
+  let out = "";
+  try {
+    out = execFileSync("node", [cliPath, "sync"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    status = e.status ?? 1;
+    out = e.stdout ?? "";
+  }
+  assert.equal(status, 1, "a CLI sync deve sinalizar recusa no exit code");
+  assert.ok(JSON.parse(out).refused.length > 0);
 });
 
 test("D.g contenção mantida — pai symlink fora da raiz → refused", () => {

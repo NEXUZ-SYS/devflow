@@ -167,7 +167,12 @@ export function readAutonomy(cwd) {
   } catch {
     return "supervised";
   }
-  for (const line of text.split("\n")) {
+  // Normalizar CRLF ANTES de escanear. O hook usa `tr -d '[:space:]"'`, que come o
+  // `\r`; a regex JS não: `.` e `$` não cruzam `\r`, então `autonomy: autonomous\r`
+  // não casava e o guard FALHAVA ABERTO num checkout Windows / core.autocrlf.
+  // Mesmo tratamento de devflow-config.mjs:normalizeNewlines.
+  const normalized = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  for (const line of normalized.split("\n")) {
     const m = line.match(/^\s*autonomy\s*:\s*(.*)$/);
     if (!m) continue;
     const value = m[1]
@@ -284,6 +289,12 @@ export function applyScaffold(cwd, { dryRun = false, confirmed = false } = {}) {
   const gate = checkGate(cwd);
   if (!gate.git) return refusal("sem repositório git");
 
+  // Nota de projeto: NÃO exigimos `gate.github` aqui, e isso é deliberado.
+  // O guardrail "só com remote GitHub" é do momento da OFERTA (skill config,
+  // P5b.1). Materializar os arquivos num repo sem remote GitHub é inerte: o
+  // workflow nunca executa. O ato perigoso — rodar CI com contents:write — exige
+  // GitHub, e o artefato que o dispara passa pelo gate de permissões (D7b).
+
   // C.9 — o applier escreve por node:fs, invisível ao pre-tool-use. A
   // confirmação humana é obrigatória e vive no código, não na prosa da skill.
   if (!confirmed) return refusal("scaffold não confirmado (confirmed:true é obrigatório)");
@@ -296,8 +307,14 @@ export function applyScaffold(cwd, { dryRun = false, confirmed = false } = {}) {
 
   // C.9e — em branch protegida a ferramenta Write será NEGADA; recusar aqui
   // evita deixar scripts/** órfãos sem o workflow que os usa.
+  //
+  // Em detached HEAD `--show-current` volta vazio: não dá para avaliar branch
+  // protection, então falhamos FECHADO em vez de pular o check.
   const branch = currentBranch(cwd);
-  if (branch && protectedBranches(cwd).includes(branch)) {
+  if (!branch) {
+    return refusal("detached HEAD: não é possível avaliar branch protection; faça checkout de uma work branch");
+  }
+  if (protectedBranches(cwd).includes(branch)) {
     return refusal(`branch protegida '${branch}': crie uma work branch antes de scaffoldar`);
   }
 
@@ -437,6 +454,14 @@ export function syncScaffold(cwd, { confirm = false, registry = null, assetDir =
       out.preserved.push(item.dest);
       continue;
     }
+    // `add` aqui significa: o dest EXISTE (checado acima) mas é ilegível — um
+    // diretório, ou sem permissão de leitura (hashFile → null). Não é o nosso
+    // caso de "ausente". Nunca tratar como `untouched`: o lineDiff estouraria e,
+    // com `confirm`, sobrescreveríamos um dest que não sabemos ler.
+    if (action === "add") {
+      out.skipped.push(item.dest);
+      continue;
+    }
 
     // action === "untouched": deploy intocado, asset mudou. Classe-CI ⇒ gate humano.
     if (!confirm) {
@@ -532,7 +557,7 @@ function cli(argv) {
     case "sync": {
       const r = syncScaffold(cwd, { confirm: has("--confirm") });
       emit(r);
-      return 0;
+      return r.refused.length > 0 ? 1 : 0; // paridade com `apply`
     }
     default:
       process.stderr.write(

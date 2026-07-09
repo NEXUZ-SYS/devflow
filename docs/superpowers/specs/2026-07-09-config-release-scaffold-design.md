@@ -48,7 +48,7 @@
 | `scripts/bump-version.sh` | **Genérico e endurecido**: detecta manifests **na raiz apenas** (sem walk); valida `^X.Y.Z$` **fail-loud**; **`sed` ancorado** (nunca toca `version =` de dependências); chama `lib/changelog-cut.mjs` por path **relativo ao script**; **sem** bloco `gen-known-hashes --append`. |
 | `scripts/lib/changelog-cut.mjs` | `[Unreleased]` → `[X.Y.Z] — data` + `[Unreleased]` novo vazio. Idempotente. |
 
-Detecção (raiz, ordem; **source of truth** = primeiro encontrado; todos os presentes são atualizados): `package.json` → `pyproject.toml` → `Cargo.toml` → `.claude-plugin/plugin.json` → `VERSION`.
+Detecção (raiz, ordem; **source of truth** = primeiro encontrado; todos os presentes são atualizados): `package.json` → `pyproject.toml` → `Cargo.toml` → `VERSION`. (Sem `.claude-plugin/plugin.json`: o guardrail anti-hardcode da ADR-012 v1.1.0 o proíbe — o asset roda no repo do usuário.)
 
 **[re-gate N1] Interface A↔B (contrato):** o `release.yml` **nunca** re-grepa um manifest para descobrir a versão nova. O `bump-version.sh`:
 - escreve `version=<X.Y.Z>` em `$GITHUB_OUTPUT` quando a variável está setada, **e**

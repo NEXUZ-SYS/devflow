@@ -100,7 +100,7 @@ function onTriggers(yml) {
   return triggers;
 }
 
-test("(a) nenhum arquivo do scaffold referencia CLAUDE_PLUGIN_ROOT", () => {
+test("B.1a nenhum arquivo do scaffold referencia CLAUDE_PLUGIN_ROOT", () => {
   const files = walk(ASSET_DIR);
   assert.ok(files.length > 0, "assets/release-scaffold/ está vazio");
   for (const f of files) {
@@ -111,7 +111,7 @@ test("(a) nenhum arquivo do scaffold referencia CLAUDE_PLUGIN_ROOT", () => {
   }
 });
 
-test("(b) o staging cobre o CHANGELOG.md cortado (fix #71)", () => {
+test("B.1b o staging cobre o CHANGELOG.md cortado (fix #71)", () => {
   const blocks = runBlocks(read(RELEASE_YML)).join("\n");
   const stagesEverything = /git add -A\b/.test(blocks);
   const stagesFilesList = /git add\b[^\n]*\$\{?FILES\}?/.test(blocks);
@@ -122,7 +122,7 @@ test("(b) o staging cobre o CHANGELOG.md cortado (fix #71)", () => {
   );
 });
 
-test("(c) sem pull_request_target e sem pull_request", () => {
+test("B.1c sem pull_request_target e sem pull_request", () => {
   const yml = read(RELEASE_YML);
   assert.ok(
     !stripComments(yml).includes("pull_request_target"),
@@ -136,7 +136,7 @@ test("(c) sem pull_request_target e sem pull_request", () => {
   );
 });
 
-test("(d) o input `bump` é type: choice", () => {
+test("B.1d o input `bump` é type: choice", () => {
   const yml = read(RELEASE_YML);
   const bumpBlock = yml.slice(yml.indexOf("bump:"), yml.indexOf("permissions:"));
   assert.match(bumpBlock, /type:\s*choice/, "input `bump` deve ser type: choice (enum fechado)");
@@ -145,7 +145,7 @@ test("(d) o input `bump` é type: choice", () => {
   }
 });
 
-test("(e) nenhum ${{ }} é interpolado dentro de um `run:` — indireção por env:", () => {
+test("B.1e nenhum ${{ }} é interpolado dentro de um `run:` — indireção por env:", () => {
   const blocks = runBlocks(read(RELEASE_YML));
   assert.ok(blocks.length > 0, "não encontrei nenhum bloco `run:`");
   for (const b of blocks) {
@@ -156,14 +156,14 @@ test("(e) nenhum ${{ }} é interpolado dentro de um `run:` — indireção por e
   }
 });
 
-test("(e2) o bump é invocado com o valor vindo de env: BUMP", () => {
+test("B.1e2 o bump é invocado com o valor vindo de env: BUMP", () => {
   const yml = read(RELEASE_YML);
   assert.match(yml, /BUMP:\s*\$\{\{\s*inputs\.bump\s*\}\}/, "env: BUMP deve vir de inputs.bump");
   const blocks = runBlocks(yml).join("\n");
   assert.match(blocks, /bash scripts\/bump-version\.sh "\$BUMP"/, 'run: deve chamar bash scripts/bump-version.sh "$BUMP"');
 });
 
-test("(f) permissions é o mínimo necessário", () => {
+test("B.1f permissions é o mínimo necessário", () => {
   const yml = read(RELEASE_YML);
   const block = yml.slice(yml.indexOf("permissions:"), yml.indexOf("jobs:"));
   const perms = block
@@ -177,7 +177,7 @@ test("(f) permissions é o mínimo necessário", () => {
   );
 });
 
-test("(g) changelog-cut.mjs do asset é byte-idêntico ao de scripts/lib na criação", () => {
+test("B.1g changelog-cut.mjs do asset é byte-idêntico ao de scripts/lib na criação", () => {
   const assetCut = readFileSync(join(ASSET_DIR, "lib", "changelog-cut.mjs"));
   const libCut = readFileSync(join(ROOT, "scripts", "lib", "changelog-cut.mjs"));
   assert.equal(
@@ -188,7 +188,7 @@ test("(g) changelog-cut.mjs do asset é byte-idêntico ao de scripts/lib na cria
   );
 });
 
-test("(h) [N1] nenhum hardcode específico do plugin nos assets", () => {
+test("B.1h [N1] nenhum hardcode específico do plugin nos assets", () => {
   const denylist = [".claude-plugin", ".cursor-plugin", "marketplace.json", "known-hashes"];
   for (const f of walk(ASSET_DIR)) {
     const content = read(f);
@@ -201,7 +201,7 @@ test("(h) [N1] nenhum hardcode específico do plugin nos assets", () => {
   }
 });
 
-test("(h2) [N1] o release.yml não grepa manifest fixo", () => {
+test("B.1h2 [N1] o release.yml não grepa manifest fixo", () => {
   const blocks = runBlocks(read(RELEASE_YML)).join("\n");
   assert.ok(!/grep[^\n]*plugin\.json/.test(blocks), "grep de plugin.json — manifest fixo do plugin");
   assert.ok(
@@ -210,7 +210,7 @@ test("(h2) [N1] o release.yml não grepa manifest fixo", () => {
   );
 });
 
-test("(i) [N1] a versão nova vem de steps.<id>.outputs.version", () => {
+test("B.1i [N1] a versão nova vem de steps.<id>.outputs.version", () => {
   const yml = read(RELEASE_YML);
   assert.match(
     yml,
@@ -219,7 +219,7 @@ test("(i) [N1] a versão nova vem de steps.<id>.outputs.version", () => {
   );
 });
 
-test("(k) cada bloco `run:` é bash sintaticamente válido", () => {
+test("B.1k cada bloco `run:` é bash sintaticamente válido", () => {
   const blocks = runBlocks(read(RELEASE_YML));
   assert.ok(blocks.length > 0, "não encontrei nenhum bloco `run:`");
   blocks.forEach((b, i) => {
@@ -232,7 +232,7 @@ test("(k) cada bloco `run:` é bash sintaticamente válido", () => {
   });
 });
 
-test("(j) [N1] o staging é genérico — sem pathspec fixo", () => {
+test("B.1j [N1] o staging é genérico — sem pathspec fixo", () => {
   const blocks = runBlocks(read(RELEASE_YML)).join("\n");
   const addLines = blocks.split("\n").filter((l) => /\bgit add\b/.test(l));
   assert.ok(addLines.length > 0, "nenhum `git add` encontrado");

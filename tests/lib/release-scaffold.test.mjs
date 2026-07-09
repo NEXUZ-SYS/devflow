@@ -28,6 +28,7 @@ import {
   applyScaffold,
   verifyWritten,
   containmentViolation,
+  readAutonomy,
   SCAFFOLD,
 } from "../../scripts/lib/release-scaffold.mjs";
 
@@ -184,6 +185,54 @@ test("C.9b assisted → refused; supervised → permitido; status.yaml ausente �
   const absent = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
   assert.ok(!existsSync(join(absent, ".context", "workflow", "status.yaml")));
   assert.equal(ok(absent).refused.length, 0, "status.yaml ausente deve valer supervised (default do hook)");
+});
+
+// Achado do security review: `readAutonomy` afirma espelhar o hooks/post-tool-use,
+// que faz `tr -d '[:space:]"'` e portanto é CRLF-safe. A regex JS não era: `.` e `$`
+// não cruzam `\r`, então `autonomy: autonomous\r` não casava e o guard FALHAVA ABERTO.
+// Todos os fixtures usavam `\n`, então nenhum teste pegava.
+test("C.9b-crlf [D7a] status.yaml em CRLF não pode fazer o guard falhar aberto", () => {
+  for (const modo of ["autonomous", "assisted"]) {
+    const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+    mkdirSync(join(dir, ".context", "workflow"), { recursive: true });
+    writeFileSync(join(dir, ".context", "workflow", "status.yaml"), `phase: E\r\nautonomy: ${modo}\r\n`);
+
+    assert.equal(readAutonomy(dir), modo, `readAutonomy leu errado com CRLF (${modo})`);
+
+    const r = ok(dir);
+    assert.ok(
+      r.refused.some((x) => /autonom/i.test(x.reason)),
+      `CRLF + autonomy:${modo} deveria recusar, veio: ${JSON.stringify(r.refused)}`,
+    );
+    assert.ok(!existsSync(join(dir, "scripts", "bump-version.sh")));
+  }
+});
+
+test("C.9b-crlf supervised em CRLF continua permitido", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  mkdirSync(join(dir, ".context", "workflow"), { recursive: true });
+  writeFileSync(join(dir, ".context", "workflow", "status.yaml"), "phase: E\r\nautonomy: supervised\r\n");
+  assert.equal(readAutonomy(dir), "supervised");
+  assert.equal(ok(dir).refused.length, 0);
+});
+
+// NOTE 7 do code review: em detached HEAD, `git branch --show-current` volta vazio e
+// o check de branch protegida era PULADO. Sem branch, não dá para saber se estamos
+// protegidos → falha fechado.
+test("C.9f detached HEAD → refused (não dá para avaliar branch protection)", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  writeFileSync(join(dir, "a.txt"), "x\n");
+  execFileSync("git", ["-C", dir, "add", "a.txt"]);
+  execFileSync("git", ["-C", dir, "commit", "-q", "-m", "init"]);
+  execFileSync("git", ["-C", dir, "checkout", "-q", "--detach", "HEAD"]);
+
+  const r = ok(dir);
+  assert.equal(r.created.length, 0);
+  assert.ok(
+    r.refused.some((x) => /detached|branch/i.test(x.reason)),
+    `esperava recusa em detached HEAD, veio: ${JSON.stringify(r.refused)}`,
+  );
+  assert.ok(!existsSync(join(dir, "scripts", "bump-version.sh")));
 });
 
 test("C.9c [D7b] .github/workflows/** nunca é escrito por node:fs", () => {

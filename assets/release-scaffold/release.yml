@@ -75,7 +75,11 @@ jobs:
           # intacto (drift).
           if [ -n "${FILES:-}" ]; then
             # shellcheck disable=SC2086
-            # word splitting é intencional: `files=` é uma lista separada por espaço.
+            # Word splitting é intencional: `files=` é uma lista separada por espaço.
+            # INVARIANTE: o bump-version.sh só emite em `files=` nomes de manifest
+            # LITERAIS e fixos (package.json, pyproject.toml, Cargo.toml, VERSION,
+            # CHANGELOG.md). Se algum dia ele emitir um nome derivado de input, este
+            # `$FILES` não-citado vira injetável (glob / split) — cite-o ou use -z.
             git add -- $FILES
           else
             git add -A

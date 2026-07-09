@@ -34,8 +34,12 @@ esac
 
 # ─── Validação ──────────────────────────────────────────────────────────────
 
+# Semver de verdade: proíbe zero à esquerda. Um `^[0-9]+\.[0-9]+\.[0-9]+$` frouxo
+# aceitaria `1.08.0`, e o bash trata `08` como OCTAL: ou `$((08 + 1))` aborta com
+# "valor muito grande para esta base", ou — pior — um bump em outra posição passa
+# e grava uma versão derivada de uma entrada inválida (1.0.09 --minor-> 1.1.0).
 validate_semver() {
-  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+  [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
 # ─── Leitura ancorada ───────────────────────────────────────────────────────

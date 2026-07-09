@@ -156,6 +156,20 @@ out=$(run_bump "$fx" major); rc=$?
 assert_clean_refusal 7b "$out"
 rm -rf "$fx"
 
+# ── 8b. Zero à esquerda: semver PROÍBE, e o bash trata como OCTAL ───────────
+#      `1.08.0` passava no validate_semver frouxo e depois estourava em
+#      $((08 + 1)) ("valor muito grande para esta base"). Fail-closed, mas com
+#      crash do bash em vez da recusa limpa que o design promete.
+for bad in '1.08.0' '01.0.0' '1.0.09'; do
+  fx=$(new_fixture)
+  printf '%s\n' "$bad" > "$fx/VERSION"
+  out=$(run_bump "$fx" minor); rc=$?
+  [ "$rc" -ne 0 ] || fail 8b "deveria recusar VERSION='$bad' (zero à esquerda não é semver)"
+  grep -qx "$bad" "$fx/VERSION" || fail 8b "VERSION='$bad' foi alterado apesar da recusa"
+  assert_clean_refusal 8b "$out"
+  rm -rf "$fx"
+done
+
 # ── 8. VERSION não-semver (v1.0, 2024.07) → recusa limpa ────────────────────
 for bad in 'v1.0' '2024.07'; do
   fx=$(new_fixture)
