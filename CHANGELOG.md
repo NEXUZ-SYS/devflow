@@ -34,6 +34,19 @@ Racional: notas de release são um entregável; version-files e CHANGELOG são d
 fail-loud em vez de fail-silent. O **stamp** é responsabilidade do release (automatizado), o **conteúdo**
 é do PR (acumula em `[Unreleased]`).
 
+### Added — Integração do impeccable (guia de design front-end) via Absorção Híbrida (ADR-010) — PR #66
+
+Absorve o toolkit de design **impeccable** (Apache-2.0) no DevFlow sem conflitar com a skill de frontend do dotcontext:
+
+- **Skill `frontend-design`** (23 modos) + comando **`/devflow:design`** + guia de `browser-extension`.
+- **45 regras classificadas:** 28 viraram **linters de Standards** (`std-design-antipatterns`, `std-visual-quality`, `std-accessibility` estendido) — regex puro, **sem dependência nova**; 17 ficaram como *guidance* na skill (precisam de DOM renderizado).
+- `scripts/design/{detect-frontend,reconcile-impeccable,live-bridge}.mjs` + **`NOTICE`** (atribuição Apache-2.0, versão 3.2.0 pinada + sha512).
+- **ADR-010** (absorção de toolkits de design externos via Híbrido + bridge). Integra com `/devflow:knowledge` (product-design-system / tone-of-voice).
+
+### Fixed — `prevc-confirmation` honra `git.autoFinish: true` (auto-executa a finalização) — PR #67
+
+A finalização com `autoFinish: true` passa a **AUTO-EXECUTAR** (sem menu nem "qual estratégia?"): sincroniza base defasada (`fetch` + rebase sobre `origin/main`), resolve a `mergeStrategy` pela **convenção do repo** (não assume `--squash` cego) e só **pausa** por risco irreversível específico (commit fora-de-escopo), com motivo + remédio. O Step 0 passa a detectar commits fora-de-escopo **na branch** (não só no working-tree). Anti-pattern reforçado: rótulo "concluído" só **após** o merge.
+
 ## [1.26.0] — 2026-07-02
 
 ### Tests — Cobertura de regressão L1 — PR 6
