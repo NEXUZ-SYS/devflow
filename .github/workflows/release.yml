@@ -61,18 +61,22 @@ jobs:
           VERSION="${{ steps.bump.outputs.version }}"
           BRANCH="release/v${VERSION}"
           git switch -c "$BRANCH"
+          # CHANGELOG.md é cortado ([Unreleased] → [X.Y.Z]) pelo bump-version.sh (atômico
+          # com o bump). DEVE ser staged junto — senão o corte é descartado e o release PR
+          # sai com versão bumpada e CHANGELOG intacto (drift).
           git add .claude-plugin/plugin.json .claude-plugin/marketplace.json \
-                  .cursor-plugin/plugin.json assets/provenance/known-hashes.json
+                  .cursor-plugin/plugin.json assets/provenance/known-hashes.json \
+                  CHANGELOG.md
           git commit -m "chore(release): v${VERSION}"
           git push -u origin "$BRANCH"
           gh pr create --base "${{ github.ref_name }}" --head "$BRANCH" \
             --title "chore(release): v${VERSION}" \
             --body "Bump \`${{ inputs.bump }}\` → **v${VERSION}** via pipeline de release (\`.github/workflows/release.yml\`).
 
-          Atualiza os 3 version files + \`known-hashes.json\`.
+          Atualiza os 3 version files + \`known-hashes.json\` + o **corte do CHANGELOG** (\`[Unreleased]\` → \`## [${VERSION}]\`, automático via \`bump-version.sh\`).
 
           **Checklist antes do merge:**
-          - [ ] CHANGELOG.md tem a entrada \`## [${VERSION}]\` (promova o \`[Unreleased]\`).
-          - [ ] README.md \"Histórico de Versões\" tem a linha de ${VERSION}.
+          - [x] CHANGELOG.md \`## [${VERSION}]\` — cortado automaticamente (verifique se as notas estão completas).
+          - [ ] README.md \"Histórico de Versões\" tem a linha de ${VERSION} (atualização manual, se aplicável).
 
           O bump é único e controlado — não há mais auto-bump local por commit."
