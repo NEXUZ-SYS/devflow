@@ -46,7 +46,8 @@ function gitBlock(text) {
 // Localiza uma chave escalar dentro do bloco, ANCORADA por `:` (não substring).
 // `autoFinishMode:` NÃO casa com `autoFinish`.
 function findScalar(block, field) {
-  const re = new RegExp("^(\\s*)" + field + ":\\s*(.*)$");
+  const esc = String(field).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // API genérica (readField): escapar metacaracteres
+  const re = new RegExp("^(\\s*)" + esc + ":\\s*(.*)$");
   for (let i = 0; i < block.length; i++) {
     const m = block[i].match(re);
     if (m) return { indent: m[1].length, raw: stripInlineComment(m[2]), idx: i };

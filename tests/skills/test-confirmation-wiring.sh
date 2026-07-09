@@ -18,7 +18,7 @@ grep -qiE "n[ãa]o[- ]listada|ausente.*SKIP|false.*(pula|skip)" "$S" || fail "#2
 
 # #3 + #14: C.x commita ADRs antes do merge; checklist inclui C.x e 8.5
 grep -qiE "ADR.*(antes do merge|commit).*(merge|Step 4)|committ?adas? .*antes.*merge" "$S" || fail "#3 C.x não garante ADRs commitadas antes do merge"
-grep -qiE "^C\.x|ADR sweep" "$S" | head -1 >/dev/null || true
+grep -qiE "C\.x|ADR sweep" "$S" || fail "#14 checklist não referencia C.x (ADR sweep)"
 grep -qiE "8\.5" "$S" || fail "#14 checklist/corpo não referencia Step 8.5"
 
 # #6: mensagem de commit ramifica por modo (sem 'bump' em pipeline/none)

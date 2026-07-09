@@ -44,7 +44,7 @@ export function makeFixture({ devflowYaml, autonomy, branch = "feature/x" } = {}
 
 export function runHook(cwd) {
   const payload = JSON.stringify({ tool_name: "TaskUpdate", tool_input: { status: "completed" }, cwd });
-  const out = execFileSync("bash", [HOOK], { input: payload, env: ENV, encoding: "utf8" });
+  const out = execFileSync("bash", [HOOK], { input: payload, env: ENV, cwd, encoding: "utf8" });
   const j = JSON.parse(out);
   return j.hookSpecificOutput?.additionalContext ?? j.additional_context ?? "";
 }
