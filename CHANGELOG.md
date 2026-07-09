@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — Revisão da `prevc-confirmation` + parser único de `.devflow.yaml` (ADR-011)
+
+Revisão ponto-a-ponto da skill `prevc-confirmation` (15 achados de auditoria) com a lógica determinística da finalização **extraída para helpers testáveis** — a skill deixa de reimplementar comportamento em prosa e passa a invocá-los por referência.
+
+- **`scripts/lib/devflow-config.mjs` (novo, ADR-011)** — parser **único** de `git.autoFinish`/`git.versioning`/campos do `.devflow.yaml`, consumido tanto pela skill quanto pelo `hooks/post-tool-use` (que trocou o parser Python inline por essa lib). Corrige a divergência com/sem PyYAML, a leitura errada da forma granular e o comentário inline não-removido (mesma classe do bug de `permissions.yaml`). Fallback seguro idêntico entre ambientes.
+- **`scripts/lib/finalize/{base-sync,scope-guard,merge-strategy,changelog-gate}.mjs` (novos)** — sincronização de base (rebase que **aborta** em conflito), detecção de commit fora-de-escopo antes do bump, resolução de estratégia de merge pela convenção do repo (`--first-parent`, não `--merges`) e gate do `## [Unreleased]` do CHANGELOG no modo `versioning: pipeline`.
+- **`devflow:config`** — cross-check que recusa/avisa o par contraditório `autoFinish.bump:true` + `versioning ∈ {pipeline,none}` (double-bump/drift).
+- Suíte E2E: hook end-to-end + composição dos helpers contra `origin/main` real (bare remote), em tmpdir isolado.
+
 ### Added — Corte automático do CHANGELOG no release + changelog-guard (fail-loud)
 
 Fecha o gap em que uma release podia ser cortada **sem** notas: o `release.yml`/`bump-version.sh` bumpavam

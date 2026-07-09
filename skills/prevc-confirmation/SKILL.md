@@ -13,15 +13,17 @@ Finalizes the development branch, updates documentation, and ensures all tools a
 
 A pipeline de finalização é SEQUENCIAL e OBRIGATÓRIA. Cada step deve ser completado antes do próximo. A ordem é alinhada com os hook messages (locales) e NUNCA deve ser alterada:
 
-0. **WIP pre-check** — garantir que não há mudanças descommitadas de escopos não relacionados
-1. **README Update** — atualizar histórico de versões e capabilities no README
-2. **Version Bump** — detect capabilities, bump version
-3. **Commit final** — commit das mudanças do README + bump
-4. **Finalize branch** — push, merge, cleanup
+0. **WIP pre-check** — sem mudanças descommitadas (working-tree E commits fora-de-escopo na branch)
+1. **README Update** — capabilities/contagens; histórico de versões só em `versioning: local`
+2. **Version Bump** — respeita o `<VERSIONING-MODE-GATE>` (pipeline/none NÃO bumpam local)
+3. **Commit final** — commit das mudanças (mensagem ramifica por modo de versionamento)
+   - **C.x. ADR sweep** — registrar ADRs tocadas/candidatas; **committadas ANTES do merge**
+4. **Finalize branch** — sincronizar base, resolver estratégia, push, merge, cleanup
 5. **Update documentation** — API docs, inline docs (exceto README, já feito)
 6. **Update project context** — reflect changes in .context/ files
 7. **Sync to tools** — export context to all configured AI tools
 8. **Present completion summary** — what was done, what to do next
+   - **8.5. Update PRD** — se o workflow faz parte de um PRD
 9. **Gate check** — everything finalized = workflow complete
 
 ## Step 0: WIP Pre-check
@@ -48,12 +50,12 @@ git diff --stat  # arquivos modificados não-stageados
 
 **Anti-pattern:** usar `git add -A` ou `git add <file>` num arquivo que já estava `M` antes da sua sessão. Sempre confira o que está staging com `git diff --cached` antes de commitar.
 
-**Também checar commits fora-de-escopo NA BRANCH (não só working-tree):** a branch pode carregar um commit **committado** que não é desta feature (ex.: veio embarcado ao ramificar de uma main local defasada). Isso não aparece em `git status` — inspecionar o histórico:
+**Também checar commits fora-de-escopo NA BRANCH (não só working-tree), ANTES do bump/commit:** a branch pode carregar um commit **committado** que não é desta feature (ex.: veio embarcado ao ramificar de uma main local defasada). Isso não aparece em `git status` — usar o helper `scope-guard.mjs`:
 ```bash
 git fetch origin
-git log --oneline origin/main..HEAD   # os commits que iriam para a main neste merge
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/finalize/scope-guard.mjs" list . origin/main   # commits que iriam para a main
 ```
-Se algum commit não pertence a esta feature, ele é o gatilho da "única exceção de pausa" do Step 4 (com `autoFinish: true`): parar com motivo específico + remédio (`git rebase --onto origin/main <sha> HEAD` para dropá-lo), não um menu genérico.
+Se algum commit não pertence a esta feature, ele é o gatilho da "única exceção de pausa" do Step 4 (com `autoFinish: true`): parar com motivo específico + remédio (`git rebase --onto origin/main <sha> HEAD`), não um menu genérico. **Este gate bloqueia ANTES do Step 2 (bump) — nunca bumpar sobre um commit alheio conhecido.**
 </HARD-GATE>
 
 ## Step 1: README Update
@@ -78,9 +80,11 @@ Atualizar o README se houve mudanças em:
 - Novas features, skills, ou capabilities — adicionar ao README
 - Bug fixes relevantes para o usuário — adicionar ao histórico de versões
 
-### Atualizar histórico de versões
+### Atualizar histórico de versões (somente `versioning: local`)
 
-Se o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), adicionar uma nova entrada com:
+**Só quando `versioning: local`.** Em `versioning: pipeline`/`none` a versão final **não é conhecida no finish** (sobe depois, pela pipeline) — o histórico de versões do README/CHANGELOG é **release-time**, feito pelo release PR, não aqui. Nesses modos, atualize apenas capabilities/contagens (acima) e **pule** a entrada de versão.
+
+Se `versioning: local` e o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), adicionar uma nova entrada com:
 - **Versão:** será preenchida após o bump (Step 2), mas a linha já deve ser preparada
 - **Data:** data de hoje
 - **Destaques:** resumo conciso das mudanças da branch (1-2 frases)
@@ -102,7 +106,11 @@ Se o README tem uma tabela de versões (ex: `| Versão | Data | Destaques |`), a
 <VERSIONING-MODE-GATE>
 FIRST, read `git.versioning` from `.context/.devflow.yaml`:
 
-- **`versioning: pipeline`** — o bump é gerenciado por uma pipeline de release (ex.: GitHub Actions `release.yml` → release PR). **NÃO bumpe localmente.** Em vez disso, garanta que as mudanças estão registradas na seção `## [Unreleased]` do `CHANGELOG.md`. A versão sobe depois, **uma única vez**, pela pipeline — evitando o double-bump que reintroduz drift de versão. **Pule o resto deste Step 2** e vá direto para o Step 3 (commit).
+- **`versioning: pipeline`** — o bump é gerenciado por uma pipeline de release (ex.: GitHub Actions `release.yml` → release PR). **NÃO bumpe localmente.** Em vez disso, **é OBRIGATÓRIO** garantir que as mudanças estão na seção `## [Unreleased]` do `CHANGELOG.md` — **gate verificável** (bloqueia se vazia):
+  ```bash
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/finalize/changelog-gate.mjs" check CHANGELOG.md   # ok (exit 0) | empty (exit 1)
+  ```
+  Se `empty`, **preencher o `[Unreleased]` antes de prosseguir** (é a contrapartida obrigatória de não bumpar). A versão sobe depois, **uma única vez**, pela pipeline — evitando o double-bump que reintroduz drift. Feito o gate, **pule o resto deste Step 2** e vá ao Step 3 (commit).
 - **`versioning: none`** — o projeto **não faz versionamento/release**. **NÃO bumpe** e pule o resto deste Step 2 (vá ao Step 3) — não há versão a subir.
 - **`versioning: local` ou ausente (padrão)** — siga o fluxo de bump local abaixo (comportamento atual, retrocompatível). O fluxo já pula o bump se nenhum mecanismo (`bump-version.sh`/`package.json` version) for detectado.
 </VERSIONING-MODE-GATE>
@@ -145,14 +153,20 @@ If bump fails, report the error and continue to Step 3 (do not block branch fina
 
 ## Step 3: Commit Final
 
-Commit das mudanças do README + bump juntas:
+Commitar as mudanças da finalização. **A mensagem ramifica pelo modo de versionamento (`VERSIONING`):**
 
-```bash
-git add README.md <bump-files>
-git commit -m "chore: bump to vX.Y.Z"
-```
+- **`versioning: local`** (houve bump) — incluir arquivos de versão + README:
+  ```bash
+  git add README.md <bump-files>
+  git commit -m "chore: bump to vX.Y.Z"
+  ```
+- **`versioning: pipeline` ou `none`** (NÃO houve bump local) — **não** usar mensagem "bump to vX.Y.Z" (seria mentirosa); descrever as mudanças reais (docs/CHANGELOG). Não há arquivos de versão a adicionar:
+  ```bash
+  git add -- <arquivos da finalização>   # README/CHANGELOG/docs
+  git commit -m "docs: <descrição real das mudanças>"
+  ```
 
-Se o pre-commit hook faz auto-bump (como neste projeto), o commit pode já incluir os arquivos de versão automaticamente. Nesse caso, o README deve estar staged ANTES do commit para ser incluído.
+Se um pre-commit hook validar/bumpar versão, ele roda no commit; confira o que está staged com `git diff --cached` ANTES de commitar (Step 0).
 
 ## Step C.x: ADR sweep (rede de segurança)
 
@@ -168,11 +182,12 @@ Antes de finalizar o branch:
    BASE=$(git merge-base HEAD "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@origin/@@' || echo main)")
    git diff --name-only "$BASE"...HEAD -- $ADR_GLOBS
    ```
-3. Para cada candidato **sem ADR já registrada**, classifique a relação e resolva a ação com `scripts/adr-decision.mjs decide`. Apresente as ofertas **em lote** (uma lista única evolve/create). **Respeite `skip_adr_offer`** — se ativo, pule o sweep silenciosamente.
+3. Para cada candidato **sem ADR já registrada**, classifique a relação e resolva a ação com `node "${CLAUDE_PLUGIN_ROOT}/scripts/adr-decision.mjs" decide`. Apresente as ofertas **em lote** (uma lista única evolve/create). **Respeite `skip_adr_offer`** — se ativo, pule o sweep silenciosamente.
 4. Limpe o estado:
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/adr-pending.mjs" clear-pending
    ```
+5. **ADRs entram no merge:** as ADRs criadas/evoluídas são committadas pelo `adr-builder` (`feat(adr): …`). **Garanta que estão em `HEAD` ANTES do merge do Step 4** — este sweep roda antes de finalizar; qualquer arquivo de ADR não-committado ficaria **fora do PR/merge**.
 
 **Completion summary:** acrescente a seção **"ADRs criadas/evoluídas neste workflow"**, listando os nomes tocados (passo 2) e o resultado do sweep.
 
@@ -182,18 +197,23 @@ Antes de finalizar o branch:
 **ANTES** de invocar qualquer sub-skill de finalização, **SEMPRE consultar `.context/.devflow.yaml`** e respeitar a configuração declarada. Config é decisão tomada do projeto, não sugestão a re-confirmar.
 
 ```bash
-# Se .context/.devflow.yaml existe
-AUTO_FINISH=$(grep -E "^\s*autoFinish:" .context/.devflow.yaml | head -1 | awk -F: '{print $2}' | xargs)
-PR_CLI=$(grep -E "^\s*prCli:" .context/.devflow.yaml | head -1 | awk -F: '{print $2}' | xargs)
+# Config lida SÓ pelo parser único (ADR-011) — NUNCA awk/grep ad-hoc.
+# É a MESMA classificação que o post-tool-use entrega em auto_finish_context (mesma fonte).
+CFG="${CLAUDE_PLUGIN_ROOT}/scripts/lib/devflow-config.mjs"
+AUTO_FINISH=$(node "$CFG" read-autofinish .context/.devflow.yaml 2>/dev/null || echo disabled)   # disabled | all | {"bump":..,"commit":..,"push":..,"merge":..}
+VERSIONING=$(node "$CFG" read-versioning  .context/.devflow.yaml 2>/dev/null || echo local)
+PR_CLI=$(node "$CFG" read-field prCli      .context/.devflow.yaml 2>/dev/null || echo "")
 ```
 
-**Decisão de execução baseada em `autoFinish`:**
+**Decisão de execução baseada em `autoFinish` (classificado pela lib):**
 
-| Valor de `autoFinish` | Comportamento |
+| Valor | Comportamento |
 |---|---|
-| `true` (ou granular com `merge: true`) | **EXECUTAR DIRETO** — não invocar `superpowers:finishing-a-development-branch`, não apresentar menu de 4 opções. Anunciar a ação e fazer merge automaticamente. |
-| `false` | Invocar `superpowers:finishing-a-development-branch` para apresentar opções ao usuário. |
-| Ausente / config sem campo | Comportamento padrão (apresentar opções). |
+| `all` (escalar `true`) | **EXECUTAR DIRETO** todas as etapas (bump\*/commit/push/merge) — sem menu, sem `superpowers:finishing-a-development-branch`. |
+| objeto granular `{bump,commit,push,merge}` | **EXECUTAR DIRETO só as etapas `true`**; etapa não-listada ou `false` = **SKIP**. Ex.: `{merge:false}` → faz bump\*/commit/push mas **não** mergeia (para revisão). Espelha o contrato do hook. |
+| `disabled` (escalar `false` ou ausente) | Invocar `superpowers:finishing-a-development-branch` (menu de opções). |
+
+\*`bump` respeita o `<VERSIONING-MODE-GATE>` do Step 2: em `pipeline`/`none` não há bump local, mesmo com `bump:true`.
 
 **Não pergunte ao usuário "qual estratégia" se config já decidiu.** O usuário já configurou — re-perguntar é fricção e ignora a intenção declarada.
 </HARD-GATE>
@@ -202,15 +222,14 @@ PR_CLI=$(grep -E "^\s*prCli:" .context/.devflow.yaml | head -1 | awk -F: '{print
 
 `autoFinish: true` resolve as complicações **automaticamente** (não vira pergunta). O fluxo é: **(0) sincronizar base → (1) detectar PR/caminho → (2) merge → (3) cleanup.**
 
-**(0) Sincronizar base ANTES do merge (automático):** se a branch está **atrás de `origin/main`** (base defasada), fazer `git fetch` + **rebase sobre `origin/main`** automaticamente — NÃO perguntar, NÃO abrir menu.
+**(0) Sincronizar base ANTES do merge (automático):** usar o helper `base-sync.mjs` (determinístico, testado) — NÃO perguntar, NÃO abrir menu.
 ```bash
 git fetch origin
-BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
-if [ "$BEHIND" -gt 0 ]; then
-  # base defasada → rebase da branch sobre origin/main (resolve conflitos triviais; se conflito real, ver "exceção de pausa")
-  git rebase origin/main
-fi
+FIN="${CLAUDE_PLUGIN_ROOT}/scripts/lib/finalize"
+node "$FIN/base-sync.mjs" analyze . origin/main   # {"behind":N,"action":"ok|rebase",...}
 ```
+- `action: "rebase"` (base defasada) → aplicar `rebaseOnto(., origin/main)`: a lib roda `git rebase` e, em **conflito real, aborta** (`git rebase --abort` — árvore preservada) retornando `{conflict, remedy}` → isso vira a **"única exceção de pausa"** abaixo (não seguir com árvore meio-rebaseada).
+- `action: "ok"` → base em dia, seguir.
 
 Detectar se há PR aberto + escolher caminho:
 
@@ -220,12 +239,15 @@ BRANCH=$(git branch --show-current)
 PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null)
 ```
 
-**Estratégia de merge (`mergeStrategy`):** resolver nesta ordem — **(1) `mergeStrategy` da config** (`merge|rebase|squash`) se presente; **(2) convenção do repo** — inspecionar os merges recentes de `origin/main` (`git log origin/main --merges -5`): se predominam "Merge pull request #N" → `--merge`; se commits únicos com título de PR → `--squash`; **(3) fallback** `--squash`. **NÃO** assumir `--squash` cegamente quando a convenção do repo é merge-commit.
+**Estratégia de merge (`mergeStrategy`):** resolver com o helper `merge-strategy.mjs` (precedência **config > convenção do repo via `--first-parent` > fallback `squash`**) — **NÃO** assumir `--squash` cegamente quando a convenção é merge-commit:
+```bash
+STRATEGY=$(node "$FIN/merge-strategy.mjs" resolve . origin/main)   # merge | squash | rebase
+STRATEGY_FLAG="--$STRATEGY"
+```
 
 **Caminho A — PR existe + `prCli: gh`:**
 ```bash
-STRATEGY_FLAG="--merge"   # ou --squash/--rebase conforme resolução acima
-gh pr merge "$PR_NUMBER" "$STRATEGY_FLAG" --delete-branch
+gh pr merge "$PR_NUMBER" "$STRATEGY_FLAG" --delete-branch   # STRATEGY_FLAG resolvido acima
 git checkout main && git pull
 git branch -d "$BRANCH" 2>/dev/null || true   # já pode ter sumido após delete-branch
 ```
@@ -252,13 +274,13 @@ git push origin --delete "$BRANCH" 2>/dev/null || true
 
 `autoFinish: true` só pausa por **risco irreversível que a config não previu** — NUNCA por complicação rotineira (base defasada, precisa rebase, precisa abrir PR: tudo isso é resolvido automaticamente acima). Quando pausar, dar o **motivo específico + remédio proposto**, jamais um menu genérico de 4 opções.
 
-O gatilho concreto: **commit fora-de-escopo embarcado na branch** que iria para a main (detectado no Step 0). Nesse caso:
+Os gatilhos concretos: **(a) commit fora-de-escopo embarcado na branch** (detectado no Step 0 por `scope-guard.mjs`, ANTES do bump); **(b) conflito real de rebase** (do `base-sync.mjs`, já abortado). Nesses casos:
 > "Pausando o autoFinish: a branch carrega o commit `<sha>` (`<título>`) que não faz parte desta feature e iria para a main. Remédio: `git rebase --onto origin/main <sha> HEAD` para dropá-lo (recuperável via reflog). Confirmar antes de prosseguir?"
 
 Fora esse tipo de risco irreversível específico, **não pausar** — a config decidiu.
 
 **Anunciar antes de executar:**
-> "`autoFinish: true` detectado em `.context/.devflow.yaml`. Executando merge automático via `gh pr merge #<N> --squash --delete-branch`."
+> "`autoFinish` = `<all|granular>` em `.context/.devflow.yaml`. Executando finalização automática via `gh pr merge #<N> <STRATEGY_FLAG resolvido> --delete-branch` (estratégia pela convenção do repo)."
 
 **NÃO** apresentar menu, **NÃO** invocar `superpowers:finishing-a-development-branch`, **NÃO** pedir confirmação adicional.
 
@@ -309,10 +331,13 @@ plan({ action: "commitPhase", phase: "C" })
 ```
 
 ### Lite Mode
-Manually update relevant `.context/docs/` files:
-- `project-overview.md` — if project scope changed
-- `codebase-map.json` — if file structure changed
-- `development-workflow.md` — if process changed
+Atualizar os docs relevantes resolvendo o layout via `context-paths.mjs` (DDC v2 — `.context/engineering/`, **não** o layout v1 `.context/docs/`):
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/context-paths.mjs" resolve-read docs .
+```
+- overview/arquitetura do projeto — se o escopo mudou
+- mapa do codebase — se a estrutura mudou
+- workflow de desenvolvimento — se o processo mudou
 
 ### Minimal Mode
 Skip (no `.context/` to update).
