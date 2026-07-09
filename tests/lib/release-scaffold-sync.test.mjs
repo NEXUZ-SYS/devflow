@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { SCAFFOLD, syncScaffold } from "../../scripts/lib/release-scaffold.mjs";
 import { distributableFiles, scaffoldFiles, indexedFiles, genFromWorkingTree } from "../../scripts/lib/gen-known-hashes.mjs";
+import { applySync } from "../../scripts/lib/provenance-sync.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ASSET_DIR = join(ROOT, "assets", "release-scaffold");
@@ -187,6 +188,70 @@ test("D.f ausente → skipped, NÃO recria (scaffold é opt-in)", () => {
   assert.deepEqual(r.skipped.sort(), SCAFFOLD.map((i) => i.dest).sort());
   assert.deepEqual(r.updated, []);
   for (const i of SCAFFOLD) assert.ok(!existsSync(join(dir, i.dest)), `${i.dest} foi recriado`);
+});
+
+// ─── Task F: por que o sync do scaffold NÃO pode passar pelo applySync ──────
+//
+// Estes dois testes provam, em CÓDIGO, as duas razões que o review R levantou.
+// Sem eles, "o sync do scaffold roda fora do applySync" seria só uma frase.
+
+test("F.1 applySync RECUSA dests fora de .context/ — daí o sync próprio", () => {
+  const dir = newRepo();
+  const artifacts = SCAFFOLD.map((i) => ({
+    src: join(ASSET_DIR, i.src),
+    dest: join(dir, i.dest),
+  }));
+
+  const report = applySync({
+    projectRoot: dir,
+    pluginRoot: ROOT,
+    artifacts,
+    registry: new Set(),
+    sourceVersion: "test",
+  });
+
+  assert.deepEqual(
+    report.refused.sort(),
+    SCAFFOLD.map((i) => i.dest).sort(),
+    "applySync deveria recusar TODOS os dests do scaffold (contido a .context/)",
+  );
+  for (const i of SCAFFOLD) {
+    assert.ok(!existsSync(join(dir, i.dest)), `${i.dest} foi criado pelo applySync`);
+  }
+});
+
+test("F.2 applySync AUTO-SOBRESCREVE 'untouched' sem confirmação — daí o needsConfirm", () => {
+  const dir = newRepo();
+  // dest dentro de .context/ para passar na contenção do applySync
+  const dest = join(dir, ".context", "artefato.md");
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, "conteúdo v1\n");
+
+  const src = join(mkdtempSync(join(tmpdir(), "rss-plugin-")), "artefato.md");
+  CLEANUP.push(dirname(src));
+  writeFileSync(src, "conteúdo v2\n");
+
+  const report = applySync({
+    projectRoot: dir,
+    pluginRoot: dirname(src),
+    artifacts: [{ src, dest }],
+    registry: new Set([sha256(Buffer.from("conteúdo v1\n"))]), // deploy intocado
+    sourceVersion: "test",
+  });
+
+  assert.deepEqual(report.updated, [".context/artefato.md"]);
+  assert.equal(
+    readFileSync(dest, "utf8"),
+    "conteúdo v2\n",
+    "applySync escreveu sem nenhum gate — é este o comportamento que o classe-CI não pode ter",
+  );
+
+  // O contraste: syncScaffold, no mesmo cenário, exigiria confirmação.
+  const repo2 = newRepo();
+  seedVerbatim(repo2);
+  const r = syncScaffold(repo2, { registry: registryOfCurrentAssets(), assetDir: assetDirWithChange() });
+  assert.equal(r.updated.length, 0);
+  assert.equal(r.needsConfirm.length, SCAFFOLD.length);
 });
 
 test("D.g contenção mantida — pai symlink fora da raiz → refused", () => {
