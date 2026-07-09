@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.0] — 2026-07-09
+
 ### Changed — Revisão da `prevc-confirmation` + parser único de `.devflow.yaml` (ADR-011)
 
 Revisão ponto-a-ponto da skill `prevc-confirmation` (15 achados de auditoria) com a lógica determinística da finalização **extraída para helpers testáveis** — a skill deixa de reimplementar comportamento em prosa e passa a invocá-los por referência.
