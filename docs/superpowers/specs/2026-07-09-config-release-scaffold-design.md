@@ -32,7 +32,10 @@
 - **D4 — Avisar + oferecer + permitir seguir** (não recusar): "pipeline sem CI" é **não-verificável**.
 - **D5 — Verbatim obrigatório.** A identidade exigida é **asset ↔ cópia no projeto** — **não** asset ↔ lib do devflow. (Correção: a assertiva anterior "byte-idêntico a `scripts/lib/`" era falsa e impedia genericidade.)
 - **D6 [novo] — v1 mínimo: 3 arquivos.** `release.yml` + `bump-version.sh` genérico + `lib/changelog-cut.mjs`. **Cortados para v2:** `tag-release.yml`, `version-guard.mjs`, `changelog-guard.mjs`, `changelog-extract.mjs` — dependem de um `detect-version.mjs` genérico compartilhado (a criar) e de um `version-guard` genérico. v1 fecha o Gap 1 e elimina 3 dos 4 BLOCKs.
-- **D7 [novo] — Enforcement real, não prosa.** A oferta de scaffold exige **confirmação humana estruturada** (enumerando os arquivos + aviso "isto roda na SUA CI com token de escrita"), **exibição do conteúdo**, **`--dry-run` obrigatório** antes da 1ª escrita, e o applier **recusa executar sem `confirmed: true`**. **Proibido em modo autônomo** sem gate humano. Em branch protegida, rotear por work branch/PR.
+- **D7 [novo, endurecido no re-gate] — Enforcement real, não prosa.** A oferta exige **confirmação humana estruturada** (enumerando os arquivos + aviso "isto roda na SUA CI com token de escrita"), **exibição do conteúdo** e **`--dry-run` obrigatório**. Além disso, dois controles **mecânicos** (porque `confirmed: true` é flag auto-setável e a escrita via `node:fs` é **invisível ao `pre-tool-use`**):
+  - **D7a — Guard de autonomia:** `applyScaffold` lê a **fonte real da autonomia** — `.context/workflow/status.yaml` (a mesma de `hooks/post-tool-use:272-281`; o `.devflow.yaml` **não** tem esse campo, ler dele falharia **aberto**) — e **RECUSA em `autonomous`/`assisted`**, independentemente de `confirmed`. Ausente → `supervised` (default do hook). "Proibido em autônomo" deixa de ser prosa.
+  - **D7b — Escrita de workflow pela ferramenta `Write`:** `.github/workflows/**` **NÃO** é escrito por `node:fs`. O applier devolve o conteúdo e a **skill grava via `Write`**, caindo no gate de permissões (`mode: prompt`) + branch protection — um gate humano que o agente **não forja**. `node:fs` fica restrito a `scripts/**`.
+  Em branch protegida, rotear por work branch/PR.
 - **D8 [novo] — Update de artefato classe-CI exige diff + confirmação.** `syncScaffold` **nunca** faz auto-overwrite silencioso: `untouched` + conteúdo do plugin mudou → **mostra diff e pede OK**; `edited` → preserva e reporta; `ausente` → **não recria**.
 - **D9 [novo] — Applier/sync próprios, com contenção equivalente.** Não passar por `provenance-sync.applySync` (contido a `.context/`). Reusar apenas as funções **puras** `loadRegistry`+`decideArtifact`. Contenção: dest **dentro de `projectRoot`**, **apenas** os paths exatos da allowlist, **recusa symlink e `..`**. `gen-known-hashes` estende o filtro para `.yml`/`.sh`/`.mjs` e indexa `assets/release-scaffold/**`.
 
@@ -41,19 +44,29 @@
 ### 3.1 Assets verbatim — `assets/release-scaffold/` (3 arquivos)
 | Copiado para | Papel |
 |---|---|
-| `.github/workflows/release.yml` | `workflow_dispatch(bump: patch\|minor\|major)` → `scripts/bump-version.sh` → abre **release PR**. **Já nasce com o fix do PR #71** (`git add CHANGELOG.md`). `bump` é `type: choice` e chega ao `run:` via **`env:`** (não `${{ }}` inline). |
+| `.github/workflows/release.yml` | `workflow_dispatch(bump: patch\|minor\|major)` → `scripts/bump-version.sh` → abre **release PR**. Fix do PR #71 (`git add` do CHANGELOG). `bump` é `type: choice` e chega ao `run:` via **`env:`** (não `${{ }}` inline). **[re-gate N1] 100% genérico:** NÃO contém `.claude-plugin`/`.cursor-plugin`/`known-hashes` nem `grep` de manifest fixo. |
 | `scripts/bump-version.sh` | **Genérico e endurecido**: detecta manifests **na raiz apenas** (sem walk); valida `^X.Y.Z$` **fail-loud**; **`sed` ancorado** (nunca toca `version =` de dependências); chama `lib/changelog-cut.mjs` por path **relativo ao script**; **sem** bloco `gen-known-hashes --append`. |
 | `scripts/lib/changelog-cut.mjs` | `[Unreleased]` → `[X.Y.Z] — data` + `[Unreleased]` novo vazio. Idempotente. |
 
 Detecção (raiz, ordem; **source of truth** = primeiro encontrado; todos os presentes são atualizados): `package.json` → `pyproject.toml` → `Cargo.toml` → `.claude-plugin/plugin.json` → `VERSION`.
 
+**[re-gate N1] Interface A↔B (contrato):** o `release.yml` **nunca** re-grepa um manifest para descobrir a versão nova. O `bump-version.sh`:
+- escreve `version=<X.Y.Z>` em `$GITHUB_OUTPUT` quando a variável está setada, **e**
+- imprime a versão nova como **último token de stdout** (fallback fora do CI);
+- imprime, em `$GITHUB_OUTPUT`, `files=<lista dos manifests atualizados>` — o `release.yml` **stageia essa lista + `CHANGELOG.md`** (ou usa `git add -A`, já que o checkout de CI é limpo). Nada de pathspec fixo.
+
+**[re-gate N4] Trade-off documentado do v1:** sem `version-guard`/`changelog-guard`, o pipeline scaffoldado **não** falha com `[Unreleased]` vazio. A confirmação da skill deve dizer explicitamente: *"seu pipeline v1 não tem changelog-guard — confira as notas do release à mão"*.
+
 **v2 (fora deste escopo):** `tag-release.yml` + `version-guard`/`changelog-guard`/`changelog-extract` genéricos, após `detect-version.mjs` compartilhado.
 
 ### 3.2 `scripts/lib/release-scaffold.mjs`
-- `checkGate(cwd) → { git, github, reason }` — **host ancorado**: extrai o host do remote (após scheme ou `@`, até `/`|`:`) e exige `host === "github.com"`. Rejeita `github.com.evil.tld`, `evilgithub.com`; aceita SSH `git@github.com:`; múltiplos remotes → qualquer GitHub conta (explícito).
-- `planScaffold(cwd) → [{ src, dest, status: 'create'|'exists' }]`
-- `applyScaffold(cwd, { dryRun, confirmed }) → { created, preserved, refused }` — **recusa tudo se `confirmed !== true`**; `exists` → `preserved` (nunca sobrescreve); contenção (D9).
-- `syncScaffold(cwd, { onDiff }) → { updated, preserved, skipped, needsConfirm }` — usa `loadRegistry`+`decideArtifact`: `untouched` & plugin mudou → `needsConfirm` (com diff) e **só escreve após OK**; `edited` → `preserved`; ausente → `skipped` (não recria).
+- `checkGate(cwd) → { git, github, reason }` — **host ancorado**. Parsing: para SSH (`git@host:path`) o host é entre `@` e `:`; para URL, o host é **após o último `@` do componente authority** (userinfo descartado) e antes de `/`|`:`. Exige `host === "github.com"`.
+  **[re-gate N2] Casos fixados por teste:** `https://github.com.evil.tld/x/y` → `false`; `https://evilgithub.com/x/y` → `false`; **`https://github.com@evil.tld/x/y` → `false`** (userinfo, host real = `evil.tld`); **`https://user@github.com/x/y` → `true`**; `git@github.com:x/y.git` → `true`; GHE (`github.company.com`) → `false` (documentado); multi-remote com um GitHub → `true`.
+- `planScaffold(cwd) → [{ src, dest, content, status: 'create'|'exists', writer: 'fs'|'tool' }]` — `writer: 'tool'` para `.github/workflows/**` (D7b: a skill grava via `Write`); `'fs'` para `scripts/**`.
+- `applyScaffold(cwd, { dryRun, confirmed }) → { created, preserved, refused, mustWriteViaTool }` —
+  **(D7a) RECUSA se `autonomy: autonomous` no `.devflow.yaml`, mesmo com `confirmed: true`**;
+  recusa tudo se `confirmed !== true`; **nunca** escreve `.github/workflows/**` por `node:fs` (devolve em `mustWriteViaTool`); `exists` → `preserved` (nunca sobrescreve); contenção (D9) com `realpath` do **diretório-pai** antes de escrever (não só do dest).
+- `syncScaffold(cwd, { confirm }) → { updated, preserved, skipped, needsConfirm: [{dest, diff}] }` — reusa **só** as puras `loadRegistry`+`decideArtifact`: `untouched` & asset mudou → entra em `needsConfirm` e **não escreve**; 2ª chamada com `confirm` → `updated`; `edited` → `preserved`; ausente → `skipped` (não recria). *(assinatura reconciliada com o plano: `{ confirm }`, não `{ onDiff }`)*
 
 ### 3.3 `skills/config/SKILL.md` — P5b
 Detecção de pipeline existente (`.github/workflows/*release*`); opções reordenadas (**pipeline RECOMENDADO**, `local` "solo/simples" com riscos, `none`); se `pipeline` sem CI: **avisa** e — só com git+GitHub — **oferece scaffold** com confirmação estruturada (D7). Nunca sobrescreve. Branch protegida → work branch.
@@ -61,7 +74,10 @@ Detecção de pipeline existente (`.github/workflows/*release*`); opções reord
 ## 4. Segurança (controles, não prosa)
 | Risco | Controle exigido |
 |---|---|
-| Escrever `.github/workflows/` planta código com `contents/PR write` **fora do gate de permissões** | Confirmação estruturada enumerando arquivos + aviso explícito de token de escrita; **mostrar conteúdo**; `--dry-run` obrigatório; applier **recusa sem `confirmed:true`**; **proibido em autônomo**; teste "sem confirmação → não escreve" |
+| Escrever `.github/workflows/` planta código com `contents/PR write` **fora do gate de permissões** (`pre-tool-use` só intercepta Edit/Write; `node *` está em `allow.exec`) | **D7b:** workflow é gravado pela ferramenta **`Write`** (cai em `mode: prompt` + branch protection — gate humano **inforjável**); `node:fs` só p/ `scripts/**`. **D7a:** applier **recusa se `autonomy: autonomous`**, mesmo com `confirmed:true`. Mais: confirmação estruturada enumerando arquivos + aviso de token de escrita; **mostrar conteúdo**; `--dry-run` obrigatório; testes "sem confirmação → não escreve" e "autônomo + confirmed → refused" |
+| `confirmed: true` ser **teatro** (flag auto-setável pelo próprio agente) | Os controles D7a/D7b são **mecânicos** e não dependem da boa-fé do chamador: o guard de autonomia lê a config, e a escrita do workflow passa pelo gate de tools |
+| Asset `release.yml` embarcar hardcode do devflow → CI do usuário nasce quebrada | **[N1]** Interface A↔B (`$GITHUB_OUTPUT`/último token) + `git add` genérico; guard-test asserindo ausência de `.claude-plugin`, `.cursor-plugin`, `known-hashes`, `grep …plugin.json` |
+| Gate GitHub burlado por **userinfo** (`https://github.com@evil.tld/…`) | **[N2]** host = após o **último `@`** do authority; casos adversariais fixados por teste |
 | Update silencioso reescrevendo a CI | **D8**: diff + confirmação para classe-CI; nunca auto-overwrite |
 | Proveniência ≠ atestação | Documentado na ADR-012 (fronteira de confiança): hash detecta **deriva local**, **não** plugin comprometido |
 | Contenção de path relaxada | **D9**: allowlist exata sob `projectRoot`; recusa symlink e `..` |
@@ -78,7 +94,12 @@ Detecção de pipeline existente (`.github/workflows/*release*`); opções reord
 - **E2E** (tmpdir fora da árvore; `HOME`/`GIT_CONFIG_GLOBAL`/`GH_CONFIG_DIR` em tmp; `GIT_CONFIG_SYSTEM=/dev/null`; `GIT_CONFIG_NOSYSTEM=1`; `GIT_TERMINAL_PROMPT=0`; `unset GH_TOKEN GITHUB_TOKEN`; identidade git local; **`origin` = path local**, jamais URL de rede): scaffold → `bump-version.sh minor` → version files + CHANGELOG cortado. **Asserção positiva: nenhum `git push` nem `gh` foi invocado.**
 
 ## 6. ADR
-ADR-012 (`ci-scaffold-verbatim-provenance`) precisa de **EVOLVE minor**: (a) guardrail "artefato classe-CI exige diff + confirmação no update; nunca auto-overwrite"; (b) guardrail "applier recusa escrever sem confirmação humana explícita; proibido em modo autônomo"; (c) registrar a **fronteira de confiança** (proveniência por hash = deriva local, não atestação de supply-chain).
+ADR-012 (`ci-scaffold-verbatim-provenance`) precisa de **EVOLVE minor → v1.1.0** com:
+- (a) guardrail "artefato classe-CI exige **diff + confirmação** no update; nunca auto-overwrite";
+- (b) guardrail "applier **recusa** escrever sem confirmação humana; **recusa em `autonomy: autonomous`**; `.github/workflows/**` é gravado pela ferramenta `Write` (gate de permissões), nunca por `node:fs`";
+- (c) **[N1]** guardrail mais amplo: "NUNCA deixar hardcode específico do plugin (`.claude-plugin/`, `.cursor-plugin/`, `known-hashes`, grep de manifest fixo) num asset de release-scaffold" — o guardrail atual só proíbe `CLAUDE_PLUGIN_ROOT`;
+- (d) **fronteira de confiança** nas Consequências: proveniência por hash = detecção de **deriva local**, **não** atestação de supply-chain;
+- (e) **[N3]** promover `status: Proposto` → **`Aprovado`** (guardrail só é gate-enforced quando aprovado) e **estender `## Enforcement`** com entradas para os guardrails novos, linkando os testes (C.9 sem-confirmação, C.9b autônomo, D.1c diff, C.13 contenção, B.1h anti-hardcode).
 
 ## 7. Referências
 `skills/config/SKILL.md`; `scripts/bump-version.sh:8,19,42,54-61`; `.github/workflows/release.yml:11-18,20-22,47`; `.github/workflows/tag-release.yml:9-15,34`; `scripts/lib/provenance-sync.mjs:34-40,83,90,97,106,114`; `scripts/lib/gen-known-hashes.mjs:28-34,85`; `scripts/lib/version-guard.mjs:19-23,58-66`; `hooks/pre-tool-use:168-284`; `.context/permissions.yaml:86-97`; `skills/context-sync/SKILL.md:142-155`.
