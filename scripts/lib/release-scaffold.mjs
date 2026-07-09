@@ -493,3 +493,55 @@ export function verifyWritten(cwd) {
   }
   return { ok: mismatch.length === 0, checked, mismatch };
 }
+
+// ─── CLI ────────────────────────────────────────────────────────────────────
+//
+// As skills invocam ESTA CLI, nunca `node -e` (SI-1: nada de script interpolado
+// em string de shell). Todo comando imprime JSON em stdout.
+//
+//   node scripts/lib/release-scaffold.mjs gate
+//   node scripts/lib/release-scaffold.mjs plan
+//   node scripts/lib/release-scaffold.mjs apply --confirmed [--dry-run]
+//   node scripts/lib/release-scaffold.mjs verify
+//   node scripts/lib/release-scaffold.mjs sync [--confirm]
+
+function cli(argv) {
+  const cmd = argv[0];
+  const cwd = process.cwd();
+  const has = (f) => argv.includes(f);
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+
+  switch (cmd) {
+    case "gate":
+      emit(checkGate(cwd));
+      return 0;
+    case "plan":
+      emit(planScaffold(cwd));
+      return 0;
+    case "apply": {
+      // `confirmed` NUNCA tem default true. Sem a flag, o applier recusa.
+      const r = applyScaffold(cwd, { confirmed: has("--confirmed"), dryRun: has("--dry-run") });
+      emit(r);
+      return r.refused.length > 0 ? 1 : 0;
+    }
+    case "verify": {
+      const r = verifyWritten(cwd);
+      emit(r);
+      return r.ok ? 0 : 1;
+    }
+    case "sync": {
+      const r = syncScaffold(cwd, { confirm: has("--confirm") });
+      emit(r);
+      return 0;
+    }
+    default:
+      process.stderr.write(
+        "uso: release-scaffold.mjs <gate|plan|apply|verify|sync> [--confirmed] [--dry-run] [--confirm]\n",
+      );
+      return 2;
+  }
+}
+
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  process.exit(cli(process.argv.slice(2)));
+}

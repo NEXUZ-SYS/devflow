@@ -152,12 +152,18 @@ AskUserQuestion:
 
 **P5b: Modo de versionamento (bump)** (condicional — só pergunta se o projeto versiona)
 
-Primeiro, detectar se há mecanismo de versão:
+Primeiro, detectar se há mecanismo de versão **e** se já existe pipeline de release:
 ```bash
 HAS_VERSIONING=false
 if [ -f "scripts/bump-version.sh" ]; then HAS_VERSIONING=true
 elif [ -f "package.json" ] && grep -q '"version"' package.json 2>/dev/null; then HAS_VERSIONING=true
 elif [ -f ".claude-plugin/plugin.json" ]; then HAS_VERSIONING=true
+fi
+
+# Já existe uma pipeline de release? (qualquer workflow que rode um bump)
+HAS_RELEASE_CI=false
+if [ -d ".github/workflows" ] && grep -rilE 'bump|release' .github/workflows >/dev/null 2>&1; then
+  HAS_RELEASE_CI=true
 fi
 ```
 
@@ -170,11 +176,81 @@ AskUserQuestion:
   header: "Versionamento"
   multiSelect: false
   options:
-    - label: "Bump local no finish (padrão)"
-      description: "O finish do DevFlow bumpa a versão antes do merge (comportamento atual)"
-    - label: "Pipeline de release (CI)"
-      description: "O bump é feito uma única vez por uma pipeline (ex.: GitHub Actions). O finish NÃO bumpa local e o BUMP WARNING é suprimido."
+    - label: "Pipeline de release (CI) (RECOMENDADO)"
+      description: "O bump é feito uma única vez por uma pipeline (ex.: GitHub Actions). O finish NÃO bumpa local e o BUMP WARNING é suprimido. Bump único, sem conflito entre branches."
+    - label: "Bump local no finish"
+      description: "Para trabalho solo / projeto simples, sem CI. O finish do DevFlow bumpa a versão antes do merge. Riscos: o bump acontece na branch e gera conflito quando duas branches bumpam; a tag e o GitHub Release ficam manuais; o CHANGELOG não é cortado automaticamente."
 ```
+
+#### P5b.1 — `pipeline` escolhido sem CI: AVISAR (nunca recusar)
+
+Se o usuário escolheu **Pipeline de release** e `HAS_RELEASE_CI=false`, **avise** — a escolha é
+legítima (a pipeline pode vir depois), mas hoje o bump vira **no-op silencioso**: o finish não
+bumpa, e não há CI que bumpe. Nunca recuse a escolha; apenas informe e ofereça o scaffold.
+
+Condicione a **oferta** do scaffold ao gate (repositório git **e** remote GitHub):
+
+```bash
+node scripts/lib/release-scaffold.mjs gate
+# → {"git":true,"github":true,"reason":"..."}
+```
+
+- `git:false` → **só avise**. Não ofereça scaffold.
+- `git:true, github:false` → **só avise** (o v1 cobre `github.com`; GitHub Enterprise não).
+- `git:true, github:true` → ofereça o scaffold.
+
+#### P5b.2 — Oferta do scaffold (confirmação estruturada)
+
+**Antes da primeira escrita**, rode o plano em `--dry-run` e **mostre o conteúdo** dos arquivos ao
+usuário. Só então peça confirmação. O applier **recusa** sem `confirmed: true`.
+
+```bash
+node scripts/lib/release-scaffold.mjs apply --confirmed --dry-run
+```
+
+A confirmação deve enumerar exatamente os **3 arquivos** que serão criados:
+
+| Arquivo | O que é |
+|---|---|
+| `.github/workflows/release.yml` | Workflow de release. **Roda na SUA CI**, com `contents: write` e `pull-requests: write`. |
+| `scripts/bump-version.sh` | Detecta os version files do projeto em runtime e faz o bump. |
+| `scripts/lib/changelog-cut.mjs` | Corta `[Unreleased]` → `[X.Y.Z]` no CHANGELOG. |
+
+Avisos obrigatórios na confirmação:
+
+- O `release.yml` **roda na SUA CI** com permissão de escrita no repositório e de abrir PRs.
+- Os arquivos são copiados **verbatim**; nada é interpolado.
+- **Nunca sobrescrevemos** um arquivo existente: se já houver um desses arquivos, ele é
+  **preservado** e reportado.
+- **[N4]** Seu pipeline v1 **não tem `changelog-guard`** — **confira as notas do release à mão**
+  antes de aprovar o release PR.
+
+#### P5b.3 — Regras de escrita (enforcement)
+
+- **Proibido em modo autônomo.** Não ofereça nem aplique o scaffold quando
+  `.context/workflow/status.yaml` tiver `autonomy: autonomous` (ou `assisted`). O applier também
+  recusa por conta própria — a skill não é a única linha de defesa.
+- **Branch protegida** (`main`/`develop`): **não scaffolde**. Peça ao usuário para criar uma
+  **work branch** (`feature/…`) antes. O applier recusa nesse caso.
+- **[D7b] `.github/workflows/**` é gravado pela ferramenta `Write`, nunca pelo applier.**
+  O `applyScaffold` cria só os `scripts/**` (`writer: 'fs'`) e devolve o workflow em
+  `mustWriteViaTool` com o conteúdo. **Você** grava esse conteúdo com a ferramenta `Write` — é ela
+  que passa pelo gate de permissões do harness. Nunca escreva `.github/**` por Bash
+  (`printf >`, `cp`) nem deixe o applier escrevê-lo por `node:fs`.
+- **[N6a] Depois de gravar o workflow, rode `verifyWritten`.** O conteúdo transitou por você (LLM);
+  esta é a única checagem de bytes do único artefato que executa em CI. `mismatch` → pare e reporte.
+
+```bash
+# 1) cria os scripts/**; devolve o workflow em mustWriteViaTool
+node scripts/lib/release-scaffold.mjs apply --confirmed
+# 2) grave mustWriteViaTool[].content com a ferramenta Write
+# 3) confira os bytes
+node scripts/lib/release-scaffold.mjs verify
+# → {"ok":true,...}   ok:false → NÃO prossiga; reporte o mismatch.
+```
+
+Se o `applyScaffold` devolver `refused`, **não contorne**: mostre o motivo ao usuário
+(`sem repositório git`, `não confirmado`, `autonomia`, `branch protegida`, `contenção`).
 
 **P6: MemPalace** (condicional — só aparece se MCP detectado ou se usuário quer configurar)
 

@@ -319,6 +319,55 @@ test("C.13b diretório-pai é symlink apontando fora da raiz → refused", () =>
   assert.ok(!existsSync(join(outside, "bump-version.sh")), "escreveu fora do projectRoot via pai-symlink");
 });
 
+// ─── CLI (SI-1: as skills chamam a CLI, nunca `node -e`) ────────────────────
+
+const CLI = join(ROOT, "scripts", "lib", "release-scaffold.mjs");
+
+/** @returns {{status:number, out:string}} */
+function runCli(cwd, args) {
+  try {
+    const out = execFileSync("node", [CLI, ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { status: 0, out };
+  } catch (e) {
+    return { status: e.status ?? 1, out: e.stdout ?? "" };
+  }
+}
+
+test("CLI apply sem --confirmed → exit 1, nada escrito", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  const r = runCli(dir, ["apply"]);
+  assert.equal(r.status, 1, "a CLI deve sinalizar recusa no exit code");
+  assert.match(JSON.parse(r.out).refused[0].reason, /confirm/i);
+  assert.ok(!existsSync(join(dir, "scripts", "bump-version.sh")));
+});
+
+test("CLI apply --confirmed → cria scripts/**, NUNCA .github/**", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  const r = runCli(dir, ["apply", "--confirmed"]);
+  assert.equal(r.status, 0);
+  assert.ok(existsSync(join(dir, "scripts", "bump-version.sh")));
+  assert.ok(existsSync(join(dir, "scripts", "lib", "changelog-cut.mjs")));
+  assert.ok(!existsSync(join(dir, ".github")), "a CLI escreveu .github/** por node:fs — viola D7b");
+  assert.equal(JSON.parse(r.out).mustWriteViaTool[0].dest, ".github/workflows/release.yml");
+});
+
+test("CLI verify sem o workflow → exit 1 (fail-loud)", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  const r = runCli(dir, ["verify"]);
+  assert.equal(r.status, 1);
+  assert.equal(JSON.parse(r.out).ok, false);
+});
+
+test("CLI gate → JSON com git/github", () => {
+  const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
+  const gate = JSON.parse(runCli(dir, ["gate"]).out);
+  assert.deepEqual({ git: gate.git, github: gate.github }, { git: true, github: true });
+});
+
+test("CLI comando inválido → exit 2", () => {
+  assert.equal(runCli(newRepo(), ["bogus"]).status, 2);
+});
+
 // ─── planScaffold ───────────────────────────────────────────────────────────
 
 test("planScaffold reporta status e writer por artefato", () => {
