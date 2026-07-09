@@ -1,0 +1,103 @@
+name: Release (bump de versão)
+
+# Bump de versão controlado e único por release. Disparo manual: escolha o tipo
+# semver; o job roda scripts/bump-version.sh (que detecta os version files do
+# projeto em RUNTIME) e abre um RELEASE PR, respeitando branch protection.
+#
+# Este arquivo é copiado VERBATIM pelo DevFlow. Não interpole nada aqui: a
+# proveniência por hash só cobre cópia byte-a-byte, e a CI não alcança o plugin.
+#
+# Superfície de gatilho: só workflow_dispatch. Nada de pull_request_target.
+# Valores dinâmicos entram por `env:` e são citados como "$VAR" no shell —
+# nunca interpolados via ${{ }} dentro de um `run:`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Tipo de bump (semver)"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Bump + abrir release PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # O script emite `version=` e `files=` em $GITHUB_OUTPUT. O workflow
+      # consome esses outputs — nunca re-lê um manifest por conta própria.
+      - name: Bump version
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          bash scripts/bump-version.sh "$BUMP"
+
+      - name: Abrir release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.ref_name }}
+          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          FILES: ${{ steps.bump.outputs.files }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="release/v${VERSION}"
+          git switch -c "$BRANCH"
+
+          # O CHANGELOG.md é cortado ([Unreleased] -> [X.Y.Z]) pelo bump-version.sh,
+          # atomicamente com o bump, e vem incluído em `files=`. Ele PRECISA ser
+          # staged junto: senão o release PR sai com a versão bumpada e o CHANGELOG
+          # intacto (drift).
+          if [ -n "${FILES:-}" ]; then
+            # shellcheck disable=SC2086
+            # word splitting é intencional: `files=` é uma lista separada por espaço.
+            git add -- $FILES
+          else
+            git add -A
+          fi
+
+          git commit -m "chore(release): v${VERSION}"
+          git push -u origin "$BRANCH"
+
+          gh pr create --base "$BASE_BRANCH" --head "$BRANCH" \
+            --title "chore(release): v${VERSION}" \
+            --body "$(cat <<EOF
+          Bump **${BUMP}** -> **v${VERSION}** via pipeline de release (.github/workflows/release.yml).
+
+          Arquivos atualizados: ${FILES}
+
+          **Checklist antes do merge**
+
+          - [ ] CHANGELOG.md: a seção [${VERSION}] foi cortada automaticamente a partir de [Unreleased].
+                Este pipeline **não** tem changelog-guard — **confira as notas do release à mão**
+                antes de aprovar.
+          - [ ] A versão foi calculada a partir do manifest do projeto pelo scripts/bump-version.sh.
+
+          O bump é único e controlado: acontece só aqui, nunca em commit local.
+          EOF
+          )"
