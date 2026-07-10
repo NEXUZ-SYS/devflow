@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `devflow:config` avisa `versioning: pipeline` sem CI e oferece scaffold de release (ADR-012)
+
+Escolher `versioning: pipeline` sem ter uma pipeline de release fazia o bump virar um **no-op silencioso**: o finish não bumpa e não há CI que bumpe. Agora a `P5b` avisa e, quando o repositório é git **e** tem remote GitHub, oferece um scaffold **verbatim** de pipeline de release. O escopo do v1 é **GitHub-only** — o `release.yml` é sintaxe de GitHub Actions e não executa em outro forge.
+
+- **`assets/release-scaffold/{release.yml, bump-version.sh, lib/changelog-cut.mjs}` (novos)** — copiados byte-a-byte, nunca interpolados. O `bump-version.sh` é genérico por **detecção em runtime** (`package.json`/`pyproject.toml`/`Cargo.toml`/`VERSION`, raiz-apenas) e endurecido: leitura e escrita **ancoradas** na seção/campo canônico (versões de dependências nunca são tocadas) e `validate_semver` fail-loud **antes** de qualquer expansão aritmética. A interface com o workflow é `version=`/`files=` em `$GITHUB_OUTPUT` — o `release.yml` nunca re-grepa um manifest.
+- **`scripts/lib/release-scaffold.mjs` (novo)** — `checkGate`/`planScaffold`/`applyScaffold`/`verifyWritten`/`syncScaffold` + CLI (`gate|plan|apply|verify|sync`). O gate parseia o host do remote de forma **ancorada** (descarta userinfo, remove porta, lowercase) e só aceita `github.com`; `applyScaffold` **recusa** repositório sem remote GitHub, sem confirmação humana, sob `autonomy` não-supervisionada, em branch protegida ou em detached HEAD.
+- **`.github/workflows/**` nunca é escrito por `node:fs`** — sai em `mustWriteViaTool` e é gravado pela ferramenta `Write`, que passa pelo gate de permissões. Depois, `verifyWritten` confere `hash(dest) === hash(asset)`: o workflow é o único artefato que executa em CI e o único cujo conteúdo transita pelo LLM.
+- **`/devflow update`** sincroniza o scaffold **fora** do `provenance-sync.applySync` (que é contido a `.context/` e auto-sobrescreve `untouched` sem gate). Artefato de classe-CI só é atualizado após **diff + confirmação**; ausente nunca é recriado; editado localmente é preservado.
+- **`gen-known-hashes`** ganha um walk separado (`.yml`/`.sh`/`.mjs`) para `assets/release-scaffold/**`, sem ampliar o filtro global — ampliá-lo arrastaria os scripts de `skills/**` para o registry compartilhado.
+- ADR-012 (`Aprovado`) registra a **fronteira de confiança**: a proveniência por hash detecta deriva **local**, não é atestação de supply-chain.
+
 ## [1.27.0] — 2026-07-09
 
 ### Changed — Revisão da `prevc-confirmation` + parser único de `.devflow.yaml` (ADR-011)
