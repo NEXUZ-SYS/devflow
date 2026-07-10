@@ -196,7 +196,10 @@ node scripts/lib/release-scaffold.mjs gate
 ```
 
 - `git:false` → **só avise**. Não ofereça scaffold.
-- `git:true, github:false` → **só avise** (o v1 cobre `github.com`; GitHub Enterprise não).
+- `git:true, github:false` → **só avise**. O v1 cobre apenas `github.com`: GitLab, Bitbucket,
+  Gitea e GitHub Enterprise ficam de fora, porque o `release.yml` é sintaxe de GitHub Actions e
+  não executa neles. O `applyScaffold` **também recusa** nesse caso — a skill não é a única
+  linha de defesa.
 - `git:true, github:true` → ofereça o scaffold.
 
 #### P5b.2 — Oferta do scaffold (confirmação estruturada)

@@ -289,11 +289,16 @@ export function applyScaffold(cwd, { dryRun = false, confirmed = false } = {}) {
   const gate = checkGate(cwd);
   if (!gate.git) return refusal("sem repositório git");
 
-  // Nota de projeto: NÃO exigimos `gate.github` aqui, e isso é deliberado.
-  // O guardrail "só com remote GitHub" é do momento da OFERTA (skill config,
-  // P5b.1). Materializar os arquivos num repo sem remote GitHub é inerte: o
-  // workflow nunca executa. O ato perigoso — rodar CI com contents:write — exige
-  // GitHub, e o artefato que o dispara passa pelo gate de permissões (D7b).
+  // C.9g — o guardrail da ADR-012 exige "opt-in explícito, repositório git E
+  // remote GitHub". Ele vive AQUI, não só na prosa da skill: o `release.yml` é
+  // sintaxe de GitHub Actions e não roda em nenhum outro forge. Sem este guard,
+  // um chamador que pule a skill deposita um workflow morto num repo GitLab.
+  // (GitHub Enterprise e demais forges ficam de fora do v1 — ver ADR-012.)
+  if (!gate.github) {
+    return refusal(
+      `sem remote GitHub: o release.yml é GitHub Actions e não executa em outro forge (${gate.reason})`,
+    );
+  }
 
   // C.9 — o applier escreve por node:fs, invisível ao pre-tool-use. A
   // confirmação humana é obrigatória e vive no código, não na prosa da skill.

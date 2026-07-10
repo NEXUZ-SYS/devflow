@@ -10,10 +10,13 @@
 //   - `git push` e `gh` são STUBS que marcam uma sentinela; ausência da
 //     sentinela é asserção POSITIVA de que nada foi empurrado.
 //
-// O gate GitHub NÃO é exercitado aqui (seria preciso uma URL real): ele é
-// testado em unidade na Task C. Por isso o fixture tem github:false, e o
-// applyScaffold segue funcionando — a exigência de remote GitHub é do momento
-// da OFERTA (skill config, P5b.1), não da materialização.
+// Sobre o remote GitHub: desde C.9g o `applyScaffold` RECUSA um repo sem remote
+// GitHub, então o fixture precisa de um. Ele é uma STRING inerte em .git/config
+// — nada jamais a contata:
+//   - `origin` continua sendo o bare LOCAL, e é para lá que qualquer push iria;
+//   - `git push` e `gh` são stubs que marcam sentinela (G.3);
+//   - o bare local termina sem refs (G.4).
+// O parsing de host em si é testado em unidade na Task C.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -63,6 +66,8 @@ before(() => {
   execFileSync(REAL_GIT, ["-C", FIXTURE, "config", "user.email", "e2e@example.invalid"]);
   execFileSync(REAL_GIT, ["-C", FIXTURE, "config", "user.name", "E2E"]);
   execFileSync(REAL_GIT, ["-C", FIXTURE, "remote", "add", "origin", ORIGIN]);
+  // URL inerte: satisfaz o gate C.9g sem nunca ser contatada (push vai p/ origin).
+  execFileSync(REAL_GIT, ["-C", FIXTURE, "remote", "add", "github", "https://github.com/acme/demo.git"]);
 
   // Stubs: `git push` e `gh` marcam sentinela e falham. Os demais subcomandos
   // de git passam adiante para o git real (o applier precisa de rev-parse etc.).
@@ -95,11 +100,16 @@ after(() => {
   rmSync(SANDBOX, { recursive: true, force: true });
 });
 
-test("G.0 higiene do fixture: origin é path local, sem remote GitHub", () => {
+test("G.0 higiene do fixture: origin é bare local; o remote GitHub é uma string inerte", () => {
   const gate = checkGate(FIXTURE);
   assert.equal(gate.git, true);
-  assert.equal(gate.github, false, "o fixture não pode ter um remote GitHub de verdade");
-  assert.ok(gate.remotes.every((r) => !r.includes("://") || r.startsWith("file://")), `remote de rede no fixture: ${gate.remotes}`);
+  assert.equal(gate.github, true, "o gate C.9g exige um remote GitHub para materializar");
+
+  // `origin` — o alvo default de qualquer push — é um path local, nunca a rede.
+  const originUrl = execFileSync(REAL_GIT, ["-C", FIXTURE, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
+  assert.equal(originUrl, ORIGIN);
+  assert.ok(!originUrl.includes("://"), `origin virou URL de rede: ${originUrl}`);
+  assert.ok(existsSync(join(ORIGIN, "HEAD")), "origin não é um repositório bare local");
 });
 
 test("G.1 [N6a] applyScaffold materializa 2 por fs + 1 via ferramenta Write; verifyWritten é fail-loud", () => {

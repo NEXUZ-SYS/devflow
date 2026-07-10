@@ -235,6 +235,49 @@ test("C.9f detached HEAD → refused (não dá para avaliar branch protection)",
   assert.ok(!existsSync(join(dir, "scripts", "bump-version.sh")));
 });
 
+// NOTE 3 do code review, fechado mecanicamente: o guardrail da ADR-012 diz
+// "NUNCA criar workflows de CI sem opt-in explícito, repositório git E remote
+// GitHub". Antes, só a prosa da skill gateava o forge — o applier aceitava
+// qualquer repo git e depositaria um .github/workflows/release.yml MORTO num
+// repo GitLab (GitHub Actions não roda lá).
+test("C.9g remote não-GitHub → refused, nada escrito", () => {
+  const casos = [
+    ["gitlab", "https://gitlab.com/x/y.git"],
+    ["bitbucket", "https://bitbucket.org/x/y.git"],
+    ["gitea", "https://gitea.io/x/y.git"],
+    ["GitHub Enterprise", "https://github.company.com/x/y.git"],
+  ];
+  for (const [nome, url] of casos) {
+    const dir = newRepo({ remotes: [["origin", url]] });
+    const r = ok(dir);
+    assert.equal(r.created.length, 0, `${nome}: criou arquivos`);
+    assert.equal(r.mustWriteViaTool.length, 0, `${nome}: entregou o workflow`);
+    assert.ok(
+      r.refused.some((x) => /github/i.test(x.reason)),
+      `${nome}: esperava recusa por remote não-GitHub, veio: ${JSON.stringify(r.refused)}`,
+    );
+    assert.ok(!existsSync(join(dir, "scripts", "bump-version.sh")), `${nome}: escreveu scripts/`);
+  }
+});
+
+test("C.9g git sem remote nenhum → refused", () => {
+  const r = ok(newRepo());
+  assert.equal(r.created.length, 0);
+  assert.ok(r.refused.some((x) => /github/i.test(x.reason)));
+});
+
+test("C.9g multi-remote com um GitHub → permitido", () => {
+  // Um repo pode ter origin apontando para outro lugar e ainda ser um projeto
+  // GitHub. checkGate varre TODOS os remotes.
+  const dir = newRepo({
+    remotes: [
+      ["origin", "https://gitlab.com/x/y.git"],
+      ["upstream", "https://github.com/x/y.git"],
+    ],
+  });
+  assert.equal(ok(dir).refused.length, 0);
+});
+
 test("C.9c [D7b] .github/workflows/** nunca é escrito por node:fs", () => {
   const dir = newRepo({ remotes: [["origin", "https://github.com/x/y.git"]] });
   const r = ok(dir);

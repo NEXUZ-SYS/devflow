@@ -7,7 +7,7 @@ source: local
 stack: universal
 category: arquitetura
 status: Aprovado
-version: 1.1.0
+version: 1.1.1
 created: 2026-07-09
 supersedes: []
 refines: []
@@ -84,6 +84,7 @@ Disso decorre a assimetria dos dois controles de escrita:
 - [ ] Teste `C.12`: o scaffold recusa sobrescrever arquivo existente do usuário (`preserved`, conteúdo intacto).
 - [ ] Guard-test `B.1a`: rejeitar a string `CLAUDE_PLUGIN_ROOT` em qualquer arquivo sob `assets/release-scaffold/`.
 - [ ] Teste `C.1`–`C.8e`: gate — sem git não oferece scaffold; sem remote GitHub avisa; host parseado de forma ancorada (userinfo, porta, case).
+- [ ] Teste `C.9g`: `applyScaffold` **recusa** repositório sem remote GitHub (GitLab, Bitbucket, Gitea, GHE). O guardrail "git **e** remote GitHub" é mecânico, não vive só na prosa da skill: o `release.yml` é sintaxe de GitHub Actions e um scaffold em outro forge seria um artefato morto.
 - [ ] Teste `C.9`: `applyScaffold` sem `confirmed: true` → `refused`, nada escrito.
 - [ ] Teste `C.9b`: `autonomy: autonomous` em `status.yaml` → `refused` mesmo com `confirmed: true` (D7a).
 - [ ] Teste `C.9c`: `.github/workflows/**` sai em `mustWriteViaTool`, nunca é escrito por `node:fs` (D7b).
