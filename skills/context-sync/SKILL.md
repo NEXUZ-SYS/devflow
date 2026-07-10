@@ -154,6 +154,34 @@ contenção/symlink/src ilegível). Respeitar `.context/standards.local.yaml` `d
 para cada `agent` ausente em `.context/agents/`, scaffoldar do template e preencher; existentes
 seguem o fluxo de fill in-place. (A proveniência por hash só cobre artefatos verbatim.)
 
+### Sync do scaffold de release (ADR-012) — FORA do `provenance-sync`
+
+Os artefatos de scaffold de CI (`.github/workflows/release.yml`, `scripts/bump-version.sh`,
+`scripts/lib/changelog-cut.mjs`) **não passam pelo `provenance-sync apply`**, por duas razões
+verificadas em teste (`tests/lib/release-scaffold-sync.test.mjs`):
+
+1. **`applySync` é contido a `.context/`** e recusaria todos esses dests (`F.1`).
+2. **`applySync` auto-sobrescreve `untouched` sem gate** (`F.2`) — inaceitável para um artefato
+   que **executa em CI** com permissão de escrita.
+
+Use o sync próprio, que **nunca recria** um artefato ausente (o scaffold é opt-in) e **exige
+confirmação humana com diff** para atualizar qualquer artefato classe-CI:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/release-scaffold.mjs" sync
+```
+
+Retorna `{updated, preserved, skipped, current, needsConfirm, refused, mustWriteViaTool}`:
+
+- **`skipped`** — ausente no projeto. **Não recrie**: o scaffold só entra por `/devflow config` (P5b).
+- **`preserved`** — editado localmente. Nunca sobrescrever; apenas reportar.
+- **`needsConfirm`** — deploy intocado e o asset do plugin mudou. **Mostre o `diff` ao usuário** e
+  só então re-execute com `--confirm`. Sem confirmação, **nada é escrito**.
+- **`mustWriteViaTool`** — mesmo com `--confirm`, `.github/workflows/**` **não** é escrito por
+  `node:fs`. Grave o `content` com a ferramenta **`Write`** (D7b) e rode
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/release-scaffold.mjs" verify` depois (N6a); `ok:false` → pare.
+- **`refused`** — contenção (symlink, `..`, diretório-pai apontando fora da raiz).
+
 Para cada `stack` ausente no manifest, semear via
 `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add --lib=<lib> --version=<ver> --discovery-hint=<url> --project=<PWD>`
 (idempotente; o scrape real é follow-up via `/devflow:scrape-stack-batch`).
