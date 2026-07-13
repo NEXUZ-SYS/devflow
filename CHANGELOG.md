@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.28.0] — 2026-07-13
+
 ### Added — `devflow:config` avisa `versioning: pipeline` sem CI e oferece scaffold de release (ADR-012)
 
 Escolher `versioning: pipeline` sem ter uma pipeline de release fazia o bump virar um **no-op silencioso**: o finish não bumpa e não há CI que bumpe. Agora a `P5b` avisa e, quando o repositório é git **e** tem remote GitHub, oferece um scaffold **verbatim** de pipeline de release. O escopo do v1 é **GitHub-only** — o `release.yml` é sintaxe de GitHub Actions e não executa em outro forge.
