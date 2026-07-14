@@ -36,6 +36,22 @@ Contrato + executor (CLI) + ledger + runners + CI árbitro + gate de leitura na 
 2. **Loop rápido local no hook** — depende de (1). O executor deste plano é rodado explicitamente (CLI) na fase E/V; o ledger é gravado por essa invocação, não pelo hook.
 3. **Os 5 controles legados possivelmente mortos** (handoff reminder, linter de standards, nudge de stack, guard de bypass PREVC, prompt de commit) — bug, não feature; tratamento separado.
 
+## Invariantes que o v1 NÃO enforça (R-C8 — honestidade sobre o que fica de fora)
+
+A spec §1.4 lista 5 invariantes de consenso. O v1 entrega **3** e adia **2**, porque os adiados eram trabalho do hook (cortado):
+
+| Invariante (spec) | Status no v1 | Onde vive |
+|---|---|---|
+| Sinal binário externo | ✅ entregue | executor + runners + CI |
+| Gerador ≠ verificador | ✅ entregue **via CI required check** (não via gate local, que é auxiliar) | `test.yml` + branch protection (TG7 Step 6) |
+| Não editar o juiz | ✅ entregue | guard anti-enfraquecimento (TG5) + guard do contrato (TG6) |
+| **Critério de parada** (3 REDs → escala) | ⏳ adiado | dependia do hook; `consecutiveReds` (TG2) fica pronto mas sem consumidor no v1 |
+| **Orçamento de tentativas** | ⏳ adiado | idem |
+
+Também **sem enforcement/teste no v1** (saíram com o hook): a garantia "sinais nunca rodam em session-start" — no v1 vale por **omissão** (não há runner automático no hook), mas não há teste que a trave. Registrado como follow-up.
+
+**Portanto: v1 = _gate honesto arbitrado por CI_, não o _loop limitado com escalação_.** O valor primário da spec (§12.6, "tornar o gate honesto") é entregue; o loop assistido é o próximo plano.
+
 **Correções de fato na spec** (feitas no Task Group 10): §12.1 (1,6s→~24s), §5 (o exemplo `unit: tests/lib/**` cobre 8% da suíte), §7 (o hook **não** entrega o `additionalContext` de forma que chegue ao agente).
 
 ---
@@ -48,20 +64,21 @@ Contrato + executor (CLI) + ledger + runners + CI árbitro + gate de leitura na 
 | `scripts/lib/verify-ledger.mjs` | append-only + leitura de cauda do ledger JSONL; tolerante a linha malformada | Criar |
 | `scripts/lib/verify-run.mjs` | `runSignal(name,{root})`: valida contrato → `execFile` → `{signal,exit,durationMs,treeDigest,at}` → append | Criar |
 | `scripts/lib/verify-tree-digest.mjs` | `treeDigest(root)`: HEAD + `git status --porcelain` excluindo estado efêmero de workflow | Criar |
-| `scripts/lib/test-weakening-guard.mjs` | compara arquivos de teste vs merge-base: sumiço/`.skip`/queda de asserts → BLOCK; novo → livre; override por trailer | Criar |
+| `scripts/lib/test-weakening-guard.mjs` | compara arquivos de teste vs merge-base: sumiço/`.skip`/queda de asserts → BLOCK; novo → livre; override por trailer; fail-closed em CI no merge-base-miss | Criar |
+| `scripts/lib/verify-contract-guard-cli.mjs` | guard do contrato `verify:` no CI, contra merge-base (R-C2) | Criar |
 | `tests/run-unit.sh` | enumera `unit` (git ls-files + convenção, exclui integration/e2e) e roda `node --test` | Criar |
 | `tests/run-integration.sh` | enumera `tests/integration/**` | Criar |
-| `tests/run-e2e.sh` | enumera `tests/e2e/*.mjs` + os `test-*.sh` | Criar |
-| `tests/run-lint.sh` | roda o guard de enfraquecimento + guard do contrato (sinal composto, D6) | Criar |
-| `.github/workflows/test.yml` | matriz sobre os 4 sinais, `fetch-depth: 0`, mesmo executor | Criar |
-| `scripts/lib/devflow-config-guard.mjs` | + detectar neutralização de `verify.*` (remoção de sinal, argv virando no-op) | Modificar |
+| `tests/run-e2e.sh` | enumera `tests/e2e/*.mjs` + os `test-*.sh` (raiz + aninhados) | Criar |
+| `tests/run-lint.sh` | guard de enfraquecimento + guard do contrato + validade do verify: (sinal composto, D6); repassa `BASE_REF` | Criar |
+| `.github/workflows/test.yml` | matriz sobre os 4 sinais, `fetch-depth: 0`, `BASE_REF`, mesmo executor | Criar |
+| `scripts/lib/devflow-config-guard.mjs` | + detectar neutralização de `verify.*` (remoção de sinal; proposto inválido/inline via `readVerify`) | Modificar |
 | `skills/prevc-validation/SKILL.md` | novo Step 1.5: lê o ledger, exige exit 0 c/ digest atual por `requiredSignal` | Modificar |
 | `skills/prevc-planning/SKILL.md` | Step 5.5 emite `requiredSignals` no plano | Modificar |
 | `skills/config/SKILL.md` | entrevista oferece o bloco `verify:` | Modificar |
 | `.context/.devflow.yaml` | novo bloco `verify:` (dogfooding) | Modificar |
 | `.context/docs/testing-strategy.md` | corrigir: afirma que não há framework de testes | Modificar |
 | `.context/engineering/adrs/013-*.md` | ADR-013: sinal verificável externo (extends 011, 012) | Criar |
-| `assets/provenance/known-hashes.json` | + hash do `test.yml` novo (proveniência, ADR-012) | Modificar |
+| Branch protection (GitHub, fora do repo) | `test.yml` como required check (R-C5) — passo manual verificado na fase C | Config |
 | Testes obsoletos (TG0) | `test-skill-adr-refs.mjs`, `test-e2e-standards-default-reversa.mjs`, `test-post-tool-use.sh`, `e2e-omp-authority.sh` | Modificar |
 
 ---
@@ -340,12 +357,42 @@ test('argv[0] fora da allowlist → lança', () => {
   assert.throws(() => readVerify(CFG(`verify:\n  unit: ["curl", "evil"]\n`)), /allowlist|permitido/i);
 });
 
-test('argv[1] = -c (código inline) → lança', () => {
-  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["bash", "-c", "x"]\n`)), /-c|inline/i);
+// R-C1: código inline deve ser rejeitado em QUALQUER posição do argv, não só argv[1].
+// Vetores provados pela revisão de segurança (todos executavam JS/shell arbitrário do config):
+test('bash -c → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["bash", "-c", "x"]\n`)), /inline/i);
 });
-
-test('argv[1] = -e (código inline) → lança', () => {
-  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "-e", "x"]\n`)), /-e|inline/i);
+test('bash -lc (bundle) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["bash", "-lc", "curl e|sh"]\n`)), /inline/i);
+});
+test('sh -ic / -xc (bundle) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["sh", "-ic", "x"]\n`)), /inline/i);
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["sh", "-xc", "x"]\n`)), /inline/i);
+});
+test('node -e → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "-e", "x"]\n`)), /inline/i);
+});
+test('node --eval / -p / --print / -pe → lança', () => {
+  for (const f of ['--eval', '-p', '--print', '-pe']) {
+    assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "${f}", "process.exit(0)"]\n`)), /inline/i, `esperava lançar em node ${f}`);
+  }
+});
+test('node --eval=... (forma com igual) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--eval=1"]\n`)), /inline/i);
+});
+test('python -c → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["python3", "-c", "x"]\n`)), /inline/i);
+});
+test('inline code NÃO na posição 1 (ex.: node --test x -e y) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--test", "t", "-e", "y"]\n`)), /inline/i);
+});
+// Legítimos que DEVEM passar (não confundir flag segura com código inline):
+test('comandos legítimos passam', () => {
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["node", "--test", "tests/x.mjs"]\n`)));
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  e2e: ["bash", "tests/run-e2e.sh"]\n`)));
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["python3", "-m", "pytest", "tests/"]\n`)));
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["make", "test"]\n`)));
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["npm", "run", "test"]\n`)));
 });
 
 test('sinal fora do vocabulário fechado → lança', () => {
@@ -372,19 +419,43 @@ Adicionar a `scripts/lib/devflow-config.mjs` (importar `parseYaml` no topo):
 ```javascript
 import { parseYaml } from "./frontmatter.mjs";
 
-const VERIFY_ALLOWLIST = new Set(["node","npm","pnpm","python","python3","pytest","make","bash","sh"]);
+export const VERIFY_ALLOWLIST = new Set(["node","npm","pnpm","python","python3","pytest","make","bash","sh"]);
 const VERIFY_SIGNALS = new Set(["unit","integration","e2e","lint"]);
-const INLINE_CODE_FLAGS = new Set(["-c","-e"]);
+
+// R-C1: rejeita execução de código inline varrendo TODOS os tokens do argv (não só argv[1]),
+// sensível ao interpretador. Fecha os vetores provados pela revisão: node -e/--eval/-p/--print/-pe
+// (e formas =...), bash/sh -c e bundles -lc/-ic/-xc, python -c. Exportada para reuso no config-guard.
+export function assertNoInlineCode(name, argv) {
+  const bin = argv[0];
+  for (const tok of argv.slice(1)) {
+    if ((bin === "bash" || bin === "sh") && /^-[a-z]*c/i.test(tok))
+      throw new Error(`verify.${name}: '${tok}' executa comando inline (shell -c/-lc/-ic/-xc proibido)`);
+    if (bin === "node" && /^(-e|--eval|-p|--print|-pe)(=.*)?$/.test(tok))
+      throw new Error(`verify.${name}: '${tok}' avalia código inline (node -e/--eval/-p/--print/-pe proibido)`);
+    if ((bin === "python" || bin === "python3") && /^-c$/.test(tok))
+      throw new Error(`verify.${name}: '${tok}' avalia código inline (python -c proibido)`);
+  }
+}
 
 // Lê e valida o bloco verify:. Vocabulário fechado unit|integration|e2e|lint.
-// Comandos são argv arrays; argv[0] em allowlist; argv[1] não é flag de código.
+// Comandos são argv arrays; argv[0] em allowlist; nenhum token é código inline.
 // Sem bloco → { signals:{}, onTaskComplete:[] } (D9: ausência não lança).
-// Qualquer violação estrutural → throw (fail-closed).
+// R-C6: distinguir "sem verify:" (ausência legítima) de "verify: presente mas parse falhou"
+// (fail-closed ruidoso) — o downgrade silencioso para warn-only é o teatro que a feature mata.
 export function readVerify(src) {
+  const text = String(src);
+  const hasVerifyText = /^verify:\s*$/m.test(text) || /^verify:\s/m.test(text);
   let data;
-  try { data = parseYaml(String(src)) || {}; } catch { data = {}; }
+  try { data = parseYaml(text) || {}; }
+  catch (e) {
+    if (hasVerifyText) throw new Error(`verify: presente mas o .devflow.yaml não parseia (${e.message}) — fail-closed`);
+    data = {};
+  }
   const v = data.verify;
-  if (v == null) return { signals: {}, onTaskComplete: [] };
+  if (v == null) {
+    if (hasVerifyText) throw new Error("verify: presente no texto mas não parseou como mapa — fail-closed");
+    return { signals: {}, onTaskComplete: [] };
+  }
   if (typeof v !== "object" || Array.isArray(v)) throw new Error("verify: deve ser um mapa");
 
   const signals = {};
@@ -395,7 +466,7 @@ export function readVerify(src) {
     if (val.length === 0) throw new Error(`verify.${key}: comando vazio`);
     if (val.some(x => typeof x !== "string")) throw new Error(`verify.${key}: todos os itens do argv devem ser strings`);
     if (!VERIFY_ALLOWLIST.has(val[0])) throw new Error(`verify.${key}: argv[0] '${val[0]}' fora da allowlist`);
-    if (val.length > 1 && INLINE_CODE_FLAGS.has(val[1])) throw new Error(`verify.${key}: argv[1] '${val[1]}' (código inline) é proibido`);
+    assertNoInlineCode(key, val);
     signals[key] = val;
   }
 
@@ -874,21 +945,27 @@ while IFS= read -r sh; do
   case "$sh" in tests/run-*.sh) continue;; esac
   if is_skipped "$sh"; then echo "SKIP (ci-skip): $sh"; continue; fi
   echo "→ $sh"; bash "$sh" || rc=1
-done < <(git ls-files -- 'tests/**/test-*.sh' | grep -vE '^tests/fixtures/')
+done < <(git ls-files -- 'tests/test-*.sh' 'tests/**/test-*.sh' | grep -vE '^tests/fixtures/' | sort -u)
 exit "$rc"
 ```
+> R-C9: os dois pathspecs (`tests/test-*.sh` **e** `tests/**/test-*.sh`) cobrem tanto os `.sh` na raiz de `tests/` quanto os aninhados — o `**/` sozinho exige uma barra e pularia `tests/test-foo.sh` silenciosamente.
 `tests/run-lint.sh` (sinal composto, D6):
 ```bash
 #!/usr/bin/env bash
-# Sinal 'lint' composto: guard anti-enfraquecimento de testes + guard do contrato.
-# Gate determinístico não é opcional por task (D6).
+# Sinal 'lint' composto: guard anti-enfraquecimento de testes + guard do contrato + validade do verify:.
+# Gate determinístico não é opcional por task (D6). R-C3: BASE_REF repassado aos guards
+# (default origin/main local; o CI seta BASE_REF=origin/<base_ref> e CI=true → fail-closed no merge-base-miss).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+BASE_REF="${BASE_REF:-origin/main}"
 rc=0
-node scripts/lib/test-weakening-guard.mjs --root . || rc=1
-# (o guard do contrato roda no pre-tool-use; aqui validamos a integridade do próprio verify:)
-node scripts/lib/devflow-config.mjs read-verify .context/.devflow.yaml >/dev/null || { echo "verify: inválido"; rc=1; }
+# 1) enfraquecimento de testes vs merge-base
+node scripts/lib/test-weakening-guard.mjs --root . --base-ref="$BASE_REF" || rc=1
+# 2) R-C2: guard do contrato verify: vs merge-base (fecha o eixo que o config-guard branch-gated não cobre)
+node scripts/lib/verify-contract-guard-cli.mjs --root=. --base-ref="$BASE_REF" || rc=1
+# 3) validade estrutural do verify: atual (fail-closed se presente e inválido — R-C6)
+node scripts/lib/devflow-config.mjs read-verify .context/.devflow.yaml >/dev/null || { echo "verify: inválido/inseguro"; rc=1; }
 exit "$rc"
 ```
 `chmod +x tests/run-*.sh`.
@@ -896,7 +973,7 @@ exit "$rc"
 - [ ] **Step 4: Ver passar**
 
 Run: `bash tests/scripts/test-verify-runners.sh`
-Expected: PASS. (`run-lint.sh` depende do TG5 — se rodar antes, o guard ainda não existe; ordenar TG5 antes de exercitar `run-lint`, ou stub temporário. O teste do runner só exercita `run-unit`.)
+Expected: PASS. (`run-lint.sh` depende de TG5 **e** TG6 — só é exercitado após ambos; o teste do runner aqui só exercita `run-unit`. Ordem de execução: TG4 cria os runners, TG5/TG6 criam os guards, e o `run-lint` completo é validado no TG10 Step 11.)
 
 - [ ] **Step 5: Commit**
 
@@ -971,6 +1048,17 @@ test('trailer Weakens-Tests: libera o enfraquecimento', () => {
   const d = repoWith({ 'test-a.mjs': TWO }, { 'test-a.mjs': ONE }, { trailer: 'refactor funde asserts' });
   assert.equal(evaluateWeakening({ root: d, baseRef: 'main' }).blocked, false);
 });
+// R-C3: merge-base ausente é fail-OPEN local mas fail-CLOSED em CI (defesa não pode desligar em silêncio no árbitro).
+test('merge-base ausente: local → skip (não bloqueia)', () => {
+  const d = repoWith({ 'test-a.mjs': TWO }, { 'test-a.mjs': TWO });
+  assert.equal(evaluateWeakening({ root: d, baseRef: 'inexistente-xyz' }).blocked, false);
+});
+test('merge-base ausente: CI → BLOCK (fail-closed)', () => {
+  const d = repoWith({ 'test-a.mjs': TWO }, { 'test-a.mjs': TWO });
+  const r = evaluateWeakening({ root: d, baseRef: 'inexistente-xyz', ci: true });
+  assert.equal(r.blocked, true);
+  assert.match(r.violations[0], /merge-base|fail-closed/i);
+});
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -997,9 +1085,14 @@ function sh(root, args) {
 }
 function countSignals(text) { const m = text.match(SIGNAL_RE); return m ? m.length : 0; }
 
-export function evaluateWeakening({ root, baseRef = "origin/main" }) {
+export function evaluateWeakening({ root, baseRef = "origin/main", ci = false }) {
   const base = sh(root, ["merge-base", "HEAD", baseRef]).trim();
-  if (!base) return { blocked: false, violations: [], note: "sem merge-base (base rasa?) — skip" };
+  if (!base) {
+    // R-C3: fail-OPEN local (dev sem a base buscada) mas fail-CLOSED em CI —
+    // um controle anti-reward-hacking que se desliga em silêncio no árbitro é pior que inútil.
+    if (ci) return { blocked: true, violations: [`merge-base com '${baseRef}' não resolve — o guard não pode verificar (fail-closed em CI). Garanta fetch-depth:0 e a base correta.`] };
+    return { blocked: false, violations: [], note: `sem merge-base com '${baseRef}' (base rasa? local?) — skip` };
+  }
 
   // Override global: trailer Weakens-Tests: em qualquer commit do range.
   const log = sh(root, ["log", `${base}..HEAD`, "--format=%B"]);
@@ -1022,7 +1115,8 @@ export function evaluateWeakening({ root, baseRef = "origin/main" }) {
 function main(argv) {
   const root = (argv.find(a => a.startsWith("--root="))?.split("=")[1]) || ".";
   const baseRef = (argv.find(a => a.startsWith("--base-ref="))?.split("=")[1]) || "origin/main";
-  const r = evaluateWeakening({ root, baseRef });
+  const ci = argv.includes("--ci") || process.env.CI === "true";
+  const r = evaluateWeakening({ root, baseRef, ci });
   if (r.blocked) {
     console.error("✗ enfraquecimento de testes detectado:");
     for (const v of r.violations) console.error("  " + v);
@@ -1060,13 +1154,16 @@ git commit -m "feat(verify): guard anti-enfraquecimento de testes (skip/deleçã
 
 **Files:**
 - Modify: `scripts/lib/devflow-config-guard.mjs`
-- Test: `tests/lib/test-config-guard-verify.mjs`
+- Create: `scripts/lib/verify-contract-guard-cli.mjs` (guard do contrato no CI, contra merge-base)
+- Test: `tests/lib/test-config-guard-verify.mjs`, `tests/e2e/verify-contract-guard.e2e.test.mjs`
 
-**Por quê:** o gate inteiro é neutralizável por dentro — reescrever `verify.unit` para `["bash","-c","true"]` mata o sinal sem tocar em teste nenhum (driblando TG5). O guard de `.devflow.yaml` já existe (detecta enfraquecimento de `git.*`); estendê-lo para `verify.*` é o mesmo padrão e fecha o modelo de ameaça de reward-hacking (§1.3).
+**Por quê (honesto — R-C7):** parte do gate é neutralizável por dentro. O que este guard **fecha**: (1) remoção de um sinal declarado; (2) troca por código inline — `readVerify` (TG1) agora **lança** em `-c`/`-e`/`--eval`/`-p`/`-lc`/… em qualquer posição, então o proposto inválido é barrado. O que **não** fecha e permanece residual-humano (spec §8 concede): repointar um sinal para um alvo trivial que ainda é estruturalmente válido (`["node","--test","tests/vazio/"]`, `["bash","runner-esvaziado.sh"]`) — o guard olha o argv, não o que ele faz. Por isso duas defesas: (a) o guard mecânico abaixo, rodado **no CI contra o merge-base** (não só no hook branch-gated, que nem dispara em `feature/*`); (b) um item de checklist da fase R que exige inspeção humana do diff de qualquer mudança em `verify.*`.
+
+**Correção de integração (R-C2/R-C3c):** o `devflow-config-guard-cli.mjs` existente só protege quando a branch atual é protegida — o ataque acontece na feature branch, onde ele **libera**. Por isso o novo `verify-contract-guard-cli.mjs` compara o `.devflow.yaml` do **merge-base vs HEAD** e roda no sinal `lint` (CI), sem depender de branch protection.
 
 **Interfaces:**
-- Consumes: `readVerify` (TG1). Adiciona ao `detectWeakenings(current, proposed)` já existente.
-- Produces: `detectWeakenings` passa a incluir enfraquecimentos de `verify`: sinal removido; `argv` que passa a conter `-c`/`-e`; `argv[0]` que sai da allowlist. (A validação de forma já lança em `readVerify`; aqui é a comparação atual-vs-proposto que caracteriza *enfraquecimento* — remover/neutralizar um sinal que existia.)
+- Consumes: `readVerify` (TG1), `detectWeakenings` estendido.
+- Produces: `detectWeakenings(current, proposed)` passa a incluir enfraquecimentos de `verify`: sinal removido; proposto inválido (inclui inline, via `readVerify` que lança). Mudança de comando que permanece válida NÃO vira block (evita bloquear edições legítimas) — é o resíduo humano acima. `verify-contract-guard-cli.mjs --root --base-ref` → exit≠0 se houver enfraquecimento vs merge-base.
 
 - [ ] **Step 1: Escrever os testes falhando**
 
@@ -1110,17 +1207,18 @@ Em `scripts/lib/devflow-config-guard.mjs`, importar `readVerify` e adicionar den
 import { readVerify } from "./devflow-config.mjs";
 
 // ... dentro de detectWeakenings(currentText, proposedText):
+// A troca por código inline é barrada porque readVerify(proposedText) LANÇA (TG1, R-C1)
+// em -c/-e/--eval/-p/--print/-pe/-lc/... em qualquer posição do argv.
 let curV = { signals: {} }, propV = { signals: {} };
-try { curV = readVerify(currentText); } catch { /* atual inválido: ignora */ }
+try { curV = readVerify(currentText); } catch { /* atual inválido: nada a comparar */ }
 try { propV = readVerify(proposedText); }
-catch (e) { weakenings.push(`verify: proposto é inválido (${e.message})`); }
+catch (e) { weakenings.push(`verify: proposto é inválido/inseguro (${e.message})`); }
 
 for (const sig of Object.keys(curV.signals)) {
-  if (!(sig in propV.signals)) { weakenings.push(`verify.${sig} removido (sinal deixaria de existir)`); continue; }
-  const before = curV.signals[sig], after = propV.signals[sig];
-  const wasInline = ["-c","-e"].includes(after[1]);
-  if (wasInline && !["-c","-e"].includes(before[1])) weakenings.push(`verify.${sig} virou código inline (no-op provável)`);
+  if (!(sig in propV.signals)) weakenings.push(`verify.${sig} removido (o sinal deixaria de existir)`);
 }
+// Nota: mudança de comando que permanece estruturalmente válida NÃO vira weakening
+// (bloquearia edições legítimas). É o resíduo humano — item de checklist da fase R.
 ```
 
 - [ ] **Step 4: Ver passar (+ regressão do guard de git.*)**
@@ -1128,11 +1226,98 @@ for (const sig of Object.keys(curV.signals)) {
 Run: `node --test tests/lib/test-config-guard-verify.mjs && node --test $(git ls-files 'tests/**/*devflow-config-guard*.mjs' 'tests/**/*config-guard*.mjs' 2>/dev/null)`
 Expected: PASS nos novos e nos existentes (git.* intacto).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Criar o guard do contrato para o CI (contra o merge-base)**
+
+Criar `scripts/lib/verify-contract-guard-cli.mjs` — o que roda no sinal `lint` (não branch-gated):
+```javascript
+#!/usr/bin/env node
+// verify-contract-guard-cli.mjs — R-C2: guard do contrato NO CI, contra o merge-base.
+// O config-guard existente só dispara em branch protegida; o ataque a verify.* acontece
+// na feature branch. Este compara o .devflow.yaml do merge-base vs HEAD e bloqueia
+// enfraquecimento (remoção de sinal, proposto inválido/inline).
+import { execFileSync } from "node:child_process";
+import { detectWeakenings } from "./devflow-config-guard.mjs";
+
+const CONFIG_REL = ".context/.devflow.yaml";
+const arg = (k, d) => (process.argv.find(a => a.startsWith(`${k}=`))?.split("=")[1]) ?? d;
+const root = arg("--root", ".");
+const baseRef = arg("--base-ref", "origin/main");
+const ci = process.argv.includes("--ci") || process.env.CI === "true";
+const git = (args) => { try { return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore","pipe","ignore"] }); } catch { return null; } };
+
+const base = (git(["merge-base", "HEAD", baseRef]) || "").trim();
+if (!base) {
+  if (ci) { console.error(`✗ verify-contract-guard: merge-base com '${baseRef}' não resolve (fail-closed em CI)`); process.exit(1); }
+  console.log(`✓ verify-contract-guard: sem merge-base local — skip`); process.exit(0);
+}
+const current = git(["show", `${base}:${CONFIG_REL}`]);
+const proposed = git(["show", `HEAD:${CONFIG_REL}`]);
+if (current == null || proposed == null) { console.log("✓ verify-contract-guard: sem .devflow.yaml na base/HEAD — nada a comparar"); process.exit(0); }
+
+const weakenings = detectWeakenings(current, proposed).filter(w => /verify/i.test(w));
+if (weakenings.length) {
+  console.error("✗ verify-contract-guard: contrato verify: enfraquecido vs merge-base:");
+  for (const w of weakenings) console.error("  " + w);
+  process.exit(1);
+}
+console.log("✓ verify-contract-guard: contrato verify: íntegro vs merge-base");
+process.exit(0);
+```
+
+- [ ] **Step 6: Teste E2E do guard do contrato no CI**
+
+Criar `tests/e2e/verify-contract-guard.e2e.test.mjs` — monta repo base com `verify:` e um HEAD que remove um sinal; roda o CLI com `--ci` e exige exit 1:
+```javascript
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const CLI = join(process.cwd(), 'scripts/lib/verify-contract-guard-cli.mjs');
+function repo(baseVerify, headVerify) {
+  const d = mkdtempSync(join(tmpdir(), 'cguard-'));
+  const g = (...a) => execFileSync('git', ['-C', d, ...a], { encoding: 'utf8' });
+  execFileSync('git', ['init', '-q', '-b', 'main', d]);
+  g('config','user.email','t@t'); g('config','user.name','t');
+  mkdirSync(join(d, '.context'), { recursive: true });
+  const cfg = (v) => `git:\n  strategy: branch-flow\n  protectedBranches: [main]\nverify:\n${v}`;
+  writeFileSync(join(d, '.context/.devflow.yaml'), cfg(baseVerify));
+  g('add','-A'); g('commit','-q','-m','base');
+  g('checkout','-q','-b','feature/x');
+  writeFileSync(join(d, '.context/.devflow.yaml'), cfg(headVerify));
+  g('add','-A'); g('commit','-q','-m','head');
+  return d;
+}
+function run(root) {
+  try { execFileSync('node', [CLI, `--root=${root}`, '--base-ref=main', '--ci'], { encoding: 'utf8' }); return 0; }
+  catch (e) { return e.status ?? 1; }
+}
+test('remover sinal na feature branch → guard do CI bloqueia (exit 1)', () => {
+  const d = repo(`  unit: ["node","--test","x"]\n  e2e: ["bash","e.sh"]\n`, `  unit: ["node","--test","x"]\n`);
+  assert.equal(run(d), 1);
+});
+test('trocar por inline na feature branch → guard do CI bloqueia', () => {
+  const d = repo(`  unit: ["node","--test","x"]\n`, `  unit: ["node","--eval","0"]\n`);
+  assert.equal(run(d), 1);
+});
+test('contrato íntegro → guard passa (exit 0)', () => {
+  const d = repo(`  unit: ["node","--test","x"]\n`, `  unit: ["node","--test","x"]\n`);
+  assert.equal(run(d), 0);
+});
+```
+
+- [ ] **Step 7: Ver passar**
+
+Run: `node --test tests/lib/test-config-guard-verify.mjs tests/e2e/verify-contract-guard.e2e.test.mjs`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/lib/devflow-config-guard.mjs tests/lib/test-config-guard-verify.mjs
-git commit -m "feat(guard): config-guard detecta neutralização de verify.* (remoção/no-op) — fecha reward-hacking do contrato"
+git add scripts/lib/devflow-config-guard.mjs scripts/lib/verify-contract-guard-cli.mjs tests/lib/test-config-guard-verify.mjs tests/e2e/verify-contract-guard.e2e.test.mjs
+git commit -m "feat(guard): contrato verify: guardado no CI vs merge-base (remoção/inline) — fecha o eixo que o config-guard branch-gated não cobre"
 ```
 
 ---
@@ -1144,11 +1329,12 @@ git commit -m "feat(guard): config-guard detecta neutralização de verify.* (re
 
 **Files:**
 - Create: `.github/workflows/test.yml`
-- Modify: `assets/provenance/known-hashes.json` (ADR-012: proveniência do scaffold de CI)
 - Test: `tests/scripts/test-ci-workflow.sh`
 
 **Interfaces:**
-- Consumes: os 4 runners (TG4), o guard (TG5). `fetch-depth: 0` para o merge-base do guard.
+- Consumes: os 4 runners (TG4), o guard (TG5), o guard do contrato (TG6). `fetch-depth: 0` para o merge-base dos guards.
+
+> **R-C4 — NÃO indexar em known-hashes.** `test.yml` é a CI **própria** do repo devflow (depende de `scripts/lib/verify-run.mjs`), **não** um scaffold ADR-012 (que governa artefatos copiados verbatim para o repo do *usuário*, sem dependência do plugin). Além disso `gen-known-hashes.mjs` não percorre `.github/` e o `known-hashes.json` é lista de hashes **sem nomes** — o critério `grep test.yml` seria insatisfazível. Proveniência de CI removida deste TG.
 
 - [ ] **Step 1: Teste estrutural do workflow (lint YAML + invariantes)**
 
@@ -1213,30 +1399,44 @@ jobs:
         with:
           node-version: "20"
 
-      - name: git fetch base (merge-base do guard)
-        run: git fetch origin "${{ github.base_ref || github.ref_name }}" --depth=1 || true
+      - name: git fetch base (merge-base dos guards — R-C3: SEM --depth para o merge-base resolver)
+        run: git fetch origin "${{ github.base_ref || github.ref_name }}" || true
 
       - name: Rodar sinal ${{ matrix.signal }}
+        env:
+          BASE_REF: "origin/${{ github.base_ref || github.ref_name }}"
         run: node scripts/lib/verify-run.mjs "${{ matrix.signal }}" "$PWD" CI
 ```
-> Nota: `verify-run.mjs` lê o `verify:` do `.devflow.yaml` e executa o argv declarado (que aponta para o runner). O exit do sinal é o exit do job — sinal vermelho barra o PR.
+> Nota: `verify-run.mjs` lê o `verify:` do `.devflow.yaml` e executa o argv declarado (que aponta para o runner). O exit do sinal é o exit do job — sinal vermelho barra o PR. `BASE_REF` é lido pelo `run-lint.sh` e repassado aos guards (R-C3). `CI=true` (setado pelo GitHub Actions) ativa o fail-closed dos guards no merge-base-miss.
 
-- [ ] **Step 4: Registrar a proveniência do scaffold (ADR-012)**
-
-Run: `node scripts/lib/gen-known-hashes.mjs` (ou o script de geração vigente) para incluir o hash de `.github/workflows/test.yml` em `assets/provenance/known-hashes.json`.
-Verify: `grep -c "test.yml" assets/provenance/known-hashes.json` → ≥1.
-
-- [ ] **Step 5: Ver passar**
+- [ ] **Step 4: Ver passar**
 
 Run: `bash tests/scripts/test-ci-workflow.sh`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/test.yml assets/provenance/known-hashes.json tests/scripts/test-ci-workflow.sh
-git commit -m "ci(verify): workflow test.yml — matriz sobre os 4 sinais pelo executor, check obrigatório de PR"
+git add .github/workflows/test.yml tests/scripts/test-ci-workflow.sh
+git commit -m "ci(verify): workflow test.yml — matriz sobre os 4 sinais pelo executor"
 ```
+
+- [ ] **Step 6: Tornar `test.yml` um required check (R-C5 — BLOCK se omitido)**
+
+Sem branch protection exigindo os 4 jobs, o árbitro independente — de que todo o corte do loop-no-hook depende — **não vincula**: um PR pode mergear com o check vermelho/ausente (o destino do `tests-passing`). Isso é config do GitHub (fora do arquivo de workflow), então é um passo **manual documentado** + verificação na fase C.
+
+Registrar no plano e executar via `gh` (requer permissão de admin do repo):
+```bash
+# Exigir os 4 contextos de status na branch main (e develop) protegida.
+gh api -X PATCH repos/NEXUZ-SYS/devflow/branches/main/protection/required_status_checks \
+  -f 'checks[][context]=sinal: unit' \
+  -f 'checks[][context]=sinal: integration' \
+  -f 'checks[][context]=sinal: e2e' \
+  -f 'checks[][context]=sinal: lint' 2>&1 || echo "AÇÃO MANUAL: configure required status checks em Settings→Branches"
+```
+Verify (fase C): `gh api repos/NEXUZ-SYS/devflow/branches/main/protection/required_status_checks --jq '.checks[].context'` deve listar os 4 sinais.
+
+> Se o operador não tiver admin do repo no momento, este passo é registrado como **entrega pendente verificável** e o plano documenta honestamente que, até ele existir, o gate é **advisory (D7a)**, não mecânico (D7b).
 
 ---
 
@@ -1310,7 +1510,13 @@ test('verde com digest atual → PASS', () => {
   const r = evaluateGate({ root: d, requiredSignals: ['unit'] });
   assert.equal(r.pass, true); assert.equal(r.warnOnly, false);
 });
-```
+// R-C6: verify: presente mas o .devflow.yaml não parseia → BLOCK ruidoso, NUNCA warn-only-pass nem crash.
+test('verify: presente mas parse falha → BLOCK (não warn-only, não stack trace)', () => {
+  const d = repo(`verify:\n  unit: ["bash", "ok.sh"]\n  bad: &anchor nope\n`); // âncora YAML → readVerify lança
+  const r = evaluateGate({ root: d, requiredSignals: ['unit'] });
+  assert.equal(r.pass, false);
+  assert.match(r.blocks[0].reason, /parse|inválid|fail-closed/i);
+});
 
 - [ ] **Step 2: Rodar e ver falhar**
 
@@ -1329,7 +1535,13 @@ import { lastEntry } from "./verify-ledger.mjs";
 import { treeDigest } from "./verify-tree-digest.mjs";
 
 export function evaluateGate({ root, requiredSignals = [] }) {
-  const { signals } = readVerifyFromPath(join(root, ".context/.devflow.yaml"));
+  let signals;
+  try {
+    ({ signals } = readVerifyFromPath(join(root, ".context/.devflow.yaml")));
+  } catch (e) {
+    // R-C6: verify: presente mas inválido/inseguro → BLOCK explícito, nunca warn-only-pass nem crash.
+    return { pass: false, warnOnly: false, blocks: [{ signal: "verify", reason: `contrato verify: inválido — fail-closed (${e.message})` }] };
+  }
   if (Object.keys(signals).length === 0) {
     return { pass: true, warnOnly: true, blocks: [], note: "nenhum sinal declarado; validação auto-reportada" };
   }
@@ -1378,9 +1590,13 @@ um sinal externo em vez de afirmar que os testes passam.
    - exit 0 + "⚠" → **warn-only** (projeto sem `verify:`): registre "validação auto-reportada; nenhum sinal declarado" e siga (D9).
    - exit 1 → **BLOCK**: apresente cada motivo (sem observação / prova vencida / sinal vermelho) e retorne à fase E.
 
-**O agente nunca escreve o ledger diretamente e nunca declara "testes passam" sem
-este gate.** O CI (`.github/workflows/test.yml`) re-roda os mesmos sinais como
-árbitro independente.
+**Honestidade sobre a independência (R-C7).** O gate local é um **auxílio de
+honestidade**, não uma garantia: o mesmo agente roda o executor e lê o ledger, e
+o ledger é gitignored/forjável — um agente adversário poderia inserir uma entrada
+verde. A **garantia** de gerador ≠ verificador é o **CI** (`test.yml`), que re-roda
+os sinais num ambiente limpo e só vincula o merge **quando é required check**
+(TG7 Step 6). Localmente o gate torna o auto-report *disciplinado*; mecanicamente,
+quem barra o vermelho é o CI obrigatório.
 ```
 
 - [ ] **Step 6: Verificar a referência da skill**
@@ -1579,6 +1795,12 @@ Três premissas de fato foram corrigidas na medição:
   não depende do hook.
 - **§4/D1:** o hook e as skills rodam do cache do plugin (pin project-scoped), não da árvore.
   Dogfooding do hook exige `--plugin-dir` ou release; o executor e o CI dogfoodam do checkout.
+- **§9 (revisão de segurança):** o gate local é auxiliar e forjável (ledger gitignored, `treeDigest`
+  sem segredo). A independência gerador≠verificador é do **CI required check**, não do gate local —
+  por isso o `test.yml` como required check (TG7 Step 6) é o que dá dente ao design.
+- **§8 (revisão de segurança):** a allowlist não fechava código inline além de `-c`/`-e` curtos
+  (`node --eval`/`-p`/`-pe`, `bash -lc`, `python -c` passavam). Fechado em TG1 (`assertNoInlineCode`,
+  varrendo todo o argv) e replicado no guard do contrato (TG6).
 ```
 
 - [ ] **Step 11: Rodar a suíte inteira via os runners (verde) + commit final**
@@ -1614,18 +1836,19 @@ Registrar como itens de acompanhamento (memória de projeto / issues):
 ## Self-Review
 
 **Spec coverage:**
-- §5 contrato → TG1 (`readVerify`, allowlist, vocabulário fechado, `onTaskComplete ⊆`). ✓
+- §5 contrato → TG1 (`readVerify`, allowlist, vocabulário fechado, `onTaskComplete ⊆`, `assertNoInlineCode`). ✓
 - §6 executor + `treeDigest` → TG3 (com correção anti-livelock do achado do architect). ✓
 - §7 ledger → TG2; loop no hook → **fora de escopo v1** (documentado, com justificativa medida). ✓ (parcial, consciente)
-- §8 segurança (argv, allowlist, `-c`/`-e`) → TG1 + TG10 Step 7 (exibir comandos). ✓
-- §9 gate de V (warn-only/fail-closed) → TG8. ✓
-- §10 guard anti-enfraquecimento → TG5. ✓
-- §11 estratégia de testes → cada TG começa com teste falhando; E2E do executor (TG3), do hook → n/a (fora de escopo). ✓
-- §13 componentes tocados → todos cobertos; `hooks/post-tool-use` movido para follow-up (com razão). ✓
-- **Adição além da spec:** TG0 (zerar suíte), TG6 (guard do contrato), correção anti-livelock — todos justificados pela revisão de viabilidade.
+- §8 segurança (argv, allowlist, código inline) → TG1 (`assertNoInlineCode` varre todo o argv — fecha o furo `--eval`/`-lc` da revisão) + TG10 Step 7 (exibir comandos). ✓
+- §9 gate de V (warn-only/fail-closed) → TG8 (R-C6: fail-closed em parse-fail, não warn-only-pass). ✓
+- §10 guard anti-enfraquecimento → TG5 (R-C3: fail-closed em CI no merge-base-miss). ✓
+- §13 componentes tocados → todos cobertos; `hooks/post-tool-use` movido para follow-up (com razão); `known-hashes` removido (R-C4: category error). ✓
+- **Adições além da spec (todas justificadas pela revisão):** TG0 (zerar suíte), TG6 (guard do contrato, agora com braço de CI vs merge-base — R-C2), TG7 Step 6 (required check — R-C5), correção anti-livelock, base-ref threading (R-C3).
+
+**Achados da fase R incorporados:** R-C1 (código inline no argv, HIGH), R-C2 (guard do contrato no CI), R-C3 (base-ref + fail-closed), R-C4 (remover known-hashes), R-C5 (required check), R-C6 (downgrade silencioso do gate), R-C7 (honestidade da independência), R-C8 (invariantes não entregues), R-C9 (enum robustez).
 
 **Placeholder scan:** sem TBD/TODO; todo step de código traz o código; comandos com expected output. ✓
 
-**Type consistency:** `readVerify`→`{signals,onTaskComplete}` usado consistentemente por TG3/TG8/TG10; `appendEntry`/`lastEntry`/`consecutiveReds` (TG2) usados por TG3/TG8; `treeDigest` (TG3) por TG3/TG8; `evaluateWeakening` (TG5), `evaluateGate` (TG8), `detectWeakenings` estendido (TG6). ✓
+**Type consistency:** `readVerify`→`{signals,onTaskComplete}` + `assertNoInlineCode` (TG1) usados por TG3/TG6/TG8/TG10; `appendEntry`/`lastEntry`/`consecutiveReds` (TG2) por TG3/TG8; `treeDigest` (TG3) por TG3/TG8; `evaluateWeakening({root,baseRef,ci})` (TG5), `evaluateGate` (TG8), `detectWeakenings` estendido (TG6) + `verify-contract-guard-cli` (TG6). ✓
 
 **requiredSignals para ESTE plano (fase V vai exigir):** `[unit, integration, e2e, lint]` — a feature toca CLI/hooks/config (e2e obrigatório), boundaries de config (integration), e é gate determinístico (lint sempre).
