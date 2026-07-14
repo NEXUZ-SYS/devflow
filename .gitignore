@@ -21,6 +21,11 @@ scripts/design/.pinned-version
 
 # DevFlow — estado efêmero de captura de decisões (PREVC)
 .context/workflow/.adr-pending.json
+
+# Artefatos de execução de testes (sandboxes datados, não são fonte — herdam
+# não-reprodutibilidade se coletados por glob de shell; os runners usam git ls-files)
+tests/20[0-9][0-9]-*/
+tests/_results/
 .context/workflow/.checkpoint/*
 tests/validation/tmp/
 
