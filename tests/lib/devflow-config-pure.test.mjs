@@ -27,9 +27,13 @@ for (const re of FORBIDDEN) {
   });
 }
 
-test("só importa de node:fs", () => {
+test("só importa de node:fs e do parser interno frontmatter.mjs (zero-dep, sem deps externas)", () => {
+  // A invariante é: sem deps de terceiros e sem superfície de eval/exec/rede/env
+  // (as regras FORBIDDEN acima cobrem o resto). frontmatter.mjs é o parser YAML
+  // interno, puro e zero-dep, reusado por readVerify (ADR-013 refina ADR-011).
+  const ALLOWED = new Set(["node:fs", "./frontmatter.mjs"]);
   const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
   for (const imp of imports) {
-    assert.ok(imp === "node:fs", `import inesperado: ${imp}`);
+    assert.ok(ALLOWED.has(imp), `import inesperado: ${imp}`);
   }
 });
