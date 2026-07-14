@@ -46,18 +46,26 @@ assert_contains "has handoff reminder" "$output" "HANDOFF"
 assert_not_contains "no commit prompt" "$output" "COMMIT"
 assert_not_contains "no branch finish" "$output" "BRANCH FINISH"
 
-# Test 3: TaskUpdate with status=completed → emits commit or finish prompt
-echo "Test 3: TaskUpdate completed emits conditional prompt"
-output=$(echo '{"tool_name":"TaskUpdate","tool_input":{"status":"completed","taskId":"1"},"cwd":"'"$REPO_ROOT"'"}' | bash "$HOOK" 2>/dev/null)
+# Test 3: TaskUpdate completed em SANDBOX de estado conhecido (branch feature + árvore suja)
+# → emite COMMIT. Antes usava cwd=$REPO_ROOT (estado da árvore real), o que falhava num
+# checkout limpo de CI (HEAD destacado, sem mudanças → só HANDOFF). Sandbox torna determinístico.
+echo "Test 3: TaskUpdate completed emits conditional prompt (sandboxed)"
+SB3=$(mktemp -d)
+(
+  cd "$SB3"
+  git init -q -b main
+  mkdir -p .context
+  printf 'git:\n  autoFinish: false\n' > .context/.devflow.yaml
+  echo "orig" > file.txt
+  git -c user.email=t@t -c user.name=t add -A
+  git -c user.email=t@t -c user.name=t commit -q -m init
+  git checkout -q -b feature/x
+  echo "changed" > file.txt   # tracked-modified → git diff mostra → HAS_CHANGES=true → COMMIT prompt
+)
+output=$(echo '{"tool_name":"TaskUpdate","tool_input":{"status":"completed","taskId":"1"},"cwd":"'"$SB3"'"}' | bash "$HOOK" 2>/dev/null)
 assert_contains "has handoff reminder" "$output" "HANDOFF"
-# Should have either COMMIT or BRANCH FINISH depending on git state
-if printf '%s' "$output" | grep -qE "COMMIT|BRANCH FINISH"; then
-  printf '  PASS: has conditional prompt (COMMIT or BRANCH FINISH)\n'
-  PASS=$((PASS + 1))
-else
-  printf '  FAIL: missing conditional prompt\n'
-  FAIL=$((FAIL + 1))
-fi
+assert_contains "has commit prompt (dirty tree)" "$output" "COMMIT"
+rm -rf "$SB3"
 
 # Test 4: Valid JSON output
 echo "Test 4: Output is valid JSON"

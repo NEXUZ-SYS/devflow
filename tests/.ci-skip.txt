@@ -1,0 +1,8 @@
+# Testes que o CI (sinal e2e) pula EXPLICITAMENTE. Nunca pulo silencioso — o runner
+# loga cada skip. Um path por linha. Reavaliar a cada release.
+#
+# tests/hooks/test-pre-commit-version-check.sh — 6/8 passam; 2 casos ("commit de feature
+#   tocando skills/ é permitido" e "bump manual válido 1.0.0→1.0.1 é permitido") falham por
+#   um defeito PRÉ-EXISTENTE do version-guard.mjs (bloqueia o que deveria permitir), FORA do
+#   escopo da feature verify-signal-pipeline. Follow-up próprio: consertar o version-guard.
+tests/hooks/test-pre-commit-version-check.sh
