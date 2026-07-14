@@ -53,11 +53,12 @@ const REVERSA = process.env.REVERSA_PROJECT
 // The 21 plugin-bundled default ids (source of truth: assets/standards/).
 const DEFAULT_IDS = [
   "std-accessibility", "std-api-conventions", "std-caching", "std-code-review",
-  "std-commit-hygiene", "std-data-modeling", "std-documentation", "std-domain-events",
-  "std-error-handling", "std-grounding", "std-internationalization", "std-layer-boundaries",
-  "std-migration", "std-naming-conventions", "std-observability", "std-performance",
-  "std-pre-commit-hygiene", "std-runtime-validation", "std-schemas", "std-secret-conventions",
-  "std-security", "std-state-management", "std-test-discipline", "std-typescript-strict",
+  "std-commit-hygiene", "std-data-modeling", "std-design-antipatterns", "std-documentation",
+  "std-domain-events", "std-error-handling", "std-grounding", "std-internationalization",
+  "std-layer-boundaries", "std-migration", "std-naming-conventions", "std-observability",
+  "std-performance", "std-pre-commit-hygiene", "std-runtime-validation", "std-schemas",
+  "std-secret-conventions", "std-security", "std-state-management", "std-test-discipline",
+  "std-typescript-strict", "std-visual-quality",
 ];
 
 const fixtureMissing =

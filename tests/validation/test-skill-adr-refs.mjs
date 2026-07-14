@@ -9,15 +9,15 @@ const read = (p) => readFileSync(resolve(root, p), 'utf-8');
 
 test('planning referencia o CLI adr-decision', () =>
   assert.match(read('skills/prevc-planning/SKILL.md'), /adr-decision\.mjs/));
-test('execution referencia adr-pending (appendCandidate)', () => {
+test('execution referencia adr-pending (append-candidate)', () => {
   const t = read('skills/prevc-execution/SKILL.md');
   assert.match(t, /adr-pending\.mjs/);
-  assert.match(t, /appendCandidate/);
+  assert.match(t, /append-candidate/);
 });
-test('confirmation referencia readCandidates, clearPending e resolveAdrPath', () => {
+test('confirmation referencia read-candidates, clear-pending e resolveAdrPath', () => {
   const t = read('skills/prevc-confirmation/SKILL.md');
-  assert.match(t, /readCandidates/);
-  assert.match(t, /clearPending/);
+  assert.match(t, /read-candidates/);
+  assert.match(t, /clear-pending/);
   assert.match(t, /resolveAdrPath/);
 });
 test('review referencia o conflict gate', () =>
