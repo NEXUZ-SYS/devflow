@@ -1,0 +1,40 @@
+name: Testes (sinal verificável)
+
+# Árbitro independente: re-roda os MESMOS sinais, pelo MESMO executor, lendo o
+# MESMO .devflow.yaml. Nasce verde (Task Group 0 zerou a suíte). Para vincular o
+# merge, configure estes 4 jobs como required status checks na branch protegida
+# (ver docs/superpowers/plans/2026-07-14-verify-signal-pipeline.md, TG7 Step 6).
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  signal:
+    name: "sinal: ${{ matrix.signal }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        signal: [unit, integration, e2e, lint]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # merge-base para os guards anti-enfraquecimento (lint)
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: git fetch base (merge-base dos guards — SEM --depth para o merge-base resolver)
+        run: git fetch origin "${{ github.base_ref || github.ref_name }}" || true
+
+      - name: Rodar sinal ${{ matrix.signal }}
+        env:
+          BASE_REF: "origin/${{ github.base_ref || github.ref_name }}"
+        run: node scripts/lib/verify-run.mjs "${{ matrix.signal }}" "$PWD" CI
