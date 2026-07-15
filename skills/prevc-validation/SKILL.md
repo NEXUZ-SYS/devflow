@@ -28,6 +28,27 @@ Run the full test suite, not just new tests. Verify:
 - All new tests pass
 - No flaky tests introduced
 
+## Step 1.5: Gate de Sinal Verificável (lê o ledger — não afirma)
+
+Se o projeto declara `verify:` no `.context/.devflow.yaml`, a fase V **observa**
+um sinal externo em vez de afirmar que os testes passam.
+
+1. Para cada `s` em `plano.requiredSignals`, garanta que o sinal foi rodado nesta
+   árvore: `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-run.mjs <s> "$PWD" V`
+   (gera/atualiza a entrada do ledger com o `treeDigest` atual).
+2. Rode o gate determinístico:
+   `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-gate.mjs "$PWD" "<requiredSignals separados por vírgula>"`
+   - exit 0 + "✓" → gate passa.
+   - exit 0 + "⚠" → **warn-only** (projeto sem `verify:`): registre "validação auto-reportada; nenhum sinal declarado" e siga (D9).
+   - exit 1 → **BLOCK**: apresente cada motivo (sem observação / prova vencida / sinal vermelho / contrato inválido) e retorne à fase E.
+
+**Honestidade sobre a independência.** O gate local é um **auxílio de honestidade**,
+não uma garantia: o mesmo agente roda o executor e lê o ledger, e o ledger é
+gitignored/forjável. A **garantia** de gerador ≠ verificador é o **CI**
+(`.github/workflows/test.yml`), que re-roda os sinais num ambiente limpo e só
+vincula o merge **quando é required check**. Localmente o gate torna o auto-report
+*disciplinado*; mecanicamente, quem barra o vermelho é o CI obrigatório.
+
 ## Step 2: Spec Compliance
 
 Compare the implementation against the design spec point by point:
