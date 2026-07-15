@@ -1,5 +1,9 @@
 // scripts/lib/test-weakening-guard.mjs — impede enfraquecimento de testes vs merge-base.
 // Adicionar teste é livre; enfraquecer nunca é silencioso (D7). Override: trailer Weakens-Tests:.
+//
+// ALCANCE v1 (ADR-013): este guard reconhece SÓ testes JS/.mjs (node:assert, test(/it().
+// Em projetos-cliente Python/Odoo ele é INERTE (não casa test_*.py) — o guard do contrato
+// (verify-contract-guard) e o gate de V seguem valendo. Generalizar por linguagem = follow-up.
 import { execFileSync } from "node:child_process";
 
 const TEST_RE = /(^|\/)(test-[^/]*|[^/]*\.test)\.mjs$/;

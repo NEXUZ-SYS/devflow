@@ -635,13 +635,29 @@ Se o projeto tem testes (`git ls-files 'test-*' '*test*' | head -1` não-vazio) 
 - Cada valor é **array argv**; `argv[0]` ∈ `{node, npm, pnpm, python, python3, pytest, make, bash, sh}`; nenhum token pode ser código inline (`-c`/`-e`/`--eval`/`-p`/`-lc`/…).
 - Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`. `onTaskComplete` ⊆ sinais declarados.
 
-Bloco sugerido (o usuário revisa/edita antes de gravar):
+Bloco sugerido **por stack detectado** (o usuário revisa/edita antes de gravar — cada projeto materializa o contrato com os comandos DELE):
+
 ```yaml
+# Node (package.json com script "test", ou node --test)
 verify:
-  unit:        ["node", "--test", "tests/**/*.test.mjs"]  # ajuste ao layout do projeto
+  unit:        ["npm", "test"]
+  onTaskComplete: [unit]
+
+# Python (pytest)
+verify:
+  unit:        ["python3", "-m", "pytest", "tests/unit"]
+  integration: ["python3", "-m", "pytest", "tests/integration"]
+  onTaskComplete: [unit]
+
+# Odoo / genérico (Makefile)
+verify:
+  unit:        ["make", "test"]
   onTaskComplete: [unit]
 ```
-Gravar via `mergeSection(yaml, "verify", <bloco>)`. Ausência do bloco = warn-only na fase V (D9), sem quebrar projetos existentes.
+
+Detecte o stack pelo manifesto (`package.json` → Node; `pyproject.toml`/`pytest.ini` → Python; `Makefile` → genérico) e ofereça o bloco correspondente. Gravar via `mergeSection(yaml, "verify", <bloco>)`. Ausência do bloco = warn-only na fase V (D9), sem quebrar projetos existentes.
+
+> **Nota de alcance (v1).** O contrato, o executor, o ledger e o gate de V são agnósticos de linguagem e rodam em qualquer projeto via o plugin. Duas peças, porém, têm alcance limitado no v1: (a) o **guard anti-enfraquecimento de testes** (`test-weakening-guard`) só reconhece testes **JS/`.mjs`** (`node:assert`) — em projetos Python/Odoo ele é inerte (o guard do *contrato* e o gate seguem valendo); (b) o **CI árbitro** (o que dá a garantia gerador ≠ verificador via required check) é **dogfoodado no repo devflow**; em projetos-cliente, ligar um CI que re-rode os sinais é responsabilidade do time — sem isso, o gate local é auto-atestação (D7a). Ver ADR-013.
 
 ### 5. Se `.context/.devflow.yaml` já existe
 

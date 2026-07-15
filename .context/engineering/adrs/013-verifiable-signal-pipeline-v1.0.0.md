@@ -65,6 +65,20 @@ Um **CI árbitro** (`.github/workflows/test.yml`) re-roda os mesmos sinais, pelo
 - Repointar um sinal para alvo trivial ainda válido escapa dos guards mecânicos — resíduo humano (inspeção do diff de `verify.*` na fase R).
 - O gate local é forjável — mitigado pelo CI required check (D7b).
 
+## Alcance em projetos-cliente (v1)
+
+O plugin é distribuído para outros projetos; nem tudo tem o mesmo alcance. Explícito para não prometer demais:
+
+| Peça | Alcance no v1 | Onde vive |
+|---|---|---|
+| Contrato `verify:` (declarativo) | **Qualquer** projeto (Node, Python, Odoo) — cada um declara os comandos dele | `.devflow.yaml` do cliente |
+| Executor + ledger + `treeDigest` + gate de V | **Qualquer** projeto — agnósticos de linguagem, rodam via `${CLAUDE_PLUGIN_ROOT}` | plugin |
+| Guard **do contrato** (`verify-contract-guard`) | **Qualquer** projeto — opera sobre o `verify:`, agnóstico de linguagem | plugin |
+| Guard **anti-enfraquecimento de testes** (`test-weakening-guard`) | **Só JS/`.mjs`** (`node:assert`, `test(`/`it(`) — **inerte** em Python/Odoo | plugin |
+| CI árbitro (required check → garantia gerador ≠ verificador) | **Dogfoodado no repo devflow**; em clientes, ligar um CI que re-rode os sinais é responsabilidade do time | `test.yml` (só devflow) |
+
+**Consequência honesta:** um projeto-cliente que declara `verify:` ganha o loop local + gate de V + guard do contrato. Ele **não** ganha, no v1, o guard de enfraquecimento (se não for JS) nem a independência via CI (a menos que configure o próprio CI). Sem CI árbitro, o gate do cliente é **auto-atestação disciplinada (D7a)**, não a garantia mecânica (D7b) — que no v1 só o repo devflow tem. Generalizar o guard por linguagem e oferecer um scaffold de CI ao cliente são **follow-ups** (fora do escopo v1, coerente com "dar **ao repo** um CI" e "validar **no repo devflow primeiro**" da spec §2).
+
 ## Guardrails
 
 - SEMPRE ler `verify:` via `scripts/lib/devflow-config.mjs` (`readVerify`) — nunca re-parsear ad-hoc.

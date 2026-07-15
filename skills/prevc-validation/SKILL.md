@@ -44,10 +44,18 @@ um sinal externo em vez de afirmar que os testes passam.
 
 **Honestidade sobre a independência.** O gate local é um **auxílio de honestidade**,
 não uma garantia: o mesmo agente roda o executor e lê o ledger, e o ledger é
-gitignored/forjável. A **garantia** de gerador ≠ verificador é o **CI**
-(`.github/workflows/test.yml`), que re-roda os sinais num ambiente limpo e só
-vincula o merge **quando é required check**. Localmente o gate torna o auto-report
-*disciplinado*; mecanicamente, quem barra o vermelho é o CI obrigatório.
+gitignored/forjável. A **garantia** de gerador ≠ verificador é o **CI**, que re-roda
+os sinais num ambiente limpo e só vincula o merge **quando é required check**.
+Localmente o gate torna o auto-report *disciplinado*; mecanicamente, quem barra o
+vermelho é o CI obrigatório.
+
+**Alcance em projetos-cliente (v1, ADR-013).** O contrato, o executor e este gate
+rodam em qualquer projeto via o plugin. Mas: (a) o guard **anti-enfraquecimento de
+testes** só cobre projetos **JS/`.mjs`** — em Python/Odoo é inerte (o guard do
+*contrato* segue valendo); (b) o **CI árbitro** é dogfoodado no repo devflow — em
+projetos-cliente, ligar um CI que re-rode os sinais é responsabilidade do time. Sem
+esse CI, o gate do cliente é **auto-atestação (D7a)**, não a garantia mecânica (D7b).
+Registre isso no relatório de validação quando o projeto não tiver CI árbitro.
 
 ## Step 2: Spec Compliance
 
