@@ -59,6 +59,34 @@ test('python -c → lança', () => {
 test('inline code NÃO na posição 1 (ex.: node --test x -e y) → lança', () => {
   assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--test", "t", "-e", "y"]\n`)), /inline/i);
 });
+// V1 (auditoria da fase V): node --import/--loader/--experimental-loader com data:/http: = código EXTERNO inline.
+test('node --import data: → lança (código externo inline)', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--import", "data:text/javascript,console.log(1)", "m.mjs"]\n`)), /inline|import/i);
+});
+test('node --import=data: (com igual) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--import=data:text/javascript,1"]\n`)), /inline|import/i);
+});
+test('node --loader / --experimental-loader → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--loader", "data:text/javascript,1", "m.mjs"]\n`)), /inline|loader/i);
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["node", "--experimental-loader=data:text/javascript,1"]\n`)), /inline|loader/i);
+});
+// V2 (auditoria da fase V): python -c colado (-cCODE) e cluster (-Ic/-Ec) escapavam de /^-c$/.
+test('python3 -cCODE (colado) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["python3", "-cimport os"]\n`)), /inline/i);
+});
+test('python3 -Ic / -Ec (cluster com c) → lança', () => {
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["python3", "-Ic", "x"]\n`)), /inline/i);
+  assert.throws(() => readVerify(CFG(`verify:\n  unit: ["python", "-Ec", "x"]\n`)), /inline/i);
+});
+test('python3 -m pytest permanece legítimo (não casa o guard de -c)', () => {
+  assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["python3", "-m", "pytest", "tests/"]\n`)));
+});
+// V3 (auditoria da fase V): grafia "verify :" (espaço antes de :) que o parser aceita mas o
+// hasVerifyText não casava → downgrade silencioso. Deve fail-closed quando verify presente e inválido.
+test('verify com espaço antes do : + valor inválido → lança (fail-closed, não warn-only)', () => {
+  const cfg = `git:\n  strategy: branch-flow\nverify :\n  unit: &anchor ["bash","x.sh"]\n`;
+  assert.throws(() => readVerify(cfg), /fail-closed|parse|inválid|presente/i);
+});
 // Legítimos que DEVEM passar (não confundir flag segura com código inline):
 test('comandos legítimos passam', () => {
   assert.doesNotThrow(() => readVerify(CFG(`verify:\n  unit: ["node", "--test", "tests/x.mjs"]\n`)));

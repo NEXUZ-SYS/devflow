@@ -99,6 +99,8 @@ O plugin é distribuído para outros projetos; nem tudo tem o mesmo alcance. Exp
 - [x] Teste: unit dos guards (deleção/skip/queda de asserts; remoção/inline de sinal; fail-closed em CI).
 - [x] Teste: unit do gate de V (warn-only sem verify:, BLOCK em vazio/vencido/vermelho/inválido).
 - [x] Teste: estrutural do CI (`test.yml`: matriz 4 sinais, fetch-depth 0, executor, contents:read).
+- [x] Guards num **job dedicado** no CI (`guards`), invocados hardcoded e independentes de `verify.lint` — repontar o sinal `lint` não silencia o árbitro (achado V4 da validação).
+- [x] `assertNoInlineCode` fecha `node --import/--loader/--experimental-loader` (código ESM externo via `data:`) e `python -c` colado/cluster (`-cCODE`/`-Ic`) — achados V1/V2 da validação.
 - [ ] Config: `test.yml` como **required status check** na branch protegida (fase C — exige admin).
 
 ## Evidências / Anexos

@@ -14,5 +14,9 @@ has "matriz dos 4 sinais" "[unit, integration, e2e, lint]"
 has "usa o executor verify-run (que lê o .devflow.yaml → runners)" "verify-run.mjs"
 has "passa BASE_REF aos guards" "BASE_REF"
 has "permissões read-only (não pull_request_target)" "contents: read"
+# V4: os guards devem rodar num passo DEDICADO, independente de verify.lint (que é editável no
+# .devflow.yaml — repontar lint silenciaria os guards se eles só rodassem via run-lint.sh).
+has "guard de enfraquecimento invocado direto no CI" "test-weakening-guard.mjs"
+has "guard do contrato invocado direto no CI" "verify-contract-guard-cli.mjs"
 echo "test-ci-workflow: $PASS pass, $FAIL fail"
 [ "$FAIL" -eq 0 ]

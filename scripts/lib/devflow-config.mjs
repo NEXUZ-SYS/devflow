@@ -135,12 +135,21 @@ const VERIFY_SIGNALS = new Set(["unit","integration","e2e","lint"]);
 export function assertNoInlineCode(name, argv) {
   const bin = argv[0];
   for (const tok of argv.slice(1)) {
+    // bash/sh: qualquer bundle de dash-único contendo 'c' → -c/-lc/-ic/-xc/…
     if ((bin === "bash" || bin === "sh") && /^-[a-z]*c/i.test(tok))
       throw new Error(`verify.${name}: '${tok}' executa comando inline (shell -c/-lc/-ic/-xc proibido)`);
-    if (bin === "node" && /^(-e|--eval|-p|--print|-pe)(=.*)?$/.test(tok))
-      throw new Error(`verify.${name}: '${tok}' avalia código inline (node -e/--eval/-p/--print/-pe proibido)`);
-    if ((bin === "python" || bin === "python3") && /^-c$/.test(tok))
-      throw new Error(`verify.${name}: '${tok}' avalia código inline (python -c proibido)`);
+    if (bin === "node") {
+      // -e/--eval/-p/--print/-pe (e formas =…) avaliam código inline.
+      if (/^(-e|--eval|-p|--print|-pe)(=.*)?$/.test(tok))
+        throw new Error(`verify.${name}: '${tok}' avalia código inline (node -e/--eval/-p/--print/-pe proibido)`);
+      // V1: --import/--loader/--experimental-loader aceitam data:/http: (código externo inline via ESM).
+      // Um runner de teste usa caminho de script, não loaders; um caso legítimo usa wrapper ["bash", …].
+      if (/^(--import|--loader|--experimental-loader)(=.*)?$/.test(tok))
+        throw new Error(`verify.${name}: '${tok}' pode injetar código externo (node --import/--loader proibido; use um wrapper de script)`);
+    }
+    // V2: python -c colado (-cCODE) e em cluster (-Ic/-Ec) — não só a forma separada /^-c$/.
+    if ((bin === "python" || bin === "python3") && /^-[A-Za-z]*c/.test(tok))
+      throw new Error(`verify.${name}: '${tok}' avalia código inline (python -c/-cCODE/-Ic proibido)`);
   }
 }
 
@@ -151,7 +160,9 @@ export function assertNoInlineCode(name, argv) {
 // (fail-closed) — o downgrade silencioso para warn-only é o teatro que a feature mata.
 export function readVerify(src) {
   const text = String(src);
-  const hasVerifyText = /^verify:\s*$/m.test(text) || /^verify:\s/m.test(text);
+  // V3: casar toda grafia que o parser subset honra como a chave `verify` (inclui "verify :" com
+  // espaço/tab antes do ':'), senão um parse-falho nessa grafia cairia em warn-only silencioso.
+  const hasVerifyText = /^verify\s*:(\s|$)/m.test(text);
   let data;
   try { data = parseYaml(text) || {}; }
   catch (e) {
