@@ -15,3 +15,12 @@ mempalace:
   enabled: true
   autoMine: post-merge
   budget: 1000
+
+# Pipeline de sinal verificável (ADR-013). Comandos são argv arrays; os runners
+# enumeram por git ls-files + convenção. onTaskComplete = subconjunto do loop rápido.
+verify:
+  unit:        ["bash", "tests/run-unit.sh"]
+  integration: ["bash", "tests/run-integration.sh"]
+  e2e:         ["bash", "tests/run-e2e.sh"]
+  lint:        ["bash", "tests/run-lint.sh"]
+  onTaskComplete: [unit]

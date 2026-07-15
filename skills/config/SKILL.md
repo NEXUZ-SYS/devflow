@@ -627,6 +627,22 @@ Se ainda não existir `.context/routines.json`, criar a partir do template para 
 
 O SessionStart passa a **sugerir** rodar `/devflow:devflow-routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:devflow-routines`.
 
+### 4.7 Oferecer o contrato de sinal verificável (`verify:`) — opt-in
+
+Se o projeto tem testes (`git ls-files 'test-*' '*test*' | head -1` não-vazio) e o `.devflow.yaml` ainda não tem bloco `verify:`, oferecer o scaffold do contrato (ADR-013). O contrato faz a fase V **observar** um sinal externo em vez de afirmar (ver `devflow:prevc-validation`).
+
+**Antes de qualquer execução, EXIBIR os comandos declarados** (spec §8 — o eixo de defesa é *quando*, não *o quê*; sinais nunca rodam em session-start). Regras do contrato:
+- Cada valor é **array argv**; `argv[0]` ∈ `{node, npm, pnpm, python, python3, pytest, make, bash, sh}`; nenhum token pode ser código inline (`-c`/`-e`/`--eval`/`-p`/`-lc`/…).
+- Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`. `onTaskComplete` ⊆ sinais declarados.
+
+Bloco sugerido (o usuário revisa/edita antes de gravar):
+```yaml
+verify:
+  unit:        ["node", "--test", "tests/**/*.test.mjs"]  # ajuste ao layout do projeto
+  onTaskComplete: [unit]
+```
+Gravar via `mergeSection(yaml, "verify", <bloco>)`. Ausência do bloco = warn-only na fase V (D9), sem quebrar projetos existentes.
+
 ### 5. Se `.context/.devflow.yaml` já existe
 
 **Não** trate isto como um binário "manter tudo" vs "reconfigurar tudo". O caminho padrão é o **patch incremental**: mostrar o estado de TODAS as áreas (inclusive as ausentes) e configurar **apenas** as selecionadas, sem tocar no resto.
