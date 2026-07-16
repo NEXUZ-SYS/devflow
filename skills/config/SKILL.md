@@ -627,6 +627,38 @@ Se ainda não existir `.context/routines.json`, criar a partir do template para 
 
 O SessionStart passa a **sugerir** rodar `/devflow:devflow-routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:devflow-routines`.
 
+### 4.7 Oferecer o contrato de sinal verificável (`verify:`) — opt-in
+
+Se o projeto tem testes (`git ls-files 'test-*' '*test*' | head -1` não-vazio) e o `.devflow.yaml` ainda não tem bloco `verify:`, oferecer o scaffold do contrato (ADR-013). O contrato faz a fase V **observar** um sinal externo em vez de afirmar (ver `devflow:prevc-validation`).
+
+**Antes de qualquer execução, EXIBIR os comandos declarados** (spec §8 — o eixo de defesa é *quando*, não *o quê*; sinais nunca rodam em session-start). Regras do contrato:
+- Cada valor é **array argv**; `argv[0]` ∈ `{node, npm, pnpm, python, python3, pytest, make, bash, sh}`; nenhum token pode ser código inline (`-c`/`-e`/`--eval`/`-p`/`-lc`/…).
+- Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`. `onTaskComplete` ⊆ sinais declarados.
+
+Bloco sugerido **por stack detectado** (o usuário revisa/edita antes de gravar — cada projeto materializa o contrato com os comandos DELE):
+
+```yaml
+# Node (package.json com script "test", ou node --test)
+verify:
+  unit:        ["npm", "test"]
+  onTaskComplete: [unit]
+
+# Python (pytest)
+verify:
+  unit:        ["python3", "-m", "pytest", "tests/unit"]
+  integration: ["python3", "-m", "pytest", "tests/integration"]
+  onTaskComplete: [unit]
+
+# Odoo / genérico (Makefile)
+verify:
+  unit:        ["make", "test"]
+  onTaskComplete: [unit]
+```
+
+Detecte o stack pelo manifesto (`package.json` → Node; `pyproject.toml`/`pytest.ini` → Python; `Makefile` → genérico) e ofereça o bloco correspondente. Gravar via `mergeSection(yaml, "verify", <bloco>)`. Ausência do bloco = warn-only na fase V (D9), sem quebrar projetos existentes.
+
+> **Nota de alcance (v1).** O contrato, o executor, o ledger e o gate de V são agnósticos de linguagem e rodam em qualquer projeto via o plugin. Duas peças, porém, têm alcance limitado no v1: (a) o **guard anti-enfraquecimento de testes** (`test-weakening-guard`) só reconhece testes **JS/`.mjs`** (`node:assert`) — em projetos Python/Odoo ele é inerte (o guard do *contrato* e o gate seguem valendo); (b) o **CI árbitro** (o que dá a garantia gerador ≠ verificador via required check) é **dogfoodado no repo devflow**; em projetos-cliente, ligar um CI que re-rode os sinais é responsabilidade do time — sem isso, o gate local é auto-atestação (D7a). Ver ADR-013.
+
 ### 5. Se `.context/.devflow.yaml` já existe
 
 **Não** trate isto como um binário "manter tudo" vs "reconfigurar tudo". O caminho padrão é o **patch incremental**: mostrar o estado de TODAS as áreas (inclusive as ausentes) e configurar **apenas** as selecionadas, sem tocar no resto.

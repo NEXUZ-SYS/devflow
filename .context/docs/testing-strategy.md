@@ -10,12 +10,25 @@ scaffoldVersion: "2.0.0"
 
 ## Test Framework
 
-DevFlow is a meta-framework (Markdown + Bash + JSON), not application code. It has no traditional unit test framework. Instead, quality is ensured through:
+DevFlow usa `node:test` (Node 20+, zero-dep) para ~1900 testes `.mjs` e Bash para ~60 testes
+`.sh`. A suíte é declarada como **sinal verificável** no `.context/.devflow.yaml` (bloco `verify:`),
+enumerada de forma reprodutível pelos runners `tests/run-*.sh` (`git ls-files` + convenção
+`test-*.mjs`/`*.test.mjs`/`test-*.sh`), e arbitrada pelo CI `.github/workflows/test.yml`. A fase V
+do PREVC **observa** um ledger (`.context/runtime/verify-ledger.jsonl`) em vez de afirmar — ver
+ADR-013 (refina ADR-011).
+
+**Comando canônico por sinal:** `node scripts/lib/verify-run.mjs <unit|integration|e2e|lint>`
+(o executor lê o `verify:` e roda o argv declarado, gravando o resultado no ledger com um
+`treeDigest`). O gate de V lê o ledger via `scripts/lib/verify-gate.mjs`.
+
+Além dos testes, a qualidade é reforçada por:
 
 1. **PREVC gate checks** — Hard gates between phases validate preconditions
 2. **Skill checklists** — Each skill defines a step-by-step checklist tracked via TaskCreate/TaskUpdate
 3. **User approval gates** — Explicit user approval required at key decision points
 4. **Pre-commit validation** — `scripts/pre-commit-version-check.sh` ensures version consistency
+5. **Guards anti-reward-hacking** — `test-weakening-guard.mjs` (não enfraquecer testes) e
+   `verify-contract-guard-cli.mjs` (não neutralizar o contrato `verify:`), ambos no sinal `lint`.
 
 ## Test Structure
 

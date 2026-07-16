@@ -332,6 +332,25 @@ Before the Planning gate can pass, verify the implementation plan follows TDD or
 If any task group violates test-first ordering, fix the plan before advancing.
 </HARD-GATE>
 
+### Emitir `requiredSignals` no plano
+
+Além de anotar os tipos de teste em prosa, o plano declara os sinais que a fase V
+vai **exigir observados** (contrato `verify:`, ver `devflow:prevc-validation` Step 1.5):
+
+```yaml
+requiredSignals: [unit, e2e]
+```
+
+Regras:
+- Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`.
+- A derivação é humana (você escolhe consultando a tabela de tipos de teste); a
+  verificação é mecânica (uma vez declarado `e2e`, a fase V exige `exit 0` observado).
+- Declare `e2e` quando a task toca auth, pagamentos, fluxos de usuário, CLI/hooks
+  (mesma regra do "E2E is mandatory when…" da prevc-validation).
+- Declare `lint` sempre (gate determinístico não é opcional por task — D6).
+- **Não** infira sinais dos paths tocados (heurística frágil, rejeitada em D2). A
+  fase R revisa a escolha.
+
 ## Step 6: Gate Check
 
 The Planning phase gate requires:

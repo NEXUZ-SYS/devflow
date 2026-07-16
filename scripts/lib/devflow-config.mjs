@@ -9,6 +9,7 @@
 // Qualquer erro de leitura/parse/arquivo-grande imprime o fallback seguro.
 
 import { readFileSync, statSync } from "node:fs";
+import { parseYaml } from "./frontmatter.mjs";
 
 const MAX_BYTES = 256 * 1024; // cap anti-ReDoS / arquivo absurdo → fallback
 
@@ -121,6 +122,85 @@ function readTextOrNull(path) {
   }
 }
 
+// ── Contrato verify: (pipeline de sinal verificável, ADR-013) ──────────────
+// Lido pelo parser único (ADR-011); delega o parse a frontmatter.mjs. NÃO toca
+// em readAutoFinish/readVersioning (paridade bit-exata com o fallback do hook).
+
+export const VERIFY_ALLOWLIST = new Set(["node","npm","pnpm","python","python3","pytest","make","bash","sh"]);
+const VERIFY_SIGNALS = new Set(["unit","integration","e2e","lint"]);
+
+// R-C1: rejeita execução de código inline varrendo TODOS os tokens do argv (não só argv[1]),
+// sensível ao interpretador. Fecha os vetores provados pela revisão: node -e/--eval/-p/--print/-pe
+// (e formas =...), bash/sh -c e bundles -lc/-ic/-xc, python -c. Exportada para reuso no config-guard.
+export function assertNoInlineCode(name, argv) {
+  const bin = argv[0];
+  for (const tok of argv.slice(1)) {
+    // bash/sh: qualquer bundle de dash-único contendo 'c' → -c/-lc/-ic/-xc/…
+    if ((bin === "bash" || bin === "sh") && /^-[a-z]*c/i.test(tok))
+      throw new Error(`verify.${name}: '${tok}' executa comando inline (shell -c/-lc/-ic/-xc proibido)`);
+    if (bin === "node") {
+      // -e/--eval/-p/--print/-pe (e formas =…) avaliam código inline.
+      if (/^(-e|--eval|-p|--print|-pe)(=.*)?$/.test(tok))
+        throw new Error(`verify.${name}: '${tok}' avalia código inline (node -e/--eval/-p/--print/-pe proibido)`);
+      // V1: --import/--loader/--experimental-loader aceitam data:/http: (código externo inline via ESM).
+      // Um runner de teste usa caminho de script, não loaders; um caso legítimo usa wrapper ["bash", …].
+      if (/^(--import|--loader|--experimental-loader)(=.*)?$/.test(tok))
+        throw new Error(`verify.${name}: '${tok}' pode injetar código externo (node --import/--loader proibido; use um wrapper de script)`);
+    }
+    // V2: python -c colado (-cCODE) e em cluster (-Ic/-Ec) — não só a forma separada /^-c$/.
+    if ((bin === "python" || bin === "python3") && /^-[A-Za-z]*c/.test(tok))
+      throw new Error(`verify.${name}: '${tok}' avalia código inline (python -c/-cCODE/-Ic proibido)`);
+  }
+}
+
+// Lê e valida o bloco verify:. Vocabulário fechado unit|integration|e2e|lint.
+// Comandos são argv arrays; argv[0] em allowlist; nenhum token é código inline.
+// Sem bloco → { signals:{}, onTaskComplete:[] } (D9: ausência não lança).
+// R-C6: distingue "sem verify:" (ausência legítima) de "verify: presente mas parse falhou"
+// (fail-closed) — o downgrade silencioso para warn-only é o teatro que a feature mata.
+export function readVerify(src) {
+  const text = String(src);
+  // V3: casar toda grafia que o parser subset honra como a chave `verify` (inclui "verify :" com
+  // espaço/tab antes do ':'), senão um parse-falho nessa grafia cairia em warn-only silencioso.
+  const hasVerifyText = /^verify\s*:(\s|$)/m.test(text);
+  let data;
+  try { data = parseYaml(text) || {}; }
+  catch (e) {
+    if (hasVerifyText) throw new Error(`verify: presente mas o .devflow.yaml não parseia (${e.message}) — fail-closed`);
+    data = {};
+  }
+  const v = data.verify;
+  if (v == null) {
+    if (hasVerifyText) throw new Error("verify: presente no texto mas não parseou como mapa — fail-closed");
+    return { signals: {}, onTaskComplete: [] };
+  }
+  if (typeof v !== "object" || Array.isArray(v)) throw new Error("verify: deve ser um mapa");
+
+  const signals = {};
+  for (const [key, val] of Object.entries(v)) {
+    if (key === "onTaskComplete") continue;
+    if (!VERIFY_SIGNALS.has(key)) throw new Error(`sinal desconhecido '${key}' (vocabulário: unit, integration, e2e, lint)`);
+    if (!Array.isArray(val)) throw new Error(`verify.${key}: deve ser um array argv (string não é permitida)`);
+    if (val.length === 0) throw new Error(`verify.${key}: comando vazio`);
+    if (val.some(x => typeof x !== "string")) throw new Error(`verify.${key}: todos os itens do argv devem ser strings`);
+    if (!VERIFY_ALLOWLIST.has(val[0])) throw new Error(`verify.${key}: argv[0] '${val[0]}' fora da allowlist`);
+    assertNoInlineCode(key, val);
+    signals[key] = val;
+  }
+
+  let onTaskComplete = v.onTaskComplete ?? [];
+  if (!Array.isArray(onTaskComplete)) throw new Error("verify.onTaskComplete: deve ser um array");
+  for (const s of onTaskComplete) {
+    if (!(s in signals)) throw new Error(`verify.onTaskComplete: '${s}' não é um sinal declarado`);
+  }
+  return { signals, onTaskComplete };
+}
+
+export function readVerifyFromPath(path) {
+  const text = readTextOrNull(path);
+  return text == null ? { signals: {}, onTaskComplete: [] } : readVerify(text);
+}
+
 function main(argv) {
   const cmd = argv[0];
   if (cmd === "read-autofinish") {
@@ -135,8 +215,18 @@ function main(argv) {
     const text = readTextOrNull(argv[2]);
     if (!name) { console.error("uso: devflow-config read-field <campo> <path>"); process.exit(2); }
     process.stdout.write((text == null ? "" : (readField(text, name) ?? "")) + "\n");
+  } else if (cmd === "read-verify") {
+    // Fail-closed: se o verify: estiver presente mas inválido/inseguro, sai !=0.
+    const text = readTextOrNull(argv[1]);
+    try {
+      const r = text == null ? { signals: {}, onTaskComplete: [] } : readVerify(text);
+      process.stdout.write(JSON.stringify(r) + "\n");
+    } catch (e) {
+      console.error(String(e.message || e));
+      process.exit(1);
+    }
   } else {
-    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>> <path>");
+    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>|read-verify> <path>");
     process.exit(2);
   }
 }

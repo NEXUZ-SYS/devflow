@@ -299,3 +299,19 @@ Os ~62 testes `.sh` já retornam `exit 1` corretamente; os runners são wrappers
 - Fowler — *On the Diverse and Fantastical Shapes of Testing* (2021): https://martinfowler.com/articles/2021-test-shapes.html
 - *Software Engineering at Google*, cap. 11 (Test Sizes): https://abseil.io/resources/swe-book/html/ch11.html
 - Design irmão (fora de escopo aqui): `docs/superpowers/specs/2026-06-19-ao-bridge-parallel-execution-design.md`
+
+---
+
+## Errata (2026-07-14, durante planejamento + implementação)
+
+Premissas de fato corrigidas na medição e na revisão (a decisão de design permanece; só os números/mecanismos abaixo mudaram):
+
+- **§12.1 / §5:** `onTaskComplete: [unit]` custa **~24 s**, não 1,6 s — `unit` cobre toda a suíte `.mjs` (fora integration/e2e), não só `tests/lib` (que é ~8% da suíte). Cobrir 8% reconstruiria o modo de falha do `tests-passing`.
+- **§7:** o hook `post-tool-use` está registrado com `async: true`; o Claude Code descarta stdout de hooks async, então o `additionalContext` (o loop de RED) **não chega ao agente**. O loop rápido no hook ficou **fora do escopo v1** (follow-up: `asyncRewake`+`exit 2`+stderr). O executor é rodado explicitamente (CLI) na fase E/V; o gate honesto (executor + ledger + CI + gate de V) **não depende do hook**.
+- **§4/D1:** o hook e as skills rodam do cache do plugin (pin project-scoped 1.23.1), não da árvore. Dogfooding do hook exige `--plugin-dir` ou release; o executor e o CI dogfoodam do checkout (validado: `verify-run.mjs unit/lint` verde no repo, ledger gravado).
+- **§9 (revisão de segurança):** o gate local é auxiliar e forjável (ledger gitignored, `treeDigest` sem segredo). A independência gerador ≠ verificador é do **CI required check**, não do gate local — por isso o `test.yml` como required check é o que dá dente ao design.
+- **§8 (revisão de segurança):** a allowlist não fechava código inline além de `-c`/`-e` curtos (`node --eval`/`-p`/`-pe`, `bash -lc`, `python -c` passavam). Fechado com `assertNoInlineCode` varrendo todo o argv, replicado no guard do contrato.
+
+- **Alcance em projetos-cliente:** o plugin é distribuído para outros projetos. No v1, contrato + executor + ledger + gate de V + guard **do contrato** são agnósticos de linguagem e rodam em qualquer cliente via `${CLAUDE_PLUGIN_ROOT}`. Duas peças têm alcance limitado: o guard **anti-enfraquecimento de testes** só cobre JS/`.mjs` (inerte em Python/Odoo), e o **CI árbitro** é dogfoodado no repo devflow (em clientes, o CI é responsabilidade do time — sem ele o gate é auto-atestação D7a). Generalizar o guard e scaffoldar CI ao cliente são follow-ups. Coerente com "dar **ao repo** um CI" e "validar **no repo devflow primeiro**" (§2).
+
+Decisão arquitetural formalizada na **ADR-013** (`.context/engineering/adrs/013-verifiable-signal-pipeline-v1.0.0.md`), que refina a ADR-011.

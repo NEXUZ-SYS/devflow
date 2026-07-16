@@ -7,6 +7,7 @@
 // Função pura + zero-dep. O gate de "branch protegida" é responsabilidade do
 // chamador (CLI/hook); aqui só se compara atual vs proposto.
 import { parseFrontmatter } from "./frontmatter.mjs";
+import { readVerify } from "./devflow-config.mjs";
 
 export function parseGitSection(yamlText) {
   try {
@@ -39,6 +40,18 @@ export function detectWeakenings(currentText, proposedText) {
 
   if (cur.strategy && cur.strategy !== "trunk-based" && prop.strategy === "trunk-based") {
     weakenings.push("git.strategy trocada para 'trunk-based' (sem proteção de branch)");
+  }
+
+  // R-C2: enfraquecimento do contrato verify:. A troca por código inline é barrada
+  // porque readVerify(proposedText) LANÇA (TG1/R-C1) em -c/-e/--eval/-p/-lc/... em
+  // qualquer posição do argv. Mudança de comando que permanece válida NÃO vira weakening
+  // (bloquearia edições legítimas) — é o resíduo humano, item de checklist da fase R.
+  let curV = { signals: {} }, propV = { signals: {} };
+  try { curV = readVerify(currentText); } catch { /* atual inválido: nada a comparar */ }
+  try { propV = readVerify(proposedText); }
+  catch (e) { weakenings.push(`verify: proposto é inválido/inseguro (${e.message})`); }
+  for (const sig of Object.keys(curV.signals)) {
+    if (!(sig in propV.signals)) weakenings.push(`verify.${sig} removido (o sinal deixaria de existir)`);
   }
 
   return weakenings;

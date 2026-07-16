@@ -26,6 +26,10 @@
 # Assert: COM launcher → modelo obedece (canário na resposta);
 #         SEM launcher (omp puro, sem contexto) → não obedece (canário ausente).
 set -euo pipefail
+# Exige uma chamada de MODELO VIVO (obediência de contexto), não roda em CI nem sem opt-in.
+# Padrão RUN_LIVE já usado no repo. O gate command -v omp abaixo não basta: omp pode estar
+# instalado localmente, mas o teste ainda depende de resposta de modelo real.
+if [ "${RUN_LIVE:-0}" != "1" ]; then echo "SKIP: e2e-omp-authority requer modelo vivo (defina RUN_LIVE=1 para rodar)"; exit 0; fi
 if ! command -v omp >/dev/null; then echo "SKIP: omp ausente"; exit 0; fi
 if ! command -v node >/dev/null; then echo "SKIP: node ausente"; exit 0; fi
 
