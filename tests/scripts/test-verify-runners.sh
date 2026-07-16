@@ -23,23 +23,27 @@ check "run-unit propaga vermelho" "$?" "1"
 
 # SHOULD-FIX (code review V): a spec §11 promete que CADA runner propaga exit≠0.
 # run-e2e e run-lint usam acumulação rc=1 (mais fácil de errar) — exercitá-los.
+# IMPORTANTE: sandboxes MÍNIMOS (só o runner + o membro que falha), NUNCA `git archive HEAD` —
+# senão o run-e2e do sandbox re-roda este próprio test-verify-runners.sh → recursão infinita.
 
-# run-e2e propaga quando um .sh membro falha (planta um test-*.sh vermelho)
+# run-e2e propaga quando um .sh membro falha: só run-e2e.sh + um test-*.sh vermelho plantado.
 SB2=$(mktemp -d); trap 'rm -rf "$SB" "$SB2" "$SB3"' EXIT
-git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$SB2" && tar -x -C "$SB2")
-cp "${REPO_ROOT}"/tests/run-*.sh "$SB2/tests/"
-printf '#!/usr/bin/env bash\nexit 1\n' > "$SB2/tests/test-zzz-planted.sh"
-( cd "$SB2" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm i )
+mkdir -p "$SB2/tests"
+cp "${REPO_ROOT}/tests/run-e2e.sh" "$SB2/tests/"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$SB2/tests/test-zzz-fail.sh"
+( cd "$SB2" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm i ) >/dev/null 2>&1
 ( cd "$SB2" && bash tests/run-e2e.sh >/dev/null 2>&1 )
 check "run-e2e propaga vermelho" "$?" "1"
 
-# run-lint propaga quando o verify: é inválido/inseguro (perna 3 do run-lint)
+# run-lint propaga quando o verify: é inválido/inseguro (perna 3 do run-lint).
+# Precisa de scripts/lib (os guards + o parser); sem origin/main os guards dão skip local
+# e só o read-verify do .devflow.yaml inválido falha → rc=1.
 SB3=$(mktemp -d)
-git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$SB3" && tar -x -C "$SB3")
-cp "${REPO_ROOT}"/tests/run-*.sh "$SB3/tests/"
-mkdir -p "$SB3/.context"
+mkdir -p "$SB3/tests" "$SB3/.context"
+cp "${REPO_ROOT}/tests/run-lint.sh" "$SB3/tests/"
+cp -r "${REPO_ROOT}/scripts" "$SB3/"
 printf 'git:\n  strategy: branch-flow\nverify:\n  unit: ["node","--eval","1"]\n' > "$SB3/.context/.devflow.yaml"
-( cd "$SB3" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm i )
+( cd "$SB3" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm i ) >/dev/null 2>&1
 ( cd "$SB3" && bash tests/run-lint.sh >/dev/null 2>&1 )
 check "run-lint propaga vermelho (verify: inseguro)" "$?" "1"
 
