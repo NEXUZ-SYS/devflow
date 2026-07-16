@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Pipeline de sinal verificável: a fase V **observa** em vez de afirmar (ADR-013)
+
+A fase V do PREVC afirmava "os testes passam" — asserção do agente, não observação de sinal externo (*reward hacking*). Os cinco estágios do PREVC existiam só como instrução em Markdown: nenhum devolvia exit code (D7a da ADR-012). Agora o estágio Test é uma **observação**: um contrato declarado, um executor que roda e registra, um gate que só lê, e um CI que re-roda como árbitro independente.
+
+- **Contrato `verify:` no `.context/.devflow.yaml` (ADR-013, refina ADR-011)** — `unit|integration|e2e|lint` declarados como **array argv**, lidos pelo parser único (`readVerify` em `devflow-config.mjs`, que delega o parse a `frontmatter.mjs`). `argv[0]` em allowlist; **nenhum token pode ser código inline** — `assertNoInlineCode` varre todo o argv e barra `-c/-e/--eval/-p/--print/-pe`, os bundles de shell (`-lc/-ic/-xc`), o `python -c` colado (`-cCODE`) e em cluster (`-Ic`), e o `node --import/--loader/--experimental-loader` (que executa código externo via `data:`). Ausência do bloco = **warn-only** (D9) — projetos existentes não quebram.
+- **`scripts/lib/verify-run.mjs` (novo)** — executor: valida o contrato, roda via `execFile` (sem `sh -c`) e faz append num **ledger** (`verify-ledger.mjs`, JSONL em `.context/runtime/`, gitignored) com um `treeDigest` (HEAD + status porcelain **excluindo** `.context/workflow`/`runtime`, que mutam ao avançar de fase — senão o gate cai em livelock de "prova vencida"). Nunca decide o gate.
+- **`scripts/lib/verify-gate.mjs` (novo) + `prevc-validation` Step 1.5** — o gate **só lê** o ledger: sem entrada → BLOCK "afirmaria sem observar"; `treeDigest` vencido → BLOCK; `exit≠0` → BLOCK; `verify:` presente mas inválido → **fail-closed** (nunca warn-only silencioso). `prevc-planning` Step 5.5 passa a emitir `requiredSignals` no plano.
+- **Runners `tests/run-{unit,integration,e2e,lint}.sh` (novos)** — enumeram por `git ls-files` + convenção (`test-*.mjs`/`*.test.mjs`/`test-*.sh`), **nunca glob de shell**: o glob coletava artefatos não-rastreados e helpers, dando 42 falhas locais vs 5 no CI. O comando de suíte deixa de ser folclore.
+- **`.github/workflows/test.yml` (novo)** — árbitro independente: matriz sobre os 4 sinais pelo **mesmo** executor lendo o **mesmo** `.devflow.yaml`, mais um job **`guards` dedicado** que invoca os guards *hardcoded* — repontar `verify.lint` no `.devflow.yaml` não silencia o árbitro. `fetch-depth: 0` + `BASE_REF` para o merge-base resolver.
+- **Guards anti-reward-hacking** — `test-weakening-guard.mjs` (teste removido / `.skip` / queda de asserts vs merge-base; teste novo é livre; override por trailer `Weakens-Tests:`) e `verify-contract-guard-cli.mjs` (remoção ou neutralização de um sinal vs merge-base). Ambos **fail-closed em CI** quando o merge-base não resolve — um controle que se desliga em silêncio no árbitro é pior que inútil.
+- **Alcance em projetos-cliente (v1):** contrato, executor, ledger, gate e guard do contrato são agnósticos de linguagem (via `${CLAUDE_PLUGIN_ROOT}`). O guard de enfraquecimento cobre **JS/`.mjs`** (inerte em Python/Odoo) e o CI árbitro é dogfoodado no repo devflow — em clientes, ligar um CI que re-rode os sinais é do time; sem ele o gate local é auto-atestação (D7a). Documentado na ADR-013 e na skill, sem overpromise.
+- **Dogfooding** — o repo devflow declara o próprio `verify:` e a maquinaria roda do checkout; `.context/docs/testing-strategy.md` corrigido (afirmava não haver framework de testes; são ~1900 testes `node:test` + ~60 `.sh`).
+
+### Fixed — Suíte de testes zerada antes do CI entrar
+
+Um CI obrigatório que nasce vermelho é ignorado — foi o destino do sensor `tests-passing`. 8 falhas pré-existentes foram corrigidas antes do gate: `test-skill-adr-refs` (verbos de CLI kebab-case pós-SI-1), contagem de standards default (24→26, impeccable), Test 3 do `test-post-tool-use` (acoplado ao `REPO_ROOT` → falhava em checkout limpo de CI; agora usa sandbox de estado conhecido) e `e2e-omp-authority` (env-gate `RUN_LIVE`, exige modelo vivo). `test-pre-commit-version-check` fica em quarentena **declarada** (`tests/.ci-skip.txt`, com log no runner) — defeito pré-existente do `version-guard`, fora deste escopo.
+
 ## [1.28.0] — 2026-07-13
 
 ### Added — `devflow:config` avisa `versioning: pipeline` sem CI e oferece scaffold de release (ADR-012)
