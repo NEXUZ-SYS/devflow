@@ -125,6 +125,7 @@ A partir da v1.0, o `.context/` ganha 4 dimensões novas que transformam o DevFl
 | `.context/stacks/` | Docs versionadas por library indexadas no store global do `docs-mcp-server` (`mcpIndexed` no manifest; refs `.md` são legado) | ADR-003 |
 | `.context/permissions.yaml` | Gramática vendor-neutral deny → allow → mode → callback | ADR-004 |
 | `.context/observability.yaml` | OTel GenAI semconv opt-in; `gen_ai.*` + `devflow.*` namespace | ADR-005 |
+| `.context/.devflow.yaml` → `verify:` | Contrato de sinal verificável: a fase V **observa** um ledger produzido por código (executor argv + runners + CI árbitro) em vez de afirmar | ADR-013 |
 | `.context/.lock` | Hashes de conteúdo para reproducibility token | — |
 
 **Comandos novos:**

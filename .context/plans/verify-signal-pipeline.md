@@ -42,6 +42,7 @@ phases:
     required_artifacts:
       - handoff-summary
     summary: "Suíte verde via os runners novos; gate de V lê o ledger; auditoria de segurança dos guards; ADR-013 audit; compliance da spec."
+lastUpdated: "2026-07-16T00:42:44.784Z"
 ---
 
 # Pipeline de Sinal Verificável — Plano (dotcontext tracking)
@@ -92,3 +93,23 @@ Suíte verde via os runners; gate de V lê o ledger (dogfooding); auditoria de s
 - Spec: `docs/superpowers/specs/2026-07-09-verify-signal-pipeline-design.md`
 - Plano canônico: `docs/superpowers/plans/2026-07-14-verify-signal-pipeline.md`
 - Branch: `feature/verify-signal-pipeline`
+
+## Execution History
+
+> Last updated: 2026-07-16T00:42:44.784Z | Progress: 0%
+
+### phase-2 [IN PROGRESS]
+- Started: 2026-07-14T23:45:09.072Z
+
+- [ ] Step 0: Step 0 *(in progress)*
+  - Notes: TG0 concluído: suíte zerada. Consertos: test-skill-adr-refs (kebab CLI verbs), test-e2e-standards-default-reversa (24→26 defaults, impeccable), Test 3 post-tool-use (sandbox de estado conhecido), omp-authority (gate RUN_LIVE), pre-commit-version-check (quarentena declarada em tests/.ci-skip.txt — defeito pré-existente do version-guard, fora de escopo). Baseline: .mjs 1986 testes 0 falhas; .sh 61/62 pass, 1 skip declarado. Commits 4. Stage seletivo respeitado (drift do .gitignore/.devflow.yaml preservado uncommitted). Próximo: TG1 contrato readVerify.
+- [ ] Step 1: Step 1 *(in progress)*
+  - Notes: Maquinaria core pronta: TG1 (readVerify+assertNoInlineCode, R-C1 validado 12 vetores), TG2 (ledger), TG3 (executor+treeDigest anti-livelock). Todos TDD RED→GREEN. Decisão emergente registrada p/ sweep: readVerify delega a frontmatter.mjs (relatedAdr devflow-config-single-parser). Teste de pureza do parser atualizado (allowlist node:fs+frontmatter). Commits: TG1-TG3. Próximo: TG4 runners, TG5/TG6 guards, TG7 CI.
+- [ ] Step 2: Step 2 *(in progress)*
+  - Notes: Maquinaria + guards completos (TG0-TG6), todos TDD verde. run-lint roda inteiro (guard de testes + guard do contrato + validade do verify:) exit 0. Achados de execução: (a) helper repoWith precisava criar branch de trabalho + --allow-empty (topologia de merge-base); (b) SIGNAL_RE do guard conta assert. não aliases (bypass por alias é risco §12.3 aceito); (c) git archive não traz não-commitados (teste do runner copia run-unit do working tree). Commits TG5/TG6. Próximo: TG7 CI test.yml.
+
+### phase-3 [IN PROGRESS]
+- Started: 2026-07-16T00:42:44.784Z
+
+- [ ] Step 0: Step 0 *(in progress)*
+  - Notes: Fase V: unit 1922/0, integration 106/0, lint verde, gate de V dogfoodado verde, ADR-013 audit 12/12, TDD ordering ok. Code review PROCEED. Security REVISE com 4 achados (PoC): V1/V2 código inline node --import data:/python -cCODE; V3 hasVerifyText grafia; V4 guards silenciáveis via verify.lint. TODOS corrigidos (7 testes de seg novos, PoCs re-verificados bloqueados, job guards dedicado no CI). SHOULD-FIX red-propagation corrigido. Bug de recursão que EU introduzi no red-propagation (git archive HEAD → run-e2e recursivo, 4564 sandboxes) corrigido com sandboxes mínimos. 19 commits. e2e final rodando.
