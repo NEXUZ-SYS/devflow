@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.29.0] — 2026-07-16
+
 ### Added — Pipeline de sinal verificável: a fase V **observa** em vez de afirmar (ADR-013)
 
 A fase V do PREVC afirmava "os testes passam" — asserção do agente, não observação de sinal externo (*reward hacking*). Os cinco estágios do PREVC existiam só como instrução em Markdown: nenhum devolvia exit code (D7a da ADR-012). Agora o estágio Test é uma **observação**: um contrato declarado, um executor que roda e registra, um gate que só lê, e um CI que re-roda como árbitro independente.
