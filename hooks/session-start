@@ -116,6 +116,17 @@ if [ -f "$stories_file" ]; then
   fi
 fi
 
+# --- Retomada do workflow PREVC (ADR-014) ---
+# O bloco autônomo acima só cobre stories.yaml e PULA supervised (o modo padrão).
+# Aqui cobre QUALQUER workflow PREVC lendo o prevc.json (fonte viva do dotcontext).
+# Fail-safe: erro/ausência/timeout → string vazia (no-op). Nunca quebra o hook.
+# O escape vem depois (junto do autonomous_escaped), pois escape_for_json só é
+# definida adiante — chamá-la aqui abortaria o hook (exit 127).
+resume_context=""
+if [ -f "${project_root}/.context/runtime/workflows/prevc.json" ]; then
+  resume_context=$(timeout 1 node "${PLUGIN_ROOT}/scripts/lib/workflow-resume.mjs" "${project_root}" 2>/dev/null || printf '')
+fi
+
 # --- Read using-devflow skill ---
 
 using_devflow_content=$(cat "${PLUGIN_ROOT}/skills/using-devflow/SKILL.md" 2>&1 || echo "Error reading using-devflow skill")
@@ -498,6 +509,9 @@ mode_escaped=$(escape_for_json "$mode_context")
 
 autonomous_escaped=$(escape_for_json "$autonomous_context")
 
+# Retomada do PREVC (ADR-014): escapada AQUI, depois da definição de escape_for_json.
+resume_escaped=$(escape_for_json "$resume_context")
+
 # ── Instinct recall (gated por N2, bounded, nunca bloqueia) ────────────
 # N2 (ADR-005): opt-in é o PISO no YAML (instincts.enabled: true); env só RESTRINGE.
 # Injeta o digest DENTRO do session_context (contrato JSON), não como texto solto.
@@ -510,7 +524,7 @@ if [ "${DEVFLOW_INSTINCTS_ENABLED:-}" != "0" ] && [ "${DEVFLOW_INSTINCT_PROFILE:
   [ -n "$INSTINCT_DIGEST" ] && instinct_context="$(escape_for_json "$INSTINCT_DIGEST")\n"
 fi
 
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n${instinct_context}</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${resume_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n${instinct_context}</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 
