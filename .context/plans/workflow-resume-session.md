@@ -9,7 +9,7 @@ status: filled
 progress: 0
 generated: "2026-07-16"
 scaffoldVersion: "2.0.0"
-summary: "O restart de sessão apaga o contexto do PREVC. Lib pura workflow-resume.mjs + session-start injeta estado/última fase/alerta de pendurado + PONTEIRO para handoff fresco (nunca a prosa — o conteúdo é entregável por clone). Inclui fix do escape_for_json (C0 apagava todo o DEVFLOW_CONTEXT). ADR-014."
+summary: "O restart de sessão apaga o contexto do PREVC. Lib pura workflow-resume.mjs (containment por realpath) + session-start injeta estado/última fase + PONTEIRO não-confiável para o handoff (nunca a prosa, nunca frescor — o conteúdo é entregável por clone e o mtime é forjável). Inclui fix do escape_for_json (C0 apagava todo o DEVFLOW_CONTEXT). Alerta de pendurado CORTADO (premissa falsa: commitPhase C não fecha o workflow). ADR-014."
 sources:
   spec: docs/superpowers/specs/2026-07-16-workflow-resume-session-design.md
   plan: docs/superpowers/plans/2026-07-16-workflow-resume-session.md
@@ -18,12 +18,12 @@ phases:
     name: "Planning"
     prevc: "P"
     status: in_progress
-    summary: "Brainstorming socrático. Spec v1 (43ce798) BLOQUEADA na fase R: 3 erros de fato + modelo de ameaça invertido. Spec v2 corrige (D1-D9), reduz escopo (corta o pre-compact) e adota o ponteiro. ADR-014 decidida (create). Plano test-first reescrito."
+    summary: "Brainstorming socrático. Spec v1 (43ce798) e v2 BLOQUEADAS na fase R. Spec v3: corta o alerta de pendurado (commitPhase C NÃO fecha o workflow — verificado no fonte), containment por realpath, allowlist+cap (resíduo medido 800 chars), ponteiro não-confiável, RED do TG4 via napkin. ADR-014 (create). Plano test-first reescrito 3×."
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
     status: in_progress
-    summary: "1ª rodada: architect REVISE (2 BLOCKs) + security BLOCK (3 achados com PoC). Correções aplicadas na spec v2 + plano v2. Aguardando re-review."
+    summary: "1ª rodada: architect REVISE + security BLOCK. 2ª rodada: architect REVISE (3 BLOCKs, incl. commitPhase C não fecha) + security REVISE (§7 afirmava sem medir; ponteiro é isca). Correções aplicadas na spec v3 + plano v3. Aguardando 3ª rodada."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
