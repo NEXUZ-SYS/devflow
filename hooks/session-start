@@ -124,6 +124,11 @@ using_devflow_content=$(cat "${PLUGIN_ROOT}/skills/using-devflow/SKILL.md" 2>&1 
 
 escape_for_json() {
     local s="$1"
+    # Bytes de controle C0 quebram o JSON → o Claude Code descarta TODO o
+    # <DEVFLOW_CONTEXT> em silêncio, levando o <GROUNDING_MODE> junto (fail-open).
+    # Remover ANTES de escapar. INLINE: um $( ) aqui comeria o newline final.
+    # (NUL não chega: a command substitution do bash já o descarta, com aviso.)
+    s="${s//[$'\001'-$'\010'$'\013'$'\014'$'\016'-$'\037'$'\177']/}"
     s="${s//\\/\\\\}"
     s="${s//\"/\\\"}"
     s="${s//$'\n'/\\n}"
