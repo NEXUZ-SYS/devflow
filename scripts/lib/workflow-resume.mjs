@@ -45,17 +45,21 @@ export function readWorkflowState(root) {
       outputs: outs.map(o => (typeof o === "string" ? o : o?.path ?? "")).filter(Boolean),
     };
   }
-  return { name: p.name, scale: p.scale, phase: p.current_phase, plan: p.plan ?? null, started: p.started ?? null, phases };
+  return { name: p.name, scale: p.scale, phase: p.current_phase ?? null, plan: p.plan ?? null, started: p.started ?? null, phases };
 }
 
 const STATUS_OK = new Set(["completed", "in_progress", "pending", "skipped"]);
 const cleanStatus = (s) => (STATUS_OK.has(s) ? s : "unknown");
 const cleanPhase = (s) => (PHASE_ORDER.includes(s) ? s : "?");
 
+// String() lança em objeto com toString envenenado ({toString:"x"}, JSON válido e
+// clone-deliverable). O contrato da lib é NUNCA lançar → coagir defensivamente.
+const toStr = (s) => { try { return String(s); } catch { return ""; } };
+
 // CONTENÇÃO por-campo, não sanitização (D8). Tira C0 (quebraria o JSON do hook e faria
 // o Claude Code descartar TODO o contexto), fecha-moldura (<>), colapsa espaço, capa.
 // NÃO neutraliza persuasão — é por isso que a moldura <UNTRUSTED_WORKFLOW_STATE> existe.
-const clean = (s) => String(s)
+const clean = (s) => toStr(s)
   .replace(/[\x00-\x1f\x7f]+/g, " ")
   .replace(/[<>]/g, "")
   .replace(/\s+/g, " ")
@@ -90,7 +94,7 @@ export function renderResume(state, handoff) {
   if (prog) L.push(`- Progresso: ${prog}`);
 
   const lastP = lastCompletedPhase(state);
-  const outs = lastP ? state.phases[lastP].outputs.slice(0, 3) : [];
+  const outs = lastP ? (state.phases[lastP].outputs ?? []).slice(0, 3) : [];
   if (outs.length) {
     L.push("");
     L.push(`Última fase concluída (${lastP}):`);

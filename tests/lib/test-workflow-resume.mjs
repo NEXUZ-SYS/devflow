@@ -111,3 +111,21 @@ test('renderResume: payload hostil MATERIALIZADO NO DISCO não vaza (D3 — o co
   assert.doesNotMatch(out, /id_rsa/i);
 });
 test('renderResume(null) → vazio (no-op)', () => assert.equal(renderResume(null, { exists: false }), ''));
+
+// ---- Fase V: hardening do contrato "NUNCA lança" (achados LOW-1 / WARN-1) ----
+test('readWorkflowState NÃO lança com toString envenenado (clone-deliverable)', () => {
+  const hostil = { version: 2, status: { project: { name: { toString: 'x' }, current_phase: 'E', plan: 'p' }, phases: { P: { status: 'completed', outputs: ['o'] } } } };
+  assert.doesNotThrow(() => readWorkflowState(repo(hostil)));
+});
+test('renderResume NÃO lança com name objeto-envenenado (clean coage)', () => {
+  const s = { name: { toString: 'x' }, phase: 'E', plan: 'p', phases: { P: { status: 'completed', outputs: [] } } };
+  assert.doesNotThrow(() => renderResume(s, { exists: false }));
+});
+test('renderResume NÃO lança com fase completed sem outputs (WARN-1)', () => {
+  const s = { name: 'd', phase: 'E', plan: 'p', phases: { P: { status: 'completed' } } };  // sem outputs
+  assert.doesNotThrow(() => renderResume(s, { exists: false }));
+});
+test('current_phase ausente → phase null (shape consistente com plan/started)', () => {
+  const s = readWorkflowState(repo({ version: 2, status: { project: { name: 'd' }, phases: {} } }));
+  assert.equal(s.phase, null);
+});
