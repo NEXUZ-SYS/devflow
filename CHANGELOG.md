@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Retomada de workflow no `SessionStart` (o restart deixa de apagar o contexto do PREVC) — ADR-014
+
+Reiniciar a sessão apagava o contexto do workflow: o agente acordava cego e reconstruía o estado à mão. O `session-start` tinha **zero** ocorrências de "handoff", só detectava workflow **autônomo** (`stories.yaml`) e **pulava supervised explicitamente** — o modo padrão era invisível. Agora o hook lê o `prevc.json` (fonte viva escrita pelo dotcontext) e injeta o estado.
+
+- **`scripts/lib/workflow-resume.mjs` (novo)** — lib pura, zero-dep, no-op sem `prevc.json`, **nunca lança nem sai não-zero** (o hook roda em toda sessão; um crash aqui quebraria o DevFlow inteiro). `readWorkflowState` + `handoffStatus` + `renderResume` (pura, IO injetado). Roda em **qualquer** projeto-cliente via `${CLAUDE_PLUGIN_ROOT}`, sem hardcode.
+- **`hooks/session-start` estendido** — injeta `<UNTRUSTED_WORKFLOW_STATE>` com workflow, fase, plano e os outputs da última fase concluída (~centenas de tokens, 1×/sessão), cobrindo o PREVC **supervised** antes invisível. `timeout 1` no spawn; erro/ausência → no-op.
+
+### Fixed — `escape_for_json` descartava só `\ " \n \r \t`; um byte de controle apagava todo o `<DEVFLOW_CONTEXT>`
+
+Bug pré-existente na main: um único byte C0 (ex.: cor ANSI colada num napkin) invalidava o JSON do hook e fazia o Claude Code descartar **em silêncio todo** o `<DEVFLOW_CONTEXT>` — inclusive o `<GROUNDING_MODE>` (fail-**open**). Um kill-switch de 1 byte para os guardrails. O `escape_for_json` passa a descartar C0 antes de escapar (inline, para preservar o newline final).
+
+### Security — a retomada nunca carrega conteúdo entregável por `git clone`
+
+O `.gitignore` **não é fronteira de confiança**: um repo hostil commita `prevc.json` + `handoff.md`, e o clone os materializa. Por isso: **(a)** o handoff é **sinalizado por um ponteiro rotulado não-confiável**, nunca carregado — o `Read` fica como decisão explícita do agente (a leitura da prosa hostil deixa de ser injeção automática); o ponteiro **não afirma frescor**, porque o `mtime` de checkout é controlável e faria um guard de frescor virar o **habilitador** de um drive-by, não a defesa. **(b)** Containment por `realpath` recusa symlink de arquivo **e de diretório** (evita ler `/etc/passwd`/`~/.ssh` por fora do avaliador de permissões). **(c)** O estado é emoldurado como `<UNTRUSTED_WORKFLOW_STATE>` com allowlist de campos de vocabulário fechado e cap por-linha — resíduo de `outputs` medido em ~800 chars contidos (contenção ≠ sanitização; a moldura reduz a autoridade, não a presença). ADR-014.
+
 ## [1.29.0] — 2026-07-16
 
 ### Added — Pipeline de sinal verificável: a fase V **observa** em vez de afirmar (ADR-013)
