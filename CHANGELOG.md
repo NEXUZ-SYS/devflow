@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `prevc-confirmation` sinaliza o release pendente sob `versioning: pipeline`
+
+Sob `versioning: pipeline`, o merge da feature **não** dispara o release (o `release.yml` é `workflow_dispatch`/manual), e a skill declarava "Workflow Complete" deixando o release **órfão e silencioso** — o `## [Unreleased]` se acumulava até alguém lembrar. `autoFinish: true` era estruturalmente inalcançável para o release.
+
+- **Step 8.1 (novo) na `prevc-confirmation`** — quando `versioning: pipeline` **e** `[Unreleased]` não-vazio, emite um bloco **RELEASE PENDENTE** antes do "Workflow Complete": o comando exato (`gh workflow run release.yml -f bump=<sugestão>`), o fluxo em 2 passos (release PR → `tag-release.yml` no merge) e a fricção `action_required` dos checks do PR do bot. **Sinaliza, nunca auto-dispara** — release é outward-facing e o tipo de bump é julgamento semver. Condicional negativo em `local`/`none`.
+- **`scripts/lib/finalize/suggest-bump.mjs` (novo)** — helper puro que deriva a sugestão de bump dos conventional commits do range mergeado (`feat`→minor, `!`/`BREAKING CHANGE`→major, resto→patch; fallback `patch`). Alimenta a sugestão do signpost; o operador confirma.
+
 ### Added — Retomada de workflow no `SessionStart` (o restart deixa de apagar o contexto do PREVC) — ADR-014
 
 Reiniciar a sessão apagava o contexto do workflow: o agente acordava cego e reconstruía o estado à mão. O `session-start` tinha **zero** ocorrências de "handoff", só detectava workflow **autônomo** (`stories.yaml`) e **pulava supervised explicitamente** — o modo padrão era invisível. Agora o hook lê o `prevc.json` (fonte viva escrita pelo dotcontext) e injeta o estado.
