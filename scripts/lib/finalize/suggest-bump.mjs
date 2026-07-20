@@ -2,6 +2,8 @@
 // commits do range mergeado. É SUGESTÃO para o signpost de release (o humano confirma
 // ao rodar `gh workflow run release.yml -f bump=<X>`); nunca dispara nada.
 // Puro, zero-dep, nunca lança. Precedência: major > minor > patch.
+// git é lido SÓ via execFileSync (argv), como os demais helpers de finalize/.
+import { execFileSync } from "node:child_process";
 
 const BREAKING_BANG = /^[a-z]+(\([^)]*\))?!:/i;      // feat!:  fix(scope)!:
 const BREAKING_BODY = /\bBREAKING[ -]CHANGE\b/;       // "BREAKING CHANGE:" / "BREAKING-CHANGE:"
@@ -21,14 +23,13 @@ export function suggestBump(messages) {
   return sawFeat ? "minor" : "patch";
 }
 
-async function main(argv) {
+function main(argv) {
   // Uso: node suggest-bump.mjs [baseRef]   (default: origin/main)
   // Lê as mensagens de commit do range baseRef..HEAD e imprime o bump sugerido.
   // Fallback silencioso p/ patch — nunca quebra o chamador (o signpost). Sem shell -c.
   const base = argv[0] || "origin/main";
   let messages = [];
   try {
-    const { execFileSync } = await import("node:child_process");
     // %x00 separa mensagens completas (subject+body); %B traz o corpo p/ BREAKING CHANGE.
     const out = execFileSync("git", ["log", "--format=%B%x00", `${base}..HEAD`], {
       encoding: "utf8",
