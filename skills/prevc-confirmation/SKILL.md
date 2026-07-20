@@ -385,6 +385,33 @@ Present a summary:
 workflow-status()  # Final status check
 ```
 
+### Step 8.1: Sinalizar release pendente (só `versioning: pipeline`)
+
+**Quando `git.versioning: pipeline` E a seção `## [Unreleased]` do CHANGELOG está não-vazia**, o merge da feature **NÃO** dispara o release: o `release.yml` é `workflow_dispatch` (manual) e abre um *release PR*; o `tag-release.yml` só publica quando esse PR mergeia. Declarar "Workflow Complete" sem avisar disso deixa o **release órfão e silencioso** — o mesmo erro de "concluído sem merge", um nível acima.
+
+Por isso, **antes** do "Workflow Complete", emitir o bloco de RELEASE PENDENTE:
+
+1. Derivar a **sugestão** de bump a partir dos conventional commits do range mergeado:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/finalize/suggest-bump.mjs"   # → patch|minor|major (fallback: patch)
+   ```
+2. Emitir (substituindo `<sugestão>` pela saída acima):
+   ```
+   ⚠ RELEASE PENDENTE (versioning: pipeline) — o merge NÃO dispara o release.
+     A entrega está na main; a versão só sobe pela pipeline, que é manual. Para lançar:
+       gh workflow run release.yml -f bump=<sugestão>
+     → abre um RELEASE PR (bump + version files + known-hashes).
+     Ao mergear esse release PR, o tag-release.yml publica a tag vX.Y.Z + GitHub Release.
+     Nota: os checks do release PR nascem em `action_required` (PR do bot) — aprovar os
+     runs (NÃO usar `--admin`) para os required checks ficarem verdes.
+   ```
+
+**NUNCA rode `gh workflow run` automaticamente — apenas sinalize.** Release é decisão humana (o *tipo* de bump é julgamento semver que o operador confirma). A skill dá o comando pronto; não o executa.
+
+**Condição negativa:** em `versioning: local` (o bump já subiu no finish) ou `versioning: none` (o projeto não faz release), **não** emitir este bloco.
+
+*(Nota de alcance: o comando cita `release.yml` — GitHub. Sob `prCli: glab`/outro forge o gatilho é outro; o signpost deve ramificar ou ser neutro — follow-up alinhado à lacuna do `glab`.)*
+
 ## Step 8.5: Update PRD (if exists)
 
 After the completion summary, check if this workflow is part of a PRD:
@@ -429,4 +456,5 @@ The Confirmation gate marks the workflow as complete:
 | "The PR description is enough" | PR descriptions are ephemeral. Project docs are permanent. |
 | "I'll clean up the branch later" | Later means never. Finalize now. |
 | "Trabalho concluído!" (com PR só aberto, sem merge) | NÃO. Finalizar a branch (merge) é a ÚLTIMA etapa. Enquanto não há merge, o estado é "aguardando finalização", nunca "concluído". Rótulo prematuro é impreciso. |
+| "Workflow Complete" sob `versioning: pipeline` (sem sinalizar o release) | NÃO. O merge não dispara o `release.yml` (é manual). Sem o signpost do Step 8.1, o **release fica órfão e silencioso** e o `[Unreleased]` se acumula. Sinalizar sempre. |
 | "autoFinish:true mas vou perguntar a estratégia" | NÃO. Config decidiu. Base defasada/rebase/abrir PR = resolvidos automaticamente. Só pausar por risco irreversível específico (commit fora-de-escopo), com motivo + remédio — nunca menu. |
