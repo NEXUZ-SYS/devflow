@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.30.0] — 2026-07-20
+
 ### Added — `prevc-confirmation` sinaliza o release pendente sob `versioning: pipeline`
 
 Sob `versioning: pipeline`, o merge da feature **não** dispara o release (o `release.yml` é `workflow_dispatch`/manual), e a skill declarava "Workflow Complete" deixando o release **órfão e silencioso** — o `## [Unreleased]` se acumulava até alguém lembrar. `autoFinish: true` era estruturalmente inalcançável para o release.
