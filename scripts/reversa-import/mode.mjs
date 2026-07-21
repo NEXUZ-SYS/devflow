@@ -4,6 +4,7 @@
 // para nunca bloquear um projeto forward legítimo (zero regressão).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { stripInjection } from "./sanitize.mjs";
 
 const REVERSE_ANALYSIS_ARTIFACTS = [
   "code-analysis.md",
@@ -60,7 +61,12 @@ export function detectMode(sourceDir) {
     reasons.push("nenhum _reversa_sdd/*/spec.md");
     reasons.push(`artefatos de análise reversa: ${analysis.join(", ")}`);
     const kind = targetKind(sourceDir);
-    if (kind) reasons.push(`state.target.kind=${kind} (reforço informativo)`);
+    if (kind) {
+      const { text: sanitized } = stripInjection(kind);
+      if (sanitized.trim()) {
+        reasons.push(`state.target.kind=${sanitized} (reforço informativo)`);
+      }
+    }
     return { mode: "reverse", reasons };
   }
 

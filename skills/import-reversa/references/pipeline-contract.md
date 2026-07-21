@@ -4,6 +4,8 @@ A skill é o único consumidor interativo da lib. Contrato:
 
 ## `runPipeline({ sourceDir }) → result`
 - `result.detected` — `{ isReversa, artifacts, missing, reasons }`
+- `result.mode` — `'forward' | 'reverse'` (`null` quando a fonte não é Reversa) — modo do projeto Reversa detectado
+- `result.modeReasons` — `string[]` — racional da detecção de modo (vazio quando `mode` é `null`)
 - `result.readiness` — `{ global, perFeature, signals }` (verdicts: green|yellow|red)
 - `result.ir` — IR completo (ver `scripts/reversa-import/ir.mjs`)
 - `result.irValid` — `{ ok, errors }`
