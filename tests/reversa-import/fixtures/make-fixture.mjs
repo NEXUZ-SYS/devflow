@@ -44,16 +44,32 @@ const SPEC_STUB = `# Spec — feat-a
 export function makeReversaFixture({ profile = "green" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), `rev-fix-${profile}-`));
   mkdirSync(join(dir, ".reversa"), { recursive: true });
-  mkdirSync(join(dir, "_reversa_sdd", "feat-a"), { recursive: true });
-  mkdirSync(join(dir, "_reversa_sdd", "_decisions"), { recursive: true });
-  mkdirSync(join(dir, "_reversa_sdd", "_review"), { recursive: true });
-  mkdirSync(join(dir, "_reversa_forward", "001-feat-a"), { recursive: true });
-
   writeFileSync(
     join(dir, ".reversa", "state.json"),
     JSON.stringify({ version: "1.2.43", project: `fixture-${profile}`, doc_language: "Português", phase: "concluido-especificacao", target: "Demo", completed: [], pending: ["revisao"] }, null, 2),
   );
   writeFileSync(join(dir, ".reversa", "soul.md"), "# Soul\nProjeto sintético.\n");
+
+  if (profile === "reverse") {
+    // Layout reverse/brownfield: _reversa_forward/ vazio, sem <feat>/spec.md,
+    // com artefatos de análise reversa.
+    mkdirSync(join(dir, "_reversa_forward"), { recursive: true }); // vazio de propósito
+    mkdirSync(join(dir, "_reversa_sdd", "traceability"), { recursive: true });
+    mkdirSync(join(dir, "_reversa_sdd", "mod-a"), { recursive: true });
+    writeFileSync(join(dir, "_reversa_sdd", "reconstruction-plan.md"), PLAN);
+    writeFileSync(join(dir, "_reversa_sdd", "code-analysis.md"), "# Code Analysis\nintrospecção live-preview.\n");
+    writeFileSync(join(dir, "_reversa_sdd", "erd-complete.md"), "# ERD\n...\n");
+    writeFileSync(join(dir, "_reversa_sdd", "traceability", "code-spec-matrix.md"), "# Matrix\n");
+    writeFileSync(join(dir, "_reversa_sdd", "mod-a", "requirements.md"), "# Requirements mod-a\n- RN-01\n");
+    writeFileSync(join(dir, "_reversa_sdd", "mod-a", "tasks.md"), "# Tasks\n- T-01 scaffold\n");
+    return dir;
+  }
+
+  // --- forward (green / yellow / red) ---
+  mkdirSync(join(dir, "_reversa_sdd", "feat-a"), { recursive: true });
+  mkdirSync(join(dir, "_reversa_sdd", "_decisions"), { recursive: true });
+  mkdirSync(join(dir, "_reversa_sdd", "_review"), { recursive: true });
+  mkdirSync(join(dir, "_reversa_forward", "001-feat-a"), { recursive: true });
   writeFileSync(join(dir, "_reversa_sdd", "reconstruction-plan.md"), PLAN);
   writeFileSync(join(dir, "_reversa_forward", "001-feat-a", "requirements.md"), "# Requirements feat-a\n- RN-01\n- US-01 (AC-01)\n");
 
