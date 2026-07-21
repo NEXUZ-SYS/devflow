@@ -44,3 +44,23 @@ describe("detectMode", () => {
     } finally { cleanup(dir); }
   });
 });
+
+import { runPipeline } from "../../scripts/reversa-import/pipeline.mjs";
+
+describe("runPipeline expõe o modo", () => {
+  it("inclui mode='reverse' para fonte reverse", () => {
+    const dir = makeReversaFixture({ profile: "reverse" });
+    try {
+      const r = runPipeline({ sourceDir: dir, now: "2026-07-20T00:00:00.000Z" });
+      assert.equal(r.mode, "reverse");
+      assert.ok(Array.isArray(r.modeReasons) && r.modeReasons.length > 0);
+    } finally { cleanup(dir); }
+  });
+
+  it("inclui mode='forward' para fonte green", () => {
+    const dir = makeReversaFixture({ profile: "green" });
+    try {
+      assert.equal(runPipeline({ sourceDir: dir, now: "2026-07-20T00:00:00.000Z" }).mode, "forward");
+    } finally { cleanup(dir); }
+  });
+});

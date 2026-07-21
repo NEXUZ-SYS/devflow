@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createIR, validateIR } from "./ir.mjs";
 import { detectReversa } from "./detect.mjs";
+import { detectMode } from "./mode.mjs";
 import { assessReadiness } from "./readiness.mjs";
 import { parseState } from "./parsers/state.mjs";
 import { parseReconstructionPlan } from "./parsers/reconstruction-plan.mjs";
@@ -75,8 +76,10 @@ function buildIR(sourceDir) {
 export function runPipeline({ sourceDir, now = "1970-01-01T00:00:00.000Z" } = {}) {
   const detected = detectReversa(sourceDir);
   if (!detected.isReversa) {
-    return { detected, readiness: null, ir: null, irValid: null, artifacts: null, consistency: null, preservePlan: null };
+    return { detected, mode: null, modeReasons: [], readiness: null, ir: null, irValid: null, artifacts: null, consistency: null, preservePlan: null };
   }
+
+  const { mode, reasons: modeReasons } = detectMode(sourceDir);
 
   const readiness = assessReadiness(sourceDir);
   const ir = buildIR(sourceDir);
@@ -97,5 +100,5 @@ export function runPipeline({ sourceDir, now = "1970-01-01T00:00:00.000Z" } = {}
   // manifesto preliminar (paths reais preenchidos na escrita pela CLI)
   artifacts.manifest = emitManifest(ir, preservePlan.map((p) => ({ devflowArtifact: p.to, reversaSource: p.from })));
 
-  return { detected, readiness, ir, irValid, artifacts, consistency, preservePlan, mapDegraded: ir._mapDegraded };
+  return { detected, mode, modeReasons, readiness, ir, irValid, artifacts, consistency, preservePlan, mapDegraded: ir._mapDegraded };
 }
