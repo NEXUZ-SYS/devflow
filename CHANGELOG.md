@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Gate de modo do Reversa no `import-reversa` (forward vs reverse) — N0
+- `import-reversa`: detecção de modo do Reversa (`detectMode`) — abort com aviso claro quando a fonte
+  está em modo *reverse/brownfield* (não suportado; backlog N1), evitando importação degenerada
+  silenciosa. Modo *forward* segue sem alteração. (N0 do F0 da validação E2E.)
+
 ### Added — `prevc-confirmation` sinaliza o release pendente sob `versioning: pipeline`
 
 Sob `versioning: pipeline`, o merge da feature **não** dispara o release (o `release.yml` é `workflow_dispatch`/manual), e a skill declarava "Workflow Complete" deixando o release **órfão e silencioso** — o `## [Unreleased]` se acumulava até alguém lembrar. `autoFinish: true` era estruturalmente inalcançável para o release.

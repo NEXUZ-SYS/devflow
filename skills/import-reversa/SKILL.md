@@ -31,6 +31,24 @@ A lib roda `detect → … → emit-em-memória` via `runPipeline({ sourceDir })
 Rode `node -e "import('./scripts/reversa-import/detect.mjs').then(m => console.log(JSON.stringify(m.detectReversa(process.argv[1]))))" <source>`.
 Se `isReversa=false`, erre com diagnóstico claro (mostre `reasons`).
 
+### 1b. Gate de modo (forward vs reverse)
+Rode a detecção de modo:
+`node -e "import('./scripts/reversa-import/mode.mjs').then(m => console.log(JSON.stringify(m.detectMode(process.argv[1]))))" <source>`
+
+Se `mode === "reverse"`, **ABORTE antes de qualquer escrita** — o suporte ao modo reverse/brownfield
+ainda não existe (backlog N1). Emita ao usuário (adaptando `<reasons>` ao retorno real):
+
+> ⛔ Reversa em modo **reverse** (brownfield) não é suportado hoje. Só o modo forward/greenfield
+> importa com fidelidade. Motivos: `<reasons>`.
+> Backlog do suporte: `docs/superpowers/2026-07-20-import-reversa-f0-backlog.md` (nível N1).
+> Importação abortada — nada foi escrito.
+
+**Não** prossiga para o destino/bootstrap/reconciliação/emit. Se `mode === "forward"`, siga para a Etapa 2 normalmente.
+
+> Por que abortar (e não importar parcial): contra o layout reverse o pipeline degenera
+> (PRD vazio, 0 ADRs apesar de `_reversa_sdd/adrs/`, features-fantasma). Entregar isso com
+> aparência de sucesso é pior que recusar. Ver `docs/superpowers/2026-07-20-import-reversa-fidelity-findings.md`.
+
 ### 2. Destino (SEMPRE interativo — sem default escondido)
 Pergunte ao usuário, usando AskUserQuestion:
 - **in-place** — o próprio dir do Reversa vira o projeto DevFlow (ganha `.context/`; `_reversa_*` permanece como input histórico);
