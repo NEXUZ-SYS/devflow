@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.0] — 2026-07-21
+
 ### Added — Gate de modo do Reversa no `import-reversa` (forward vs reverse) — N0
 - `import-reversa`: detecção de modo do Reversa (`detectMode`) — abort com aviso claro quando a fonte
   está em modo *reverse/brownfield* (não suportado; backlog N1), evitando importação degenerada
