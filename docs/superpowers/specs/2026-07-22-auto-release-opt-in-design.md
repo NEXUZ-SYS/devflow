@@ -9,21 +9,26 @@ Duas pendências no mesmo caminho (finalização/release), entregues juntas.
 
 ## A — `--end-of-options` no `git log` do `suggest-bump`
 
-### Dimensionamento honesto
+### Dimensionamento — corrigido durante a Execution
 
-Isto é **hardening marginal**, não correção de bug nem de segurança. O vetor foi revisado três vezes durante o design, cada uma para baixo:
+Isto **é** hardening de segurança. O dimensionamento foi revisado duas vezes para baixo durante o design e depois **corrigido para cima na fase E**, quando o teste expôs o erro do método de verificação:
 
 1. Levantado como achado de segurança (injeção de opção via `argv[0]`).
-2. Probe do vetor concreto: `git log "--output=/tmp/pwned..HEAD"` **não criou arquivo**. Sem exploit.
-3. Probe dos três casos de base malformada:
+2. Probe: `git log "--output=/tmp/pwned..HEAD"` — procurei por `/tmp/pwned`, não encontrei, e conclui "sem exploit". **Errado.**
+3. O teste RED revelou: o arquivo criado chama-se **`/tmp/pwned..HEAD`** — o `..HEAD` é concatenado *dentro* do valor da opção. `ls` confirmou `/tmp/pwned..HEAD` (19B) e `/tmp/x..HEAD` (19B). O `git log` **honra** `--output=`.
 
-| base | exit | comportamento atual |
+**A primitiva real:** uma `base` iniciada por `--output=` faz o git escrever num caminho arbitrário gravável, sempre com sufixo `..HEAD`, conteúdo = saída do log. O sufixo fixo impede sobrescrever um alvo existente pelo nome exato (não dá para clobber `~/.bashrc`), então é **criação** de arquivo arbitrária, não sobrescrita — severidade baixa, mas real.
+
+**Superfície:** `argv[0]` vem do operador ou da skill; a skill chama sem argumento. Não é fronteira remota. Ainda assim, defesa em profundidade é exatamente o caso de uso do `--end-of-options`.
+
+| base | exit | comportamento antes da guarda |
 |---|---|---|
 | `v9.9.9` (typo de tag) | 128 | já falha alto — o `catch` vira "range indisponível" |
 | `--not-a-real-flag` | 128 | já falha alto |
-| `--output=/tmp/x` | **0** | **silencioso** — 0 commits → `patch` |
+| `--output=<gravável>` | **0** | **escreve o arquivo** + 0 commits → `patch` silencioso |
+| `--output=<não-gravável>` | ≠0 | falha alto (por permissão, não por guarda) |
 
-Só escapa o caso em que a base é uma opção que o git **aceita e engole**. O acidente realista (typo de tag) já falha alto hoje.
+A última linha é a armadilha do método: um teste apontando para caminho não-gravável **passa pelo motivo errado**, sem exercitar o caminho vulnerável. O teste usa tmpdir gravável de propósito.
 
 ### Mudança
 
@@ -35,11 +40,11 @@ const out = git(cwd, ["log", "--format=%B%x00", "--end-of-options", `${base}..HE
 
 ### Efeito
 
-Uma base que hoje é engolida como opção passa a produzir `fatal` → `catch` → `rangeOk = false` → stderr `range indisponível → patch`, em vez de `0 commits` silencioso. O veredito (`patch`) é o mesmo; o que muda é a **auditabilidade**, na mesma família do defeito corrigido na v1.31.1.
+Uma base engolida como opção passa a produzir `fatal` → `catch` → `rangeOk = false` → stderr `range indisponível → patch`, **e nenhum arquivo é escrito**. O veredito (`patch`) é o mesmo; o que muda é que a escrita indevida some e o range vazio deixa de ser silencioso.
 
 ### CHANGELOG
 
-Descrever como *hardening / falha explícita*. **Não** vender como correção de segurança — a evidência não sustenta.
+Descrever como **hardening de segurança** (escrita de arquivo indevida via injeção de opção) **e** falha explícita. Registrar a severidade honestamente: baixa — criação de arquivo com sufixo fixo, a partir de entrada que não vem de fronteira não-confiável.
 
 ---
 
