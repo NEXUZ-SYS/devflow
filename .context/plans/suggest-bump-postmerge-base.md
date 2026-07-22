@@ -38,7 +38,7 @@ phases:
     prevc: "V"
     status: pending
     summary: "Sinais unit e lint observados no ledger do verify-gate (ADR-013 — observar, não afirmar). 14 testes no suggest-bump (8 originais intactos + 6 novos); finalize-pure verde; sem regressão no restante do run-unit.sh."
-lastUpdated: "2026-07-22T00:00:00.000Z"
+lastUpdated: "2026-07-22T17:50:27.346Z"
 ---
 
 # `suggest-bump` resolve a base pelo último release — tracking
@@ -79,4 +79,4 @@ Trocar o default para `git describe --tags --abbrev=0` **nu** — a correção q
 
 ## Execution History
 
-> Last updated: 2026-07-22 | Progress: 0%
+> Last updated: 2026-07-22T17:50:27.346Z | Progress: 0%
