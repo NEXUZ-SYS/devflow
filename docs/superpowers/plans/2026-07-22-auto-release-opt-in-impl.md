@@ -120,40 +120,63 @@ Hardening: typo de tag e flag inexistente JÁ falhavam alto (exit 128)."
 
 - [ ] **Step 1: Escrever as asserções de contrato que falham**
 
-Acrescentar ao final de `tests/skills/test-confirmation-release-signpost.sh`, **antes** da linha final de sucesso (se houver `echo OK`, inserir acima dela):
+**Primeiro, corrigir a asserção (6), que esta mudança torna semanticamente falsa.** Ela afirma que a skill "NUNCA auto-dispara"; com `autoRelease` isso passa a valer **só por default**. Deixá-la como está a faria passar pelo motivo errado (casando com `só sinalizar` da tabela nova). Substituir o bloco:
+
+```bash
+# (6) NUNCA auto-disparar — só sinalizar
+if ! grep -qiE "nunca .*(auto-?dispar|dispar.*autom)|n[ãa]o .*auto-?dispar|apenas sinaliz|s[óo] sinaliz" "$SKILL"; then
+  echo "FALHA(6): não deixa explícito que NUNCA auto-dispara (só sinaliza)"; exit 1
+fi
+```
+
+por:
+
+```bash
+# (6) o DEFAULT é sinalizar — auto-disparo só sob autoRelease opt-in
+if ! grep -qiE "autoRelease.*(ausente|false).*NUNCA|NUNCA rode .*automaticamente" "$SKILL"; then
+  echo "FALHA(6): não deixa explícito que o default (autoRelease ausente/false) NUNCA auto-dispara"; exit 1
+fi
+if ! grep -qiE "n[ãa]o publica|abre um \*?release PR\*?; ele n[ãa]o publica" "$SKILL"; then
+  echo "FALHA(6b): não deixa explícito que o dispatch abre PR e não publica"; exit 1
+fi
+```
+
+**Depois**, acrescentar as asserções novas **antes** da linha `echo "OK test-confirmation-release-signpost"`. Numeração começa em **(8)** — a `(7)` já existe (anti-pattern do release órfão):
 
 ```bash
 # --- autoRelease (opt-in) ---
 if ! grep -qE "read-field autoRelease" "$SKILL"; then
-  echo "FALHA(7): Step 8.1 não lê autoRelease pelo parser único (ADR-011)"; exit 1
+  echo "FALHA(8): Step 8.1 não lê autoRelease pelo parser único (ADR-011)"; exit 1
 fi
 if ! grep -qiE "auto-disparo suspenso" "$SKILL"; then
-  echo "FALHA(8): não há ramo de major que suspende o auto-disparo"; exit 1
+  echo "FALHA(9): não há ramo de major que suspende o auto-disparo"; exit 1
 fi
 if ! grep -qiE "cair para o signpost" "$SKILL"; then
-  echo "FALHA(9): não há fallback para signpost quando o dispatch falha"; exit 1
+  echo "FALHA(10): não há fallback para signpost quando o dispatch falha"; exit 1
 fi
 if ! grep -qE 'prCli' "$SKILL"; then
-  echo "FALHA(10): ramo de dispatch não é guardado por prCli"; exit 1
+  echo "FALHA(11): ramo de dispatch não é guardado por prCli"; exit 1
 fi
 if ! grep -qiE "o merge desse PR|merge dele" "$SKILL"; then
-  echo "FALHA(11): não deixa explícito que quem publica é o merge do release PR"; exit 1
+  echo "FALHA(12): não deixa explícito que quem publica é o merge do release PR"; exit 1
 fi
 
 CONFIG_SKILL="$ROOT/skills/config/SKILL.md"
 if ! grep -qE "autoRelease" "$CONFIG_SKILL"; then
-  echo "FALHA(12): /devflow config não oferece autoRelease"; exit 1
+  echo "FALHA(13): /devflow config não oferece autoRelease"; exit 1
 fi
 if ! grep -qiE "autoRelease.*versioning|versioning.*autoRelease" "$CONFIG_SKILL"; then
-  echo "FALHA(13): falta o cross-check autoRelease × versioning"; exit 1
+  echo "FALHA(14): falta o cross-check autoRelease × versioning"; exit 1
 fi
 ```
+
+**Por fim**, atualizar o comentário de cabeçalho do arquivo (linha ~5), que hoje diz "Sinalizar, nunca auto-disparar" — passa a ser "Sinalizar por default; auto-disparo é opt-in via `git.autoRelease`".
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
 Run: `bash tests/skills/test-confirmation-release-signpost.sh`
 
-Expected: FAIL com `FALHA(7): Step 8.1 não lê autoRelease pelo parser único (ADR-011)` — nada de `autoRelease` existe ainda.
+Expected: FAIL com `FALHA(6): não deixa explícito que o default (autoRelease ausente/false) NUNCA auto-dispara` — a asserção corrigida bate antes das novas, porque nada de `autoRelease` existe ainda na SKILL.md.
 
 - [ ] **Step 3: Ramificar o Step 8.1**
 
