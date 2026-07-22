@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — `suggest-bump` sugeria `patch` sempre no signpost do Step 8.1
+
+O Step 8.1 da `prevc-confirmation` roda **depois** do Step 4 (merge + `git pull`), quando
+`origin/main..HEAD` já está vazio — o helper não tinha commit algum para classificar e caía
+no fallback `patch` em toda entrega, inclusive nas `feat`. O helper existe justamente para
+acertar essa sugestão; sempre responder `patch` o tornava inútil e induzia bump subestimado
+(pior sob `autonomy: autonomous`, onde a confirmação humana é mais fraca).
+
+- **`scripts/lib/finalize/suggest-bump.mjs`** — `resolveBase()` (nova, exportada) deriva a base
+  da última tag de release alcançável do HEAD via `git describe --tags --abbrev=0`, em tiers de
+  `--match` (`v[0-9]*` → `[0-9]*` → qualquer tag → `origin/main`). Os tiers também impedem que uma
+  tag não-release no caminho (ex.: `cli-v3.2.0` num monorepo) trunque o range. `argv[0]` continua
+  sendo override explícito; só o *default* mudou. `stdout` segue sendo só `patch|minor|major` — a
+  procedência (`base=…, N commits`) vai para o `stderr`, o que também torna visível o range vazio.
+- **`prevc-confirmation` Step 8.1** — documenta que o helper é chamado **sem argumento** (passar a
+  base pelo call site sobrescreve a resolução por uma pior) e exibe a procedência da sugestão.
+
 ## [1.31.0] — 2026-07-21
 
 ### Added — Gate de modo do Reversa no `import-reversa` (forward vs reverse) — N0

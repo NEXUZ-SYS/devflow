@@ -391,11 +391,16 @@ workflow-status()  # Final status check
 
 Por isso, **antes** do "Workflow Complete", emitir o bloco de RELEASE PENDENTE:
 
-1. Derivar a **sugestão** de bump a partir dos conventional commits do range mergeado:
+1. Derivar a **sugestão** de bump a partir dos conventional commits desde o último release:
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/finalize/suggest-bump.mjs"   # → patch|minor|major (fallback: patch)
    ```
-2. Emitir (substituindo `<sugestão>` pela saída acima):
+   **Chamar sem argumento.** O helper resolve a base sozinho (última tag de release
+   alcançável do HEAD, com degradação até `origin/main`) — por isso funciona mesmo
+   aqui, *depois* do merge do Step 4. Passar a base pela linha de comando sobrescreve
+   essa resolução por uma pior. A procedência sai no `stderr`
+   (`suggest-bump: base=v1.31.0 (source=tag, 2 commits)`); o `stdout` é só o bump.
+2. Emitir (substituindo `<sugestão>`, `<base>` e `<n>` pela saída acima):
    ```
    ⚠ RELEASE PENDENTE (versioning: pipeline) — o merge NÃO dispara o release.
      A entrega está na main; a versão só sobe pela pipeline, que é manual. Para lançar:
@@ -404,6 +409,7 @@ Por isso, **antes** do "Workflow Complete", emitir o bloco de RELEASE PENDENTE:
      Ao mergear esse release PR, o tag-release.yml publica a tag vX.Y.Z + GitHub Release.
      Nota: os checks do release PR nascem em `action_required` (PR do bot) — aprovar os
      runs (NÃO usar `--admin`) para os required checks ficarem verdes.
+     (sugestão derivada de <base>..HEAD, <n> commits — do stderr do helper; confira antes de confirmar)
    ```
 
 **NUNCA rode `gh workflow run` automaticamente — apenas sinalize.** Release é decisão humana (o *tipo* de bump é julgamento semver que o operador confirma). A skill dá o comando pronto; não o executa.
@@ -458,3 +464,4 @@ The Confirmation gate marks the workflow as complete:
 | "Trabalho concluído!" (com PR só aberto, sem merge) | NÃO. Finalizar a branch (merge) é a ÚLTIMA etapa. Enquanto não há merge, o estado é "aguardando finalização", nunca "concluído". Rótulo prematuro é impreciso. |
 | "Workflow Complete" sob `versioning: pipeline` (sem sinalizar o release) | NÃO. O merge não dispara o `release.yml` (é manual). Sem o signpost do Step 8.1, o **release fica órfão e silencioso** e o `[Unreleased]` se acumula. Sinalizar sempre. |
 | "autoFinish:true mas vou perguntar a estratégia" | NÃO. Config decidiu. Base defasada/rebase/abrir PR = resolvidos automaticamente. Só pausar por risco irreversível específico (commit fora-de-escopo), com motivo + remédio — nunca menu. |
+| "Vou passar a base pro `suggest-bump` pra garantir" | NÃO. O helper já resolve a base pela última tag de release, com `--match` e degradação. Um `$(git describe …)` no call site é *menos* robusto e, como `argv[0]`, **vence** a resolução do helper — anula a proteção contra tag não-release. Chamar sem argumento. |
