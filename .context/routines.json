@@ -1,0 +1,20 @@
+{
+  "routines": [
+    {
+      "id": "context-maintenance",
+      "description": "Health-check do contexto DevFlow (MCP, MemPalace, config) a cada 7 dias",
+      "enabled": true,
+      "frequency": "7d",
+      "lastRun": null,
+      "nextRun": null,
+      "lastSuggested": "2026-07-22",
+      "snoozeUntil": null,
+      "prompts": [
+        {
+          "type": "command",
+          "value": "/devflow:devflow-doctor"
+        }
+      ]
+    }
+  ]
+}

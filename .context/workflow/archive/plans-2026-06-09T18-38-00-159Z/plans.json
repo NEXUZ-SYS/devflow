@@ -1,0 +1,17 @@
+{
+  "active": [
+    {
+      "slug": "standards-default-enforcement",
+      "path": "plans/standards-default-enforcement.md",
+      "title": "Enforcement de Standards Default sem Eject — Plan (tracking)",
+      "summary": "Plano canônico (TDD, detalhado): `docs/superpowers/plans/2026-06-02-standards-default-enforcement.md`",
+      "linkedAt": "2026-06-03T00:53:20.929Z",
+      "status": "active",
+      "approval_status": "approved",
+      "approved_at": "2026-06-04T00:33:44.238Z",
+      "approved_by": "reviewer"
+    }
+  ],
+  "completed": [],
+  "primary": "standards-default-enforcement"
+}

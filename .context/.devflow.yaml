@@ -16,6 +16,12 @@ mempalace:
   autoMine: post-merge
   budget: 1000
 
+grounding:
+  mode: docs-only        # docs-first | docs-only
+  docsMcpServer: docs-mcp-server  # server canônico de documentação
+  blockWeb: true         # nega WebSearch/WebFetch no pre-tool-use
+  failClosed: true       # MCP down/vazio → parar, não responder de memória
+
 # Pipeline de sinal verificável (ADR-013). Comandos são argv arrays; os runners
 # enumeram por git ls-files + convenção. onTaskComplete = subconjunto do loop rápido.
 verify:

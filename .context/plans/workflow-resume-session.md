@@ -42,7 +42,7 @@ phases:
     required_artifacts:
       - handoff-summary
     summary: "3 sinais verdes via verify-run (unit/e2e/lint); gate de V lê o ledger; auditoria de segurança independente (re-testar os PoCs do drive-by/symlink/breakout); ADR-014 audit; compliance da spec."
-lastUpdated: "2026-07-16T23:00:51.870Z"
+lastUpdated: "2026-07-20T14:42:49.439Z"
 ---
 
 # Retomada de workflow no SessionStart — Plano (dotcontext tracking)
@@ -96,4 +96,4 @@ Consertar o `async:true` do `post-tool-use` (follow-up: 5 controles legados mort
 
 ## Execution History
 
-> Last updated: 2026-07-16T23:00:51.870Z | Progress: 0%
+> Last updated: 2026-07-20T14:42:49.439Z | Progress: 0%

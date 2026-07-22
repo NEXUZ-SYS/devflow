@@ -32,7 +32,7 @@ phases:
     prevc: "V"
     status: pending
     summary: "Testes verdes (suggest-bump unit + skill grep); signpost condicional a pipeline+[Unreleased] não-vazio; sem regressão no test-confirmation-autofinish.sh (Camada A)."
-lastUpdated: "2026-07-20"
+lastUpdated: "2026-07-20T19:59:57.206Z"
 ---
 
 # Signpost de release pendente na Confirmation — tracking
@@ -47,3 +47,7 @@ Sob `versioning: pipeline`, a `prevc-confirmation` mergeia a feature, declara "W
 
 ## Fora de escopo
 Auto-disparo (`git.autoRelease` opt-in); GitLab/`glab`; roteamento prevc-flow→prevc-confirmation (Camada 0). Ver o plano autoritativo.
+
+## Execution History
+
+> Last updated: 2026-07-20T19:59:57.206Z | Progress: 0%
