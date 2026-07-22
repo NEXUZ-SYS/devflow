@@ -183,6 +183,24 @@ test('scan fora de repo git declara o erro, não finge estar limpo', async () =>
   await rm(d, { recursive: true, force: true });
 });
 
+test('o plano do workflow ATIVO nunca é movable', async () => {
+  const { dir, git } = await makeRepo();
+  await writeFile(join(dir, 'docs/superpowers/plans/2026-03-01-em-curso.md'), '# wip\n');
+  await mkdir(join(dir, '.context/runtime/workflows'), { recursive: true });
+  // O prevc.json guarda o SLUG em status.project.plan — verificado no arquivo
+  // real. A primeira versão deste guard presumiu plan.sources.plan e ficou
+  // MORTA: o plano desta própria feature aparecia movable no dogfood.
+  await writeFile(
+    join(dir, '.context/runtime/workflows/prevc.json'),
+    JSON.stringify({ status: { project: { plan: 'em-curso' } } }),
+  );
+  git('add', '-A'); git('commit', '-qm', 'add');
+  const a = scan(dir).find((x) => x.path.includes('2026-03-01-em-curso.md'));
+  assert.equal(a.movable, false, 'arquivar o plano ativo quebra a retomada de sessão');
+  assert.match(a.reason, /workflow ativo/i);
+  await rm(dir, { recursive: true, force: true });
+});
+
 test('README.md no dir de planos não é candidato a arquivamento', async () => {
   const { dir, git } = await makeRepo();
   await writeFile(join(dir, 'docs/superpowers/plans/README.md'), '# índice\n');

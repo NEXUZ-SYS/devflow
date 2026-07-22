@@ -81,14 +81,16 @@ const slugOf = (p, isSpec) => {
   return isSpec ? base.replace(/-design$/, "") : base;
 };
 
-// Plano vinculado ao workflow ativo. Degrada para null em qualquer erro —
-// nunca lança, nunca bloqueia o scan.
-function readActivePlanPath(root) {
-  for (const p of ["runtime/workflows/prevc.json", "workflow/prevc.json"]) {
+// Slug do plano vinculado ao workflow ativo. O prevc.json guarda o SLUG em
+// status.project.plan (ex.: "context-hygiene"), não um path — verificado no
+// arquivo real, não presumido. Degrada para null em qualquer erro: nunca lança,
+// nunca bloqueia o scan.
+function readActivePlanSlug(root) {
+  for (const p of ["runtime/workflows/prevc.json", "harness/workflows/prevc.json", "workflow/prevc.json"]) {
     try {
       const j = JSON.parse(readFileSync(join(root, ".context", p), "utf8"));
-      const plan = j?.plan?.sources?.plan ?? j?.activePlanPath;
-      if (typeof plan === "string" && plan) return plan;
+      const slug = j?.status?.project?.plan;
+      if (typeof slug === "string" && slug) return slug;
     } catch {
       /* segue para o próximo candidato */
     }
@@ -150,8 +152,10 @@ export function scanArtifacts(cwd = ".") {
     .map((l) => Number(l.split("|")[1]));
 
   // O plano do workflow ATIVO nunca é movível: arquivá-lo no meio do próprio
-  // workflow quebraria o ponteiro de retomada do SessionStart.
-  const activePlan = readActivePlanPath(root);
+  // workflow quebraria o ponteiro de retomada do SessionStart. O casamento é por
+  // slug (o prevc.json não guarda path), então um plano cujo nome, sem a data,
+  // é o slug ativo fica protegido.
+  const activeSlug = readActivePlanSlug(root);
 
   const describe = (abs, category) => {
     const r = rel(abs);
@@ -166,7 +170,7 @@ export function scanArtifacts(cwd = ".") {
     let reason = null;
     if (category === "B") reason = "ADR-006: território dotcontext — nunca movido";
     else if (category !== "A") reason = `categoria ${category} — só diagnóstico`;
-    else if (activePlan && r === activePlan) reason = "plano do workflow ativo";
+    else if (activeSlug && slugOf(abs, false) === activeSlug) reason = "plano do workflow ativo";
     else if (!isTracked) reason = "untracked — o git não protege este arquivo";
     else if (isDirty) reason = "dirty — há modificação não-commitada";
     else movable = true;
