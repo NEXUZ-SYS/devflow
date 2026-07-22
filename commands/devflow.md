@@ -44,6 +44,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow:devflow-memory <mine|wake-up|status|sweep|sync>  # MemPalace ingest & maintenance
 /devflow:devflow-doctor [--fix]                # Diagnose & repair context health (MCP, MemPalace)
 /devflow:devflow-routines <list|run|snooze>    # Scheduled maintenance routines
+/devflow:devflow-cleanup [--fix]               # Audita context rot e arquiva planos entregues
 ```
 
 ## Behavior
@@ -102,6 +103,7 @@ COMMANDS
   /devflow:devflow-memory <sub>       MemPalace ops (mine/wake-up/status/sweep/sync)
   /devflow:devflow-doctor [--fix]     Diagnose & repair context health (MCP, MemPalace)
   /devflow:devflow-routines <sub>     Scheduled maintenance routines (list/run/snooze)
+  /devflow:devflow-cleanup [--fix]    Audita context rot e arquiva planos entregues
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -264,6 +266,7 @@ QUICK REFERENCE
   Mine/maintain MemPalace        /devflow:devflow-memory <mine|wake-up|status|sweep|sync>
   Check context health           /devflow:devflow-doctor [--fix]
   Schedule maintenance           /devflow:devflow-routines <list|run|snooze>
+  Limpar contexto obsoleto       /devflow:devflow-cleanup [--fix]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   DevFlow v1.2.0 — https://github.com/NEXUZ-SYS/devflow

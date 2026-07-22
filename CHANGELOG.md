@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `/devflow:devflow-cleanup`: higiene de contexto (anti context-rot)
+
+Artefatos de processo se acumulam e o agente passa a ler material obsoleto com aparência
+de autoridade. O comando novo diagnostica **3 categorias** — planos no diretório ativo,
+trackings órfãos em `.context/plans/` e specs órfãs — e arquiva os planos cuja entrega é
+**observável no código**.
+
+O critério não é nenhum sinal auto-declarado: checkbox, `progress:` e status de frontmatter
+apodrecem porque ninguém volta para marcá-los depois da entrega. O CLI
+(`scripts/context-hygiene.mjs scan`) emite **fatos**; o julgamento é do agente, sobre
+evidência (ADR-013). Inferir entrega a partir de data ou inatividade é vedado — plano
+abandonado também para de receber commits (ADR-014).
+
+Salvaguardas, porque a feature move arquivos:
+
+- Só move o que o git protege (`tracked && !dirty`), sempre via `git mv` — untracked ou
+  sujo é recusado e reportado. O gate é por arquivo-alvo, não por working tree.
+- `.context/` é território dotcontext (ADR-006): reportado, nunca tocado. Os paths vêm de
+  `context-paths.mjs`, não de hardcode.
+- Consentimento com gate **mecânico** (`--confirmed` no CLI, exit 2 sem ele), não só em
+  prosa. Diagnóstico é o padrão; mover exige `--fix` + confirmação explícita.
+- Nunca executa sob `autonomy: autonomous` (ADR-012).
+
+Limitação declarada: mover para `archive/` tira o ruído da listagem, mas `grep`/`glob`
+continuam alcançando a pasta.
+
+### Fixed — o guard de pureza passa a cobrir o que dizia cobrir
+
+`tests/lib/finalize/finalize-pure.test.mjs` varria apenas `scripts/lib/finalize/`, e
+`tests/run-lint.sh` **não o executava**. Na prática, o lint aprovava `execSync(...)` em
+qualquer módulo fora daquele diretório — verificado por injeção antes da correção. O guard
+agora cobre os módulos de higiene, roda no `lint`, e tem um teste que trava o próprio
+alcance (restringi-lo de volta reprova).
+
 ## [1.32.0] — 2026-07-22
 
 ### Added — `git.autoRelease`: o Step 8.1 pode abrir o release PR sozinho (opt-in)
