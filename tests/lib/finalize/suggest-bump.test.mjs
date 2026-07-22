@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -147,6 +147,28 @@ test("base explícita em argv[0] vence a resolução automática", () => {
 
   assert.equal(cli(d).stdout, "patch");             // auto → v2.0.0..HEAD = só o fix
   assert.equal(cli(d, "v1.0.0").stdout, "minor");   // explícito → inclui o feat
+});
+
+test("base engolida como opção do git não escreve arquivo nem vira range vazio silencioso", () => {
+  const d = initRepo();
+  commit(d, "chore: inicial");
+  g(d, "tag", "v1.0.0");
+  commit(d, "feat: capacidade nova");
+
+  // `--output=<path>` É HONRADO pelo git log. Sem guarda, o `${base}..HEAD`
+  // vira o valor da opção: o git ESCREVE em `<path>..HEAD` e sai 0 com stdout
+  // vazio → "0 commits → patch" silencioso (mesma classe do defeito da
+  // v1.31.1, agora com uma escrita de arquivo indevida junto).
+  // O alvo fica em tmpdir gravável de propósito: apontar para um caminho
+  // não-gravável faria o git falhar por permissão e o teste passaria pelo
+  // motivo errado, sem exercitar o caminho vulnerável.
+  const victim = join(mkdtempSync(join(tmpdir(), "sb-victim-")), "escrito");
+  const r = cli(d, `--output=${victim}`);
+
+  assert.equal(existsSync(`${victim}..HEAD`), false, "a base não pode virar escrita de arquivo");
+  assert.match(r.stderr, /range indisponível/, "base inválida precisa falhar alto");
+  assert.doesNotMatch(r.stderr, /0 commits/, "não pode reportar 0 commits silenciosamente");
+  assert.equal(r.stdout, "patch", "stdout segue sendo o contrato patch|minor|major");
 });
 
 test("emite procedência no stderr sem poluir o stdout", () => {

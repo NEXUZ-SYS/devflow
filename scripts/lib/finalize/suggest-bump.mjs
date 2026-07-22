@@ -73,7 +73,11 @@ function main(argv) {
   let rangeOk = true;
   try {
     // %x00 separa mensagens completas (subject+body); %B traz o corpo p/ BREAKING CHANGE.
-    const out = git(cwd, ["log", "--format=%B%x00", `${base}..HEAD`]);
+    // --end-of-options: sem isso, uma base que o git aceita como opção é
+    // interpretada como tal. `--output=<path>` é honrado e ESCREVE em
+    // `<path>..HEAD`, saindo 0 com stdout vazio → "patch" silencioso. Com a
+    // guarda, tudo depois dela é revisão/caminho: vira fatal e cai no catch.
+    const out = git(cwd, ["log", "--format=%B%x00", "--end-of-options", `${base}..HEAD`]);
     messages = out.split("\0").map(s => s.trim()).filter(Boolean);
   } catch {
     rangeOk = false; /* git ausente/range inválido → patch */
