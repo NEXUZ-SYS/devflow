@@ -18,6 +18,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
+import { readVerifyFromPath } from "./devflow-config.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -344,7 +345,54 @@ const adrInjection = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection];
+const harnessSensors = {
+  id: "harness-sensors",
+  title: "Sensores do harness (.context/config/sensors.json)",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const cfg = join(ctx.cwd, ".context", ".devflow.yaml");
+    const { signals } = readVerifyFromPath(cfg);
+    const names = Object.keys(signals || {});
+    if (names.length === 0) {
+      return { status: "OK", diagnosis: "Projeto sem contrato verify: — nada a espelhar.", repair: "" };
+    }
+
+    const catalogPath = join(ctx.cwd, ".context", "config", "sensors.json");
+    const repair = "Rode: node scripts/lib/sensors-from-verify.mjs write";
+
+    if (!existsSync(catalogPath)) {
+      return {
+        status: "WARN",
+        diagnosis:
+          "Catálogo de sensores ausente: o gate de fase do harness exige 'tests'/'lint', " +
+          "que não existem, e o avanço só passa com force. Os built-ins do dotcontext assumem npm/TS.",
+        repair,
+      };
+    }
+
+    let ids = [];
+    try {
+      const raw = JSON.parse(readFileSync(catalogPath, "utf-8"));
+      ids = (raw.sensors || []).map((s) => s && s.id).filter(Boolean);
+    } catch {
+      return { status: "WARN", diagnosis: "sensors.json ilegível ou malformado.", repair };
+    }
+
+    const missing = names.filter((n) => !ids.includes(n));
+    if (missing.length > 0) {
+      return {
+        status: "WARN",
+        diagnosis: `Catálogo desatualizado: sinal(is) do verify: sem sensor — ${missing.join(", ")}.`,
+        repair,
+      };
+    }
+
+    return { status: "OK", diagnosis: `Catálogo cobre os ${names.length} sinais do verify:.`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
