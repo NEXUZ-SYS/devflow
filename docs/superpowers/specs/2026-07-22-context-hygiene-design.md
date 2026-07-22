@@ -174,8 +174,35 @@ Casos RED antes de qualquer implementação:
   `glob` continuam alcançando a pasta. Excluir o path do context-awareness foi avaliado e
   deixado fora — a limpeza é parcial, e isso está declarado, não escondido.
 - **Agir nas categorias B–E.** Só diagnóstico nesta versão.
+- **Detectar as categorias D e E.** Cortadas na fase R: esta versão implementa **A, B e
+  C**. "Duplicado" sem definição operacional vira heurística — o que a ADR-014 proíbe.
+  Prometer 5 categorias e entregar 3 faria o agente listar D/E sempre vazias, sugerindo
+  "não há docs duplicados" quando nunca foram procurados. O corte é propagado no contrato
+  do CLI, no SKILL.md e no CHANGELOG.
 - **Consertar os sinais podres** (checkbox, `progress:`). O design os contorna
   deliberadamente em vez de fingir que serão mantidos.
+
+## Revisão da fase R — o que mudou no design
+
+A review (architect + security-auditor, com probes) achou defeitos que alteram o contrato:
+
+| Achado | Correção incorporada |
+|---|---|
+| **`tracked` e `dirty` em coordenadas diferentes** — `ls-files` é relativo ao cwd, `status --porcelain` à raiz. Rodando de um subdiretório, `dirty` vira `false` para arquivo **com WIP**. Fail-open provado por probe. | Tudo se ancora em `git rev-parse --show-toplevel`. Teste de subdiretório obrigatório. |
+| **`git()` engolia falha como `""`** — `status` falhando produzia "nada está sujo". | `git()` devolve `null` em erro; falha de `ls-files`/`status` **aborta** o scan. |
+| **O guard de pureza não cobria o arquivo** — `finalize-pure` varre só `scripts/lib/finalize/`, e `run-lint.sh` nem o roda. A Global Constraint era falsa. | O guard é estendido e passa a rodar no `lint`. |
+| **Consentimento em prosa** — contradizia a tese central da spec. | Gate **mecânico** `--confirmed` no CLI (exit 2 sem ele). |
+| **Vazio ambíguo** (4 achados independentes) | `scan` emite `scannedDirs` com a procedência da busca. |
+| **Hardcode de `.context/plans`** | Vem de `contextPaths()`, que já marca as chaves como "INTOCADOS". |
+
+O **dogfooding saiu do escopo do PR**: rodar a ferramenta sobre ~40 planos reais no seu
+momento menos validado, com 28 arquivos sujos na árvore, é o cenário que os fail-opens
+acima tornavam perigoso. Vira follow-up pós-merge, em commit próprio.
+
+Dois pontos foram **testados e mantidos**: o hardcode de `docs/superpowers/plans/` (o
+architect verificou 8 versões do superpowers — o path é estável desde a 5.0.6) e a
+ausência de path traversal (`byPath.get()` é igualdade exata; 5 variantes de escape
+testadas, todas recusadas).
 
 ## Aplicação a este repo (dogfooding)
 
