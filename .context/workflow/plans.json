@@ -1,14 +1,14 @@
 {
   "active": [
     {
-      "slug": "default-engineering-standards",
-      "path": "plans/default-engineering-standards.md",
-      "title": "Biblioteca de Standards Default de Engenharia",
-      "summary": "Shippar biblioteca curada de standards default (concern-first, warn-only) vendorizada no plugin (assets/standards/) + fetch https no /devflow update (à la napkin, repo standalone devflow-standards); escopo tiered (~16 universais + 4 condicionais, exclui contracts DB-específicos→stacks); standards-loader merge 2 fontes (plugin-defaults + projeto, override por id, disable via standards.local.yaml); modo eject; wiring just-in-time no índice/filtro; ADR-007. Spec: docs/superpowers/specs/2026-05-30-default-engineering-standards-design.md. Plano: docs/superpowers/plans/2026-05-30-default-engineering-standards.md.",
-      "linkedAt": "2026-05-31T02:26:43.209Z",
+      "slug": "instinct-system",
+      "path": "plans/instinct-system.md",
+      "title": "Instinct System (MVP) — Plano (dotcontext tracking)",
+      "summary": "Este arquivo é o **tracking** dotcontext. O plano executável canônico (13 tasks TDD-first, com código real) vive em [`docs/superpowers/plans/2026-06-17-instinct-system.md`](../../docs/superpowers/plans/2026-06-17-instinct-system.md). O design aprovado está em [`docs/superpowers/specs/2026-06-17-instinct-system-design.md`](../../docs/superpowers/specs/2026-06-17-instinct-system-design.md).",
+      "linkedAt": "2026-06-18T02:26:59.675Z",
       "status": "active"
     }
   ],
   "completed": [],
-  "primary": "default-engineering-standards"
+  "primary": "instinct-system"
 }
