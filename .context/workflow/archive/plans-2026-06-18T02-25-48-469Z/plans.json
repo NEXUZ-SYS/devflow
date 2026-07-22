@@ -1,0 +1,17 @@
+{
+  "active": [
+    {
+      "slug": "standards-coverage-gap-fix",
+      "path": "plans/standards-coverage-gap-fix.md",
+      "title": "Correção dos gaps de cobertura de Standards",
+      "summary": "Plano TDD de 4 fases (taxonomy → stds → enforcement → sync) para fechar os 3 eixos de gap de Standards: Eixo A (gerar std-layer-boundaries, std-domain-events, std-pre-commit-hygiene que a taxonomy já define), Eixo B (registrar concerns module-size, environment-config, git-workflow + typescript-strict órfão na taxonomy), Eixo C (rotear enforcement dos 8 stds sem linter: file-linters via TDD para internationalization/accessibility/documentation/layer-boundaries/domain-events, hook commit-msg para commit-hygiene, Danger/CI para code-review, linter:null consciente para state-management/caching/grounding). Plano completo em docs/superpowers/plans/2026-06-12-standards-coverage-gap-fix.md; spec em docs/superpowers/specs/2026-06-12-standards-coverage-gap-fix-design.md; análise-fonte em docs/research/standards-coverage-gap.md. Constraints ADR-007 (machine/*.js bundled-only) e ADR-008 (concern-framed, trio MANIFEST↔.md↔id).",
+      "linkedAt": "2026-06-13T15:00:54.836Z",
+      "status": "active",
+      "approval_status": "approved",
+      "approved_at": "2026-06-13T15:28:35.057Z",
+      "approved_by": "reviewer"
+    }
+  ],
+  "completed": [],
+  "primary": "standards-coverage-gap-fix"
+}

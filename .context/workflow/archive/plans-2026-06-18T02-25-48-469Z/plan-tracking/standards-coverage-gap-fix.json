@@ -1,0 +1,23 @@
+{
+  "planSlug": "standards-coverage-gap-fix",
+  "progress": 0,
+  "phases": {},
+  "decisions": [
+    {
+      "title": "Revisão R: REVISE→aprovado após 9 fixes de corretude",
+      "description": "3 revisores (architect/code-reviewer REVISE, security PASS). Aplicados ao plano: B1 helper mkdirSync recursivo (falso GREEN); B2 reusar commit-msg-guard.mjs existente; B3 domain-events scanner de parênteses (FP em payload aninhado); B4 layer-boundaries por resolução real de path (FP mesmo-slice, WIP FSD era stub); i18n plural-ternário+moeda-com-símbolo; a11y multiline+role=; documentation //|#|/* */; consistency gate order-tolerant+5º check; pre-commit-hygiene já existe na taxonomy. Segurança: anti-RCE/ReDoS/injeção todos PASS.",
+      "phase": "R",
+      "alternatives": [
+        "Avançar para E sem revisar o plano (rejeitado: blockers dariam falso GREEN)",
+        "Parar para revisão manual (rejeitado: fixes eram concretos e já especificados)"
+      ],
+      "status": "accepted",
+      "id": "dec-1781364497344",
+      "decidedAt": "2026-06-13T15:28:17.344Z"
+    }
+  ],
+  "lastUpdated": "2026-06-13T15:28:35.057Z",
+  "approvalStatus": "approved",
+  "approvedAt": "2026-06-13T15:28:35.057Z",
+  "approvedBy": "reviewer"
+}

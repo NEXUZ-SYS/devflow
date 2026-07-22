@@ -114,12 +114,13 @@ allow:
 
 # ─── MODE (default for unmatched) ─────────────────────────────────────────
 
-mode: prompt    # prompt | accept | deny
+mode: prompt
 
 # ─── CALLBACK (optional HTTP endpoint for complex decisions) ──────────────
 
 callback:
-  url: null     # https:// only (SI-3 enforced); null disables callback layer
+  # https:// only (SI-3 enforced); null disables callback layer
+  url: null
 
 # ─── Claude Code compatibility ────────────────────────────────────────────
 #

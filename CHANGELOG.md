@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — check `harness-sensors` no doctor + catálogo derivado do `verify:`
+
+O gate de fase do PREVC exigia os sensores `tests`/`lint`, que não existiam: o projeto nunca
+definiu `.context/config/sensors.json`, e os built-ins do dotcontext assumem npm/TS. Todo avanço
+de fase precisava de `workflow-advance --force` — não por teste faltando (os sinais rodavam
+verdes no ledger **e** no CI), mas por contabilidade do harness divergindo da evidência real.
+Forçar virou rotina, o que normaliza justamente o bypass que o ADR-013 existe para impedir.
+
+- **`scripts/lib/sensors-from-verify.mjs`** (novo) — deriva o catálogo do contrato `verify:`
+  lido pelo parser único (ADR-011), reusando `VERIFY_ALLOWLIST`. **Fail-closed** em metacaractere
+  de shell ou espaço dentro de argumento — o harness re-tokeniza a string por espaços, então isso
+  quebraria o comando em silêncio. Não escreve por padrão: sem flag imprime, `write` grava.
+- **Check `harness-sensors`** — `OK` sem `verify:` (nada a espelhar) ou com o catálogo completo;
+  `WARN` quando ausente ou em drift. Diagnóstico-only: o reparo é texto e a skill o executa sob
+  consentimento.
+
+**Nota de alcance:** o catálogo do harness é executado com `sh -c`, diferente dos built-ins
+(`spawn`, `shell:false`). Esse caminho é do dotcontext e **pré-existente** — gerar o arquivo não
+cria a capacidade, e o arquivo é versionado, passando por revisão de PR. A validação estrita é
+guard de **corretude** (round-trip `argv ↔ string`), não fronteira de segurança.
+
 ### Added — `/devflow:devflow-cleanup`: higiene de contexto (anti context-rot)
 
 Artefatos de processo se acumulam e o agente passa a ler material obsoleto com aparência

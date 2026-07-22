@@ -1,0 +1,16 @@
+{
+  "decisions": [
+    {
+      "title": "Review R: APROVAR-COM-AJUSTES — fixes incorporados no plano",
+      "description": "code-reviewer + security-auditor revisaram o plano. Veredito: APROVAR-COM-AJUSTES. Bloqueador crítico de segurança (TOKEN_RE não cobria AWS/JWT/PEM/conn-string/--password=/Stripe/GH → violava NUNCA-logar-credencial da ADR-005) corrigido: redação expandida + KV + URL-cred + Bash binary-only + testes por classe. Bugs de código (linha morta, withLock global, mine-apply contract, rotação×checkpoint, parse null-guard, .md atômico) corrigidos. promote/prune/projects.json promovidos a Tasks 7b/7c (mantém promoção project→global no MVP). 13→15 tasks, todas TDD-first.",
+      "phase": "R",
+      "alternatives": [
+        "BLOCK até reescrever (rejeitado: corrigível sem redesenho)",
+        "Deferir promote/prune para fase 2 (rejeitado pelo usuário: promoção é ganho central do MVP)"
+      ],
+      "status": "accepted",
+      "id": "dec-1781750484932",
+      "decidedAt": "2026-06-18T02:41:24.932Z"
+    }
+  ]
+}
