@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.1] — 2026-07-22
+
 ### Fixed — `suggest-bump` sugeria `patch` sempre no signpost do Step 8.1
 
 O Step 8.1 da `prevc-confirmation` roda **depois** do Step 4 (merge + `git pull`), quando
