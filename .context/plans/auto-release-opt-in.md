@@ -38,7 +38,7 @@ phases:
     prevc: "V"
     status: pending
     summary: "Sinais unit e lint observados no ledger do verify-gate (ADR-013). 15 testes no suggest-bump; teste de contrato do signpost verde; sem regressão no test-confirmation-autofinish.sh. Limitação assumida: os asserts de contrato são grep sobre texto de skill — provam que o contrato está escrito, não que o LLM o executa."
-lastUpdated: "2026-07-22T00:00:00.000Z"
+lastUpdated: "2026-07-22T19:14:25.154Z"
 ---
 
 # `git.autoRelease` opt-in + hardening do `suggest-bump` — tracking
@@ -47,17 +47,22 @@ lastUpdated: "2026-07-22T00:00:00.000Z"
 > **Plano executável:** [`docs/superpowers/plans/2026-07-22-auto-release-opt-in-impl.md`](../../docs/superpowers/plans/2026-07-22-auto-release-opt-in-impl.md)
 > **Racional da decisão:** [`docs/superpowers/plans/2026-07-22-auto-release-opt-in.md`](../../docs/superpowers/plans/2026-07-22-auto-release-opt-in.md)
 
-## A — `--end-of-options` (hardening, alcance estreito)
+## A — `--end-of-options` (hardening de segurança, severidade baixa)
 
-Revisado para baixo três vezes durante o design, cada vez com probe:
+Dimensionado errado duas vezes no design e **corrigido para cima na fase E**, quando o teste expôs a falha do método:
 
 | base | exit | comportamento antes |
 |---|---|---|
 | `v9.9.9` (typo de tag) | 128 | já falhava alto |
 | `--not-a-real-flag` | 128 | já falhava alto |
-| `--output=/tmp/x` | **0** | **silencioso** — 0 commits → `patch` |
+| `--output=<gravável>` | **0** | **escreve o arquivo** + 0 commits → `patch` |
+| `--output=<não-gravável>` | ≠0 | falha por permissão, não por guarda |
 
-Só escapava a base que o git **aceita e engole** como opção. Não é correção de segurança: o probe do vetor `--output` não criou arquivo algum. O CHANGELOG descreve como hardening.
+**O erro:** conclui "sem exploit" após procurar por `/tmp/pwned`. O arquivo real é **`/tmp/pwned..HEAD`** — o `..HEAD` é concatenado *dentro* do valor da opção. `ls` confirmou `/tmp/pwned..HEAD` e `/tmp/x..HEAD`, 19B cada. O `git log` **honra** `--output=`.
+
+**A primitiva:** criação de arquivo em diretório arbitrário gravável, sempre com sufixo `..HEAD`, conteúdo = saída do log. O sufixo fixo impede sobrescrever alvo existente pelo nome exato. Entrada é `argv[0]` — operador/skill, não fronteira remota. Severidade baixa, mas real.
+
+**Armadilha de teste registrada no código:** a primeira fixture usou `--output=/dev/null` e **passou sem a correção** — o git tentou criar `/dev/null..HEAD` na raiz e falhou por permissão, exercitando o caminho não-vulnerável. Alvo não-gravável faz o teste passar pelo motivo errado. A fixture final usa tmpdir gravável de propósito.
 
 ## B — `git.autoRelease`
 
@@ -93,4 +98,4 @@ Merge automático do release PR (é *o* ato outward-facing); aprovação automá
 
 ## Execution History
 
-> Last updated: 2026-07-22 | Progress: 0%
+> Last updated: 2026-07-22T19:14:25.154Z | Progress: 0%
