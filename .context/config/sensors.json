@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "source": "manual",
+  "sensors": [
+    {
+      "id": "unit",
+      "name": "unit",
+      "description": "Sinal 'unit' do contrato verify: (ADR-013).",
+      "severity": "critical",
+      "blocking": false,
+      "enabled": true,
+      "command": "bash tests/run-unit.sh"
+    },
+    {
+      "id": "integration",
+      "name": "integration",
+      "description": "Sinal 'integration' do contrato verify: (ADR-013).",
+      "severity": "critical",
+      "blocking": false,
+      "enabled": true,
+      "command": "bash tests/run-integration.sh"
+    },
+    {
+      "id": "e2e",
+      "name": "e2e",
+      "description": "Sinal 'e2e' do contrato verify: (ADR-013).",
+      "severity": "critical",
+      "blocking": false,
+      "enabled": true,
+      "command": "bash tests/run-e2e.sh"
+    },
+    {
+      "id": "lint",
+      "name": "lint",
+      "description": "Sinal 'lint' do contrato verify: (ADR-013).",
+      "severity": "critical",
+      "blocking": true,
+      "enabled": true,
+      "command": "bash tests/run-lint.sh"
+    },
+    {
+      "id": "tests",
+      "name": "tests",
+      "description": "Alias do sinal 'unit' — id que o gate de fase do harness exige.",
+      "severity": "critical",
+      "blocking": true,
+      "enabled": true,
+      "command": "bash tests/run-unit.sh"
+    }
+  ]
+}
