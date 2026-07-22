@@ -15,7 +15,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
 - **21 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
-- **46 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, stack-filter, memory-recall, import-reversa, odoo-l10n-br, odoo-nxz-overlay...
+- **49 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, stack-filter, memory-recall, import-reversa, odoo-l10n-br, odoo-nxz-overlay, context-hygiene...
 - **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
 - **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
 - **Escala adaptativa** — auto-detecta complexidade e ajusta o fluxo (QUICK/SMALL/MEDIUM/LARGE)
@@ -308,8 +308,8 @@ o design completo e rationale.
 
 ```
 devflow/
-├── commands/         # 11 commands: /devflow + 10 subcomandos (adr, dispatch, doctor, import-reversa, memory, next, recall, routines, status, sync)
-├── skills/           # 44 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall, import-reversa)
+├── commands/         # 14 commands: /devflow + 13 subcomandos (adr, cleanup, design, dispatch, doctor, import-reversa, instinct, memory, next, recall, routines, status, sync)
+├── skills/           # 49 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall, import-reversa, context-hygiene)
 ├── agents/           # 20 playbooks de agentes (inclui memory-specialist, business-context, product-context, engineering-context, operations-context)
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
