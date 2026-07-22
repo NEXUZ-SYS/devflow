@@ -476,6 +476,22 @@ AskUserQuestion:
       description: "Desativar integração com o Agent Orchestrator — enabled: false"
 ```
 
+**P5c: Auto-disparo do release** (condicional — só se P5b = pipeline)
+
+Só pergunte quando o usuário escolheu **Pipeline de release**. Nos outros modos o bloco de RELEASE PENDENTE do Step 8.1 nem é emitido, e a chave ficaria inerte.
+
+```
+AskUserQuestion:
+  question: "Ao concluir uma entrega, o DevFlow deve abrir o release PR sozinho?"
+  header: "Auto-release"
+  multiSelect: false
+  options:
+    - label: "Não, só me avisar (padrão)"
+      description: "O DevFlow emite o comando pronto e você dispara quando o lote estiver fechado. Escolha isto se você agrupa várias entregas num único release."
+    - label: "Sim, abrir o release PR"
+      description: "Bump patch/minor disparam o release.yml automaticamente; major sempre espera você. O PR ainda precisa de merge humano para publicar — o auto-disparo evita o passo manual de abrir, não o gate."
+```
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:
@@ -504,6 +520,14 @@ git:
 - Se "Bump local no finish (padrão)": **não incluir** a chave `versioning` (ausência = `local`, retrocompatível).
 - Se "Pipeline de release (CI)": incluir `versioning: pipeline` no bloco `git:`. Nesse modo o finish (`prevc-confirmation` Step 2) **pula o bump local** e o `BUMP WARNING` do PostToolUse é suprimido — o bump é único, feito pela pipeline de release.
 - Se **não há mecanismo de versão** (P5b não perguntada): incluir `versioning: none` no bloco `git:` — o finish não bumpa e o `BUMP WARNING` fica silencioso (projeto sem release).
+
+**Regras de geração (auto-release — P5c):**
+- Se **P5c não foi perguntada** (P5b ≠ pipeline) → **não incluir** a chave `autoRelease`.
+- Se **"Não, só me avisar"** (default) → **não incluir** a chave (ausência = desativado, retrocompatível).
+- Se **"Sim, abrir o release PR"** → incluir `autoRelease: true` no bloco `git:`.
+
+**Cross-check obrigatório (P5c × P5b) — par contraditório:**
+`autoRelease: true` com `versioning ∈ {local, none}` **conflita**: nesses modos o bloco de RELEASE PENDENTE do Step 8.1 não é emitido, então a chave fica **inerte e mente** sobre o comportamento do projeto. Ao gerar o YAML, se essa combinação surgir, **NÃO gere em silêncio**: avise o usuário do conflito e ofereça resolver — (a) manter `versioning` e **remover o `autoRelease`** (recomendado), ou (b) trocar para `versioning: pipeline` se ele realmente quer a pipeline de release. Recusar a gravação do par contraditório até a escolha.
 
 **Cross-check obrigatório (P5 × P5b) — par contraditório:**
 `autoFinish` com `bump: true` (forma "Personalizar", ou "Sim, tudo") **conflita** com `versioning ∈ {pipeline, none}`: o `bump` do autoFinish pede bump local no finish, mas `versioning: pipeline`/`none` diz que o finish **não** bumpa (o bump é da pipeline, ou não há release) — juntos causam **double-bump/drift** de versão. Ao gerar o YAML, se essa combinação surgir, **NÃO gere em silêncio**: avise o usuário do conflito e ofereça resolver — (a) manter `versioning: pipeline`/`none` e **remover o `bump: true`** do autoFinish (recomendado; o bump fica com a pipeline), ou (b) trocar para `versioning: local` se ele realmente quer bump local no finish. Recusar a gravação do par contraditório até a escolha.

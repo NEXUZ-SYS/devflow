@@ -42,14 +42,42 @@ if ! grep -qE "action_required" "$SKILL"; then
   echo "FALHA(5): não avisa da fricção action_required (checks do PR do bot)"; exit 1
 fi
 
-# (6) NUNCA auto-disparar — só sinalizar
-if ! grep -qiE "nunca .*(auto-?dispar|dispar.*autom)|n[ãa]o .*auto-?dispar|apenas sinaliz|s[óo] sinaliz" "$SKILL"; then
-  echo "FALHA(6): não deixa explícito que NUNCA auto-dispara (só sinaliza)"; exit 1
+# (6) o DEFAULT é sinalizar — auto-disparo só sob autoRelease opt-in
+if ! grep -qiE "autoRelease.*(ausente|false).*NUNCA|NUNCA rode .*automaticamente" "$SKILL"; then
+  echo "FALHA(6): não deixa explícito que o default (autoRelease ausente/false) NUNCA auto-dispara"; exit 1
+fi
+if ! grep -qiE "n[ãa]o publica" "$SKILL"; then
+  echo "FALHA(6b): não deixa explícito que o dispatch abre PR e não publica"; exit 1
 fi
 
 # (7) anti-pattern: 'Workflow Complete' sob pipeline sem sinalizar o release = órfão
 if ! grep -qiE "release [óo]rf[ãa]o|release.*silencios" "$SKILL"; then
   echo "FALHA(7): anti-pattern do release órfão/silencioso ausente"; exit 1
+fi
+
+# --- autoRelease (opt-in) ---
+if ! grep -qE "read-field autoRelease" "$SKILL"; then
+  echo "FALHA(8): Step 8.1 não lê autoRelease pelo parser único (ADR-011)"; exit 1
+fi
+if ! grep -qiE "auto-disparo suspenso" "$SKILL"; then
+  echo "FALHA(9): não há ramo de major que suspende o auto-disparo"; exit 1
+fi
+if ! grep -qiE "cair para o signpost" "$SKILL"; then
+  echo "FALHA(10): não há fallback para signpost quando o dispatch falha"; exit 1
+fi
+if ! grep -qE 'prCli' "$SKILL"; then
+  echo "FALHA(11): ramo de dispatch não é guardado por prCli"; exit 1
+fi
+if ! grep -qiE "o merge desse PR|merge dele" "$SKILL"; then
+  echo "FALHA(12): não deixa explícito que quem publica é o merge do release PR"; exit 1
+fi
+
+CONFIG_SKILL="$ROOT/skills/config/SKILL.md"
+if ! grep -qE "autoRelease" "$CONFIG_SKILL"; then
+  echo "FALHA(13): /devflow config não oferece autoRelease"; exit 1
+fi
+if ! grep -qiE "autoRelease.*versioning|versioning.*autoRelease" "$CONFIG_SKILL"; then
+  echo "FALHA(14): falta o cross-check autoRelease × versioning"; exit 1
 fi
 
 echo "OK test-confirmation-release-signpost"

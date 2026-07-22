@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `git.autoRelease`: o Step 8.1 pode abrir o release PR sozinho (opt-in)
+
+Sob `versioning: pipeline`, o merge da feature não dispara o release e o Step 8.1 apenas
+sinalizava. A regra "nunca auto-disparar" apoiava-se em duas premissas que não se sustentaram:
+o `gh workflow run release.yml` **abre um release PR — não publica** (quem publica é o merge
+desse PR, humano e atrás de branch protection), e o "bump é julgamento semver" foi escrito
+quando o `suggest-bump` respondia `patch` para toda entrega (corrigido na v1.31.1). A razão
+legítima para não disparar é outra: **cadência** — times que agrupam entregas num só release.
+Por isso, config em vez de dogma.
+
+- **`git.autoRelease`** (novo, default ausente = desativado) — lido via `devflow-config.mjs
+  read-field`, o mesmo caminho do `prCli` (ADR-011, sem leitor novo). Com `true` e `prCli: gh`,
+  bump `patch`/`minor` dispara o `release.yml`; **`major` sempre sinaliza** (breaking change
+  exige confirmação semântica). Sob outro forge, sinaliza. Falha de dispatch cai para o
+  signpost — o operador nunca fica sem o comando.
+- **`/devflow config`** — pergunta P5c (só quando `versioning: pipeline`) + cross-check que
+  recusa o par contraditório `autoRelease: true` × `versioning ∈ {local, none}`.
+
+### Fixed — `suggest-bump`: a base podia virar opção do git e escrever arquivo
+
+O `git log` **honra** `--output=`. Como o `${base}..HEAD` é concatenado dentro do valor da
+opção, uma base iniciada por `--output=` fazia o git **escrever em `<path>..HEAD`** e sair `0`
+com stdout vazio — escrita de arquivo indevida somada a `patch` silencioso (a mesma classe de
+defeito da v1.31.1). `--end-of-options` fecha os dois: vira `fatal`, que o `catch` já trata
+como `range indisponível`.
+
+Severidade **baixa** e declarada: é criação de arquivo com sufixo fixo (`..HEAD`), o que impede
+sobrescrever um alvo existente pelo nome exato, e a entrada é `argv[0]` — vinda do operador ou
+da skill, nunca de fronteira não-confiável. Ainda assim é uma escrita não-intencional, e a
+guarda custa uma palavra.
+
 ## [1.31.1] — 2026-07-22
 
 ### Fixed — `suggest-bump` sugeria `patch` sempre no signpost do Step 8.1

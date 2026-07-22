@@ -412,7 +412,23 @@ Por isso, **antes** do "Workflow Complete", emitir o bloco de RELEASE PENDENTE:
      (sugestão derivada de <base>..HEAD, <n> commits — do stderr do helper; confira antes de confirmar)
    ```
 
-**NUNCA rode `gh workflow run` automaticamente — apenas sinalize.** Release é decisão humana (o *tipo* de bump é julgamento semver que o operador confirma). A skill dá o comando pronto; não o executa.
+3. **Decidir entre sinalizar e disparar** — ler a config pelo parser único (ADR-011):
+   ```bash
+   CFG="${CLAUDE_PLUGIN_ROOT}/scripts/lib/devflow-config.mjs"
+   AUTO_RELEASE=$(node "$CFG" read-field autoRelease .context/.devflow.yaml 2>/dev/null || echo "")
+   PR_CLI=$(node "$CFG" read-field prCli .context/.devflow.yaml 2>/dev/null || echo "")
+   ```
+
+   | `autoRelease` | `prCli` | bump | Ação |
+   |---|---|---|---|
+   | ausente / `false` | — | — | **Só sinalizar** (emitir o bloco acima e seguir) |
+   | `true` | ≠ `gh` | — | **Só sinalizar** + nota de alcance de forge |
+   | `true` | `gh` | `major` | **Só sinalizar** + `auto-disparo suspenso: breaking change exige confirmação semântica humana` |
+   | `true` | `gh` | `patch` / `minor` | **Disparar**: `gh workflow run release.yml -f bump=<sugestão>` |
+
+   **Ao disparar:** informar que o release PR abre em instantes, que **o merge desse PR — humano — é o que publica**, e que os checks dele nascem em `action_required` (PR do bot) exigindo aprovação dos runs. Se o `gh workflow run` sair não-zero (sem permissão, workflow ausente, rede), **cair para o signpost** com o comando pronto e a mensagem de erro — nunca deixar o operador sem o caminho manual.
+
+**Com `autoRelease` ausente ou `false` (o default), NUNCA rode `gh workflow run` automaticamente — apenas sinalize.** Mesmo com `autoRelease: true`, o dispatch **abre um release PR; ele não publica**. O ato outward-facing é o **merge desse PR**, que permanece humano em qualquer configuração.
 
 **Condição negativa:** em `versioning: local` (o bump já subiu no finish) ou `versioning: none` (o projeto não faz release), **não** emitir este bloco.
 
@@ -465,3 +481,4 @@ The Confirmation gate marks the workflow as complete:
 | "Workflow Complete" sob `versioning: pipeline` (sem sinalizar o release) | NÃO. O merge não dispara o `release.yml` (é manual). Sem o signpost do Step 8.1, o **release fica órfão e silencioso** e o `[Unreleased]` se acumula. Sinalizar sempre. |
 | "autoFinish:true mas vou perguntar a estratégia" | NÃO. Config decidiu. Base defasada/rebase/abrir PR = resolvidos automaticamente. Só pausar por risco irreversível específico (commit fora-de-escopo), com motivo + remédio — nunca menu. |
 | "Vou passar a base pro `suggest-bump` pra garantir" | NÃO. O helper já resolve a base pela última tag de release, com `--match` e degradação. Um `$(git describe …)` no call site é *menos* robusto e, como `argv[0]`, **vence** a resolução do helper — anula a proteção contra tag não-release. Chamar sem argumento. |
+| "`autoRelease: true`, então o release sai sozinho" | NÃO. O dispatch abre um *release PR* — quem publica é o merge dele, humano e atrás de branch protection. E os checks do PR do bot nascem em `action_required`, exigindo aprovação dos runs. `autoRelease` **desloca** a intervenção humana, não a elimina. |
