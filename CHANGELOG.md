@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.32.0] — 2026-07-22
+
 ### Added — `git.autoRelease`: o Step 8.1 pode abrir o release PR sozinho (opt-in)
 
 Sob `versioning: pipeline`, o merge da feature não dispara o release e o Step 8.1 apenas
