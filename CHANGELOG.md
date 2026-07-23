@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.33.0] — 2026-07-23
+
 ### Added — check `harness-sensors` no doctor + catálogo derivado do `verify:`
 
 O gate de fase do PREVC exigia os sensores `tests`/`lint`, que não existiam: o projeto nunca
