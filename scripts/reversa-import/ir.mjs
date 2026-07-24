@@ -1,24 +1,19 @@
 // scripts/reversa-import/ir.mjs
-// Modelo intermediário (IR) normalizado: a fronteira entre parsers (input Reversa)
-// e emitters (output DevFlow). Adicionar tipo de input = novo parser; adicionar
-// tipo de output = novo emitter. Nenhum lado conhece o outro.
-
-const VERDICTS = new Set(["green", "yellow", "red"]);
+// IR de EVIDÊNCIA (não mais IR de plano).
+// O importador carrega o que existe e quanto se confia nisso; o plano nasce na
+// fase P do PREVC. Não há mais tasks/milestones/features aqui.
+const KIND_SOURCES = new Set(["frontmatter", "manifest", "handoff-table", "heuristic"]);
 
 export function createIR() {
   return {
     project: { name: null, language: null, sourceType: null, target: null, declaredPhase: null },
-    readiness: { global: null, perFeature: {} }, // verdict por feature + global
-    tasks: [],        // { id, name, dependsOn:[], milestone, confidence }
-    milestones: [],   // { id, after, demo }
-    features: [],     // { slug, requirements, specPath, screensPath, specLineCount, hasForward, hasSdd, hasScreens, markers }
-    decisions: [],    // { id, title, status, confidence, body }
-    gaps: [],         // { feature, text }
-    // Reservados para uso futuro/CLI. O plano de preserve hoje vem de planPreserve()
-    // e a proveniência de emitManifest() — estes slots ficam vazios por ora (não são
-    // populados pelo pipeline). Mantidos para estabilidade do shape do IR.
-    preserve: [],     // { sourcePath, destSubpath, kind, feature } — reservado
-    provenance: [],   // { devflowArtifact, reversaSource, hash } — reservado
+    provenance: { mode: null, modeReasons: [], reversaVersion: null },
+    handoff: null,      // saída de resolveHandoff
+    artifacts: [],      // saída de classifyArtifacts
+    ledger: null,       // saída de buildLedger
+    adrSources: [],     // subconjunto de artifacts com kind === "adr"
+    preservePlan: [],   // saída de planPreserve
+    conflicts: [],      // { id, detail }
   };
 }
 
@@ -26,20 +21,21 @@ export function validateIR(ir) {
   const errors = [];
   if (!ir || typeof ir !== "object") return { ok: false, errors: ["IR ausente ou não-objeto"] };
 
-  for (const [i, t] of (ir.tasks || []).entries()) {
-    if (!t.id) errors.push(`tasks[${i}]: falta id`);
-    if (!Array.isArray(t.dependsOn)) errors.push(`tasks[${i}].dependsOn deve ser array`);
+  if (!Array.isArray(ir.artifacts)) errors.push("artifacts deve ser array");
+  else {
+    for (const [i, a] of ir.artifacts.entries()) {
+      if (!a.relPath) errors.push(`artifacts[${i}]: falta relPath`);
+      if (!a.kind) errors.push(`artifacts[${i}]: falta kind`);
+      if (!KIND_SOURCES.has(a.kindSource)) {
+        errors.push(`artifacts[${i}]: kindSource inválido: ${a.kindSource}`);
+      }
+    }
   }
-  for (const [i, f] of (ir.features || []).entries()) {
-    if (!f.slug) errors.push(`features[${i}]: falta slug`);
+  if (ir.handoff != null && typeof ir.handoff.found !== "boolean") {
+    errors.push("handoff.found deve ser booleano quando handoff existe");
   }
-  if (ir.readiness?.global != null && !VERDICTS.has(ir.readiness.global)) {
-    errors.push(`readiness.global inválido: ${ir.readiness.global}`);
-  }
-  for (const [feat, v] of Object.entries(ir.readiness?.perFeature || {})) {
-    if (!VERDICTS.has(v)) errors.push(`readiness.perFeature.${feat} inválido: ${v}`);
-  }
+  if (!Array.isArray(ir.conflicts)) errors.push("conflicts deve ser array");
   return { ok: errors.length === 0, errors };
 }
 
-export { VERDICTS };
+export { KIND_SOURCES };
