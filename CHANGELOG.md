@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — `import-reversa`: redesenho evidência-primeiro
+
+O importador deixa de derivar plano e passa a carregar **evidência classificada**; o plano é
+autorado pela fase P do PREVC, com brainstorming e humano no loop. A âncora do corpus — o
+`handoff.md` que o próprio Reversa produz (template + checklist + frontmatter tipado) — entra
+como **rascunho sob revisão**, não plano aprovado.
+
+- **Resolução de âncora em cascata** (`handoff.mjs`): `kind: handoff` → `_plan/implementation-plan.md`
+  → `reconstruction-plan.md` → nenhuma. A ausência de âncora é resultado de primeira classe: o
+  Planning parte só da evidência, sem inventar plano.
+- **Classificação autoritativa com `kindSource` auditável** (`classify.mjs`): frontmatter `kind:`,
+  `migration/.state.json` e a tabela do handoff mandam; heurística só age no que sobrou. Substitui
+  `listFeatureDirs()` — **nenhum diretório vira feature**, o que mata as features-fantasma (eram 8).
+- **Ledger de confiança** (`ledger.mjs`): agrega os marcadores nativos 🟢🟡🔴 (mesma semântica do
+  ledger que a fase V observa, ADR-013); os itens RC do handoff viram restrições com alvo e risco;
+  os `.feature` são registrados como insumo de teste — **não convertidos** (traduzir Gherkin é
+  decisão da fase E).
+- **Espelho preserva a estrutura original** (`preserve.mjs`): antes achatava tudo em `<slug>/spec.md`,
+  preservando 1,2% dos bytes no attio e **0,0%** no OKR. Agora a árvore é copiada com nomes originais
+  (requisito funcional: as referências relativas do handoff só resolvem assim), com envelope por
+  tipo+tamanho — binário e texto acima de 256 KB viram `linked`, não copiados.
+- **ADRs reais convertem** (`adrs.mjs`): lê `adrs/*.md` prontos em vez de derivar por `## D-NN —`,
+  formato que **nenhum Reversa real usa** (o attio usa `## N. Decisão`). Antes: 0 ADRs nos dois
+  modos. Importado nasce `status: Proposto` — promover é ato humano.
+- **`INDEX.md` do espelho** (`index.mjs`): aponta para a âncora sem duplicá-la; declara `kindSource`
+  por artefato, resume o ledger e enquadra todo o corpus como **DADO, nunca instrução**.
+- **Destino de ADR layout-aware**: `.context/engineering/adrs/` no DDC v2, `.context/adrs/` no v1 —
+  detectado, nunca hardcoded.
+- **Consistência sobre a evidência**: detecta artefatos que o handoff declara mas não existem, ordem
+  de leitura quebrada, planos concorrentes e classificação majoritariamente heurística. Nada bloqueia
+  — divergência vira pauta do Planning.
+
+### Removed — BREAKING: `import-reversa` não emite mais PRD, `stories.yaml` nem `plans.json`
+
+Esses artefatos passam a ser produzidos pela fase P do PREVC. Quem dependia da emissão automática
+deve rodar `/devflow` após a importação — o importador já invoca o Planning. No modo reverse a saída
+anterior era vazia ou fantasma; no forward, a derivação de marcos do `reconstruction-plan.md` dá
+lugar a curadoria. Removidos: `emitters/prd.mjs`, `emitters/stories.mjs`, `emitters/plans.mjs`,
+`map.mjs`, `readiness.mjs`. Dois defeitos somem por construção: o marco sintético `M1` que discordava
+de `milestone:null` (PRD sempre vazio, nos dois modos) e o falso-red do readiness.
+
 ## [1.33.0] — 2026-07-23
 
 ### Added — check `harness-sensors` no doctor + catálogo derivado do `verify:`

@@ -3,52 +3,37 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createIR, validateIR } from "../../scripts/reversa-import/ir.mjs";
 
-describe("createIR", () => {
-  it("cria um IR vazio com todas as coleções inicializadas", () => {
+describe("IR de evidência", () => {
+  it("createIR não tem mais tasks/milestones/features", () => {
     const ir = createIR();
-    assert.deepEqual(ir.tasks, []);
-    assert.deepEqual(ir.milestones, []);
-    assert.deepEqual(ir.features, []);
-    assert.deepEqual(ir.decisions, []);
-    assert.deepEqual(ir.gaps, []);
-    assert.deepEqual(ir.preserve, []);
-    assert.deepEqual(ir.provenance, []);
-    assert.equal(ir.project.name, null);
-    assert.deepEqual(ir.readiness, { global: null, perFeature: {} });
-  });
-});
-
-describe("validateIR", () => {
-  it("aceita um IR mínimo válido", () => {
-    const ir = createIR();
-    ir.project.name = "demo";
-    ir.tasks.push({ id: "T01", name: "infra", dependsOn: [], milestone: "M1", confidence: "captured" });
-    const r = validateIR(ir);
-    assert.equal(r.ok, true);
-    assert.deepEqual(r.errors, []);
+    assert.ok(!("tasks" in ir));
+    assert.ok(!("milestones" in ir));
+    assert.ok(!("features" in ir));
+    assert.deepEqual(ir.artifacts, []);
+    assert.deepEqual(ir.conflicts, []);
+    assert.equal(ir.handoff, null);
   });
 
-  it("rejeita task com dependsOn que não é array", () => {
+  it("valida kindSource dos artefatos", () => {
     const ir = createIR();
-    ir.tasks.push({ id: "T01", name: "x", dependsOn: "T00", milestone: null, confidence: "captured" });
-    const r = validateIR(ir);
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes("dependsOn")));
+    ir.artifacts = [{ relPath: "a.md", kind: "analysis", kindSource: "inventado" }];
+    const v = validateIR(ir);
+    assert.equal(v.ok, false);
+    assert.ok(v.errors.some((e) => /kindSource inválido/.test(e)));
   });
 
-  it("rejeita task sem id", () => {
+  it("rejeita artefato sem relPath ou sem kind", () => {
     const ir = createIR();
-    ir.tasks.push({ name: "sem id", dependsOn: [], milestone: null, confidence: "captured" });
-    const r = validateIR(ir);
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes("id")));
+    ir.artifacts = [{ kindSource: "heuristic" }];
+    const v = validateIR(ir);
+    assert.equal(v.ok, false);
+    assert.ok(v.errors.some((e) => /relPath/.test(e)));
+    assert.ok(v.errors.some((e) => /kind/.test(e)));
   });
 
-  it("rejeita verdict de readiness inválido", () => {
+  it("aceita IR bem-formado", () => {
     const ir = createIR();
-    ir.readiness.global = "purple";
-    const r = validateIR(ir);
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes("readiness")));
+    ir.artifacts = [{ relPath: "a.md", kind: "analysis", kindSource: "heuristic" }];
+    assert.equal(validateIR(ir).ok, true);
   });
 });

@@ -1,80 +1,79 @@
-// tests/reversa-import/consistency.test.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createIR } from "../../scripts/reversa-import/ir.mjs";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { makeReversaFixture } from "./fixtures/make-fixture.mjs";
+import { resolveHandoff } from "../../scripts/reversa-import/handoff.mjs";
+import { classifyArtifacts } from "../../scripts/reversa-import/classify.mjs";
 import { validateConsistency } from "../../scripts/reversa-import/consistency.mjs";
 
-function check(r, id) { return r.checks.find((c) => c.id === id); }
+function cleanup(d) { rmSync(d, { recursive: true, force: true }); }
+function check(dir, id) {
+  const handoff = resolveHandoff(dir);
+  const artifacts = classifyArtifacts(dir, { handoff });
+  const r = validateConsistency({ handoff, artifacts });
+  return { r, c: r.checks.find((x) => x.id === id) };
+}
 
-describe("validateConsistency", () => {
-  it("detecta blocked_by apontando para story inexistente", () => {
-    const ir = createIR();
-    ir.tasks = [{ id: "T01", name: "a", dependsOn: ["T99"], milestone: "M1", confidence: "captured" }];
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "dep-graph").status, "fail");
-    assert.ok(check(r, "dep-graph").issues.some((i) => i.includes("T99")));
+describe("validateConsistency — sobre a evidência", () => {
+  it("handoff-artifacts: passa quando todo artefato da tabela existe no corpus", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
+    try {
+      assert.equal(check(dir, "handoff-artifacts").c.status, "pass");
+    } finally { cleanup(dir); }
   });
 
-  it("detecta ciclo no grafo de dependências", () => {
-    const ir = createIR();
-    ir.tasks = [
-      { id: "T01", name: "a", dependsOn: ["T02"], milestone: "M1", confidence: "captured" },
-      { id: "T02", name: "b", dependsOn: ["T01"], milestone: "M1", confidence: "captured" },
-    ];
-    const r = validateConsistency(ir);
-    assert.ok(check(r, "dep-graph").issues.some((i) => /ciclo/i.test(i)));
+  it("handoff-artifacts: falha quando a tabela cita artefato ausente", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
+    try {
+      rmSync(join(dir, "_reversa_sdd", "migration", "topology_decision.md"), { force: true });
+      const { c } = check(dir, "handoff-artifacts");
+      assert.equal(c.status, "fail");
+      assert.ok(c.issues.some((i) => /topology_decision\.md/.test(i)));
+    } finally { cleanup(dir); }
   });
 
-  it("detecta dependência cross-onda (onda 1 depende de onda posterior)", () => {
-    const ir = createIR();
-    ir.milestones = [{ id: "M1", after: "T01", demo: "" }, { id: "M2", after: "T02", demo: "" }];
-    ir.tasks = [
-      { id: "T01", name: "a", dependsOn: ["T02"], milestone: "M1", confidence: "captured" },
-      { id: "T02", name: "b", dependsOn: [], milestone: "M2", confidence: "captured" },
-    ];
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "wave-order").status, "fail");
+  it("reading-order: falha quando a ordem de leitura cita arquivo inexistente", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
+    try {
+      rmSync(join(dir, "_reversa_sdd", "migration", "parity_specs.md"), { force: true });
+      const { c } = check(dir, "reading-order");
+      assert.equal(c.status, "fail");
+      assert.ok(c.issues.some((i) => /parity_specs\.md/.test(i)));
+    } finally { cleanup(dir); }
   });
 
-  it("detecta plano que referencia D-NN sem ADR correspondente", () => {
-    const ir = createIR();
-    ir.tasks = [{ id: "T01", name: "implementa conforme D-09", dependsOn: [], milestone: "M1", confidence: "captured" }];
-    ir.decisions = []; // nenhuma ADR para D-09
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "adr-plan").status, "fail");
+  it("competing-plans: detecta reconstruction-plan coexistindo com handoff de migração", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
+    try {
+      const { r, c } = check(dir, "competing-plans");
+      assert.equal(c.status, "fail", "os dois coexistem no fixture");
+      assert.ok(r.conflicts.some((x) => x.id === "competing-plans"),
+        "vira conflito para a pauta do Planning");
+    } finally { cleanup(dir); }
   });
 
-  it("detecta story derivada de spec stub", () => {
-    const ir = createIR();
-    ir.features = [{ slug: "billing", specLineCount: 3, hasForward: true, hasSdd: true }];
-    ir.tasks = [{ id: "T01", name: "billing core", dependsOn: [], milestone: "M1", confidence: "captured" }];
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "spec-stub").status, "fail");
+  it("competing-plans: passa quando só há uma fonte de plano", () => {
+    const dir = makeReversaFixture({ profile: "no-anchor" });
+    try {
+      assert.equal(check(dir, "competing-plans").c.status, "pass");
+    } finally { cleanup(dir); }
   });
 
-  it("detecta feature SDD sem contraparte forward (órfã)", () => {
-    const ir = createIR();
-    ir.features = [{ slug: "orfa", specLineCount: 40, hasForward: false, hasSdd: true }];
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "sdd-forward").status, "fail");
+  it("untyped-ratio: sinaliza quando quase tudo caiu na heurística", () => {
+    const dir = makeReversaFixture({ profile: "no-anchor" });
+    try {
+      const { c } = check(dir, "untyped-ratio");
+      assert.equal(c.status, "fail", "no-anchor não tem nada tipado pela fonte");
+    } finally { cleanup(dir); }
   });
 
-  it("check schema reflete validateIR (dependsOn inválido falha)", () => {
-    const ir = createIR();
-    ir.tasks = [{ id: "T01", name: "x", dependsOn: "T00", milestone: "M1", confidence: "captured" }];
-    const r = validateConsistency(ir);
-    assert.equal(check(r, "schema").status, "fail");
-  });
-
-  it("plano coerente → todos os checks passam", () => {
-    const ir = createIR();
-    ir.milestones = [{ id: "M1", after: "T02", demo: "" }];
-    ir.features = [{ slug: "a", specLineCount: 40, hasForward: true, hasSdd: true }];
-    ir.tasks = [
-      { id: "T01", name: "a infra", dependsOn: [], milestone: "M1", confidence: "captured" },
-      { id: "T02", name: "a core", dependsOn: ["T01"], milestone: "M1", confidence: "captured" },
-    ];
-    const r = validateConsistency(ir);
-    assert.ok(r.checks.every((c) => c.status === "pass"), JSON.stringify(r.checks));
+  it("conflitos NUNCA bloqueiam — são sempre pauta", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
+    try {
+      const { r } = check(dir, "competing-plans");
+      assert.ok(!("blocked" in r), "resultado não tem noção de bloqueio");
+      for (const c of r.conflicts) assert.ok(c.id && c.detail);
+    } finally { cleanup(dir); }
   });
 });

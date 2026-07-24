@@ -86,20 +86,20 @@ describe("detectMode — injection safety", () => {
   });
 });
 
-describe("runPipeline expõe o modo", () => {
+describe("runPipeline expõe o modo (via proveniência)", () => {
   it("inclui mode='reverse' para fonte reverse", () => {
     const dir = makeReversaFixture({ profile: "reverse" });
     try {
       const r = runPipeline({ sourceDir: dir, now: "2026-07-20T00:00:00.000Z" });
-      assert.equal(r.mode, "reverse");
-      assert.ok(Array.isArray(r.modeReasons) && r.modeReasons.length > 0);
+      assert.equal(r.ir.provenance.mode, "reverse");
+      assert.ok(Array.isArray(r.ir.provenance.modeReasons) && r.ir.provenance.modeReasons.length > 0);
     } finally { cleanup(dir); }
   });
 
   it("inclui mode='forward' para fonte green", () => {
     const dir = makeReversaFixture({ profile: "green" });
     try {
-      assert.equal(runPipeline({ sourceDir: dir, now: "2026-07-20T00:00:00.000Z" }).mode, "forward");
+      assert.equal(runPipeline({ sourceDir: dir, now: "2026-07-20T00:00:00.000Z" }).ir.provenance.mode, "forward");
     } finally { cleanup(dir); }
   });
 });

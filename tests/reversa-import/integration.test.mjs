@@ -1,51 +1,42 @@
 // tests/reversa-import/integration.test.mjs
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, rmSync, existsSync, lstatSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { makeReversaFixture } from "./fixtures/make-fixture.mjs";
 import { runPipeline } from "../../scripts/reversa-import/pipeline.mjs";
-import { parseStoriesContent, getNextStory } from "../../scripts/runner-lib.mjs";
 
-const FIXTURE = "/home/walterfrey/Documentos/code/reversa-com-attio";
+function cleanup(d) { rmSync(d, { recursive: true, force: true }); }
+const NOW = "2026-07-23T12:00:00.000Z";
+const PERFIS = ["green", "yellow", "red", "reverse", "forward-real", "reverse-analysis", "reverse-migration", "no-anchor"];
 
-describe("integração: reversa-com-attio (cópia tmpdir)", { skip: !existsSync(FIXTURE) }, () => {
-  it("pipeline completo produz IR válido e artefatos coerentes", () => {
-    const work = mkdtempSync(join(tmpdir(), "rev-e2e-"));
-    const copy = join(work, "src");
-    // copia SEM _browser_profile, .mp4, .history — e SEM seguir symlinks (segurança H3)
-    cpSync(FIXTURE, copy, {
-      recursive: true,
-      filter: (src) => {
-        if (src.includes("_browser_profile") || src.endsWith(".mp4") || src.includes(".history")) return false;
-        try { if (lstatSync(src).isSymbolicLink()) return false; } catch { /* ignore */ }
-        return true;
-      },
+describe("integração — todos os perfis atravessam o pipeline", () => {
+  for (const profile of PERFIS) {
+    it(`${profile}: produz IR válido e os 3 artefatos, sem lançar`, () => {
+      const dir = makeReversaFixture({ profile });
+      try {
+        const r = runPipeline({ sourceDir: dir, now: NOW });
+        assert.equal(r.detected.isReversa, true);
+        assert.equal(r.irValid.ok, true, JSON.stringify(r.irValid.errors));
+        assert.deepEqual(Object.keys(r.artifacts).sort(), ["adrs", "index", "manifest"]);
+        assert.ok(r.artifacts.index.includes("# Evidência importada do Reversa"));
+        assert.equal(JSON.parse(r.artifacts.manifest).schema, 2);
+        for (const a of r.ir.artifacts) {
+          assert.ok(a.relPath && a.kind && a.kindSource, `artefato completo: ${a.relPath}`);
+        }
+      } finally { cleanup(dir); }
     });
+  }
+});
+
+describe("integração — determinismo", () => {
+  it("duas execuções sobre a mesma fonte produzem saída idêntica", () => {
+    const dir = makeReversaFixture({ profile: "reverse-migration" });
     try {
-      const r = runPipeline({ sourceDir: copy });
-      assert.equal(r.detected.isReversa, true);
-      assert.equal(r.irValid.ok, true, `IR inválido: ${JSON.stringify(r.irValid.errors)}`);
-
-      // reconstruction-plan tem 21 tarefas → PRD deve listar todas
-      assert.ok(r.ir.tasks.length >= 20, `esperava ~21 tarefas, veio ${r.ir.tasks.length}`);
-      // grafo de deps preservado: T14 depende de T12 e T13
-      const t14 = r.ir.tasks.find((t) => t.id === "T14");
-      assert.ok(t14 && t14.dependsOn.includes("T12") && t14.dependsOn.includes("T13"));
-
-      // stories da 1ª onda são parseáveis pelo runner real e executáveis
-      const { stories, maxRetries } = parseStoriesContent(r.artifacts.stories);
-      assert.ok(stories.length >= 1);
-      assert.ok(getNextStory(stories, maxRetries) !== null);
-      // demais ondas pending no PRD
-      assert.ok(r.artifacts.prd.includes("⬚"));
-
-      // readiness reflete o fixture real (specs com stub conhecido, ex. notificacoes)
-      assert.ok(["green", "yellow", "red"].includes(r.readiness.global));
-      // o mapeamento tarefa→onda não degradou (o fixture real tem marcos com after parseável)
-      assert.equal(r.mapDegraded, false);
-    } finally {
-      rmSync(work, { recursive: true, force: true });
-    }
+      const a = runPipeline({ sourceDir: dir, now: NOW });
+      const b = runPipeline({ sourceDir: dir, now: NOW });
+      assert.equal(a.artifacts.index, b.artifacts.index);
+      assert.equal(a.artifacts.manifest, b.artifacts.manifest);
+      assert.deepEqual(a.artifacts.adrs, b.artifacts.adrs);
+    } finally { cleanup(dir); }
   });
 });
