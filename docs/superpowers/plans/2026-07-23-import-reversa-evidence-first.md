@@ -22,7 +22,7 @@
 - **Sanitização:** todo texto de terceiro passa por `stripInjection` de `scripts/reversa-import/sanitize.mjs` antes de entrar em artefato lido por LLM.
 - **Idioma:** comentários, mensagens e docs em **pt-BR**. Identificadores de código em inglês.
 - **Commits:** um por tarefa, conventional commits, escopo `import-reversa`.
-- **Suíte verde entre tarefas:** `bash tests/run-unit.sh` deve sair 0 ao fim de cada tarefa.
+- **Suíte verde entre commits:** `bash tests/run-unit.sh` deve sair 0 ao fim de cada tarefa **que comita**. As Tasks 5–9 formam um *switchover atômico* (ver abaixo) — elas mantêm o teste da própria unidade verde, mas **não comitam** individualmente; o único commit do bloco é o da Task 9, e é lá que a suíte completa fecha verde. Nenhum commit deixa a árvore quebrada.
 
 ### Verificação (contrato `verify:` deste repo)
 
@@ -68,6 +68,22 @@
 | `CHANGELOG.md` | nota de breaking |
 
 **Remover:** `emitters/prd.mjs`, `emitters/stories.mjs`, `emitters/plans.mjs`, `map.mjs`, `readiness.mjs` — e seus testes.
+
+---
+
+## Blocos de execução (por que a ordem importa)
+
+O `pipeline.mjs` chama `createIR`, `validateIR`, `validateConsistency`, `emitAdrs`, `planPreserve` e `emitManifest` — **todas com assinatura que muda** nesta feature. E o IR velho (`tasks`/`milestones`, que `emitPrd`/`emitStories` consomem) é **incompatível** com o IR novo de evidência: não há transição campo-a-campo. Logo, qualquer troca de assinatura de uma dependência do pipeline o quebra até ele ser reescrito.
+
+Por isso as tarefas se agrupam em três blocos:
+
+| Bloco | Tarefas | Regra de commit |
+|---|---|---|
+| **Aditivo** | 1–4 (fixtures, handoff, classify, ledger) | Unidades 100% novas, não tocam o pipeline. **Commit por tarefa**, suíte completa verde. |
+| **Switchover** | 5–9 (adrs, preserve, index, IR/consistency, rewire+remoções) | Cada uma mantém o teste da própria unidade verde, mas **NÃO comita**. O IR muda de forma no meio; a suíte completa só volta a verde quando o pipeline é reescrito (Task 9). **Um único commit atômico**, na Task 9, cobrindo as cinco. |
+| **Pós** | 10–12 (write, SKILL.md, CHANGELOG) | Aditivo/independente. **Commit por tarefa**, suíte completa verde. |
+
+O switchover é maior que um commit ideal, mas é a única forma de não apresentar um commit "pronto" com a árvore quebrada. Ele permanece bissectável como unidade: ou o bloco inteiro está aplicado, ou nenhum dele.
 
 ---
 
@@ -1512,24 +1528,20 @@ node --test tests/reversa-import/emitters-adrs.test.mjs
 ```
 Esperado: PASS, 6 testes.
 
-- [ ] **Step 5: Suíte completa e commit**
+- [ ] **Step 5: Teste da unidade verde — NÃO commitar (início do switchover)**
 
-A suíte vai falhar em `pipeline.test.mjs` e `integration.test.mjs` (ainda passam `ir.decisions`). Isso é esperado e será resolvido na Task 9; **por ora**, rode só os testes das unidades já migradas:
+Esta é a primeira tarefa do bloco switchover. A troca de assinatura (`ir.decisions` → `ir.adrSources`) quebra `pipeline.test.mjs` e `integration.test.mjs`, que só são consertados na Task 9. Confirme que a **unidade** está verde e **acumule sem commitar**:
 
 ```bash
+# verde por-arquivo (a unidade e suas vizinhas aditivas)
 node --test tests/reversa-import/emitters-adrs.test.mjs tests/reversa-import/handoff.test.mjs \
              tests/reversa-import/classify.test.mjs tests/reversa-import/ledger.test.mjs \
              tests/reversa-import/fixtures.test.mjs
+# NÃO rodar `git commit` aqui — o commit do bloco é único, na Task 9.
 git add scripts/reversa-import/emitters/adrs.mjs tests/reversa-import/emitters-adrs.test.mjs
-git commit -m "feat(import-reversa): converte os ADRs reais em vez de derivar por regex
-
-Fecha o F3, que degradava OS DOIS modos: nenhum Reversa real casa o formato
-'## D-NN —' esperado (o attio usa '## N. Decisão'), então saíam 0 ADRs em
-ambos. Passa a ler adrs/*.md prontos, com Consequências ganhando seção própria.
-Importado nasce status: Proposto — promover é ato humano.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
+
+Se estiver executando via subagent-driven-development, mantenha as mudanças 5–8 na árvore de trabalho e só chame `git commit` na Task 9.
 
 ---
 
@@ -1702,20 +1714,12 @@ node --test tests/reversa-import/emitters-preserve-manifest.test.mjs
 ```
 Esperado: PASS nos 6 testes de `planPreserve`. Os testes de `emitManifest` no mesmo arquivo podem falhar — serão ajustados na Task 8.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Teste da unidade verde — NÃO commitar (switchover)**
 
 ```bash
 node --test tests/reversa-import/emitters-preserve-manifest.test.mjs
 git add scripts/reversa-import/emitters/preserve.mjs tests/reversa-import/emitters-preserve-manifest.test.mjs
-git commit -m "feat(import-reversa): espelho preserva estrutura original + envelope
-
-Antes: dois nomes conhecidos (spec.md, screens.md), achatados em <slug>/spec.md
-— 1,2% dos bytes preservados no attio, 0,0% no OKR (8 de 8 entradas apontando
-para arquivos inexistentes). Agora a árvore é preservada com nomes originais,
-requisito funcional para as referências relativas do handoff resolverem.
-Envelope por tipo+tamanho: binário sempre linked, texto acima de 256 KB também.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+# sem commit — parte do bloco switchover (commit na Task 9)
 ```
 
 ---
@@ -1956,20 +1960,15 @@ node --test tests/reversa-import/emitters-index.test.mjs
 ```
 Esperado: PASS, 6 testes.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Teste da unidade verde — NÃO commitar (switchover)**
 
 ```bash
 node --test tests/reversa-import/emitters-index.test.mjs
 git add scripts/reversa-import/emitters/index.mjs tests/reversa-import/emitters-index.test.mjs
-git commit -m "feat(import-reversa): INDEX.md do espelho
-
-Curto por design: aponta para a âncora em vez de duplicá-la. Declara kindSource
-por artefato (autoritativo vs. heurístico), resume o ledger, lista constraints
-com risco e aponta os insumos de teste sem embutir conteúdo. Enquadra o handoff
-como rascunho sob revisão e todo o corpus como DADO, nunca instrução.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+# sem commit — parte do bloco switchover (commit na Task 9)
 ```
+
+> Nota de dependência: o teste desta tarefa monta o `ir` à mão e chama `planPreserve` (Task 6) e `buildLedger` (Task 4). Como estamos no switchover, `preserve.mjs` já está na forma nova na árvore de trabalho — o teste de index passa. Fora do switchover essa ordem não fecharia.
 
 ---
 
@@ -2362,27 +2361,23 @@ node --test tests/reversa-import/consistency.test.mjs tests/reversa-import/ir.te
 ```
 Esperado: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Testes das unidades verdes — NÃO commitar (switchover)**
 
 ```bash
-node --test tests/reversa-import/consistency.test.mjs tests/reversa-import/ir.test.mjs tests/reversa-import/emitters-preserve-manifest.test.mjs
+node --test tests/reversa-import/consistency.test.mjs tests/reversa-import/ir.test.mjs \
+             tests/reversa-import/emitters-preserve-manifest.test.mjs
 git add scripts/reversa-import/ir.mjs scripts/reversa-import/consistency.mjs \
         scripts/reversa-import/emitters/manifest.mjs \
         tests/reversa-import/ir.test.mjs tests/reversa-import/consistency.test.mjs \
         tests/reversa-import/emitters-preserve-manifest.test.mjs
-git commit -m "refactor(import-reversa): IR de evidência + consistência sobre evidência
-
-O IR deixa de modelar plano (tasks/milestones/features) e passa a modelar o que
-existe e quanto se confia nisso. A consistência valida a evidência: artefatos que
-o handoff declara, ordem de leitura, planos concorrentes e proporção de
-classificação heurística. Nada bloqueia — divergência vira pauta do Planning.
-
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+# sem commit — a Task 9 fecha o switchover com a suíte completa verde
 ```
+
+Neste ponto, `run-unit.sh` **ainda está vermelho** (o pipeline velho chama as assinaturas antigas). Isso é esperado e será resolvido no próximo passo da Task 9 — não é um estado a commitar.
 
 ---
 
-## Task 9: Rewire do pipeline + remoção das unidades mortas
+## Task 9: Rewire do pipeline + remoção das unidades mortas (fecha o switchover)
 
 **Files:**
 - Modify: `scripts/reversa-import/pipeline.mjs`
@@ -2621,16 +2616,26 @@ bash tests/run-unit.sh
 ```
 Esperado: verde — a suíte inteira, agora sem as unidades removidas.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit ATÔMICO do switchover (Tasks 5–9)**
+
+Este é o único commit do bloco switchover. Ele cobre tudo que se acumulou nas Tasks 5, 6, 7, 8 e 9: as reescritas de `adrs`, `preserve`, `index`, `ir`, `consistency`, `manifest` e `pipeline`, as remoções, e todos os testes afetados. A suíte completa deve fechar **verde** antes de commitar — é aqui que a árvore volta a um estado consistente.
 
 ```bash
+# a suíte completa TEM que passar aqui — se falhar, a árvore não está pronta para commitar
 bash tests/run-unit.sh && bash tests/run-lint.sh
 git add -A scripts/reversa-import tests/reversa-import
-git commit -m "refactor(import-reversa)!: pipeline carrega evidência, não deriva plano
+git commit -m "refactor(import-reversa)!: carrega evidência, não deriva plano
 
 BREAKING CHANGE: runPipeline não emite mais PRD, stories.yaml nem plans.json.
-Esses artefatos passam a ser autorados pela fase P do PREVC. Remove
-emitters/prd, emitters/stories, emitters/plans, map.mjs e readiness.mjs.
+Esses artefatos passam a ser autorados pela fase P do PREVC.
+
+Switchover atômico (o IR muda de forma; não há transição campo-a-campo):
+- ADRs reais (adrs/*.md) agora convertem — antes 0 nos dois modos, porque
+  nenhum Reversa real casa '## D-NN —' (o attio usa '## N. Decisão')
+- espelho preserva estrutura original — antes achatava (0,0% dos bytes no OKR)
+- INDEX.md do espelho aponta para a âncora sem duplicá-la
+- IR de evidência + consistência sobre a evidência (nada bloqueia)
+- remove emitters/prd, emitters/stories, emitters/plans, map.mjs, readiness.mjs
 
 Dois defeitos somem por construção: o marco sintético M1 que discordava de
 milestone:null (PRD sempre vazio, nos dois modos) e o falso-red do readiness
@@ -2638,6 +2643,8 @@ milestone:null (PRD sempre vazio, nos dois modos) e o falso-red do readiness
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
+
+> Se estiver via subagent-driven-development: as Tasks 5–8 rodam sem commitar; a revisão entre-tarefas do bloco switchover é feita sobre o diff acumulado, e o gate de "verde" do bloco é este passo.
 
 ---
 
