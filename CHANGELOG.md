@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-07-25
+
 ### Changed — `import-reversa`: redesenho evidência-primeiro
 
 O importador deixa de derivar plano e passa a carregar **evidência classificada**; o plano é
