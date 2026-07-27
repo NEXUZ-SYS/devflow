@@ -128,6 +128,40 @@ test("S6: WARN when .devflow.yaml sets standards.s6Level=warn", () => {
   } finally { cleanup(); }
 });
 
+test("S6: s6Level com comentário inline ainda é warn (fail-closed indevido)", () => {
+  const { root, cleanup } = fixture();
+  try {
+    // Comentário inline é o padrão neste .devflow.yaml. O parseYamlSubset não
+    // remove `# ...` mid-line, então o valor chegava como "warn   # ..." e a
+    // comparação `s6Level === "warn"` caía no else → FAIL. Mesma classe do bug
+    // do permissions.yaml e do grounding-mcp.
+    writeDevflowYaml(root, "version: 1\nstandards:\n  s6Level: warn   # fail | warn\n");
+    writeManifest(root, {
+      typescript: { version: "5.9.0", artisanalRef: "refs/typescript@5.9.0.md" },
+    });
+    writeStd(root, "typescript", "## Princípios\n\nTypeScript 5.9.x é a linguagem única.\n");
+    const r = auditStandard(join(root, ".context/standards/std-typescript.md"), root);
+    const s6 = r.checks.find(c => c.id === "S6");
+    assert.equal(s6.status, "WARN", "comentário inline não pode transformar warn em FAIL");
+    assert.equal(r.gate, "PASSED", "WARN does not block gate");
+  } finally { cleanup(); }
+});
+
+test("S6: default segue FAIL — a correção não afrouxa o gate", () => {
+  const { root, cleanup } = fixture();
+  try {
+    // Sem s6Level declarado: o default "fail" continua valendo.
+    writeDevflowYaml(root, "version: 1\n");
+    writeManifest(root, {
+      typescript: { version: "5.9.0", artisanalRef: "refs/typescript@5.9.0.md" },
+    });
+    writeStd(root, "typescript", "## Princípios\n\nTypeScript 5.9.x é a linguagem única.\n");
+    const r = auditStandard(join(root, ".context/standards/std-typescript.md"), root);
+    const s6 = r.checks.find(c => c.id === "S6");
+    assert.equal(s6.status, "FAIL", "ausência de s6Level não pode virar WARN");
+  } finally { cleanup(); }
+});
+
 test("S6: skips libs declared with skipDocs:true (won't scrape, OK)", () => {
   const { root, cleanup } = fixture();
   try {

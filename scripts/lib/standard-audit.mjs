@@ -229,7 +229,12 @@ export function auditStandard(stdPath, projectRoot, options = {}) {
   // manifest entry, verify stacks/refs/<lib>@<ver>.md exists.
   {
     const cfg = loadDevflowConfig(projectRoot);
-    const s6Level = (cfg.standards && cfg.standards.s6Level) || "fail";
+    // `parseYamlSubset` não remove comentário mid-line (a doc dele é explícita:
+    // "comments: # ... full-line, NOT mid-line"), então `s6Level: warn  # fail | warn`
+    // chegava como "warn   # fail | warn" e a comparação abaixo caía no FAIL —
+    // fail-closed indevido, mesma classe do permissions.yaml e do grounding-mcp.
+    const s6Raw = (cfg.standards && cfg.standards.s6Level) || "fail";
+    const s6Level = String(s6Raw).replace(/\s+#.*$/, "").trim();
     const adrShape = {
       name: fm.id || "",
       description: fm.description || "",

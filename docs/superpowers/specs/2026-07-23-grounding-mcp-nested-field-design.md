@@ -42,16 +42,36 @@ export function readField(src, name) {
 
 `node scripts/lib/devflow-config.mjs read-field docsMcpServer …` retorna **vazio**. Quem precisa de campo sob `grounding:`, `instincts:` ou `orchestrator:` não tem caminho — e escreve o próprio parser.
 
-Consumidores hoje sem o parser único:
+Consumidores sem o parser único — **levantamento corrigido em 2026-07-27**, após verificar cada um em vez de confiar no `grep`:
 
-| arquivo | bloco | estado |
+| arquivo | mecanismo | estado |
 |---|---|---|
-| `doctor.mjs` (`grounding-mcp`) | `grounding:` | **bug vivo** |
-| `instinct-config.mjs` | `instincts:` | funciona |
-| `orchestrator-config.mjs` | `orchestrator:` | funciona |
-| `standard-audit.mjs` | — | funciona |
+| `doctor.mjs` (`grounding-mcp`) | regex ad-hoc | **bug vivo** → corrigido aqui |
+| `standard-audit.mjs` | `parseYamlSubset` (via `parseFrontmatter`) | **bug latente** → corrigido aqui (ver abaixo) |
+| `instinct-config.mjs` | parser próprio | **sem defeito** — já remove `\s+#.*$`, com comentário no código citando o `permissions.yaml` como lição |
+| `orchestrator-config.mjs` | — | **não é consumidor** — parseia a saída de `claude plugin list`; o `grep` casou uma menção em comentário |
 
-O ADR-011 diz *"NUNCA re-parsear com grep/awk/regex ad-hoc"*. A violação aqui não é indisciplina: é **lacuna de API**. Enquanto a lib só souber ler `git:`, o guardrail é inaplicável para o resto do arquivo.
+A primeira versão deste spec afirmava "4 consumidores violando o ADR-011". Estava errado nos dois sentidos: um não é consumidor, um já estava correto, e o `standard-audit` foi descartado como "funciona hoje" **sem verificação** — quando é justamente o segundo bug.
+
+O ADR-011 diz *"NUNCA re-parsear com grep/awk/regex ad-hoc"*. A violação no doctor não era indisciplina: é **lacuna de API**. Enquanto a lib só souber ler `git:`, o guardrail é inaplicável para o resto do arquivo.
+
+## O segundo bug: `standard-audit` (mesma classe, mecanismo diferente)
+
+`parseYamlSubset` não remove comentário de valor. Verificado empiricamente:
+
+```
+s6Level: warn   # comentário   →   lido como   "warn   # comentário"
+```
+
+E o consumo é comparação exata (`standard-audit.mjs:263`):
+
+```js
+const status = s6Level === "warn" ? "WARN" : "FAIL";
+```
+
+Quem escrever `s6Level: warn   # …` — comentário inline é o padrão neste `.devflow.yaml` — recebe **FAIL onde configurou WARN**. *Fail-closed* indevido: o audit de Standards bloqueia quando deveria apenas avisar.
+
+Não é regex ad-hoc como no doctor; é o parser de frontmatter, que legitimamente não trata comentário mid-line (a própria doc dele diz: *"comments: # … (full-line, NOT mid-line)"*). Mas o efeito para o usuário é idêntico.
 
 ## O achado que encolhe a correção
 
@@ -94,11 +114,18 @@ CLI: `read-block-field <bloco> <campo> <path>`, no mesmo formato dos comandos ex
 
 **`readField` permanece intacta** — é o atalho para `git:`, usada em vários lugares. Nada de deprecar nesta entrega.
 
-### D3 — Migrar **só** o `grounding-mcp`
+### D3 — Migrar os consumidores **com defeito**, não todos
 
-O `parseGrounding` ad-hoc do doctor sai; entra `readBlockField(src, "grounding", …)` para `mode` e `docsMcpServer`.
+**Revisada em 2026-07-27.** A versão original dizia "migrar só o `grounding-mcp`; os outros funcionam hoje". A premissa caiu quando o `standard-audit` foi verificado.
 
-Os outros 3 consumidores **não** são tocados. Eles funcionam hoje, não têm defeito conhecido, e mexer neles seria refactor sem ganho imediato — com risco de regressão. Ficam para depois, agora com a API disponível.
+- `doctor.mjs` — o `readGrounding` ad-hoc sai; entra `readBlockField(src, "grounding", …)`.
+- `standard-audit.mjs` — `s6Level` passa a ser lido com remoção de comentário inline.
+
+**Não** são tocados:
+- `instinct-config.mjs` — tem parser próprio, mas **sem defeito** (já remove `\s+#.*$`). Migrar seria refactor DRY puro: risco de regressão sem correção. YAGNI.
+- `orchestrator-config.mjs` — não é consumidor de `.devflow.yaml`.
+
+O critério passou a ser **defeito comprovado**, não estilo. Quem funciona fica.
 
 ## Testes
 
@@ -114,16 +141,18 @@ Os outros 3 consumidores **não** são tocados. Eles funcionam hoje, não têm d
 | 6 | `readField` | não-regressão: campos de `git:` seguem lidos |
 | 7 | check `grounding-mcp` | **o falso-positivo**: config com comentário inline + server presente no `.mcp.json` → `OK` |
 | 8 | check `grounding-mcp` | server realmente ausente → `WARN` (o alerta legítimo não é perdido) |
+| 9 | `standard-audit` | **o bug latente**: `s6Level: warn   # comentário` → `WARN`, não `FAIL` |
+| 10 | `standard-audit` | `s6Level: fail` (ou ausente) segue produzindo `FAIL` — o default não afrouxa |
 
-O teste 8 importa tanto quanto o 7: corrigir um falso-positivo não pode virar falso-**negativo**.
+Os testes 8 e 10 importam tanto quanto os 7 e 9: corrigir um falso-positivo não pode virar falso-**negativo**, e afrouxar um gate por acidente seria pior que o bug.
 
 Fixtures em `mkdtempSync(tmpdir())`.
 
 ## Escopo
 
-**Dentro:** `namedBlock` + `readBlockField` + CLI na lib; migração do `grounding-mcp`; testes; CHANGELOG.
+**Dentro:** `namedBlock` + `readBlockField` + CLI na lib; migração do `grounding-mcp`; correção do `s6Level` no `standard-audit`; testes; CHANGELOG.
 
-**Fora:** migrar `instinct-config`, `orchestrator-config`, `standard-audit` (funcionam; a API fica pronta); deprecar `readField`; suporte a aninhamento de mais de um nível (`a.b.c` — YAGNI, nenhum consumidor precisa); trocar o parser subset por uma dependência YAML real (decisão do ADR-011, fora desta correção).
+**Fora:** migrar `instinct-config` (sem defeito — refactor DRY é YAGNI); `orchestrator-config` (não é consumidor); deprecar `readField`; aninhamento de mais de um nível (`a.b.c` — nenhum consumidor precisa); trocar o subset-parser por dependência YAML real (decisão do ADR-011, fora desta correção).
 
 ## Guardrails de ADR
 
