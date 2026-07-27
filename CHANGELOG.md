@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — `/devflow:devflow-doctor`: falso-positivo no check `grounding-mcp`
+
+O check acusava que o `docsMcpServer` não estava no `.mcp.json` **quando estava** — a
+mensagem de erro exibia o próprio sintoma: `'docs-mcp-server  # server canônico de
+documentação'`, com o comentário inline colado ao valor. Um WARN permanente e enganoso
+no comando que existe para dizer a verdade sobre a saúde do contexto.
+
+- **`scripts/lib/devflow-config.mjs`** — `readBlockField(src, bloco, campo)` (nova, exportada)
+  lê um escalar de **qualquer** bloco de topo, herdando de `findScalar` a remoção de comentário
+  inline e a ancoragem por `:`. Internamente, `gitBlock` virou `namedBlock(text, name)` com o
+  nome parametrizado; os call-sites existentes seguem intactos. CLI: `read-block-field`.
+- **`grounding-mcp`** — o parse ad-hoc do doctor (comentado no código como *"no YAML dep"*)
+  saiu; o check passa a usar a lib. O `mode` também deixa de exibir o comentário na mensagem.
+
+**Causa raiz, não só sintoma:** `readField` era hard-coded ao bloco `git:`, então quem
+precisava de campo sob `grounding:`/`instincts:`/`orchestrator:` não tinha caminho e escrevia
+o próprio parser. A violação do ADR-011 era **lacuna de API**, não indisciplina — e a mesma
+classe de bug já havia custado um deny repo-wide no `permissions.yaml`. Os outros três
+consumidores com parse próprio funcionam hoje e não foram tocados; a API está disponível
+para quando forem migrados.
+
 ## [2.0.0] — 2026-07-25
 
 ### Changed — `import-reversa`: redesenho evidência-primeiro
