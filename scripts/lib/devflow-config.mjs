@@ -29,19 +29,30 @@ function leadingWidth(line) {
 
 // Retorna apenas as linhas DENTRO do bloco top-level `git:` (fecha na 1ª linha
 // não-indentada não-vazia). Espelha o fallback do read_yaml_field do hook.
-function gitBlock(text) {
+// Coleta as linhas de um bloco de topo (`<name>:` sem valor) até o dedent.
+// Genérica desde 2026-07-23: `readField` cobria só `git:`, o que empurrava os
+// consumidores de campos aninhados (grounding:, instincts:, …) a escrever
+// parser ad-hoc — a violação do ADR-011 era lacuna de API, não indisciplina.
+function namedBlock(text, name) {
+  const esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const head = new RegExp("^" + esc + ":\\s*$");
   const lines = normalizeNewlines(text).split("\n");
   const block = [];
-  let inGit = false;
+  let inBlock = false;
   for (const line of lines) {
-    if (!inGit) {
-      if (/^git:\s*$/.test(line)) inGit = true;
+    if (!inBlock) {
+      if (head.test(line)) inBlock = true;
       continue;
     }
     if (line.trim() !== "" && !/^\s/.test(line)) break; // dedent → fim do bloco
     block.push(line);
   }
   return block;
+}
+
+// Atalho retrocompatível: os call-sites internos seguem inalterados.
+function gitBlock(text) {
+  return namedBlock(text, "git");
 }
 
 // Localiza uma chave escalar dentro do bloco, ANCORADA por `:` (não substring).
@@ -94,6 +105,17 @@ export function readAutoFinish(src) {
 export function readField(src, name) {
   try {
     const f = findScalar(gitBlock(src), name);
+    return f ? f.raw : null;
+  } catch {
+    return null;
+  }
+}
+
+// Lê um escalar de QUALQUER bloco de topo. Herda de `findScalar` a remoção de
+// comentário inline e a ancoragem por `:` (prefixo não casa: `modeExtra` != `mode`).
+export function readBlockField(src, block, field) {
+  try {
+    const f = findScalar(namedBlock(src, block), field);
     return f ? f.raw : null;
   } catch {
     return null;
@@ -215,6 +237,12 @@ function main(argv) {
     const text = readTextOrNull(argv[2]);
     if (!name) { console.error("uso: devflow-config read-field <campo> <path>"); process.exit(2); }
     process.stdout.write((text == null ? "" : (readField(text, name) ?? "")) + "\n");
+  } else if (cmd === "read-block-field") {
+    const block = argv[1];
+    const name = argv[2];
+    const text = readTextOrNull(argv[3]);
+    if (!block || !name) { console.error("uso: devflow-config read-block-field <bloco> <campo> <path>"); process.exit(2); }
+    process.stdout.write((text == null ? "" : (readBlockField(text, block, name) ?? "")) + "\n");
   } else if (cmd === "read-verify") {
     // Fail-closed: se o verify: estiver presente mas inválido/inseguro, sai !=0.
     const text = readTextOrNull(argv[1]);
@@ -226,7 +254,7 @@ function main(argv) {
       process.exit(1);
     }
   } else {
-    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>|read-verify> <path>");
+    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>|read-block-field <bloco> <campo>|read-verify> <path>");
     process.exit(2);
   }
 }
