@@ -18,7 +18,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
-import { readVerifyFromPath } from "./devflow-config.mjs";
+import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -197,26 +197,21 @@ const gitHooks = {
   },
 };
 
-// Parse the grounding section of .context/.devflow.yaml (no YAML dep).
+// Lê a seção grounding via parser único (ADR-011). O parse ad-hoc que vivia aqui
+// capturava o comentário inline junto do valor — comparava
+// "docs-mcp-server  # server canônico de documentação" contra as chaves do
+// .mcp.json e acusava ausência de um server presente.
 function readGrounding(cwd) {
   const path = join(cwd, ".context", ".devflow.yaml");
   const def = { mode: "off", server: "docs-mcp-server" };
   if (!existsSync(path)) return def;
   let raw = "";
   try { raw = readFileSync(path, "utf-8"); } catch { return def; }
-  let mode = "off", server = "docs-mcp-server", inG = false;
-  for (const line of raw.split("\n")) {
-    const stripped = line.trim();
-    if (stripped === "grounding:") { inG = true; continue; }
-    if (inG) {
-      if (line && !/^\s/.test(line)) break; // dedent → grounding section ended
-      const m = stripped.match(/^mode:\s*(.+)$/);
-      if (m) mode = m[1].trim().replace(/['"]/g, "");
-      const s = stripped.match(/^docsMcpServer:\s*(.+)$/);
-      if (s) server = s[1].trim().replace(/['"]/g, "");
-    }
-  }
-  return { mode, server };
+  const strip = (v) => (v == null ? null : v.replace(/['"]/g, ""));
+  return {
+    mode: strip(readBlockField(raw, "grounding", "mode")) || "off",
+    server: strip(readBlockField(raw, "grounding", "docsMcpServer")) || "docs-mcp-server",
+  };
 }
 
 const groundingMcp = {

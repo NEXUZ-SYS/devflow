@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — `/devflow:devflow-doctor`: falso-positivo no check `grounding-mcp`
+
+O check acusava que o `docsMcpServer` não estava no `.mcp.json` **quando estava** — a
+mensagem de erro exibia o próprio sintoma: `'docs-mcp-server  # server canônico de
+documentação'`, com o comentário inline colado ao valor. Um WARN permanente e enganoso
+no comando que existe para dizer a verdade sobre a saúde do contexto.
+
+- **`scripts/lib/devflow-config.mjs`** — `readBlockField(src, bloco, campo)` (nova, exportada)
+  lê um escalar de **qualquer** bloco de topo, herdando de `findScalar` a remoção de comentário
+  inline e a ancoragem por `:`. Internamente, `gitBlock` virou `namedBlock(text, name)` com o
+  nome parametrizado; os call-sites existentes seguem intactos. CLI: `read-block-field`.
+- **`grounding-mcp`** — o parse ad-hoc do doctor (comentado no código como *"no YAML dep"*)
+  saiu; o check passa a usar a lib. O `mode` também deixa de exibir o comentário na mensagem.
+
+**Causa raiz, não só sintoma:** `readField` era hard-coded ao bloco `git:`, então quem
+precisava de campo sob `grounding:` não tinha caminho e escrevia o próprio parser. A violação
+do ADR-011 era **lacuna de API**, não indisciplina — e a mesma classe de bug já havia custado
+um deny repo-wide no `permissions.yaml`.
+
+### Fixed — `standards.s6Level` com comentário inline bloqueava o gate de Standards
+
+Segundo bug da mesma classe, encontrado ao auditar os demais consumidores de config. O
+`parseYamlSubset` não remove comentário *mid-line* (a doc dele é explícita: *"comments: `#` …
+full-line, NOT mid-line"*), então `s6Level: warn   # fail | warn` chegava ao `standard-audit`
+como a string `"warn   # fail | warn"`. A comparação é exata:
+
+```js
+const status = s6Level === "warn" ? "WARN" : "FAIL";
+```
+
+Resultado: quem configurava `warn` **com comentário** — o padrão neste `.devflow.yaml` —
+recebia **FAIL**, e o audit de Standards bloqueava o gate quando deveria apenas avisar.
+*Fail-closed* indevido. O valor passa a ser normalizado na leitura; o default `fail` segue
+intacto (há teste para isso — corrigir um fail-closed não pode afrouxar o gate).
+
+**Auditoria dos demais consumidores** (verificada arquivo a arquivo, não por `grep`):
+`instinct-config.mjs` tem parser próprio mas **já remove** `\s+#.*$` — sem defeito, não foi
+tocado (migrá-lo seria refactor sem correção). `orchestrator-config.mjs` **não é consumidor**
+de `.devflow.yaml` — parseia a saída de `claude plugin list`. O critério de migração passou a
+ser **defeito comprovado**, não estilo.
+
 ## [2.0.0] — 2026-07-25
 
 ### Changed — `import-reversa`: redesenho evidência-primeiro
