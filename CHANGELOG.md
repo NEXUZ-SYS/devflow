@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-07-29
+
 ### Fixed — `/devflow:devflow-doctor`: falso-positivo no check `grounding-mcp`
 
 O check acusava que o `docsMcpServer` não estava no `.mcp.json` **quando estava** — a
