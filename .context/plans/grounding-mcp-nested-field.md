@@ -37,7 +37,7 @@ phases:
     prevc: "V"
     status: pending
     summary: "Sinais unit e lint observados no ledger do verify-gate (ADR-013). 12 testes novos; não-regressão dos consumidores da lib (readField/readAutoFinish/readVersioning seguem via gitBlock→namedBlock). Verificação no repo real: o doctor deve sair de 2 WARN para 1 WARN (o restante é o claude mcp list, alheio)."
-lastUpdated: "2026-07-23T00:00:00.000Z"
+lastUpdated: "2026-07-27T16:35:07.802Z"
 ---
 
 # `readBlockField` — o doctor para de re-parsear config aninhada — tracking
@@ -60,16 +60,30 @@ Impacto: o comando que existe para dizer a verdade sobre a saúde do contexto me
 
 ## A causa raiz
 
-`readField` é hard-coded ao bloco `git:`. Não há leitor para campos aninhados, então quem precisa deles escreve o próprio parser:
+`readField` é hard-coded ao bloco `git:`. Não há leitor para campos aninhados, então quem precisa deles escreve o próprio parser. O ADR-011 proíbe parse ad-hoc, mas a lib não oferecia alternativa: **a violação é lacuna de API, não indisciplina.**
 
-| consumidor | bloco | estado |
+## Levantamento corrigido (2026-07-27)
+
+A primeira versão deste tracking afirmava "4 consumidores violando o ADR-011". Errado nos dois sentidos — verificação arquivo a arquivo, não por `grep`:
+
+| arquivo | mecanismo | estado |
 |---|---|---|
-| `doctor.mjs` (`grounding-mcp`) | `grounding:` | **bug vivo** |
-| `instinct-config.mjs` | `instincts:` | funciona |
-| `orchestrator-config.mjs` | `orchestrator:` | funciona |
-| `standard-audit.mjs` | — | funciona |
+| `doctor.mjs` (`grounding-mcp`) | regex ad-hoc | **bug vivo** → corrigido |
+| `standard-audit.mjs` | `parseYamlSubset` | **bug latente** → corrigido (ver abaixo) |
+| `instinct-config.mjs` | parser próprio | **sem defeito** — já remove `\s+#.*$` |
+| `orchestrator-config.mjs` | — | **não é consumidor** (parseia `claude plugin list`) |
 
-O ADR-011 proíbe parse ad-hoc, mas a lib não oferecia alternativa. **A violação é lacuna de API, não indisciplina.**
+Um não era consumidor, um já estava correto, e o `standard-audit` — que descartei como *"funciona hoje"* **sem verificar** — era justamente o segundo bug.
+
+## O segundo bug: `s6Level` bloqueava o gate
+
+`parseYamlSubset` não remove comentário *mid-line*. Então `s6Level: warn   # fail | warn` chegava como a string inteira, e a comparação exata (`standard-audit.mjs:263`) caía no `else`:
+
+```js
+const status = s6Level === "warn" ? "WARN" : "FAIL";
+```
+
+Quem configurou `warn` **com comentário** — o padrão neste `.devflow.yaml` — recebia **FAIL**, e o audit de Standards bloqueava o gate. Mais grave que o primeiro bug, que só produzia ruído.
 
 ## O achado que encolhe a correção
 
@@ -79,11 +93,11 @@ A lib **já** resolve o que o doctor reintroduziu: `findScalar` chama `stripInli
 
 - **D1** — `gitBlock(text)` → `namedBlock(text, name)`; `gitBlock` permanece como atalho, e os 3 call-sites internos seguem inalterados (retrocompatibilidade por construção).
 - **D2** — `readBlockField(src, block, field)` exportada + CLI `read-block-field`. Herda remoção de comentário e ancoragem por `:` de graça. `readField` **não** é deprecada.
-- **D3** — migrar **só** o `grounding-mcp`. Os outros 3 funcionam, não têm defeito conhecido, e mexer neles seria refactor com risco de regressão sem ganho imediato.
+- **D3 (revisada)** — migrar os consumidores **com defeito comprovado**, não todos: `grounding-mcp` e `s6Level`. O critério é defeito, não estilo — quem funciona fica.
 
 ## Fora de escopo
 
-Migrar `instinct-config`/`orchestrator-config`/`standard-audit`; deprecar `readField`; aninhamento de mais de um nível (YAGNI); trocar o subset-parser por dependência YAML real (decisão do ADR-011).
+Migrar `instinct-config` (sem defeito — refactor DRY é YAGNI); `orchestrator-config` (não é consumidor); deprecar `readField`; aninhamento de mais de um nível; trocar o subset-parser por dependência YAML real (decisão do ADR-011).
 
 ## Guardrails de ADR
 
@@ -95,4 +109,4 @@ Migrar `instinct-config`/`orchestrator-config`/`standard-audit`; deprecar `readF
 
 ## Execution History
 
-> Last updated: 2026-07-23 | Progress: 0%
+> Last updated: 2026-07-27T16:35:07.802Z | Progress: 0%
