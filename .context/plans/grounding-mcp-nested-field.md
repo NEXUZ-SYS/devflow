@@ -12,7 +12,7 @@ scaffoldVersion: "2.0.0"
 summary: "BUG VIVO: o check grounding-mcp reporta que o docsMcpServer não está no .mcp.json quando ELE ESTÁ. A regex ad-hoc do doctor captura o comentário inline junto, comparando 'docs-mcp-server  # server canônico de documentação' contra as chaves do .mcp.json — a própria mensagem de erro exibe o sintoma. Mesma família do bug do permissions.yaml. CAUSA RAIZ: readField é hard-coded ao bloco git: (findScalar(gitBlock(src), name)), então quem precisa de campo sob grounding:/instincts:/orchestrator: não tem caminho e escreve o próprio parser — a violação do ADR-011 é lacuna de API, não indisciplina (4 consumidores nessa situação). ACHADO QUE ENCOLHE A CORREÇÃO: a lib já resolve o problema — findScalar chama stripInlineComment (/\\s+#.*$/) e gitBlock é genérico exceto por uma linha (/^git:\\s*$/). Basta parametrizar o nome do bloco e expor. Escopo travado: migrar SÓ o grounding-mcp; os outros 3 funcionam e ficam para depois, já com a API pronta."
 sources:
   spec: docs/superpowers/specs/2026-07-23-grounding-mcp-nested-field-design.md
-  plan: docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field-impl.md
+  plan: docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field.md
 requiredSignals:
   - unit
   - lint
@@ -43,7 +43,7 @@ lastUpdated: "2026-07-27T16:35:07.802Z"
 # `readBlockField` — o doctor para de re-parsear config aninhada — tracking
 
 > **Spec:** [`docs/superpowers/specs/2026-07-23-grounding-mcp-nested-field-design.md`](../../docs/superpowers/specs/2026-07-23-grounding-mcp-nested-field-design.md)
-> **Plano executável:** [`docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field-impl.md`](../../docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field-impl.md)
+> **Plano executável:** [`docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field.md`](../../docs/superpowers/plans/2026-07-23-grounding-mcp-nested-field.md)
 
 ## O bug
 

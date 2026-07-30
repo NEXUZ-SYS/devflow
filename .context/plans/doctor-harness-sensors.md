@@ -12,7 +12,7 @@ scaffoldVersion: "2.0.0"
 summary: "O gate de fase exige os sensores tests/lint, que não existem: nunca definimos .context/config/sensors.json e os built-ins do dotcontext assumem npm/TS (este repo não tem package.json na raiz). Resultado: workflow-advance --force em TODO avanço — 4x só na sessão que originou este plano — não por teste faltando (os sinais ficam verdes no ledger E no CI), mas por contabilidade do harness divergindo da evidência. Solução: gerador que deriva o catálogo do verify: (parser único, ADR-011; reusa VERIFY_ALLOWLIST) com fail-closed em metacaractere de shell e espaço em argumento, mais um check no doctor. ACHADO: o catálogo roda com promisify(exec) — sh -c — enquanto os built-ins usam spawn shell:false. Mas esse caminho é do dotcontext e PRÉ-EXISTENTE (qualquer sensors.json já é executado assim; quem tem escrita no repo pode criá-lo hoje), então gerar não cria a capacidade: superfície marginal ~zero e o arquivo é versionado, revisado em PR. A validação estrita é guard de CORRETUDE (round-trip argv<->string), não fronteira de segurança."
 sources:
   spec: docs/superpowers/specs/2026-07-22-doctor-harness-sensors-design.md
-  plan: docs/superpowers/plans/2026-07-22-doctor-harness-sensors-impl.md
+  plan: docs/superpowers/plans/2026-07-22-doctor-harness-sensors.md
   gap: docs/superpowers/plans/2026-07-22-harness-sensors-catalog-gap.md
 requiredSignals:
   - unit
@@ -44,7 +44,7 @@ lastUpdated: "2026-07-22T00:00:00.000Z"
 # Check `harness-sensors` + catálogo derivado do `verify:` — tracking
 
 > **Spec:** [`docs/superpowers/specs/2026-07-22-doctor-harness-sensors-design.md`](../../docs/superpowers/specs/2026-07-22-doctor-harness-sensors-design.md)
-> **Plano executável:** [`docs/superpowers/plans/2026-07-22-doctor-harness-sensors-impl.md`](../../docs/superpowers/plans/2026-07-22-doctor-harness-sensors-impl.md)
+> **Plano executável:** [`docs/superpowers/plans/2026-07-22-doctor-harness-sensors.md`](../../docs/superpowers/plans/2026-07-22-doctor-harness-sensors.md)
 > **Levantamento do gap:** [`docs/superpowers/plans/2026-07-22-harness-sensors-catalog-gap.md`](../../docs/superpowers/plans/2026-07-22-harness-sensors-catalog-gap.md)
 
 ## Problema
