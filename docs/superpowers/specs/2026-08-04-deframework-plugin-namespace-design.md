@@ -201,6 +201,7 @@ TDD real, RED → GREEN. O teste central é o guard de regressão do defeito ori
 | `frameworkContributions` | não retorna `agents`; retorna `skillsWithOrigin` |
 | Detecção de órfão | manifesto com artefato não-contribuído ⇒ reportado, **não** removido |
 | Binding no agente | `skills:` gravada preservando demais chaves; idempotente |
+| **Frontmatter sobrevive ao dotcontext** | agente com `skills:` parseado **pelo parser do próprio dotcontext** mantém todas as chaves (ver risco abaixo) |
 
 Atualizar: `test-profile-nxz-integrity`, `test-profile-standards-integrity`,
 `test-profile-standards-wiring`, `test-detect-framework`, `test-gen-known-hashes`,
@@ -209,6 +210,17 @@ Atualizar: `test-profile-nxz-integrity`, `test-profile-standards-integrity`,
 ```yaml
 requiredSignals: [unit, integration, lint]
 ```
+
+### Risco do frontmatter (achado da revisão do architect)
+
+O parser de frontmatter do dotcontext **descarta o frontmatter inteiro** quando um campo
+sai mal-tipado (caso conhecido: `generated:` sem aspas interpretado como `Date`), caindo
+num fallback silencioso. Gravar `skills:` no agente de projeto entra exatamente nessa
+superfície: se a lista sair malformada, o agente perde `role`, `name` e tudo mais — sem
+erro visível.
+
+Mitigação: o teste de binding valida o arquivo resultante **com o parser do próprio
+dotcontext**, nunca com `pyyaml`, que dá falso-OK nesse caso.
 
 ### Limitação declarada
 
@@ -233,13 +245,32 @@ na fase V — *não* como sinal verde de teste.
 - A worktree `.claude/worktrees/feature+prevc-active-feature-guard` **não é tocada**
   (WIP de outra feature).
 
+### Fora de escopo — drift pré-existente (follow-up)
+
+A revisão do architect expôs desatualização que **antecede** esta mudança e não será
+corrigida aqui, para não misturar refactor alheio na entrega:
+
+- `references/skills-map.md` (índice-mestre citado pelo playbook do architect) é de
+  2026-05-28 e **não menciona nenhuma skill de Odoo** — já estava errado antes.
+- O próprio `.context/agents/architect.md` declara "32 skills, 16 agents, 6 commands"
+  contra 49 / 21 / 14 reais.
+
+Verificado nesta revisão e **sem impacto**: nenhum hook quebra. `hooks/session-start` lê
+apenas `${PLUGIN_ROOT}/skills/using-devflow/SKILL.md` (skill base, permanece) e
+`hooks/pre-tool-use` casa o padrão `*/.context/skills/*`, que é o destino da cópia e não
+muda.
+
 ## ADR e versionamento
 
-**ADR nova, `refines: [008]`.** A decisão do ADR-008 (Standards de perfil copiados)
-continua válida; esta acrescenta que *localização = contrato de registro*, estende a
-regra a skills e **revoga** a contribuição de agents por profile — que nunca teve ADR,
-veio do mecanismo da v1.13.0. A relação será confirmada mecanicamente por
-`adr-decision.mjs` no Step 3.5 do Planning, não por prosa.
+**Evoluir a ADR-008 (`framework-profile-scoped-standards`), bump minor.** A decisão do
+ADR-008 (Standards de perfil copiados) continua válida; esta acrescenta que
+*localização = contrato de registro*, estende a regra a skills e **revoga** a
+contribuição de agents por profile — que nunca teve ADR, veio do mecanismo da v1.13.0.
+
+> **Correção registrada.** A primeira versão deste spec dizia "ADR nova, `refines: [008]`".
+> A relação foi classificada como `extends` e submetida a `adr-decision.mjs`, que
+> respondeu `{"action":"evolve","evolveHint":"minor"}`. Prevalece a saída mecânica sobre
+> a prosa anterior, conforme o Step 3.5 do Planning.
 
 **Versionamento: major.** Somem comandos invocáveis (`devflow:odoo-*`,
 `devflow:nxz-go-test`) e o agent type `devflow:Odoo Specialist`. Repo é
