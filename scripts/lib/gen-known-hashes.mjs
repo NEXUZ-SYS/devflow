@@ -25,10 +25,16 @@ function walk(root, sub, out) {
   }
 }
 
-// Artefatos VERBATIM: skills/** + assets/standards/profiles/** (.md + .js). Sem agents nem std raiz.
+// Artefatos VERBATIM (.md + .js). Sem agents nem std raiz. Tres raizes:
+//   skills/**                      -> skills base do bridge (namespace global)
+//   assets/skills/profiles/**      -> skills de perfil (ADR-008 v1.1.0)
+//   assets/standards/profiles/**   -> standards de perfil
+// O hash e de CONTEUDO, path-agnostico: relocar um arquivo entre estas raizes
+// nao altera o conjunto de hashes, desde que a raiz nova seja varrida aqui.
 export function distributableFiles(pluginRoot) {
   const out = [];
   walk(pluginRoot, "skills", out);
+  walk(pluginRoot, join("assets", "skills", "profiles"), out);
   walk(pluginRoot, join("assets", "standards", "profiles"), out);
   return out.filter((f) => f.endsWith(".md") || f.endsWith(".js"));
 }

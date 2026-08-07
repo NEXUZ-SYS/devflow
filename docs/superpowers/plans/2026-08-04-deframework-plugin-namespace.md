@@ -599,18 +599,30 @@ export function distributableFiles(pluginRoot) {
 }
 ```
 
-- [ ] **Passo 4: Rodar e confirmar GREEN**
+- [ ] **Passo 4: Rodar e confirmar GREEN (parcial)**
 
 Run: `node --test tests/integration/test-gen-known-hashes.mjs`
-Expected: **PASS**.
 
-- [ ] **Passo 5: Regenerar o registry e conferir o delta**
+Expected: **3 de 4 PASS**. O teste "nenhuma skill de framework sobrou sob `skills/`" segue **RED** acusando `skills/nxz-go-test/SKILL.md`, que só sai na Tarefa 7 — mesmo padrão dos AC3/AC4 do guard.
+
+- [ ] **Passo 5: Provar o invariante contra o registry pré-relocação**
+
+O registry commitado foi gerado **antes** do move. Se o conteúdo foi preservado, todo hash do working tree atual já deve constar nele:
 
 ```bash
-node scripts/lib/gen-known-hashes.mjs
-git diff --stat assets/provenance/known-hashes.json
+node -e "
+const fs=require('fs');
+import('./scripts/lib/gen-known-hashes.mjs').then(m => {
+  const atual = m.genFromWorkingTree(process.cwd());
+  const registry = new Set(JSON.parse(fs.readFileSync('assets/provenance/known-hashes.json')).hashes);
+  const novos = [...atual].filter(h => !registry.has(h));
+  console.log('novos:', novos.length);
+});"
 ```
-Expected: o conjunto encolhe **apenas** pelos hashes do `nxz-go-test` (removido na Tarefa 7). Se hashes das skills relocadas sumirem, o conteúdo foi alterado no move — volte à Tarefa 2.
+
+Expected: **`novos: 0`**. Qualquer número acima de zero significa que algum conteúdo mudou junto com o move — volte à Tarefa 2. Esta é uma prova independente do `git diff -M`: aquele compara a árvore, esta compara contra o histórico de conteúdo já distribuído.
+
+**A regeneração do registry fica para depois da Tarefa 7**, quando o `nxz-go-test` já tiver saído — regenerar antes gravaria hashes de um artefato que está de saída.
 
 - [ ] **Passo 6: Commit**
 
