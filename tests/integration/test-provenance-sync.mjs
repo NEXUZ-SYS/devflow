@@ -83,16 +83,65 @@ describe("applySync — segurança (contenção)", () => {
   });
 });
 
+// Fixture: projeto que CASA com o perfil odoo (detect.files: __manifest__.py).
+// Sem o marcador nenhum perfil fica ativo e as asserções passariam VAZIAS.
+function projetoOdoo(prefixo = "prov-res-") {
+  const proj = mkdtempSync(join(tmpdir(), prefixo));
+  mkdirSync(join(proj, "addons", "x"), { recursive: true });
+  writeFileSync(join(proj, "addons", "x", "__manifest__.py"), "{'name':'x'}");
+  return proj;
+}
+
 describe("resolveArtifacts", () => {
   it("inclui skills e standards de profile; exclui agents; src no plugin", () => {
-    const proj = mkdtempSync(join(tmpdir(), "prov-res-"));
-    mkdirSync(join(proj, "addons", "x"), { recursive: true });
-    writeFileSync(join(proj, "addons", "x", "__manifest__.py"), "{'name':'x'}");
+    const proj = projetoOdoo();
     const arts = resolveArtifacts({ projectRoot: proj, pluginRoot: REPO, baseSkills: [] });
     assert.ok(arts.some((a) => a.dest.includes(`${join(".context", "skills", "odoo-development")}`)));
     assert.ok(arts.some((a) => a.dest.includes(`${join(".context", "engineering", "standards", "std-odoo-naming-conventions.md")}`)));
     assert.ok(arts.every((a) => !a.dest.includes(`${join(".context", "agents")}`)), "agents fora");
     assert.ok(arts.every((a) => a.src.startsWith(REPO)), "src no plugin");
+  });
+});
+
+describe("resolveArtifacts é source-aware por slug", () => {
+  it("skill de perfil resolve de assets/skills/profiles/<fw>/ com dest em .context/skills/", () => {
+    const arts = resolveArtifacts({
+      projectRoot: projetoOdoo("prov-src-"), pluginRoot: REPO, baseSkills: [],
+    });
+    const dev = arts.find((a) => a.src.includes("odoo-development"));
+    assert.ok(dev, "odoo-development deveria ser contribuída pelo perfil odoo");
+    assert.match(dev.src, /assets[/\\]skills[/\\]profiles[/\\]odoo[/\\]odoo-development[/\\]SKILL\.md$/);
+    assert.match(dev.dest, /\.context[/\\]skills[/\\]odoo-development[/\\]SKILL\.md$/);
+    assert.equal(dev.framework, "odoo");
+    // O dest NUNCA pode carregar o path de ORIGEM: derivá-lo do rel do src
+    // produziria .context/assets/skills/profiles/... — o defeito que a T4 corrige.
+    // Checar o SEGMENTO, não a substring: um arquivo pode legitimamente se
+    // chamar "module-and-assets.md" sem que isso seja vazamento de path.
+    const VAZAMENTO = new RegExp(`\\.context[/\\\\]${["assets", "skills", "profiles"].join("[/\\\\]")}`);
+    for (const a of arts) {
+      assert.ok(!VAZAMENTO.test(a.dest), `dest carregou o path de origem: ${a.dest}`);
+    }
+  });
+
+  it("preserva a estrutura interna da skill (references/ não achatado)", () => {
+    const arts = resolveArtifacts({
+      projectRoot: projetoOdoo("prov-nest-"), pluginRoot: REPO, baseSkills: [],
+    });
+    const ref = arts.find((a) => a.src.includes("odoo-l10n-br") && a.src.includes("references"));
+    assert.ok(ref, "as references/ da skill precisam ser resolvidas");
+    assert.match(ref.dest, /\.context[/\\]skills[/\\]odoo-l10n-br[/\\]references[/\\]/);
+  });
+
+  it("skill base continua resolvendo de skills/", () => {
+    const arts = resolveArtifacts({
+      projectRoot: projetoOdoo("prov-base-"), pluginRoot: REPO, baseSkills: ["commit-message"],
+    });
+    const base = arts.find((a) => a.src.includes("commit-message"));
+    assert.ok(base, "skill base deveria ser resolvida");
+    assert.match(base.src, /[/\\]skills[/\\]commit-message[/\\]/);
+    assert.ok(!base.src.includes(join("assets", "skills")), "skill base não vem de assets/");
+    assert.match(base.dest, /\.context[/\\]skills[/\\]commit-message[/\\]/);
+    assert.equal(base.framework, "skill");
   });
 });
 

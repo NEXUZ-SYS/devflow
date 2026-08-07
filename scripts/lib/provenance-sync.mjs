@@ -75,12 +75,29 @@ function walkFiles(root, sub, out) {
 export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
   const c = frameworkContributions(projectRoot, pluginRoot);
   const arts = [];
-  const skills = [...new Set([...(c.skills || []), ...baseSkills])];
-  for (const slug of skills) {
+
+  // Origem por slug: skill base vive em skills/; skill de perfil, em
+  // assets/skills/profiles/<fw>/ (ADR-008 v1.1.0 — localizacao e o contrato de
+  // registro). O dest NUNCA e derivado do rel do src: derivar produziria
+  // .context/assets/skills/profiles/... A origem e o destino sao independentes.
+  const sources = new Map(); // slug -> { sub, framework }
+  for (const slug of baseSkills) {
+    sources.set(slug, { sub: join("skills", slug), framework: "skill" });
+  }
+  for (const { slug, framework } of c.skillsWithOrigin || []) {
+    sources.set(slug, { sub: join("assets", "skills", "profiles", framework, slug), framework });
+  }
+
+  for (const [slug, { sub, framework }] of sources) {
     const files = [];
-    walkFiles(pluginRoot, join("skills", slug), files);
+    walkFiles(pluginRoot, sub, files);
     for (const rel of files) {
-      arts.push({ src: join(pluginRoot, rel), dest: join(projectRoot, ".context", rel), framework: "skill" });
+      const inner = relative(sub, rel); // caminho DENTRO da skill (preserva references/)
+      arts.push({
+        src: join(pluginRoot, rel),
+        dest: join(projectRoot, ".context", "skills", slug, inner),
+        framework,
+      });
     }
   }
   for (const { id, framework } of c.standardsWithOrigin || []) {
