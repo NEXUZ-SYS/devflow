@@ -14,20 +14,21 @@
 # Nomes de produtos internos que NÃO devem aparecer em ADR (Check 3).
 # ADR fala de stack e arquitetura; menção a produto é sinal de que o raciocínio
 # está misturado com domínio de negócio.
+#
+# Os valores abaixo são PLACEHOLDERS. Substitua pelos produtos da sua
+# organização — o Check 3 só acusa o que estiver listado aqui.
 product_names:
-  - NXZ ERP
-  - NXZ Go
-  - NXZ KDS
-  - NXZ Delivery
+  - Produto A
+  - Produto B
 
 # Verticais de mercado que NÃO devem aparecer em ADR (Check 3).
 # Uma ADR bem escrita deve ser reutilizável por outra organização com a mesma
 # stack — se menciona vertical, perdeu essa portabilidade.
+#
+# Também PLACEHOLDERS. Substitua pelas verticais da sua organização.
 business_verticals:
-  - food service
-  - restaurantes
-  - varejo
-  - franqueados
+  - vertical-de-mercado
+  - segmento-de-cliente
 
 # URL do repositório DevFlow (Step 6, opções A e C).
 # Usada no IMPORT.md da opção A e no README.md da opção C para apontar ao

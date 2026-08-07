@@ -879,10 +879,34 @@ business_verticals:
 Run: `node scripts/adr-audit.mjs .context/engineering/adrs/008-framework-profile-scoped-standards-v1.1.0.md --format=json`
 Expected: Check 3 (`Foco em stack`) segue `PASS` — os placeholders não casam com nada no texto, que é o comportamento esperado de um default neutro.
 
-- [ ] **Passo 5: Commit**
+- [ ] **Passo 5: Regenerar o registry em modo `--append` (nunca backfill)**
 
 ```bash
-git add -A skills
+node scripts/lib/gen-known-hashes.mjs --append
+```
+
+**A escolha do modo importa e foi medida.** O default (`backfill`) deriva de `indexedFiles()` sobre a árvore atual e, com o `nxz-go-test` fora dela, **descarta os hashes históricos dele** — medido: 335 hashes contra 338 do `--append`. Isso quebraria a T10: um deploy **intocado** do artefato aposentado num projeto-cliente deixaria de ser reconhecível, e `detectRetired` reportaria "divergente", ou seja, diria *"você editou isto"* sobre um arquivo que ninguém tocou.
+
+Regra geral: **um registry de proveniência não encolhe ao aposentar artefato.** Use `--append` sempre que retirar algo do bundle.
+
+Verifique que a história sobreviveu:
+
+```bash
+node -e "
+const fs=require('fs'); const {execFileSync}=require('child_process'); const {createHash}=require('crypto');
+const reg=new Set(JSON.parse(fs.readFileSync('assets/provenance/known-hashes.json')).hashes);
+const shas=execFileSync('git',['log','--pretty=%H','--','skills/nxz-go-test/SKILL.md'],{encoding:'utf-8'}).trim().split('\n').filter(Boolean);
+let ok=0; for(const s of shas){ try{ const b=execFileSync('git',['show',s+':skills/nxz-go-test/SKILL.md']); if(reg.has(createHash('sha256').update(b).digest('hex'))) ok++; }catch{} }
+console.log('versões históricas:', shas.length, '| ainda no registry:', ok);
+"
+```
+
+Expected: os dois números iguais.
+
+- [ ] **Passo 6: Commit**
+
+```bash
+git add -A skills assets/provenance/known-hashes.json
 git commit -m "chore(skills): retira nxz-go-test do bundle e neutraliza defaults proprietários"
 ```
 
