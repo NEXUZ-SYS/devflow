@@ -154,6 +154,30 @@ contenção/symlink/src ilegível). Respeitar `.context/standards.local.yaml` `d
 para cada `agent` ausente em `.context/agents/`, scaffoldar do template e preencher; existentes
 seguem o fluxo de fill in-place. (A proveniência por hash só cobre artefatos verbatim.)
 
+**Perfis NÃO contribuem agents** (ADR-008 v1.1.0) — criar agente de projeto é competência
+exclusiva do dotcontext. O que o perfil contribui é o **vínculo**, via `skillBindings`.
+
+**Binding de skills no agente — em TODA execução do sync:**
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/agent-skill-binding.mjs" \
+  --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}"
+```
+
+Após copiar os artefatos de perfil, aplique `applySkillBindings({ root, skillBindings })` com o
+`skillBindings` vindo de `frameworkContributions`. A chamada é **incondicional e idempotente**:
+
+- reaplicar sem mudança **não altera byte algum** do arquivo;
+- uma regeneração do agente pelo dotcontext (que apagaria a chave) é **reparada no sync
+  seguinte** — é isto que impede o binding de virar uma escrita órfã;
+- a gravação é **cirúrgica**: só a linha `skills:` é inserida ou substituída, nunca o bloco
+  re-serializado, porque re-emitir um campo mal-tipado faz o parser do dotcontext descartar o
+  frontmatter inteiro;
+- papel **sem** agente correspondente volta em `pending` e é **reportado ao usuário** — o sync
+  nunca cria o arquivo.
+
+Reporte `{written, pending}` junto do relatório de proveniência.
+
 ### Sync do scaffold de release (ADR-012) — FORA do `provenance-sync`
 
 Os artefatos de scaffold de CI (`.github/workflows/release.yml`, `scripts/bump-version.sh`,
