@@ -13,14 +13,18 @@ import { parseYaml } from "../../../scripts/lib/frontmatter.mjs";
 export const REPO = resolve(import.meta.dirname, "../../..");
 export const REQUIRED_VERSIONS = ["12", "13", "14", "15", "16", "17", "18"];
 
+// Skills de perfil moram sob assets/skills/profiles/<fw>/ desde a ADR-008
+// v1.1.0 — nunca em skills/, que e namespace global registrado sem opt-out.
+const PROFILE_SKILLS = resolve(REPO, "assets/skills/profiles");
+
 export const L1_FILES = {
   skills: [
-    resolve(REPO, "skills/odoo-development/SKILL.md"),
-    resolve(REPO, "skills/frontend-specialist-odoo/SKILL.md"),
+    resolve(PROFILE_SKILLS, "odoo/odoo-development/SKILL.md"),
+    resolve(PROFILE_SKILLS, "odoo/frontend-specialist-odoo/SKILL.md"),
   ],
 };
-export const L2_FILES = { skills: [resolve(REPO, "skills/odoo-l10n-br/SKILL.md")] };
-export const L3_FILES = { skills: [resolve(REPO, "skills/odoo-nxz-overlay/SKILL.md")] };
+export const L2_FILES = { skills: [resolve(PROFILE_SKILLS, "odoo/odoo-l10n-br/SKILL.md")] };
+export const L3_FILES = { skills: [resolve(PROFILE_SKILLS, "nxz/odoo-nxz-overlay/SKILL.md")] };
 
 // Standards que PERMANECEM no profile odoo (L1/L2) — devem ficar livres de NXZ.
 export function l1Standards() {

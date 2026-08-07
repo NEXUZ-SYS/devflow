@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadProfiles, detectFrameworks } from "../../scripts/lib/detect-framework.mjs";
+import { loadProfiles, detectFrameworks, frameworkContributions } from "../../scripts/lib/detect-framework.mjs";
 
 const REPO = resolve(import.meta.dirname, "../..");
 
@@ -65,8 +65,63 @@ describe("detect-framework", () => {
     for (const p of profiles) {
       assert.ok(p.framework, "profile missing framework");
       assert.ok(p.detect && typeof p.detect === "object", `${p.framework}: missing detect`);
-      assert.ok(Array.isArray(p.agents), `${p.framework}: agents must be an array`);
       assert.ok(Array.isArray(p.skills), `${p.framework}: skills must be an array`);
+      // `agents` foi REVOGADO na ADR-008 v1.1.0 — criar agente de projeto é do
+      // dotcontext. loadProfiles não normaliza mais essa chave.
+      assert.equal(p.agents, undefined, `${p.framework}: perfis não contribuem agents`);
+      assert.ok(p.skillBindings && typeof p.skillBindings === "object",
+        `${p.framework}: skillBindings must be an object`);
     }
+  });
+});
+
+/**
+ * Contribuições de perfil após a revogação de agents (ADR-008 v1.1.0).
+ *
+ * A fixture cria o marcador de detecção (__manifest__.py): sem ele nenhum
+ * perfil fica ativo e as asserções passariam VAZIAS — falso-verde que a
+ * revisão da fase R apontou como risco real.
+ */
+describe("contribuições de perfil (ADR-008 v1.1.0)", () => {
+  const dirs = [];
+  after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
+
+  function projetoOdoo() {
+    const proj = mkdtempSync(join(tmpdir(), "detect-odoo-"));
+    dirs.push(proj);
+    writeFileSync(join(proj, "__manifest__.py"), "{'name': 'fixture'}\n");
+    return proj;
+  }
+
+  it("frameworkContributions não expõe mais agents", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.ok(c.frameworks.includes("odoo"), "fixture precisa casar com o perfil odoo");
+    assert.equal(c.agents, undefined, "perfis não contribuem agents");
+  });
+
+  it("expõe skillsWithOrigin com o perfil de origem", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    const dev = c.skillsWithOrigin.find((s) => s.slug === "odoo-development");
+    assert.deepEqual(dev, { slug: "odoo-development", framework: "odoo" });
+  });
+
+  it("normaliza skillBindings e mapeia papel → skills", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.deepEqual([...c.skillBindings["backend-specialist"]].sort(),
+      ["odoo-development", "odoo-l10n-br"]);
+    assert.deepEqual(c.skillBindings["frontend-specialist"], ["frontend-specialist-odoo"]);
+  });
+
+  it("dispatchKeywords não referencia agente do plugin", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.equal(c.dispatchKeywords["odoo-specialist"], undefined,
+      "odoo-specialist deixou de existir — o mapa aponta para papéis de projeto");
+    assert.ok(c.dispatchKeywords["backend-specialist"].includes("orm"));
+  });
+
+  it("backward-compat: perfil sem as chaves novas → estruturas vazias", () => {
+    const p = loadProfiles(REPO).find((x) => x.framework === "nxz");
+    assert.ok(Array.isArray(p.skills));
+    assert.equal(typeof p.skillBindings, "object");
   });
 });

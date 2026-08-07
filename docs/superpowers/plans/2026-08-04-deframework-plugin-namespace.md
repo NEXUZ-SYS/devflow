@@ -386,6 +386,11 @@ dispatchKeywords:
 git rm agents/odoo-specialist.md tests/integration/test-odoo-specialist-refs.mjs
 ```
 
+**Desvio registrado na execução — `tests/odoo-artifacts/` também depende dos paths antigos.** O escopo de testes a ajustar previa só os três `test-profile-*`, mas o sinal `unit` quebrou em `tests/odoo-artifacts/`, que hardcoda os caminhos das skills por meio da lib compartilhada `tests/odoo-artifacts/lib/artifact-lint.mjs` (`L1_FILES`/`L2_FILES`/`L3_FILES`) e testa o agente removido em `env-coupling.test.mjs`. Ajustes feitos aqui:
+
+- `lib/artifact-lint.mjs` — as 4 constantes passam a apontar para `assets/skills/profiles/<fw>/`.
+- `env-coupling.test.mjs` — removido o bloco que lia `agents/odoo-specialist.md` (o arquivo deixou de existir por decisão da ADR) e trocado o `if (!existsSync(file)) return;` por uma asserção de existência: aquele `return` faria o teste passar **vazio** justamente se a relocação tivesse perdido um arquivo.
+
 - [ ] **Passo 8: Rodar os testes e confirmar GREEN**
 
 Run: `node --test tests/integration/test-detect-framework.mjs`

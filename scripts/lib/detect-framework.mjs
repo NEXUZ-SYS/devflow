@@ -53,8 +53,11 @@ export function loadProfiles(pluginRoot = defaultPluginRoot()) {
       framework: data.framework,
       displayName: data.displayName || data.framework,
       detect: data.detect || {},
-      agents: Array.isArray(data.agents) ? data.agents : [],
+      // NAO normalizar `agents`: perfis nao contribuem agents desde a ADR-008
+      // v1.1.0 — criar agente de projeto e competencia do dotcontext.
       skills: Array.isArray(data.skills) ? data.skills : [],
+      skillBindings: (data.skillBindings && typeof data.skillBindings === "object")
+        ? data.skillBindings : {},
       standards: Array.isArray(data.standards) ? data.standards : [],
       stacks: Array.isArray(data.stacks) ? data.stacks : [],
       dispatchKeywords: data.dispatchKeywords || {},
@@ -192,15 +195,21 @@ export function detectFrameworks(projectRoot, pluginRoot = defaultPluginRoot()) 
 /** Aggregate the agents/skills/keywords contributed by all active profiles. */
 export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRoot()) {
   const active = detectFrameworks(projectRoot, pluginRoot);
-  const agents = new Set();
   const skills = new Set();
+  const skillsOrigin = new Map(); // slug -> framework (primeiro perfil vence)
+  const skillBindings = {};       // papel de agente de projeto -> [slug]
   const standards = new Set();
   const standardsOrigin = new Map(); // id -> framework (C1: preserva a origem do profile)
   const stacksByLib = new Map();
   const dispatchKeywords = {};
   for (const p of active) {
-    p.agents.forEach((a) => agents.add(a));
-    p.skills.forEach((s) => skills.add(s));
+    p.skills.forEach((s) => {
+      skills.add(s);
+      if (!skillsOrigin.has(s)) skillsOrigin.set(s, p.framework);
+    });
+    for (const [role, slugs] of Object.entries(p.skillBindings || {})) {
+      skillBindings[role] = [...new Set([...(skillBindings[role] || []), ...(slugs || [])])];
+    }
     (p.standards || []).forEach((s) => {
       standards.add(s);
       if (!standardsOrigin.has(s)) standardsOrigin.set(s, p.framework);
@@ -217,8 +226,9 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
   }
   return {
     frameworks: active.map((p) => p.framework),
-    agents: [...agents],
     skills: [...skills],
+    skillsWithOrigin: [...skillsOrigin].map(([slug, framework]) => ({ slug, framework })),
+    skillBindings,
     standards: [...standards],
     standardsWithOrigin: [...standardsOrigin].map(([id, framework]) => ({ id, framework })),
     stacks: [...stacksByLib.values()],
