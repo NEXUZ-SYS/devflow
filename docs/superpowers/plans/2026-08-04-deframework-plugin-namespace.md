@@ -74,10 +74,17 @@ Este é o teste que teria pego o defeito original. Escrito **antes** de qualquer
  *
  * AC1 skills/ do plugin e o conjunto contribuído por perfis são DISJUNTOS
  * AC2 toda skill declarada por um perfil existe em assets/skills/profiles/<fw>/
+ * AC3 nenhum SKILL.md em skills/ carrega path absoluto de máquina
+ * AC4 skills/ bate exatamente com o MANIFEST de skills base
+ *
+ * AC1 sozinho NÃO cobre o pior caso: uma skill de framework/produto que nenhum
+ * perfil declara passa direto (foi o caso do nxz-go-test). AC3 pega o sintoma
+ * mecânico e AC4 é a garantia estrutural — toda skill em skills/ tem de ser
+ * declarada como capacidade do bridge, por escrito.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { loadProfiles } from "../../scripts/lib/detect-framework.mjs";
 
@@ -118,19 +125,79 @@ describe("skills de perfil não são registradas globalmente", () => {
     }
     assert.deepEqual(missing, [], `skills de perfil sem arquivo: ${missing.join(", ")}`);
   });
+
+  // AC3 — sintoma mecânico de artefato de projeto que vazou para o bundle.
+  // Uma skill do bridge nunca aponta para o disco de uma máquina especifica.
+  it("AC3 nenhuma skill em skills/ carrega path absoluto de máquina", () => {
+    const ABS = /(^|[\s"'`(])(\/home\/|\/Users\/|[A-Z]:\\\\)/m;
+    const ofensores = [];
+    for (const slug of registered) {
+      const md = join(REPO, "skills", slug, "SKILL.md");
+      if (!existsSync(md)) continue;
+      const m = readFileSync(md, "utf-8").match(ABS);
+      if (m) ofensores.push(`${slug}: ${m[0].trim()}`);
+    }
+    assert.deepEqual(ofensores, [],
+      `skill do bridge com path de máquina (artefato de projeto vazado): ${ofensores.join(", ")}`);
+  });
+
+  // AC4 — garantia estrutural. AC1 só olha o que os perfis declaram; uma skill
+  // de framework SEM perfil (o caso nxz-go-test) escaparia. O MANIFEST obriga
+  // toda skill de skills/ a ser declarada como capacidade do bridge.
+  it("AC4 skills/ bate exatamente com o MANIFEST de skills base", () => {
+    const manifesto = readFileSync(join(REPO, "skills", "MANIFEST.txt"), "utf-8")
+      .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    const declaradas = new Set(manifesto);
+    const naoDeclaradas = [...registered].filter((s) => !declaradas.has(s)).sort();
+    const orfas = manifesto.filter((s) => !registered.has(s)).sort();
+    assert.deepEqual(naoDeclaradas, [],
+      `skill em skills/ fora do MANIFEST — declare como capacidade do bridge ou mova para assets/skills/profiles/: ${naoDeclaradas.join(", ")}`);
+    assert.deepEqual(orfas, [], `MANIFEST cita skill inexistente: ${orfas.join(", ")}`);
+  });
 });
 ```
 
-- [ ] **Passo 2: Rodar e confirmar que falha (RED)**
+- [ ] **Passo 2: Criar o MANIFEST de skills base**
 
-Run: `node --test tests/integration/test-profile-skills-not-registered.mjs`
-Expected: **FAIL** nos dois testes. AC1 lista `odoo-development (perfil odoo)`, `frontend-specialist-odoo (perfil odoo)`, `odoo-l10n-br (perfil odoo)`, `odoo-nxz-overlay (perfil nxz)`. AC2 lista os mesmos 4 como sem arquivo. Este é o defeito reproduzido.
-
-- [ ] **Passo 3: Commit do teste vermelho**
+Gerar a partir do estado **alvo** (44 skills, já sem as 4 relocadas e sem `nxz-go-test`):
 
 ```bash
-git add tests/integration/test-profile-skills-not-registered.mjs
-git commit -m "test(profiles): guard de regressão — skills de perfil no namespace global (RED)"
+cat > skills/MANIFEST.txt <<'EOF'
+# Skills base do DevFlow — capacidades do BRIDGE, registradas no namespace global.
+#
+# Toda skill em skills/ DEVE constar aqui (guard AC4 de
+# tests/integration/test-profile-skills-not-registered.mjs).
+#
+# Conhecimento condicional a framework NAO entra nesta lista: vai para
+# assets/skills/profiles/<fw>/<slug>/ e e copiado sob deteccao de perfil
+# (ADR-008 v1.1.0 — localizacao e o contrato de registro).
+EOF
+ls -d skills/*/ | xargs -n1 basename \
+  | grep -vE '^(odoo-development|frontend-specialist-odoo|odoo-l10n-br|odoo-nxz-overlay|nxz-go-test)$' \
+  | sort >> skills/MANIFEST.txt
+wc -l skills/MANIFEST.txt   # 7 linhas de cabeçalho + 44 slugs
+```
+
+- [ ] **Passo 3: Rodar e confirmar que falha (RED)**
+
+Run: `node --test tests/integration/test-profile-skills-not-registered.mjs`
+
+Expected: **FAIL** em três dos quatro ACs, cada um por um motivo distinto:
+
+| AC | Falha esperada |
+|---|---|
+| AC1 | 4 vazamentos: `odoo-development (odoo)`, `frontend-specialist-odoo (odoo)`, `odoo-l10n-br (odoo)`, `odoo-nxz-overlay (nxz)` |
+| AC2 | os mesmos 4, ainda sem arquivo sob `assets/skills/profiles/` |
+| AC3 | `nxz-go-test: /home/` — o path absoluto de máquina no bundle |
+| AC4 | `nxz-go-test` + as 4 relocadas ainda em `skills/` mas fora do MANIFEST |
+
+AC3 e AC4 são o que faltava: **AC1 sozinho nunca teria pego o `nxz-go-test`**, porque nenhum perfil o declara. Verificado empiricamente antes de escrever este plano.
+
+- [ ] **Passo 4: Commit do teste vermelho**
+
+```bash
+git add tests/integration/test-profile-skills-not-registered.mjs skills/MANIFEST.txt
+git commit -m "test(profiles): guard de regressão de namespace com 4 ACs (RED)"
 ```
 
 ---
@@ -181,7 +248,151 @@ git commit -m "refactor(skills): reloca skills de perfil para assets/skills/prof
 
 ---
 
-## Tarefa 3: Resolução source-aware no provenance-sync
+## Tarefa 3: `skillsWithOrigin`, `skillBindings` e a revogação de `agents`
+
+**Agente:** backend-specialist
+
+**Files:**
+- Modify: `scripts/lib/detect-framework.mjs:52-62` (`loadProfiles`), `:193-227` (`frameworkContributions`)
+- Modify: `profiles/odoo.yaml`, `profiles/nxz.yaml`
+- Delete: `agents/odoo-specialist.md`, `tests/integration/test-odoo-specialist-refs.mjs`
+- Test: `tests/integration/test-detect-framework.mjs`
+
+**Interfaces:**
+- Produz: `frameworkContributions(projectRoot, pluginRoot)` → `{frameworks, skills, skillsWithOrigin: [{slug, framework}], standards, standardsWithOrigin, stacks, skillBindings: {papel: [slug]}, dispatchKeywords}` — **sem** a chave `agents`
+- Consumido por: Tarefa 4 (`skillsWithOrigin`), Tarefa 6 (`skillBindings`)
+
+**Ordem:** esta tarefa vem **antes** da resolução source-aware porque produz o `skillsWithOrigin` que a Tarefa 4 consome. Inverter a ordem deixaria a Tarefa 4 sem como ficar verde por conta própria.
+
+- [ ] **Passo 1: Escrever os testes que falham**
+
+```javascript
+// acrescentar em tests/integration/test-detect-framework.mjs
+// Fixture: projeto que casa com o perfil odoo. Sem o marcador nenhum perfil
+// fica ativo e as asserções passariam vazias (falso-verde).
+function projetoOdoo() {
+  const proj = mkdtempSync(join(tmpdir(), "detect-odoo-"));
+  writeFileSync(join(proj, "__manifest__.py"), "{'name': 'fixture'}\n");
+  return proj;
+}
+
+describe("contribuições de perfil após a revogação de agents (ADR-008 v1.1.0)", () => {
+  it("frameworkContributions não expõe mais agents", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.equal(c.agents, undefined, "perfis não contribuem agents");
+  });
+
+  it("expõe skillsWithOrigin com o perfil de origem", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    const dev = c.skillsWithOrigin.find((s) => s.slug === "odoo-development");
+    assert.deepEqual(dev, { slug: "odoo-development", framework: "odoo" });
+  });
+
+  it("normaliza skillBindings e mapeia papel → skills", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.deepEqual(c.skillBindings["backend-specialist"].sort(),
+      ["odoo-development", "odoo-l10n-br"]);
+    assert.deepEqual(c.skillBindings["frontend-specialist"], ["frontend-specialist-odoo"]);
+  });
+
+  it("dispatchKeywords não referencia agente do plugin", () => {
+    const c = frameworkContributions(projetoOdoo(), REPO);
+    assert.equal(c.dispatchKeywords["odoo-specialist"], undefined);
+    assert.ok(c.dispatchKeywords["backend-specialist"].includes("orm"));
+  });
+
+  it("backward-compat: perfil sem as chaves novas → arrays/objetos vazios", () => {
+    const p = loadProfiles(REPO).find((x) => x.framework === "nxz");
+    assert.ok(Array.isArray(p.skills));
+    assert.equal(typeof p.skillBindings, "object");
+  });
+});
+```
+
+- [ ] **Passo 2: Rodar e confirmar que falha (RED)**
+
+Run: `node --test tests/integration/test-detect-framework.mjs`
+Expected: **FAIL** — `c.agents` ainda é `["odoo-specialist"]`, `skillsWithOrigin` e `skillBindings` são `undefined`.
+
+- [ ] **Passo 3: Normalizar `skillBindings` no `loadProfiles`**
+
+Em `scripts/lib/detect-framework.mjs`, no objeto empurrado por `loadProfiles`, remover a linha `agents:` e acrescentar:
+
+```javascript
+      skills: Array.isArray(data.skills) ? data.skills : [],
+      skillBindings: (data.skillBindings && typeof data.skillBindings === "object")
+        ? data.skillBindings : {},
+```
+
+- [ ] **Passo 4: Atualizar `frameworkContributions`**
+
+Remover `const agents = new Set()`, o `p.agents.forEach(...)` e a chave `agents:` do retorno. Acrescentar:
+
+```javascript
+  const skillsOrigin = new Map();  // slug -> framework (primeiro perfil vence)
+  const skillBindings = {};
+  // ...dentro do laço `for (const p of active)`:
+    p.skills.forEach((s) => {
+      skills.add(s);
+      if (!skillsOrigin.has(s)) skillsOrigin.set(s, p.framework);
+    });
+    for (const [role, slugs] of Object.entries(p.skillBindings || {})) {
+      skillBindings[role] = [...new Set([...(skillBindings[role] || []), ...(slugs || [])])];
+    }
+  // ...no retorno, no lugar de `agents`:
+    skillsWithOrigin: [...skillsOrigin].map(([slug, framework]) => ({ slug, framework })),
+    skillBindings,
+```
+
+- [ ] **Passo 5: Atualizar `profiles/odoo.yaml`**
+
+Remover a linha `agents: ["odoo-specialist"]` e o bloco `dispatchKeywords` antigo; colocar:
+
+```yaml
+# Perfis NÃO contribuem agents (ADR-008 v1.1.0) — criar agente de projeto é do dotcontext.
+skills: ["odoo-development", "frontend-specialist-odoo", "odoo-l10n-br"]
+# Liga cada skill a um papel de agente de projeto; o sync grava isso no frontmatter.
+skillBindings:
+  backend-specialist:  ["odoo-development", "odoo-l10n-br"]
+  frontend-specialist: ["frontend-specialist-odoo"]
+dispatchKeywords:
+  backend-specialist:  ["odoo", "orm", "addon", "l10n_br", "nfc-e", "nf-e"]
+  frontend-specialist: ["owl", "qweb", "pos"]
+```
+
+- [ ] **Passo 6: Atualizar `profiles/nxz.yaml`**
+
+Remover `agents: []`; colocar:
+
+```yaml
+skills: ["odoo-nxz-overlay"]
+skillBindings:
+  backend-specialist: ["odoo-nxz-overlay"]
+dispatchKeywords:
+  backend-specialist: ["nxz", "bridge", "nfce", "danfe"]
+```
+
+- [ ] **Passo 7: Remover o agente do plugin e seu teste**
+
+```bash
+git rm agents/odoo-specialist.md tests/integration/test-odoo-specialist-refs.mjs
+```
+
+- [ ] **Passo 8: Rodar os testes e confirmar GREEN**
+
+Run: `node --test tests/integration/test-detect-framework.mjs`
+Expected: **PASS**. Não rode ainda o `test-provenance-sync.mjs` — a resolução source-aware que o deixa verde é a Tarefa 4.
+
+- [ ] **Passo 9: Commit**
+
+```bash
+git add -A scripts/lib/detect-framework.mjs profiles tests/integration agents
+git commit -m "feat(profiles): revoga agents por perfil; adiciona skillsWithOrigin e skillBindings"
+```
+
+---
+
+## Tarefa 4: Resolução source-aware no provenance-sync
 
 **Agente:** backend-specialist
 
@@ -302,155 +513,13 @@ export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
 - [ ] **Passo 4: Rodar e confirmar GREEN**
 
 Run: `node --test tests/integration/test-provenance-sync.mjs`
-Expected: **PASS**. (Depende da Tarefa 4 para `skillsWithOrigin` existir — se rodar antes, o array vem vazio e o primeiro teste segue vermelho. Execute a Tarefa 4 e volte.)
+Expected: **PASS**. O `skillsWithOrigin` que esta tarefa consome já existe — foi entregue pela Tarefa 3.
 
 - [ ] **Passo 5: Commit**
 
 ```bash
 git add scripts/lib/provenance-sync.mjs tests/integration/test-provenance-sync.mjs
 git commit -m "feat(sync): resolveArtifacts resolve origem por slug e calcula dest explicitamente"
-```
-
----
-
-## Tarefa 4: `skillsWithOrigin`, `skillBindings` e a revogação de `agents`
-
-**Agente:** backend-specialist
-
-**Files:**
-- Modify: `scripts/lib/detect-framework.mjs:52-62` (`loadProfiles`), `:193-227` (`frameworkContributions`)
-- Modify: `profiles/odoo.yaml`, `profiles/nxz.yaml`
-- Delete: `agents/odoo-specialist.md`, `tests/integration/test-odoo-specialist-refs.mjs`
-- Test: `tests/integration/test-detect-framework.mjs`
-
-**Interfaces:**
-- Produz: `frameworkContributions(projectRoot, pluginRoot)` → `{frameworks, skills, skillsWithOrigin: [{slug, framework}], standards, standardsWithOrigin, stacks, skillBindings: {papel: [slug]}, dispatchKeywords}` — **sem** a chave `agents`
-- Consumido por: Tarefa 3 (`skillsWithOrigin`), Tarefa 6 (`skillBindings`)
-
-- [ ] **Passo 1: Escrever os testes que falham**
-
-```javascript
-// acrescentar em tests/integration/test-detect-framework.mjs
-// Fixture: projeto que casa com o perfil odoo. Sem o marcador nenhum perfil
-// fica ativo e as asserções passariam vazias (falso-verde).
-function projetoOdoo() {
-  const proj = mkdtempSync(join(tmpdir(), "detect-odoo-"));
-  writeFileSync(join(proj, "__manifest__.py"), "{'name': 'fixture'}\n");
-  return proj;
-}
-
-describe("contribuições de perfil após a revogação de agents (ADR-008 v1.1.0)", () => {
-  it("frameworkContributions não expõe mais agents", () => {
-    const c = frameworkContributions(projetoOdoo(), REPO);
-    assert.equal(c.agents, undefined, "perfis não contribuem agents");
-  });
-
-  it("expõe skillsWithOrigin com o perfil de origem", () => {
-    const c = frameworkContributions(projetoOdoo(), REPO);
-    const dev = c.skillsWithOrigin.find((s) => s.slug === "odoo-development");
-    assert.deepEqual(dev, { slug: "odoo-development", framework: "odoo" });
-  });
-
-  it("normaliza skillBindings e mapeia papel → skills", () => {
-    const c = frameworkContributions(projetoOdoo(), REPO);
-    assert.deepEqual(c.skillBindings["backend-specialist"].sort(),
-      ["odoo-development", "odoo-l10n-br"]);
-    assert.deepEqual(c.skillBindings["frontend-specialist"], ["frontend-specialist-odoo"]);
-  });
-
-  it("dispatchKeywords não referencia agente do plugin", () => {
-    const c = frameworkContributions(projetoOdoo(), REPO);
-    assert.equal(c.dispatchKeywords["odoo-specialist"], undefined);
-    assert.ok(c.dispatchKeywords["backend-specialist"].includes("orm"));
-  });
-
-  it("backward-compat: perfil sem as chaves novas → arrays/objetos vazios", () => {
-    const p = loadProfiles(REPO).find((x) => x.framework === "nxz");
-    assert.ok(Array.isArray(p.skills));
-    assert.equal(typeof p.skillBindings, "object");
-  });
-});
-```
-
-- [ ] **Passo 2: Rodar e confirmar que falha (RED)**
-
-Run: `node --test tests/integration/test-detect-framework.mjs`
-Expected: **FAIL** — `c.agents` ainda é `["odoo-specialist"]`, `skillsWithOrigin` e `skillBindings` são `undefined`.
-
-- [ ] **Passo 3: Normalizar `skillBindings` no `loadProfiles`**
-
-Em `scripts/lib/detect-framework.mjs`, no objeto empurrado por `loadProfiles`, remover a linha `agents:` e acrescentar:
-
-```javascript
-      skills: Array.isArray(data.skills) ? data.skills : [],
-      skillBindings: (data.skillBindings && typeof data.skillBindings === "object")
-        ? data.skillBindings : {},
-```
-
-- [ ] **Passo 4: Atualizar `frameworkContributions`**
-
-Remover `const agents = new Set()`, o `p.agents.forEach(...)` e a chave `agents:` do retorno. Acrescentar:
-
-```javascript
-  const skillsOrigin = new Map();  // slug -> framework (primeiro perfil vence)
-  const skillBindings = {};
-  // ...dentro do laço `for (const p of active)`:
-    p.skills.forEach((s) => {
-      skills.add(s);
-      if (!skillsOrigin.has(s)) skillsOrigin.set(s, p.framework);
-    });
-    for (const [role, slugs] of Object.entries(p.skillBindings || {})) {
-      skillBindings[role] = [...new Set([...(skillBindings[role] || []), ...(slugs || [])])];
-    }
-  // ...no retorno, no lugar de `agents`:
-    skillsWithOrigin: [...skillsOrigin].map(([slug, framework]) => ({ slug, framework })),
-    skillBindings,
-```
-
-- [ ] **Passo 5: Atualizar `profiles/odoo.yaml`**
-
-Remover a linha `agents: ["odoo-specialist"]` e o bloco `dispatchKeywords` antigo; colocar:
-
-```yaml
-# Perfis NÃO contribuem agents (ADR-008 v1.1.0) — criar agente de projeto é do dotcontext.
-skills: ["odoo-development", "frontend-specialist-odoo", "odoo-l10n-br"]
-# Liga cada skill a um papel de agente de projeto; o sync grava isso no frontmatter.
-skillBindings:
-  backend-specialist:  ["odoo-development", "odoo-l10n-br"]
-  frontend-specialist: ["frontend-specialist-odoo"]
-dispatchKeywords:
-  backend-specialist:  ["odoo", "orm", "addon", "l10n_br", "nfc-e", "nf-e"]
-  frontend-specialist: ["owl", "qweb", "pos"]
-```
-
-- [ ] **Passo 6: Atualizar `profiles/nxz.yaml`**
-
-Remover `agents: []`; colocar:
-
-```yaml
-skills: ["odoo-nxz-overlay"]
-skillBindings:
-  backend-specialist: ["odoo-nxz-overlay"]
-dispatchKeywords:
-  backend-specialist: ["nxz", "bridge", "nfce", "danfe"]
-```
-
-- [ ] **Passo 7: Remover o agente do plugin e seu teste**
-
-```bash
-git rm agents/odoo-specialist.md tests/integration/test-odoo-specialist-refs.mjs
-```
-
-- [ ] **Passo 8: Rodar os testes e confirmar GREEN**
-
-Run: `node --test tests/integration/test-detect-framework.mjs tests/integration/test-provenance-sync.mjs`
-Expected: **PASS** em ambos (a Tarefa 3 fecha aqui).
-
-- [ ] **Passo 9: Commit**
-
-```bash
-git add -A scripts/lib/detect-framework.mjs profiles tests/integration agents
-git commit -m "feat(profiles): revoga agents por perfil; adiciona skillsWithOrigin e skillBindings"
 ```
 
 ---
@@ -712,11 +781,24 @@ export function applySkillBindings({ root, skillBindings = {} }) {
 Run: `node --test tests/integration/test-agent-skill-binding.mjs`
 Expected: **PASS** nos 4 testes.
 
-- [ ] **Passo 5: Commit**
+- [ ] **Passo 5: Declarar o gatilho de reaplicação**
+
+Sem gatilho, o binding é uma escrita única que o dotcontext apaga na próxima regeneração do agente — e aí a leitura *"o devflow materializa, não autora"* que reconcilia esta tarefa com o guardrail do ADR-006 deixa de se sustentar: sobra uma escrita órfã num arquivo de outro dono.
+
+Em `skills/context-sync/SKILL.md`, na seção de resolução de artefatos, declarar explicitamente:
+
+> **Binding de skills (toda execução).** Após copiar os artefatos de perfil,
+> `context-sync` invoca `applySkillBindings({ root, skillBindings })` com o
+> `skillBindings` de `frameworkContributions`. A chamada é **incondicional e
+> idempotente**: reaplicar sem mudança não altera byte algum do arquivo, e uma
+> regeneração do agente pelo dotcontext é reparada no sync seguinte. Papéis sem
+> agente correspondente voltam em `pending` e são **reportados**, nunca criados.
+
+- [ ] **Passo 6: Commit**
 
 ```bash
-git add scripts/lib/agent-skill-binding.mjs tests/integration/test-agent-skill-binding.mjs
-git commit -m "feat(sync): binding aditivo de skills no frontmatter do agente de projeto"
+git add scripts/lib/agent-skill-binding.mjs tests/integration/test-agent-skill-binding.mjs skills/context-sync/SKILL.md
+git commit -m "feat(sync): binding aditivo de skills no agente de projeto, reaplicado a cada sync"
 ```
 
 ---
@@ -950,10 +1032,25 @@ git commit -m "docs: alinha exemplos, template e CHANGELOG ao layout de skills p
 
 **Files:**
 - Modify: `scripts/lib/provenance-sync.mjs:105-139` (`applySync`)
+- Create: `assets/provenance/retired.json`
 - Test: `tests/integration/test-provenance-sync.mjs`
 
 **Interfaces:**
-- Produz: `applySync(...)` → report com a chave nova `orphaned: [{path, verdict}]`, onde `verdict` ∈ `{"untouched", "diverged"}`
+- Produz: `applySync(...)` → report com a chave nova `orphaned: [{path, verdict}]`, `verdict` ∈ `{"untouched", "diverged"}`
+- Produz: `detectRetired({projectRoot, pluginRoot, registry})` → `[{path, since, reason, pristine}]`, `pristine` ∈ `{true, false, null}`
+
+### Por que duas mecânicas, e não uma
+
+O manifesto de proveniência **exclui agents por design** — o cabeçalho da lib diz textualmente *"Agents (preenchidos no deploy) e std-*.md raiz (live-loaded) ficam fora"*. Um detector de órfão que só lê o manifesto **nunca veria** `.context/agents/odoo-specialist.md`, que é justamente o único artefato realmente orfanado por esta mudança. As skills de Odoo mantêm slug e destino (não orfanam) e os 2 standards NXZ seguem contribuídos pelo perfil `nxz`, que permanece.
+
+Daí duas mecânicas complementares:
+
+| Mecânica | Cobre | Como decide |
+|---|---|---|
+| Órfão de manifesto | skills e standards de perfil que saíram do conjunto contribuído | compara manifesto × artefatos contribuídos |
+| **Lista de aposentados** | qualquer artefato que o plugin **deixou de distribuir**, inclusive classes nunca rastreadas por hash | declaração explícita em `assets/provenance/retired.json` |
+
+`pristine` é honesto sobre o limite: `true`/`false` quando o hash é conhecido, e **`null` quando a classe nunca foi rastreada** (agents) — nesse caso a ferramenta admite que não sabe, em vez de chutar.
 
 - [ ] **Passo 1: Escrever o teste que falha**
 
@@ -1005,16 +1102,63 @@ describe("detecção de órfão", () => {
     assert.equal(existsSync(join(root, ORFAO)), true, "divergente também é preservado");
   });
 });
+
+describe("aposentados alcançam classes fora do manifesto", () => {
+  it("o agente de perfil retirado é detectado, ainda que agents nunca entrem no manifesto", () => {
+    const root = mkdtempSync(join(tmpdir(), "prov-ret-"));
+    const agente = join(root, ".context/agents/odoo-specialist.md");
+    mkdirSync(dirname(agente), { recursive: true });
+    writeFileSync(agente, "---\ntype: agent\nname: odoo-specialist\n---\n");
+
+    const achados = detectRetired({ projectRoot: root, pluginRoot: REPO, registry: new Set() });
+    const alvo = achados.find((r) => r.path === ".context/agents/odoo-specialist.md");
+
+    assert.ok(alvo, "o agente aposentado precisa ser detectado sem depender do manifesto");
+    assert.equal(alvo.pristine, null, "agents nunca foram rastreados por hash — admitir que nao sabe");
+    assert.match(alvo.reason, /agents/i);
+    assert.equal(existsSync(agente), true, "aposentado NUNCA e removido pela deteccao");
+  });
+
+  it("nao reporta nada quando o projeto nao tem artefato aposentado", () => {
+    const root = mkdtempSync(join(tmpdir(), "prov-ret-limpo-"));
+    mkdirSync(join(root, ".context"), { recursive: true });
+    assert.deepEqual(detectRetired({ projectRoot: root, pluginRoot: REPO, registry: new Set() }), []);
+  });
+});
 ```
 
 - [ ] **Passo 2: Rodar e confirmar que falha (RED)**
 
 Run: `node --test tests/integration/test-provenance-sync.mjs`
-Expected: **FAIL** — `report.orphaned` é `undefined`.
+Expected: **FAIL** — `report.orphaned` é `undefined` e `detectRetired` não existe.
 
-- [ ] **Passo 3: Implementar**
+- [ ] **Passo 3: Declarar os aposentados**
 
-Em `applySync`, antes do `saveManifest`, acrescentar:
+```bash
+mkdir -p assets/provenance
+cat > assets/provenance/retired.json <<'EOF'
+{
+  "schema": 1,
+  "_comment": "Artefatos que o plugin JA distribuiu e nao distribui mais. O sync procura cada path no .context/ do projeto e REPORTA (nunca remove). Cobre inclusive classes que o manifesto de proveniencia nao rastreia, como agents.",
+  "retired": [
+    {
+      "path": ".context/agents/odoo-specialist.md",
+      "since": "3.0.0",
+      "reason": "Perfis nao contribuem mais agents; criar agente de projeto e do dotcontext (ADR-008 v1.1.0)"
+    },
+    {
+      "path": ".context/skills/nxz-go-test",
+      "since": "3.0.0",
+      "reason": "Artefato de projeto especifico; nunca foi gated por perfil algum"
+    }
+  ]
+}
+EOF
+```
+
+- [ ] **Passo 4: Implementar as duas mecânicas**
+
+Em `applySync`, antes do `saveManifest`:
 
 ```javascript
   // Órfão: estava no manifesto mas nenhum perfil ativo contribui mais.
@@ -1030,16 +1174,51 @@ Em `applySync`, antes do `saveManifest`, acrescentar:
   }
 ```
 
-- [ ] **Passo 4: Rodar e confirmar GREEN**
+E, como função exportada nova:
+
+```javascript
+/**
+ * Aposentados — artefatos que o plugin ja distribuiu e nao distribui mais.
+ *
+ * Existe porque o manifesto de proveniencia cobre SO skills e standards de
+ * perfil: agents ficam de fora por design (sao preenchidos no deploy). Sem
+ * isto, o unico artefato que a revogacao de agents realmente orfana seria
+ * invisivel. NUNCA remove — so reporta (ADR-012).
+ */
+export function detectRetired({ projectRoot, pluginRoot, registry }) {
+  const p = join(pluginRoot, "assets", "provenance", "retired.json");
+  if (!existsSync(p)) return [];
+  let lista;
+  try { lista = JSON.parse(readFileSync(p, "utf-8")).retired; } catch { return []; }
+  if (!Array.isArray(lista)) return [];
+
+  const contextRoot = join(projectRoot, ".context");
+  const achados = [];
+  for (const item of lista) {
+    const abs = join(projectRoot, item.path);
+    // Mesma contencao do applySync: nada fora de .context/, nada via symlink.
+    if (!isWithinDir(abs, contextRoot) || isSymlink(abs) || !existsSync(abs)) continue;
+    const h = hashFile(abs);
+    // null = classe nunca rastreada por hash (agents). Admitir, nao chutar.
+    const pristine = h == null ? null : (registry && registry.has(h) ? true : false);
+    achados.push({ path: item.path, since: item.since, reason: item.reason, pristine });
+  }
+  return achados;
+}
+```
+
+> **Nota sobre `pristine` para agents.** `distributableFiles()` nunca indexou `agents/**`, então o hash de um agente jamais esteve no registry. Um `false` ali seria mentira ("você editou isto") — por isso o teste exige `null` quando a classe não é rastreável. `hashFile` de um **diretório** (caso do `nxz-go-test`) também retorna `null`, o que produz o mesmo veredito honesto.
+
+- [ ] **Passo 5: Rodar e confirmar GREEN**
 
 Run: `node --test tests/integration/test-provenance-sync.mjs`
-Expected: **PASS**.
+Expected: **PASS** nos quatro testes (2 de órfão + 2 de aposentado).
 
-- [ ] **Passo 5: Commit**
+- [ ] **Passo 6: Commit**
 
 ```bash
-git add scripts/lib/provenance-sync.mjs tests/integration/test-provenance-sync.mjs
-git commit -m "feat(sync): reporta artefatos órfãos com veredito de proveniência"
+git add scripts/lib/provenance-sync.mjs assets/provenance/retired.json tests/integration/test-provenance-sync.mjs
+git commit -m "feat(sync): reporta órfãos por manifesto e aposentados por declaração"
 ```
 
 ---

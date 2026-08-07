@@ -173,6 +173,19 @@ sozinho (guardrail ADR-012). A oferta de limpeza carrega veredito de segurança:
 - hash do arquivo **∈** registry → "cópia intocada do plugin, remoção segura"
 - hash **∉** registry → "divergente ou artefato aposentado — revise antes de remover"
 
+**Correção da fase R — o manifesto sozinho não bastava.** A revisão apurou que o
+manifesto de proveniência **exclui agents por design** (`provenance-sync.mjs`: *"Agents
+(preenchidos no deploy) e std-*.md raiz (live-loaded) ficam fora"*). Um detector que só
+lesse o manifesto **nunca veria** `.context/agents/odoo-specialist.md` — que é
+justamente o único artefato realmente orfanado por esta mudança, já que as skills de
+Odoo mantêm slug e destino e os 2 standards NXZ seguem contribuídos pelo perfil `nxz`.
+
+Daí uma segunda mecânica, complementar: `assets/provenance/retired.json` declara os
+artefatos que o plugin **deixou de distribuir**, e `detectRetired()` procura cada um no
+`.context/` do projeto, reportando sem nunca remover. O campo `pristine` admite `null`
+quando a classe jamais foi rastreada por hash (agents) — a ferramenta diz que não sabe
+em vez de chutar "você editou isto".
+
 ### Proveniência
 
 `known-hashes.json` é uma lista plana de 337 hashes **de conteúdo** (`schema: 1`), sem
@@ -194,7 +207,8 @@ TDD real, RED → GREEN. O teste central é o guard de regressão do defeito ori
 
 | Teste | Asserção |
 |---|---|
-| **`test-profile-skills-not-registered`** (novo) | `skills/` e o conjunto contribuído por profiles são **disjuntos**. Fail-closed. |
+| **`test-profile-skills-not-registered`** (novo) | 4 ACs: **AC1** `skills/` e as skills de perfil são disjuntos · **AC2** toda skill de perfil existe sob `assets/skills/profiles/<fw>/` · **AC3** nenhum `SKILL.md` em `skills/` carrega path absoluto de máquina · **AC4** `skills/` bate com `skills/MANIFEST.txt`. Fail-closed. |
+| `detectRetired` (novo) | artefato aposentado é achado no `.context/` mesmo em classe fora do manifesto (agents), com `pristine: null` quando o hash nunca foi rastreado |
 | `resolveArtifacts` source-aware | profile resolve de `assets/skills/profiles/<fw>/<slug>`; base de `skills/<slug>`; `dest` sempre `.context/skills/<slug>/…` |
 | Integridade do trio | todo slug em `profiles/<fw>.yaml skills:` tem diretório com `SKILL.md`; sem órfão no diretório |
 | Invariante de proveniência | regenerar após o move ⇒ mesmo conjunto de hashes (menos os do `nxz-go-test`) |
