@@ -234,10 +234,18 @@ git diff --cached --stat -M
 ```
 Expected: apenas renomeações (`R100`), zero linhas adicionadas ou removidas. Se aparecer qualquer `+`/`-`, um arquivo foi editado — desfaça e refaça o move.
 
-- [ ] **Passo 3: Rodar o guard (GREEN)**
+- [ ] **Passo 3: Rodar o guard (GREEN parcial — AC1 e AC2)**
 
 Run: `node --test tests/integration/test-profile-skills-not-registered.mjs`
-Expected: **PASS** nos dois testes.
+
+Expected: **AC1 e AC2 PASS**. **AC3 e AC4 seguem RED**, ambos acusando `nxz-go-test`, que só sai do bundle na Tarefa 7. Isso é o comportamento correto — cada AC fecha na tarefa que resolve a sua causa:
+
+| AC | Fecha em |
+|---|---|
+| AC1, AC2 | **esta tarefa** (relocação) |
+| AC3, AC4 | **Tarefa 7** (retirada do `nxz-go-test`) |
+
+Só após a Tarefa 7 o guard fica inteiramente verde.
 
 - [ ] **Passo 4: Commit**
 
