@@ -1308,9 +1308,28 @@ Expected: `OK: nenhuma skill de framework em skills/`
 
 - [ ] **Passo 3: Registrar a observação manual do namespace**
 
-Esta verificação **não é um sinal de teste**. Após reiniciar a sessão do Claude Code, conferir que `devflow:odoo-development`, `devflow:frontend-specialist-odoo`, `devflow:odoo-l10n-br`, `devflow:odoo-nxz-overlay`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist` **não aparecem mais** na listagem.
+Esta verificação **não é um sinal de teste**.
 
-Registrar o resultado como **observação** na fase V, junto da ressalva de que o Claude Code precisa reindexar o plugin. Se a listagem ainda os mostrar, verificar se o plugin instalado é o da branch antes de concluir qualquer coisa.
+**Corrigido durante a execução — reiniciar a sessão NÃO basta.** O plano supunha que bastava reabrir o Claude Code. Verificação feita: o plugin carregado vem do **cache do release instalado** (`~/.claude/plugins/cache/NEXUZ-SYS/devflow/<versão>/`), que é um diretório **independente** do working tree — não um link. Confirmado que o cache da 2.0.1 ainda contém as 5 skills e o `odoo-specialist.md`, enquanto a branch já está limpa.
+
+Logo a observação só é conclusiva **depois do release e do `/devflow update`**, que renova o cache. Antes disso, a listagem reflete a versão instalada e **não diz nada** sobre esta branch.
+
+Sequência correta de verificação:
+
+```bash
+# 1. a branch está limpa (verificável agora)
+ls skills/ | grep -E "odoo|nxz"     # esperado: vazio
+ls agents/ | grep -i odoo           # esperado: vazio
+
+# 2. o cache instalado ainda é o antigo (explica a listagem atual)
+ls ~/.claude/plugins/cache/NEXUZ-SYS/devflow/*/skills/ | grep -E "odoo|nxz"
+
+# 3. SÓ APÓS release + /devflow update + reinício:
+#    conferir que devflow:odoo-*, devflow:nxz-go-test e o agent type
+#    devflow:Odoo Specialist sumiram da listagem
+```
+
+Registrar na fase V como **observação pendente de release**, nunca como sinal verde — e nunca como falha, já que o estado atual da listagem é esperado.
 
 - [ ] **Passo 4: Commit final se algo mudou**
 
