@@ -917,8 +917,21 @@ git commit -m "chore(skills): retira nxz-go-test do bundle e neutraliza defaults
 **Agente:** test-writer
 
 **Files:**
-- Create: `tests/integration/test-profile-skills-integrity.mjs`
+- Modify: `tests/integration/test-framework-profiles-integrity.mjs` (**substitui** a criação de um arquivo novo — ver desvio)
 - Modify: `tests/integration/test-profile-nxz-integrity.mjs`, `test-profile-standards-integrity.mjs`, `test-profile-standards-wiring.mjs`
+
+**Desvio registrado — estender o gate existente em vez de criar um duplicado.** O plano previa criar `test-profile-skills-integrity.mjs`, mas `test-framework-profiles-integrity.mjs` **já é** o gate de integridade referencial dos perfis: sua própria docstring diz que guarda *"the failure mode that left odoo-specialist orphaned"*. Dois arquivos asserindo a mesma responsabilidade divergem com o tempo. O gate canônico foi estendido de 3 para 7 ACs:
+
+| AC | Asserção |
+|---|---|
+| AC1 | perfil tem `framework`/`detect`/`skills`/`skillBindings` |
+| AC2 | perfil **não** declara `agents` (revogado) |
+| AC3 | skill existe em `assets/skills/profiles/<fw>/` **e** não sobrou cópia em `skills/` |
+| AC4 | sem diretório órfão sob o dir do perfil |
+| AC5 | `skillBindings` só cita skills declaradas |
+| AC6 | `dispatchKeywords` e `skillBindings` concordam nos papéis |
+
+Os guards foram **mutation-tested**: injetar `agents:` de volta faz AC2 falhar; apontar `dispatchKeywords` para `odoo-specialist` faz AC6 falhar. (Na primeira tentativa o `sed` da mutação 2 não casou e o teste passou — o verde ali não provava nada; refeito com a mutação de fato aplicada.)
 
 **Interfaces:**
 - Consome: `loadProfiles(pluginRoot)`
