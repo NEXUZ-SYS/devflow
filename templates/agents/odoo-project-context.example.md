@@ -1,8 +1,12 @@
 # Contexto Odoo do projeto (exemplo) — `.context/odoo-project.md`
 
 > Copie para `.context/odoo-project.md` no projeto e preencha. Específico de
-> máquina/projeto — NUNCA versionar valores reais no plugin. Consumido pelo agente
-> `odoo-specialist` e pelas skills L1/L2/L3.
+> máquina/projeto — NUNCA versionar valores reais no plugin.
+>
+> Consumido pelo **agente de projeto** que o dotcontext criou para o papel de backend
+> (tipicamente `backend-specialist`) e pelas skills de framework listadas no frontmatter
+> `skills:` desse agente. O plugin não traz agente de Odoo: perfis contribuem skills e o
+> vínculo `skillBindings`, nunca agents (ADR-008 v1.1.0).
 
 ## Versão Odoo
 - Série alvo: `<NN.0>`  (ex.: 18.0)

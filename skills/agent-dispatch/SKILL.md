@@ -31,19 +31,24 @@ DevFlow provides 15 specialist agents, each with defined roles and phase partici
 | devops-specialist | specialist | E, C | CI/CD, infrastructure, deployment |
 | mobile-specialist | specialist | E | iOS/Android development, mobile UX |
 
-### Framework-specific agents (dynamic discovery)
+### Framework routing (dynamic discovery)
 
-Beyond the 15 base agents, the project may have **framework-specific** agents
-(e.g. `odoo-specialist`). Discover them dynamically — do NOT rely only on the table above:
+**Perfis NÃO contribuem agents** (ADR-008 v1.1.0) — criar agente de projeto é competência
+exclusiva do dotcontext. O que o perfil contribui é **conhecimento de framework** (skills) e
+o **vínculo** entre esse conhecimento e os papéis de agente que o projeto já tem.
 
 1. List candidate agents from `.context/agents/*.md` (project) and the bundled
    `agents/*.md` (plugin). Each agent declares `agentType:` in its frontmatter.
-2. Load the active framework profiles to get their `dispatchKeywords`:
+2. Load the active framework profiles:
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
    ```
-   The `dispatchKeywords` map (e.g. `odoo-specialist: ["odoo","owl","qweb",...]`) feeds
-   the Lite-mode keyword routing below — a task mentioning those terms routes to that agent.
+   - `dispatchKeywords` mapeia keyword → **papel de agente de projeto** (ex.:
+     `backend-specialist: ["odoo","orm","addon"]`), nunca um agente do plugin.
+   - `skillBindings` diz **quais skills de framework** cada papel usa.
+3. Ao despachar um papel, carregue as skills declaradas no frontmatter `skills:` do agente de
+   projeto — é ali que o `context-sync` materializa o vínculo. Essa chave é a fonte de verdade
+   em tempo de dispatch; o `skillBindings` do perfil é a fonte que a alimenta.
 
 ## Dispatch Process
 
@@ -72,8 +77,11 @@ Match task keywords to agent roles:
 - "product", "roadmap", "PRD", "requirements" → product-manager
 
 Then **append the framework profiles' `dispatchKeywords`** (from the detector above).
-E.g. in an Odoo project: "odoo", "owl", "qweb", "pos", "nfc-e", "l10n_br" → odoo-specialist.
-A framework agent takes precedence over a generic specialist when both match.
+E.g. num projeto Odoo: "odoo", "orm", "addon", "l10n_br" → `backend-specialist`;
+"owl", "qweb", "pos" → `frontend-specialist`. O roteamento aponta para **papéis que o projeto
+já tem**, e o papel escolhido carrega as skills de framework listadas no seu frontmatter
+`skills:`. Quando a keyword de perfil e a genérica casam no mesmo papel, não há conflito — é o
+mesmo agente, com conhecimento de framework anexado.
 
 **Minimal Mode:**
 No agent dispatch — proceed with general-purpose approach.
