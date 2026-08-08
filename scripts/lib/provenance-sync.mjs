@@ -151,8 +151,53 @@ export function applySync({ projectRoot, pluginRoot, artifacts, registry, source
       report.preserved.push(rel);
     }
   }
+  // Orfao: estava no manifesto mas nenhum perfil ativo contribui mais.
+  // Preserva e reporta (ADR-012) — remocao so sob confirmacao humana, fora daqui.
+  const contribuidos = new Set(artifacts.map((a) => relative(projectRoot, a.dest)));
+  report.orphaned = [];
+  for (const [rel, rec] of byPath) {
+    if (contribuidos.has(rel)) continue;
+    const projHash = hashFile(join(projectRoot, rel));
+    if (projHash == null) continue;               // ja nao existe em disco
+    const intocado = projHash === rec.hash || (registry && registry.has(projHash));
+    report.orphaned.push({ path: rel, verdict: intocado ? "untouched" : "diverged" });
+  }
+
   saveManifest(projectRoot, { schema: 1, artifacts: [...byPath.values()] });
   return report;
+}
+
+/**
+ * Aposentados — artefatos que o plugin JA distribuiu e nao distribui mais.
+ *
+ * Existe porque o manifesto de proveniencia cobre SO skills e standards de
+ * perfil: agents ficam de fora por design (sao preenchidos no deploy). Sem
+ * isto, o unico artefato que a revogacao de agents realmente orfana seria
+ * invisivel ao sync. NUNCA remove — so reporta (ADR-012).
+ *
+ * `pristine`: true = hash no registry (copia intocada, remocao segura);
+ *             false = hash conhecido e ausente do registry (divergente);
+ *             null = nao ha hash (diretorio) — admitir que nao sabe, nao chutar.
+ */
+export function detectRetired({ projectRoot, pluginRoot, registry }) {
+  const p = join(pluginRoot, "assets", "provenance", "retired.json");
+  if (!existsSync(p)) return [];
+  let lista;
+  try { lista = JSON.parse(readFileSync(p, "utf-8")).retired; } catch { return []; }
+  if (!Array.isArray(lista)) return [];
+
+  const contextRoot = join(projectRoot, ".context");
+  const achados = [];
+  for (const item of lista) {
+    if (!item || typeof item.path !== "string") continue;
+    const abs = join(projectRoot, item.path);
+    // Mesma contencao do applySync: nada fora de .context/, nada via symlink.
+    if (!isWithinDir(abs, contextRoot) || isSymlink(abs) || !existsSync(abs)) continue;
+    const h = hashFile(abs); // null para diretorio
+    const pristine = h == null ? null : Boolean(registry && registry.has(h));
+    achados.push({ path: item.path, since: item.since, reason: item.reason, pristine });
+  }
+  return achados;
 }
 
 export function loadRegistry(pluginRoot) {

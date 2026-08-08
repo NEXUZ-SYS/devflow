@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "_comment": "Artefatos que o plugin JA distribuiu e nao distribui mais. O sync procura cada path no .context/ do projeto e REPORTA (nunca remove, ADR-012). Cobre inclusive classes que o manifesto de proveniencia nao rastreia, como agents — sem esta lista, o unico artefato realmente orfanado pela revogacao de agents seria invisivel. Ao aposentar um artefato, regenere o registry com --append: em modo backfill os hashes historicos somem e um deploy intocado passa a ser reportado como divergente.",
+  "retired": [
+    {
+      "path": ".context/agents/odoo-specialist.md",
+      "since": "3.0.0",
+      "reason": "Perfis nao contribuem mais agents; criar agente de projeto e competencia do dotcontext (ADR-008 v1.1.0)"
+    },
+    {
+      "path": ".context/skills/nxz-go-test",
+      "since": "3.0.0",
+      "reason": "Artefato de projeto especifico; nunca foi gated por perfil algum"
+    }
+  ]
+}
