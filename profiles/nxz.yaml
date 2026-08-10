@@ -15,14 +15,16 @@ detect:
     - file: "__openerp__.py"
       keys: ["author", "maintainer", "website"]
       anyOf: ["Nexuz", "nexuz"]
-# Agentes: o odoo-specialist já vem do profile odoo (não duplicar).
-agents: []
+# Perfis NAO contribuem agents (ADR-008 v1.1.0) — chave removida.
 # Skill de overlay NXZ — copiada só quando este profile casa.
+# Arquivos em assets/skills/profiles/nxz/odoo-nxz-overlay/.
 skills: ["odoo-nxz-overlay"]
+skillBindings:
+  backend-specialist: ["odoo-nxz-overlay"]
 # Standards NXZ — backed por assets/standards/profiles/nxz/.
 standards:
   - std-odoo-oca-separation
   - std-odoo-fiscal-br-integrity
 dispatchKeywords:
-  odoo-specialist: ["nxz", "bridge", "nfce", "danfe"]
+  backend-specialist: ["nxz", "bridge", "nfce", "danfe"]
 stacks: []

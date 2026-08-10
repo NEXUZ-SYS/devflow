@@ -422,12 +422,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/detect-framework.mjs" "$PWD"
 ```
 It reads `profiles/*.yaml` (plugin) and returns JSON:
 ```json
-{ "frameworks": ["odoo"], "agents": ["odoo-specialist"],
-  "skills": ["odoo-development", "frontend-specialist-odoo"],
-  "dispatchKeywords": { "odoo-specialist": ["odoo", "owl", "..."] } }
+{ "frameworks": ["odoo"],
+  "skills": ["odoo-development", "frontend-specialist-odoo", "odoo-l10n-br"],
+  "skillsWithOrigin": [{ "slug": "odoo-development", "framework": "odoo" }],
+  "skillBindings": { "backend-specialist": ["odoo-development", "odoo-l10n-br"] },
+  "dispatchKeywords": { "backend-specialist": ["odoo", "orm", "..."] } }
 ```
-The returned `agents`/`skills` are **added** to the base scaffold sets in Step 3c-3 / 3c-4
-(union, never replace). To support a new framework, add a sibling profile — no code change.
+Note que **não há chave `agents`**: perfis não contribuem agents (ADR-008 v1.1.0).
+As `skills` retornadas são **adicionadas** ao set base (união, nunca substituição) e vêm de
+`assets/skills/profiles/<fw>/<slug>/`, não de `skills/`. Para suportar um framework novo,
+acrescente um perfil irmão — sem mudança de código.
 
 ### Structure Mapping
 Walk the directory tree (top 2-3 levels) and describe each directory's purpose.
@@ -513,12 +517,19 @@ Only scaffold agents relevant to the detected project type:
 | Large codebase | + refactoring-specialist, performance-optimizer |
 | Bug fix focus | + bug-fixer |
 
-**Framework profiles (union):** add every agent in the detector's `agents` list
-(Framework Detection above) to the set. E.g. an Odoo project also scaffolds
-`odoo-specialist`. The bundled `agents/odoo-specialist.md` is a **generic template** —
-when scaffolding it, fill the "Ambientes de Desenvolvimento" placeholders
-(`<PATH_DO_AMBIENTE>`, `<NOME_DO_DB>`, `<PORTA>`, `<PATH_DE_DEPLOY>`) from the project
-scan and/or by asking the user. NEVER copy another project's paths/DBs/ports.
+**Perfis de framework NÃO contribuem agents** (ADR-008 v1.1.0). O set de agentes vem
+exclusivamente da tabela acima e do dotcontext — o plugin não deposita agente de projeto.
+
+O que o perfil contribui é o **vínculo**: depois de copiar as skills, grave a chave
+`skills:` no frontmatter do agente do papel correspondente, a partir do `skillBindings`:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/agent-skill-binding.mjs" \
+  --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}"
+```
+
+A gravação é aditiva e idempotente. Papel sem agente correspondente volta em `pending` e é
+**reportado** — nunca crie o arquivo do agente aqui.
 
 Each agent file in `.context/agents/<name>.md`:
 
@@ -562,13 +573,25 @@ Scaffold skills relevant to the project:
 
 **Framework profiles (union + copy):** add every skill in the detector's `skills`
 list (Framework Detection above). These framework skills are **full directories**
-shipped with the plugin (`skills/<slug>/`), not scaffolded prose — **copy** each one
-into `.context/skills/<slug>/` so the framework agent's references resolve:
+shipped with the plugin, not scaffolded prose. **A origem depende da classe da skill:**
+
+| Classe | Origem no plugin | Registrada no namespace? |
+|---|---|---|
+| base (capacidade do bridge) | `skills/<slug>/` | sim, `devflow:<slug>` |
+| de perfil (framework) | `assets/skills/profiles/<fw>/<slug>/` | **não** |
+
+Não copie à mão: a resolução de origem por slug e o destino explícito são responsabilidade
+da lib de proveniência, que ainda decide por hash (intocado → atualiza; editado → preserva)
+e mantém a contenção de segurança:
+
 ```bash
-cp -r "${CLAUDE_PLUGIN_ROOT}/skills/<slug>" ".context/skills/<slug>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/provenance-sync.mjs" apply \
+  --project="$PWD" --plugin="${CLAUDE_PLUGIN_ROOT}" --base-skills=<lista base>
 ```
-E.g. an Odoo project copies `odoo-development` and `frontend-specialist-odoo`.
-Do not overwrite a `.context/skills/<slug>/` that already exists with user edits.
+
+O destino é sempre `.context/skills/<slug>/`, qualquer que seja a origem — nunca derive o
+destino do caminho de origem. Um `.context/skills/<slug>/` com edição do usuário é
+**preservado** e reportado, nunca sobrescrito.
 
 Each skill file in `.context/skills/<slug>/SKILL.md`:
 

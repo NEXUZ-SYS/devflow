@@ -75,12 +75,29 @@ function walkFiles(root, sub, out) {
 export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
   const c = frameworkContributions(projectRoot, pluginRoot);
   const arts = [];
-  const skills = [...new Set([...(c.skills || []), ...baseSkills])];
-  for (const slug of skills) {
+
+  // Origem por slug: skill base vive em skills/; skill de perfil, em
+  // assets/skills/profiles/<fw>/ (ADR-008 v1.1.0 — localizacao e o contrato de
+  // registro). O dest NUNCA e derivado do rel do src: derivar produziria
+  // .context/assets/skills/profiles/... A origem e o destino sao independentes.
+  const sources = new Map(); // slug -> { sub, framework }
+  for (const slug of baseSkills) {
+    sources.set(slug, { sub: join("skills", slug), framework: "skill" });
+  }
+  for (const { slug, framework } of c.skillsWithOrigin || []) {
+    sources.set(slug, { sub: join("assets", "skills", "profiles", framework, slug), framework });
+  }
+
+  for (const [slug, { sub, framework }] of sources) {
     const files = [];
-    walkFiles(pluginRoot, join("skills", slug), files);
+    walkFiles(pluginRoot, sub, files);
     for (const rel of files) {
-      arts.push({ src: join(pluginRoot, rel), dest: join(projectRoot, ".context", rel), framework: "skill" });
+      const inner = relative(sub, rel); // caminho DENTRO da skill (preserva references/)
+      arts.push({
+        src: join(pluginRoot, rel),
+        dest: join(projectRoot, ".context", "skills", slug, inner),
+        framework,
+      });
     }
   }
   for (const { id, framework } of c.standardsWithOrigin || []) {
@@ -134,8 +151,53 @@ export function applySync({ projectRoot, pluginRoot, artifacts, registry, source
       report.preserved.push(rel);
     }
   }
+  // Orfao: estava no manifesto mas nenhum perfil ativo contribui mais.
+  // Preserva e reporta (ADR-012) — remocao so sob confirmacao humana, fora daqui.
+  const contribuidos = new Set(artifacts.map((a) => relative(projectRoot, a.dest)));
+  report.orphaned = [];
+  for (const [rel, rec] of byPath) {
+    if (contribuidos.has(rel)) continue;
+    const projHash = hashFile(join(projectRoot, rel));
+    if (projHash == null) continue;               // ja nao existe em disco
+    const intocado = projHash === rec.hash || (registry && registry.has(projHash));
+    report.orphaned.push({ path: rel, verdict: intocado ? "untouched" : "diverged" });
+  }
+
   saveManifest(projectRoot, { schema: 1, artifacts: [...byPath.values()] });
   return report;
+}
+
+/**
+ * Aposentados — artefatos que o plugin JA distribuiu e nao distribui mais.
+ *
+ * Existe porque o manifesto de proveniencia cobre SO skills e standards de
+ * perfil: agents ficam de fora por design (sao preenchidos no deploy). Sem
+ * isto, o unico artefato que a revogacao de agents realmente orfana seria
+ * invisivel ao sync. NUNCA remove — so reporta (ADR-012).
+ *
+ * `pristine`: true = hash no registry (copia intocada, remocao segura);
+ *             false = hash conhecido e ausente do registry (divergente);
+ *             null = nao ha hash (diretorio) — admitir que nao sabe, nao chutar.
+ */
+export function detectRetired({ projectRoot, pluginRoot, registry }) {
+  const p = join(pluginRoot, "assets", "provenance", "retired.json");
+  if (!existsSync(p)) return [];
+  let lista;
+  try { lista = JSON.parse(readFileSync(p, "utf-8")).retired; } catch { return []; }
+  if (!Array.isArray(lista)) return [];
+
+  const contextRoot = join(projectRoot, ".context");
+  const achados = [];
+  for (const item of lista) {
+    if (!item || typeof item.path !== "string") continue;
+    const abs = join(projectRoot, item.path);
+    // Mesma contencao do applySync: nada fora de .context/, nada via symlink.
+    if (!isWithinDir(abs, contextRoot) || isSymlink(abs) || !existsSync(abs)) continue;
+    const h = hashFile(abs); // null para diretorio
+    const pristine = h == null ? null : Boolean(registry && registry.has(h));
+    achados.push({ path: item.path, since: item.since, reason: item.reason, pristine });
+  }
+  return achados;
 }
 
 export function loadRegistry(pluginRoot) {

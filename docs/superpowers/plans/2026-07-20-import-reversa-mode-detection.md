@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **TDD obrigatório:** RED → GREEN → REFACTOR. Teste real primeiro; nunca implementar antes do teste falhar.
-- **Lib pura:** `scripts/reversa-import/*.mjs` usa só `node:*`, só-leitura, sem efeitos colaterais. Testes via `node --test tests/reversa-import/`.
+- **Lib pura:** `scripts/reversa-import/*.mjs` usa só `node:*`, só-leitura, sem efeitos colaterais. **Comando de teste canônico:** `node --test tests/reversa-import/*.test.mjs` (o repo não tem script npm; passar o diretório puro `tests/reversa-import/` NÃO funciona no Node 24 — use o glob `*.test.mjs`). Arquivo único: `node --test tests/reversa-import/mode.test.mjs`. Baseline atual: 92 testes verdes.
 - **Zero regressão:** os profiles `green`/`yellow`/`red` do `makeReversaFixture` e todos os testes atuais devem continuar idênticos/verdes.
 - **Detecção conservadora:** só classifica `reverse` quando **as 3 condições** valem (forward vazio/ausente **e** nenhum `*/spec.md` **e** ≥1 artefato de análise). Qualquer dúvida → `forward`.
 - **Versionamento `pipeline`:** entrada em `CHANGELOG.md` sob `[Unreleased]`; **sem** bump local (o pre-commit version-guard só valida).
@@ -226,7 +226,7 @@ Expected: PASS (5 testes).
 
 - [ ] **Step 6: Rodar a suíte inteira (zero regressão do refactor do fixture)**
 
-Run: `node --test tests/reversa-import/`
+Run: `node --test tests/reversa-import/*.test.mjs`
 Expected: PASS — todos verdes (o refactor do `make-fixture` preservou green/yellow/red).
 
 - [ ] **Step 7: Commit**
@@ -330,7 +330,7 @@ Expected: PASS (7 testes no arquivo).
 
 - [ ] **Step 5: Rodar a suíte inteira**
 
-Run: `node --test tests/reversa-import/`
+Run: `node --test tests/reversa-import/*.test.mjs`
 Expected: PASS — nenhum consumidor existente de `runPipeline` quebrou (só campos adicionados).
 
 - [ ] **Step 6: Commit**
@@ -401,7 +401,7 @@ Expected: PASS — a skill continua bem-formada (o teste de estrutura da skill, 
 
 - [ ] **Step 4: Rodar a suíte inteira da feature (regressão final)**
 
-Run: `node --test tests/reversa-import/`
+Run: `node --test tests/reversa-import/*.test.mjs`
 Expected: PASS — todos verdes.
 
 - [ ] **Step 5: Commit**
@@ -418,7 +418,7 @@ Claude-Session: https://claude.ai/code/session_01EBTgH4gZCYUcatz2Cfx9og"
 
 ## Validação final (fase V)
 
-- [ ] `node --test tests/reversa-import/` — suíte completa verde (inclui os novos `mode.test.mjs`).
+- [ ] `node --test tests/reversa-import/*.test.mjs` — suíte completa verde (inclui os novos `mode.test.mjs`).
 - [ ] Fumaça manual (opcional, fora da suíte — paths externos): `detectMode` contra os reais →
   `reversa-com-attio` = `forward`; `reversa-modulo-odoo-17-okr` = `reverse`.
 - [ ] Confirmar zero regressão nos consumidores de `runPipeline` (só campos adicionados).

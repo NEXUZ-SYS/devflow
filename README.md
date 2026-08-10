@@ -14,8 +14,9 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 - **Loop autônomo** — execução story-by-story com contexto fresco, escalação automática e retry inteligente
 - **Modos de autonomia** — `supervised` (padrão), `assisted` (humano nas pontas), `autonomous` (loop completo com safety net)
 - **TDD obrigatório** — RED → GREEN → REFACTOR em TODOS os modos, com HARD-GATE bloqueante
-- **21 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
-- **49 skills** — API design, refactoring, debugging, test generation, security audit, PRD generation, stack-filter, memory-recall, import-reversa, odoo-l10n-br, odoo-nxz-overlay, context-hygiene...
+- **20 agentes especialistas** — architect, product-manager, business-context, product-context, engineering-context, operations-context, backend, frontend, security-auditor, memory-specialist e mais
+- **44 skills do bridge** — API design, refactoring, debugging, test generation, security audit, PRD generation, stack-filter, memory-recall, import-reversa, context-hygiene...
+- **Skills de framework sob demanda** — conhecimento condicional (ex.: Odoo) mora em `assets/skills/profiles/<fw>/` e é copiado para o `.context/` do projeto **só quando o perfil casa** — nunca registrado no namespace global
 - **ADRs como guardrails** — 6 templates (SOLID, TDD, Code Review, Layered, OWASP, AWS Data Lake) com compliance check no Validation
 - **Napkin + MemPalace** — runbook local curado + memória semântica persistente opcional
 - **Escala adaptativa** — auto-detecta complexidade e ajusta o fluxo (QUICK/SMALL/MEDIUM/LARGE)
@@ -38,7 +39,7 @@ Markdown puro + shell. Zero dependências de runtime. Funciona como plugin para 
 │    (disciplina)     │    (contexto + workflow)         │
 ├────────────────────┼─────────────────────────────────┤
 │ brainstorming       │ fases PREVC                     │
-│ TDD iron law        │ 21 agentes via MCP              │
+│ TDD iron law        │ 20 agentes via MCP              │
 │ SDD (subagents)     │ análise semântica               │
 │ code review 2x      │ gestão de planos                │
 │ anti-racional.      │ sync multi-tool                 │
@@ -309,8 +310,9 @@ o design completo e rationale.
 ```
 devflow/
 ├── commands/         # 14 commands: /devflow + 13 subcomandos (adr, cleanup, design, dispatch, doctor, import-reversa, instinct, memory, next, recall, routines, status, sync)
-├── skills/           # 49 skills (PREVC, bridge, on-demand, PRD, autonomous-loop, napkin, memory-recall, import-reversa, context-hygiene)
+├── skills/           # 44 skills do bridge, registradas no namespace global (MANIFEST.txt declara o conjunto)
 ├── agents/           # 20 playbooks de agentes (inclui memory-specialist, business-context, product-context, engineering-context, operations-context)
+├── assets/skills/    # profiles/<fw>/ — skills de framework, NÃO registradas; copiadas sob detecção de perfil
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
 ├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n

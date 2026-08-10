@@ -15,13 +15,22 @@ detect:
       deps: ["odoo", "openerp"]
     - file: requirements.txt
       deps: ["odoo", "openerp"]
-# Agents to scaffold into .context/agents/ (in addition to the base set).
-agents: ["odoo-specialist"]
-# Skills to copy into .context/skills/ (in addition to the base set).
+# Perfis NAO contribuem agents (ADR-008 v1.1.0): criar agente de projeto e
+# competencia exclusiva do dotcontext. A chave `agents:` foi removida.
+#
+# Skills copiadas para .context/skills/ quando este perfil casa. Os arquivos
+# moram em assets/skills/profiles/odoo/<slug>/ — NUNCA em skills/ do plugin,
+# que e namespace global registrado sem opt-out.
 skills: ["odoo-development", "frontend-specialist-odoo", "odoo-l10n-br"]
-# Extra Lite-mode dispatch routing: keyword -> agent.
+# Liga cada skill a um PAPEL de agente de projeto. O context-sync grava a lista
+# como frontmatter `skills:` no agente correspondente (aditivo e idempotente).
+skillBindings:
+  backend-specialist: ["odoo-development", "odoo-l10n-br"]
+  frontend-specialist: ["frontend-specialist-odoo"]
+# Dispatch routing: keyword -> PAPEL de agente de projeto (nunca agente do plugin).
 dispatchKeywords:
-  odoo-specialist: ["odoo", "owl", "qweb", "pos", "nfc-e", "nf-e", "l10n_br", "addon", "orm"]
+  backend-specialist: ["odoo", "orm", "addon", "l10n_br", "nfc-e", "nf-e"]
+  frontend-specialist: ["owl", "qweb", "pos"]
 # Profile-scoped Standards (enforcement) copied into the project's
 # .context/engineering/standards/ ONLY when this profile is detected. The ids
 # are mirrored in assets/standards/profiles/odoo/MANIFEST.txt and backed by

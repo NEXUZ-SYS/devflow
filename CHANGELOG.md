@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — **BREAKING**: conhecimento de framework sai do namespace global
+
+O DevFlow é um *bridge* genérico, mas publicava no namespace `devflow:*` — em **todo**
+projeto — skills de um framework específico (Odoo) e de um produto proprietário (NXZ), além
+de um agente de projeto. O repo do próprio plugin (Node/bash, zero Odoo) expunha
+`devflow:odoo-development`, `devflow:odoo-l10n-br`, `devflow:nxz-go-test` e o agent type
+`devflow:Odoo Specialist`.
+
+A causa não era o gating: **localização é o contrato de registro**. O Claude Code registra
+todo `skills/<nome>/SKILL.md` e `agents/<nome>.md` do plugin sem opt-out, e o gating por
+perfil só governa a **cópia** para `.context/`. Prova por contraste: os 15 `std-odoo-*`, já
+sob `assets/standards/profiles/odoo/`, nunca vazaram.
+
+**O que muda para quem usa o plugin**
+
+- **Somem do namespace:** `devflow:odoo-development`, `devflow:frontend-specialist-odoo`,
+  `devflow:odoo-l10n-br`, `devflow:odoo-nxz-overlay`, `devflow:nxz-go-test`.
+- **Some o agent type** `devflow:Odoo Specialist`; perfis não contribuem mais `agents`.
+- **Nada de conhecimento é perdido:** as 4 skills de framework continuam sendo copiadas para
+  `.context/skills/` quando o perfil casa — mudou só o diretório-fonte no plugin. Os 17
+  standards de perfil não se movem.
+- **`nxz-go-test` sai do bundle** — era um runbook de QA de um app específico, com caminho
+  absoluto de máquina, que nenhum perfil declarava.
+
+**Migração.** Nada é removido do seu projeto. O `context-sync` passa a **reportar**
+artefatos órfãos e aposentados com veredito de proveniência (`untouched` / `diverged` /
+`pristine: null` quando não dá para saber), e a remoção acontece só sob confirmação
+(ADR-012). Em projetos Odoo, o artefato que vira órfão é `.context/agents/odoo-specialist.md`.
+
+**Novidades de mecanismo**
+
+- `profiles/<fw>.yaml` ganha `skillBindings: { <papel>: [<slug>] }` e `dispatchKeywords`
+  passa a apontar para **papéis de agente de projeto**, nunca para um agente do plugin.
+- `context-sync` grava `skills: [...]` no frontmatter do agente do papel, por **edição
+  cirúrgica de linha** — o bloco nunca é re-serializado, porque re-emitir um campo
+  mal-tipado faz o parser do dotcontext descartar o frontmatter inteiro.
+- `skills/MANIFEST.txt` declara as 44 skills base; um guard fail-closed impede que skill de
+  framework volte a `skills/`.
+- `assets/provenance/retired.json` + `detectRetired()` alcançam classes que o manifesto de
+  proveniência não rastreia (agents).
+
+Ver ADR-008 v1.1.0.
+
 ## [2.0.1] — 2026-07-29
 
 ### Fixed — `/devflow:devflow-doctor`: falso-positivo no check `grounding-mcp`

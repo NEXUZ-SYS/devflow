@@ -1,0 +1,52 @@
+# Skills base do DevFlow — capacidades do BRIDGE, registradas no namespace global.
+#
+# Toda skill em skills/ DEVE constar aqui (guard AC4 de
+# tests/integration/test-profile-skills-not-registered.mjs).
+#
+# Conhecimento condicional a framework NAO entra nesta lista: vai para
+# assets/skills/profiles/<fw>/<slug>/ e e copiado sob deteccao de perfil
+# (ADR-008 v1.1.0 — localizacao e o contrato de registro).
+adr-builder
+adr-filter
+agent-dispatch
+api-design
+autonomous-loop
+bug-investigation
+commit-message
+config
+context-awareness
+context-hygiene
+context-sync
+doctor
+documentation
+feature-breakdown
+frontend-design
+git-strategy
+import-reversa
+instinct-ops
+knowledge
+knowledge-filter
+language
+memory-ops
+memory-recall
+migration
+napkin
+parallel-dispatch
+prd-generation
+prevc-confirmation
+prevc-execution
+prevc-flow
+prevc-planning
+prevc-review
+prevc-validation
+project-init
+pr-review
+refactoring
+routines
+scrape-stack-batch
+security-audit
+skill-creation
+stack-filter
+standards-builder
+test-generation
+using-devflow
