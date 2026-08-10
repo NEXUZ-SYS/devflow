@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-08-10
+
 ### Changed — **BREAKING**: conhecimento de framework sai do namespace global
 
 O DevFlow é um *bridge* genérico, mas publicava no namespace `devflow:*` — em **todo**
