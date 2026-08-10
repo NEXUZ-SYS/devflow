@@ -21,12 +21,21 @@
  * CLI:
  *   node agent-skill-binding.mjs --project=<root> --plugin=<root>
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, lstatSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { frameworkContributions } from "./detect-framework.mjs";
+import { isWithinDir } from "./path-guard.mjs";
 
 const DELIM = /^---\s*$/;
+
+// Um papel e NOME DE ARQUIVO, nunca caminho: sem separador, sem `..`, sem
+// absoluto. Mesma disciplina de contencao do provenance-sync (isWithinDir +
+// recusa de symlink), aqui tambem em defesa-em-profundidade — os profiles sao
+// bundled (TCB), mas a lib e exportada e tem CLI proprio.
+const PAPEL_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function isSymlink(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } }
 
 /**
  * Insere ou substitui a linha `skills:` dentro do bloco de frontmatter.
@@ -50,8 +59,14 @@ export function applySkillBindings({ root, skillBindings = {} }) {
   const written = [];
   const pending = [];
 
+  const agentsDir = join(root, ".context", "agents");
+
   for (const [role, slugs] of Object.entries(skillBindings)) {
-    const file = join(root, ".context", "agents", `${role}.md`);
+    // Contencao ANTES de tocar o disco: papel invalido nunca vira path.
+    if (!PAPEL_VALIDO.test(role)) { pending.push(role); continue; }
+
+    const file = join(agentsDir, `${role}.md`);
+    if (!isWithinDir(file, agentsDir) || isSymlink(file)) { pending.push(role); continue; }
     if (!existsSync(file)) { pending.push(role); continue; }
 
     const raw = readFileSync(file, "utf-8");

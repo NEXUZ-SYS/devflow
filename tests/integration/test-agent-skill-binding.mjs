@@ -12,7 +12,7 @@
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applySkillBindings, upsertSkillsLine } from "../../scripts/lib/agent-skill-binding.mjs";
@@ -116,6 +116,46 @@ describe("binding de skills no agente de projeto", () => {
       if (!linha) continue;
       assert.ok(depois.includes(linha), `linha alterada pela edição cirúrgica: ${linha}`);
     }
+  });
+});
+
+describe("contenção de segurança", () => {
+  it("papel com traversal NÃO escreve fora de .context/agents/", () => {
+    const root = mkdtempSync(join(tmpdir(), "devflow-bind-sec-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".context", "agents"), { recursive: true });
+    const vitima = join(root, "vitima.md");
+    writeFileSync(vitima, "---\ntype: agent\nname: v\n---\n\ncorpo\n");
+    const antes = readFileSync(vitima, "utf-8");
+
+    const r = applySkillBindings({ root, skillBindings: { "../../vitima": ["INJETADO"] } });
+
+    assert.equal(readFileSync(vitima, "utf-8"), antes, "escreveu fora de .context/agents/");
+    assert.deepEqual(r.written, [], "não pode reportar escrita de um papel recusado");
+    assert.deepEqual(r.pending, ["../../vitima"], "papel fora da contenção vira pendência");
+  });
+
+  it("agente que é symlink é recusado, não seguido", () => {
+    const root = mkdtempSync(join(tmpdir(), "devflow-bind-sym-"));
+    dirs.push(root);
+    mkdirSync(join(root, ".context", "agents"), { recursive: true });
+    const alvo = join(root, "alvo.md");
+    writeFileSync(alvo, "---\ntype: agent\nname: alvo\n---\n\ncorpo\n");
+    const antes = readFileSync(alvo, "utf-8");
+    symlinkSync(alvo, join(root, ".context", "agents", "backend-specialist.md"));
+
+    const r = applySkillBindings({ root, skillBindings: { "backend-specialist": ["X"] } });
+
+    assert.equal(readFileSync(alvo, "utf-8"), antes, "seguiu o symlink e escreveu no alvo");
+    assert.deepEqual(r.written, []);
+    assert.deepEqual(r.pending, ["backend-specialist"]);
+  });
+
+  it("papel com separador de path é recusado mesmo sem escapar", () => {
+    const root = projetoComAgente();
+    const r = applySkillBindings({ root, skillBindings: { "sub/backend-specialist": ["X"] } });
+    assert.deepEqual(r.written, [], "papel não é caminho — só nome de arquivo");
+    assert.deepEqual(r.pending, ["sub/backend-specialist"]);
   });
 });
 
