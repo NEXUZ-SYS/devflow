@@ -6,6 +6,7 @@ planSlug: deframework-plugin-namespace
 summary: "Localizacao passa a ser o contrato de registro: artefato condicional a framework sai de skills/ e agents/ do plugin (namespace global sem opt-out) para assets/skills/profiles/<fw>/, de onde segue sendo copiado ao .context/ sob deteccao de perfil. Perfis deixam de contribuir agents. BREAKING (major)."
 generated: "2026-08-05"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
 agents:
   - type: "test-writer"
@@ -172,6 +173,7 @@ phases:
         assignee: "devops-specialist"
         deliverables:
           - "Comando gh workflow run indicado ao operador, nunca executado sozinho"
+lastUpdated: "2026-08-07T22:04:56.675Z"
 ---
 
 # Desframeworkizar o namespace global do plugin
@@ -218,6 +220,10 @@ Evidência: este repositório é o próprio DevFlow (bridge Node/bash, zero Odoo
 
 - O plugin instalado durante a validação é o da branch — se não for, a observação de namespace é inconclusiva, não negativa.
 - Nenhum consumidor externo depende de invocar `devflow:odoo-*` por nome; se depender, quebra, e isso é intencional (BREAKING).
+
+## Execution History
+
+> Last updated: 2026-08-07T22:04:56.675Z | Progress: 0%
 
 ## Rollback
 
