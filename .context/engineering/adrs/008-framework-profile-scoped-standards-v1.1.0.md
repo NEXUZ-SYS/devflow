@@ -28,9 +28,7 @@ Faltava um equivalente para **Standards**: regras de enforcement específicas de
 
 ### Contexto adicional da v1.1.0 — a razão dura do subdir
 
-A v1.0.0 justificava o subdir por um motivo de **loader** (`readStandardsFromDir` não recursa). Operando o mecanismo descobriu-se razão mais dura: o Claude Code **registra todo `skills/<nome>/SKILL.md` como comando invocável** (`/devflow:<nome>`) e **todo `agents/<nome>.md` como agent type**, em **todo** projeto, sem opt-out por frontmatter. Logo **a localização é o contrato de registro** — morar em `skills/` é *ser comando global*, independentemente do perfil. O gating de `detect-framework.mjs` governa só a **cópia** para `.context/`; nunca teve efeito sobre o registro.
-
-Evidência: o próprio repo do DevFlow (bridge Node/bash, zero Odoo) expunha `devflow:odoo-development`, `devflow:frontend-specialist-odoo`, `devflow:odoo-l10n-br`, `devflow:odoo-nxz-overlay`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist`. Prova por contraste: os 15 `std-odoo-*`, já sob `assets/standards/profiles/odoo/` por força desta ADR, **nunca vazaram** — o padrão da v1.0.0 estava certo, só não fora aplicado a skills e agents.
+A v1.0.0 justificava o subdir por um motivo de **loader** (`readStandardsFromDir` não recursa). Operando o mecanismo apareceu razão mais dura: o Claude Code **registra todo `skills/<nome>/SKILL.md` como comando** (`/devflow:<nome>`) e **todo `agents/<nome>.md` como agent type**, em **todo** projeto, sem opt-out. Logo **a localização é o contrato de registro** — morar em `skills/` é *ser comando global*, independentemente do perfil; o gating governa só a **cópia** para `.context/`, nunca o registro. Evidência: o próprio repo do DevFlow (bridge Node/bash, zero Odoo) expunha `devflow:odoo-*`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist`, enquanto os 15 `std-odoo-*` já sob `assets/standards/profiles/odoo/` **nunca vazaram** — o padrão da v1.0.0 estava certo, só não fora aplicado a skills e agents.
 
 ## Decisão
 
@@ -54,9 +52,9 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 
 8. **Perfis DEIXAM de contribuir agents.** A chave `agents:` sai de `profiles/<fw>.yaml` e `frameworkContributions()` para de agregá-la. **Criar agente de projeto é exclusividade do dotcontext.** O mecanismo veio da v1.13.0 e nunca teve ADR própria; esta versão o revoga.
 
-9. **Distinção explícita entre materializar e autorar** — reconcilia com o ADR-006 (*"NUNCA mover ou criar arquivos em `docs/`, `agents/`, `skills/`, `plans/` via mecanismos devflow"*), que ao pé da letra proibiria a cópia que esta ADR sanciona. Leitura coerente: o devflow **MATERIALIZA** contribuições de perfil (cópia verbatim, rastreada por proveniência) mas **não AUTORA** conteúdo nesses diretórios. Agente escrito à mão no plugin e depositado no projeto viola a segunda metade; skill de perfil copiada verbatim, não.
+9. **Materializar ≠ autorar** — reconcilia com o ADR-006 (*"NUNCA mover ou criar arquivos em `docs/`, `agents/`, `skills/`, `plans/` via mecanismos devflow"*), que ao pé da letra proibiria a cópia que esta ADR sanciona. Leitura coerente: o devflow **MATERIALIZA** contribuições de perfil (cópia verbatim rastreada por proveniência) mas **não AUTORA** conteúdo ali. Agente escrito à mão no plugin e depositado no projeto viola a segunda metade; skill copiada verbatim, não.
 
-10. **O vínculo skill↔agente é declarado, não inferido.** `profiles/<fw>.yaml` ganha `skillBindings: { <papel>: [<slugs>] }`; o sync grava `skills: [...]` no frontmatter do agente de projeto, de forma **aditiva e idempotente**. `dispatchKeywords` passa a mapear keyword → **papel de agente de projeto**, nunca um agente do plugin.
+10. **O vínculo skill↔agente é declarado, não inferido.** `profiles/<fw>.yaml` ganha `skillBindings: { <papel>: [<slugs>] }`; o sync grava `skills: [...]` no frontmatter do agente, de forma **aditiva e idempotente**, reaplicada a cada execução. `dispatchKeywords` passa a mapear keyword → **papel de agente de projeto**, nunca um agente do plugin.
 
 ## Alternativas Consideradas
 
@@ -65,12 +63,10 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - **Cópia no init para `.context/` (origin:project), sandbox universal intocado** ✓ — condicional por framework, consistente com as skills de perfil, sem tocar na superfície crítica.
 - **Só documentar as regras em skill (sem linter)** — perde enforcement em CI/hook. Rejeitado.
 
-**Acrescentadas na v1.1.0 (para skills e agents):**
-
-- **Manter as skills em `skills/` e filtrar no registro** — **impossível**: não há opt-out (nem frontmatter, nem manifest). Rejeitado por impossibilidade técnica verificada, não por preferência.
+- **v1.1.0** — **Manter as skills em `skills/` e filtrar no registro** — **impossível**: não há opt-out (nem frontmatter, nem manifest). Rejeitado por impossibilidade verificada, não por preferência.
 - **Diretório raso `assets/skills/<slug>/`** — perde a origem por perfil (necessária a `skillsWithOrigin` e à detecção de órfão) e diverge do layout dos Standards. Rejeitado.
-- **Deletar os artefatos de framework do bundle** — perderia conhecimento validado e quebraria projetos-cliente sem ganho: o defeito é o registro, não a existência. Rejeitado.
-- **Relocar os agents de perfil em vez de revogá-los** ✗ — manteria o plugin autorando agente de projeto, competência do dotcontext (ADR-006). Rejeitado.
+- **Deletar os artefatos de framework** — perderia conhecimento validado e quebraria projetos-cliente sem ganho: o defeito é o registro, não a existência. Rejeitado.
+- **Relocar os agents de perfil em vez de revogá-los** ✗ — manteria o plugin autorando agente de projeto (ADR-006). Rejeitado.
 
 ## Consequências
 
@@ -79,7 +75,7 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - Zero mudança na superfície de segurança do set universal (sandbox `origin:"default"` byte-idêntico).
 - Mecanismo data-driven e extensível: novo framework = novo `profiles/<fw>.yaml` + subdir, sem mudar código.
 - Reusa o pipeline de cópia já existente para as skills de perfil.
-- *(v1.1.0)* O namespace global volta a conter **só** capacidades do bridge, sob uma regra única de localização (`assets/<classe>/profiles/<fw>/`) válida para toda classe de artefato condicional.
+- *(v1.1.0)* O namespace global volta a conter **só** capacidades do bridge, sob uma regra única de localização válida para toda classe de artefato condicional.
 
 **Negativas**
 - Os Standards de perfil só passam a valer após `init`/`sync` copiá-los (não são live como os universais). Aceitável — consistente com as skills de perfil.
@@ -99,9 +95,7 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - SEMPRE semear a wishlist `stacks:` do perfil no manifest do PROJETO como `mcpIndexed`, nunca no manifest do self-repo (bridge plugin, vazio por design).
 - NUNCA nomear um Standard de perfil por módulo/subsistema (`std-odoo-pos`) — concern-framed sempre (regra que atravessa módulos).
 
-**Acrescentados na v1.1.0:**
-
-- SEMPRE manter artefato condicional a framework sob `assets/<classe>/profiles/<fw>/` — NUNCA em `skills/` ou `agents/` do plugin, que são namespace global registrado sem opt-out.
+- **v1.1.0** — SEMPRE manter artefato condicional a framework sob `assets/<classe>/profiles/<fw>/` — NUNCA em `skills/` ou `agents/` do plugin, que são namespace global registrado sem opt-out.
 - NUNCA um perfil contribuir `agents:` — criar agente de projeto é exclusividade do dotcontext.
 - SEMPRE calcular o destino da cópia explicitamente por slug — NUNCA derivá-lo do path relativo da origem (derivar produziria `.context/assets/skills/profiles/...`).
 - QUANDO um artefato for retirado do bundle, ENTÃO tratar o deploy remanescente como órfão: preservar e reportar, com remoção só sob confirmação humana (coerente com o ADR-012).
@@ -114,14 +108,13 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - [ ] `tests/integration/test-stacks-add.mjs` — `devflow stacks add` semeia o manifest com entrada `mcpIndexed`.
 - [ ] `tests/odoo-standards/*.test.mjs` — 17 linters `std-odoo-*` com fixtures BAD/GOOD (RED→GREEN).
 
-**Acrescentado na v1.1.0:**
-
-- [ ] `tests/integration/test-profile-skills-not-registered.mjs` — **guard de regressão do defeito**: `skills/` do plugin e o conjunto contribuído por perfis são **disjuntos** (fail-closed).
-- [ ] `tests/integration/test-profile-skills-integrity.mjs` — trio `profiles/<fw>.yaml skills:` ↔ diretórios em `assets/skills/profiles/<fw>/` ↔ `SKILL.md`, sem órfãos.
-- [ ] `tests/integration/test-provenance-sync.mjs` — `resolveArtifacts` resolve origem por slug e calcula `dest` explicitamente; órfão reportado, nunca removido.
-- [ ] `tests/integration/test-gen-known-hashes.mjs` — relocação não altera o conjunto de hashes (hash de conteúdo, path-agnóstico).
-- [ ] `tests/integration/test-detect-framework.mjs` — `frameworkContributions` não retorna `agents`; retorna `skillsWithOrigin`.
-- [ ] Verificação **manual** pós-reinício: nenhum `devflow:<skill-de-framework>` no namespace. Não automatizável — observação, nunca sinal verde de teste.
+- [x] **v1.1.0** — `test-profile-skills-not-registered.mjs` — **guard do defeito**, 4 ACs: disjunção; skill de perfil existe sob `assets/`; nenhum `SKILL.md` de `skills/` com path absoluto de máquina; `skills/` bate com `skills/MANIFEST.txt`. Os dois últimos existem porque a disjunção sozinha ignora skill que **nenhum perfil declara** — o caso `nxz-go-test`.
+- [x] `test-framework-profiles-integrity.mjs` — 7 ACs: trio sem órfãos, perfil **não** declara `agents`, `skillBindings` só cita skill declarada, `dispatchKeywords` concorda nos papéis. Mutation-tested.
+- [x] `test-provenance-sync.mjs` — `dest` explícito por slug (segmento, não substring); órfão por manifesto **e** `detectRetired` sobre `assets/provenance/retired.json`, que alcança classes fora do manifesto (agents); nada removido.
+- [x] `test-gen-known-hashes.mjs` — relocação não altera o conjunto de hashes.
+- [x] `test-detect-framework.mjs` — sem `agents`; com `skillsWithOrigin`/`skillBindings`.
+- [x] `test-agent-skill-binding.mjs` — frontmatter validado pelo parser do **dotcontext**; **contenção**: papel é nome de arquivo, `isWithinDir` + recusa de symlink.
+- [ ] Verificação **manual pós-release**: o plugin carregado vem do **cache do release**, não do working tree — reiniciar a sessão não basta. Só após `/devflow update`. Observação, nunca sinal verde.
 
 ## Evidências
 
