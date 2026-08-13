@@ -22,6 +22,7 @@
 - **Allowlist de skill visível:** exatamente `["scrape-stack-batch"]` — justificada por `docs/odoo-profile-standards.md:50`.
 - **Nome-alvo:** `devflow-design` (arquivo `commands/devflow-design.md`, `name: devflow-design`).
 - **Não tocar:** `agents/`, `CHANGELOG.md` histórico, specs antigas, `.context/runtime/`, `disable-model-invocation`.
+- **NUNCA rodar `gen-known-hashes.mjs` à mão nesta branch.** `distributableFiles()` varre `skills/` e filtra `.md`, então os 43 `SKILL.md` editados são artefatos de proveniência e seus hashes mudam. O registry é **append-only** e é atualizado pelo `bump-version.sh` (`--append`) durante o release — sob `versioning: pipeline`, isso acontece no `release.yml`, não no merge. Rodar à mão suja o diff e, pelo histórico do projeto, um `known-hashes.json` sujo bloqueia `pull --ff-only` pós-release. **Nenhum teste falha por isso** (`test-gen-known-hashes.mjs` compara o working tree consigo mesmo; `test-bump-appends-registry.mjs` só verifica que o bump chama `--append`).
 - **Sinais exigidos na fase V:** `requiredSignals: [unit, integration, lint]`.
 
 ---
@@ -101,7 +102,14 @@ function temUserInvocableFalse(arquivo) {
 function comandos() {
   return readdirSync(join(REPO, "commands"))
     .filter((f) => f.endsWith(".md"))
-    .map((f) => nomeDeclarado(join(REPO, "commands", f), basename(f, ".md")));
+    .map((f) => join(REPO, "commands", f));
+}
+
+// Nenhum comando usa user-invocable hoje, mas o campo vale para command e skill
+// igualmente — filtrar os dois pelo mesmo critério evita que um comando oculto
+// no futuro seja contado como visível.
+function visivel(arquivo) {
+  return !temUserInvocableFalse(arquivo);
 }
 
 function skills() {
@@ -118,10 +126,12 @@ const menorQue = (a, b) => (a[0] !== b[0] ? a[0] < b[0] : a[1] < b[1]);
 describe("ordenação do menu de slash do plugin", () => {
   it("AC1 devflow:devflow é o primeiro item ao digitar /devflow", () => {
     const visiveis = [
-      ...comandos(),
-      ...skills().filter(
-        (s) => !temUserInvocableFalse(join(REPO, "skills", s, "SKILL.md")),
-      ),
+      ...comandos()
+        .filter(visivel)
+        .map((f) => nomeDeclarado(f, basename(f, ".md"))),
+      ...skills()
+        .filter((s) => visivel(join(REPO, "skills", s, "SKILL.md")))
+        .map((s) => nomeDeclarado(join(REPO, "skills", s, "SKILL.md"), s)),
     ].map((n) => `${PLUGIN}:${n}`);
 
     const alvo = `${PLUGIN}:${PLUGIN}`;
@@ -149,6 +159,7 @@ describe("ordenação do menu de slash do plugin", () => {
 
   it("AC3 todo comando segue a convenção devflow-* (restaurada na v1.6.0)", () => {
     const foraDoPadrao = comandos()
+      .map((f) => nomeDeclarado(f, basename(f, ".md")))
       .filter((n) => n !== PLUGIN && !/^devflow-/.test(n))
       .sort();
     assert.deepEqual(
