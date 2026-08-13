@@ -25,11 +25,12 @@ This directory contains plans for coordinating work across documentation and pla
 20. [Mempalace Integration](./mempalace-integration.md)
 21. [Odoo Profile Standards](./odoo-profile-standards.md)
 22. [Scrape Stack Hosted Mcp](./scrape-stack-hosted-mcp.md)
-23. [Standards Coverage Gap Fix](./standards-coverage-gap-fix.md)
-24. [Standards Default Enforcement](./standards-default-enforcement.md)
-25. [Suggest Bump Postmerge Base](./suggest-bump-postmerge-base.md)
-26. [Verify Signal Pipeline](./verify-signal-pipeline.md)
-27. [Workflow Resume Session](./workflow-resume-session.md)
+23. [Slash Menu First Command](./slash-menu-first-command.md)
+24. [Standards Coverage Gap Fix](./standards-coverage-gap-fix.md)
+25. [Standards Default Enforcement](./standards-default-enforcement.md)
+26. [Suggest Bump Postmerge Base](./suggest-bump-postmerge-base.md)
+27. [Verify Signal Pipeline](./verify-signal-pipeline.md)
+28. [Workflow Resume Session](./workflow-resume-session.md)
 
 ## How To Create Or Update Plans
 - Run "dotcontext plan <name>" to scaffold a new plan template.

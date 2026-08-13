@@ -136,7 +136,9 @@ phases:
           - "merge + signpost"
 generated: "2026-07-23"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
+lastUpdated: "2026-07-24T15:02:02.064Z"
 ---
 
 # Importador Reversa evidência-primeiro
@@ -203,3 +205,7 @@ Suíte atual: **101 testes, 0 falhas** — sobre um fixture sintético que model
 |---|---|---|
 | Doc drift: `adr-builder/SKILL.md` diz `.context/adrs/` "NEVER elsewhere", mas a migração v2 move para `engineering/adrs/` | `documentation-writer` | feature separada |
 | Promoção curada da evidência às camadas DDC via `devflow:knowledge` | `architect-specialist` | sob demanda, pós-merge |
+
+## Execution History
+
+> Last updated: 2026-07-24T15:02:02.064Z | Progress: 0%
