@@ -1,19 +1,19 @@
 ---
 type: adr
 name: framework-profile-scoped-standards
-description: "Artefatos condicionais a framework (Standards e skills) moram sob assets/<classe>/profiles/<fw>/ e são copiados no init — localização é o contrato de registro; perfis não contribuem agents"
+description: Artefatos condicionais a framework (Standards e skills) moram sob assets/<classe>/profiles/<fw>/ e são copiados no init — localização é o contrato de registro; perfis não contribuem agents
 scope: organizational
 source: local
 stack: universal
 category: principios-codigo
 status: Proposto
-version: 1.1.0
+version: 1.2.0
 created: 2026-06-09
 supersedes: []
 refines: [002-adopt-standards-triple-layer-v1.0.0]
 protocol_contract: null
 decision_kind: firm
-summary: "Artefatos condicionais a um framework moram num subdir bundled assets/<classe>/profiles/<fw>/ e são COPIADOS para o .context/ do projeto quando o perfil casa. A v1.1.0 generaliza a regra de Standards para SKILLS e enuncia a razão dura: o Claude Code registra todo skills/<nome>/ e agents/<nome>.md do plugin como comando e agent type globais, em todo projeto, sem opt-out — logo LOCALIZAÇÃO É O CONTRATO DE REGISTRO, e morar em skills/ significa ser comando global. A v1.1.0 também REVOGA a contribuição de agents por perfil (mecanismo da v1.13.0, nunca ADR-ado): criar agente de projeto é exclusividade do dotcontext; profiles/<fw>.yaml perde a chave agents: e ganha skillBindings:, que liga cada skill a um papel de agente de projeto via frontmatter skills:. Fica explícita a distinção que reconcilia com o ADR-006: devflow MATERIALIZA contribuições de perfil (cópia verbatim rastreada por proveniência), mas não AUTORA conteúdo em agents/skills do .context/. A allowlist do sandbox origin:default (anti-RCE do ADR-007) permanece byte-idêntica."
+summary: "Artefatos condicionais a um framework moram num subdir bundled assets/<classe>/profiles/<fw>/ e são COPIADOS para o .context/ do projeto quando o perfil casa. A v1.1.0 generaliza a regra de Standards para SKILLS e enuncia a razão dura: o Claude Code REGISTRA todo skills/<nome>/ e agents/<nome>.md do plugin em todo projeto, sem opt-out — logo LOCALIZAÇÃO É O CONTRATO DE REGISTRO, e morar em skills/ significa estar no vocabulário global. A v1.2.0 corrige a precisão dessa premissa sem alterar a decisão: o que não tem opt-out é o REGISTRO; a superfície de MENU tem (user-invocable: false) e a invocação pelo modelo também (disable-model-invocation: true). Nenhuma das duas desregistra a skill, então nenhuma substitui mover o artefato para o subdir de perfil. A v1.1.0 também REVOGA a contribuição de agents por perfil (mecanismo da v1.13.0, nunca ADR-ado): criar agente de projeto é exclusividade do dotcontext; profiles/<fw>.yaml perde a chave agents: e ganha skillBindings:, que liga cada skill a um papel de agente de projeto via frontmatter skills:. Fica explícita a distinção que reconcilia com o ADR-006: devflow MATERIALIZA contribuições de perfil (cópia verbatim rastreada por proveniência), mas não AUTORA conteúdo em agents/skills do .context/. A allowlist do sandbox origin:default (anti-RCE do ADR-007) permanece byte-idêntica."
 ---
 
 # ADR 008 — Artefatos por perfil de framework: localização é o contrato de registro (copiados no init; sandbox SI-4 universal inalterado)
@@ -28,7 +28,19 @@ Faltava um equivalente para **Standards**: regras de enforcement específicas de
 
 ### Contexto adicional da v1.1.0 — a razão dura do subdir
 
-A v1.0.0 justificava o subdir por um motivo de **loader** (`readStandardsFromDir` não recursa). Operando o mecanismo apareceu razão mais dura: o Claude Code **registra todo `skills/<nome>/SKILL.md` como comando** (`/devflow:<nome>`) e **todo `agents/<nome>.md` como agent type**, em **todo** projeto, sem opt-out. Logo **a localização é o contrato de registro** — morar em `skills/` é *ser comando global*, independentemente do perfil; o gating governa só a **cópia** para `.context/`, nunca o registro. Evidência: o próprio repo do DevFlow (bridge Node/bash, zero Odoo) expunha `devflow:odoo-*`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist`, enquanto os 15 `std-odoo-*` já sob `assets/standards/profiles/odoo/` **nunca vazaram** — o padrão da v1.0.0 estava certo, só não fora aplicado a skills e agents.
+A v1.0.0 justificava o subdir por um motivo de **loader** (`readStandardsFromDir` não recursa). Operando o mecanismo apareceu razão mais dura: o Claude Code **registra todo `skills/<nome>/SKILL.md`** e **todo `agents/<nome>.md` como agent type**, em **todo** projeto, sem opt-out. Logo **a localização é o contrato de registro** — morar em `skills/` é *estar no vocabulário global*, independentemente do perfil; o gating governa só a **cópia** para `.context/`, nunca o registro. Evidência: o próprio repo do DevFlow (bridge Node/bash, zero Odoo) expunha `devflow:odoo-*`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist`, enquanto os 15 `std-odoo-*` já sob `assets/standards/profiles/odoo/` **nunca vazaram** — o padrão da v1.0.0 estava certo, só não fora aplicado a skills e agents.
+
+### Contexto adicional da v1.2.0 — três superfícies, um único opt-out ausente
+
+A v1.1.0 dizia que a skill "vira comando sem opt-out": conclusão certa, argumento errado. O loader de plugin do Claude Code 2.1.231 (`let z = a["user-invocable"], V = (z === void 0 ? true : …)`) e o dispatch (`if (g.userInvocable === false)`) separam três superfícies:
+
+| Superfície | Opt-out? | Mecanismo |
+|---|---|---|
+| **Registro** / vocabulário exposto ao modelo | **Não** | — |
+| Menu de slash / digitação pelo usuário | Sim | `user-invocable: false` |
+| Invocação pelo modelo | Sim | `disable-model-invocation: true` |
+
+Nenhum dos dois opt-outs desregistra: a skill de framework segue carregada e ocupando o vocabulário do modelo em todo projeto — o defeito que esta ADR endereça. O enunciado correto é *registrada* sem opt-out, e o subdir de perfil continua sendo o único mecanismo que resolve.
 
 ## Decisão
 
@@ -95,7 +107,9 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - SEMPRE semear a wishlist `stacks:` do perfil no manifest do PROJETO como `mcpIndexed`, nunca no manifest do self-repo (bridge plugin, vazio por design).
 - NUNCA nomear um Standard de perfil por módulo/subsistema (`std-odoo-pos`) — concern-framed sempre (regra que atravessa módulos).
 
-- **v1.1.0** — SEMPRE manter artefato condicional a framework sob `assets/<classe>/profiles/<fw>/` — NUNCA em `skills/` ou `agents/` do plugin, que são namespace global registrado sem opt-out.
+- **v1.1.0** — SEMPRE manter artefato condicional a framework sob `assets/<classe>/profiles/<fw>/` — NUNCA em `skills/` ou `agents/` do plugin, que são namespace global **registrado** sem opt-out.
+- **v1.2.0** — NUNCA usar `user-invocable: false` (ou `disable-model-invocation: true`) como substituto de mover artefato de framework para `assets/<classe>/profiles/<fw>/` — esconder da superfície não desregistra, e o artefato segue carregado em todo projeto.
+- **v1.2.0** — QUANDO um texto afirmar que o namespace de plugin não tem opt-out, ENTÃO dizer de qual superfície se trata (registro / menu / invocação pelo modelo) — só a primeira é verdadeiramente sem opt-out.
 - NUNCA um perfil contribuir `agents:` — criar agente de projeto é exclusividade do dotcontext.
 - SEMPRE calcular o destino da cópia explicitamente por slug — NUNCA derivá-lo do path relativo da origem (derivar produziria `.context/assets/skills/profiles/...`).
 - QUANDO um artefato for retirado do bundle, ENTÃO tratar o deploy remanescente como órfão: preservar e reportar, com remoção só sob confirmação humana (coerente com o ADR-012).
@@ -119,5 +133,7 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 ## Evidências
 
 **Referências internas:** plano `.context/plans/odoo-profile-standards.md` (spec + faseamento PREVC) · doc `docs/odoo-profile-standards.md` · `scripts/lib/standards-loader.mjs` (`loadStandardsMerged`, `readStandardsFromDir`) · `scripts/lib/run-linter.mjs` (`resolveAndCheckSandbox`, sandbox SI-4 origin-aware) · `scripts/lib/detect-framework.mjs` (`loadProfiles`/`frameworkContributions`) · `profiles/odoo.yaml`. Refina o ADR-002 (Standard triple-layer); coexiste com o ADR-007 (default standards library / sync do repo standalone), cujo invariante anti-RCE (`.js` bundled-only, allowlist `origin:"default"`) permanece intocado por esta decisão. Estende o mecanismo de perfis de framework introduzido na v1.13.0 (agents/skills) para também carregar Standards e stacks.
+
+**Acrescentado na v1.2.0:** spec `docs/superpowers/specs/2026-08-13-slash-menu-first-command-design.md` (workflow `slash-menu-first-command`) · bundle do Claude Code **2.1.231** — loader de plugin skill/command (default de `user-invocable`), dispatch (`cmd_not_user_invocable`) e função `H8l` (comparador do menu de `/`). Lido do binário, não de documentação: o campo não consta do material público de plugins.
 
 **Acrescentado na v1.1.0:** spec `docs/superpowers/specs/2026-08-04-deframework-plugin-namespace-design.md` (workflow PREVC `deframework-plugin-namespace`) · `scripts/lib/provenance-sync.mjs` (`resolveArtifacts`, `applySync`) · `scripts/lib/gen-known-hashes.mjs` (`distributableFiles`, `genBackfill` — hash de conteúdo, path-agnóstico). Reconcilia com o ADR-006 pela distinção materializar ≠ autorar (item 9 da Decisão) e apoia-se no ADR-012 para a política de órfão (preservar, reportar, remover só sob confirmação).
