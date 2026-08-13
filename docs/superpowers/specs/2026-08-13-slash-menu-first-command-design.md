@@ -131,8 +131,9 @@ Relação: **extends**. Tratada via `adr:evolve` no Step 3.5 do Planning.
 |---|---|---|
 | 1 | `user-invocable: false` em 43 `skills/*/SKILL.md` | todas menos `scrape-stack-batch` |
 | 2 | rename `commands/design.md` → `commands/devflow-design.md` + `name:` | 1 arquivo |
-| 3 | referências vivas a `/devflow:design` | `commands/devflow.md` linhas 349 e 357 (prosa do Step 4e) — as duas únicas no repo |
-| 3b | registrar `devflow-design` no help | o comando existe hoje **sem constar** de `Related Commands` nem do bloco `COMMANDS`; entra junto, já que a seção está sendo tocada |
+| 3 | referências vivas a `/devflow:design` | 8 arquivos de produto: `commands/design.md` (16), `references/post-update-guide.md` (4), `skills/frontend-design/SKILL.md` (3 — inclui `description` e `trigger_phrases`), `skills/frontend-design/references/{browser-extension,init}.md` (3), `commands/devflow.md` (2), `skills/project-init/SKILL.md` (1) |
+| 3b | 4 suítes que exercitam o comando | `tests/skills/test-{command-design,frontend-design,design-brownfield-notice,project-init-design-step}.sh` — `test-command-design.sh` referencia `commands/design.md` por caminho e quebra sem atualização |
+| 3c | registrar `devflow-design` no help | o comando existe hoje **sem constar** de `Related Commands` nem do bloco `COMMANDS`; entra junto, já que a seção está sendo tocada |
 | 4 | guard de regressão | `tests/integration/test-slash-menu-ordering.mjs` (novo) |
 | 5 | precisão da premissa | comentário de `test-profile-skills-not-registered.mjs` + `adr:evolve` do ADR-008 |
 | 6 | CHANGELOG | entrada breaking |
@@ -143,6 +144,8 @@ Relação: **extends**. Tratada via `adr:evolve` no Step 3.5 do Planning.
 - Referências históricas a `/devflow:status`, `/devflow:sync`, `/devflow:doctor` no changelog do
   README (linha 265) — são registro do passado, não referências vivas. O README não cita
   `/devflow:design` em lugar nenhum.
+- Entradas de CHANGELOG e specs antigas que citam `/devflow:design` — registro histórico, ficam
+  como estão.
 - Qualquer alteração em `agents/` — agent types não têm o campo e não participam do menu de `/`.
 - Reordenar ou renomear os outros 12 comandos.
 
