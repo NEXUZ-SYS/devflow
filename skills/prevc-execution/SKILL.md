@@ -1,6 +1,7 @@
 ---
 name: prevc-execution
 description: "Use during PREVC Execution phase — implements the approved plan using dotcontext agent orchestration (Full Mode) or superpowers SDD/TDD (Lite/Minimal)"
+user-invocable: false
 ---
 
 # PREVC Execution Phase

@@ -1,6 +1,7 @@
 ---
 name: api-design
 description: "Use when designing, modifying, or reviewing APIs — REST, GraphQL, RPC, or internal interfaces. Covers contracts, versioning, error handling, and documentation."
+user-invocable: false
 ---
 
 # API Design

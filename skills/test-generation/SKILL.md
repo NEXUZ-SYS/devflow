@@ -1,6 +1,7 @@
 ---
 name: test-generation
 description: "Use when designing test suites, generating test cases, or reviewing test coverage — covers unit, integration, and E2E strategies"
+user-invocable: false
 ---
 
 # Test Generation

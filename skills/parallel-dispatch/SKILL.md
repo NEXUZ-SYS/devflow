@@ -1,6 +1,7 @@
 ---
 name: parallel-dispatch
 description: "Use when multiple independent tasks can be executed simultaneously — coordinates parallel agent/subagent dispatch"
+user-invocable: false
 ---
 
 # Parallel Dispatch

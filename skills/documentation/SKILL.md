@@ -1,6 +1,7 @@
 ---
 name: documentation
 description: "Use when writing, updating, or reviewing documentation — API docs, README, inline comments, architecture docs"
+user-invocable: false
 ---
 
 # Documentation

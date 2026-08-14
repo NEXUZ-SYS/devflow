@@ -1,6 +1,7 @@
 ---
 name: memory-recall
 description: "Search MemPalace for project memories — agent diaries, PREVC decisions, and historical context"
+user-invocable: false
 ---
 
 # Memory Recall

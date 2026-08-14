@@ -1,6 +1,7 @@
 ---
 name: frontend-design
 description: "Use QUANDO invocada explicitamente via /devflow:design <modo> (ou delegada pelo agente product-context) para projetar, redesenhar, criticar, auditar, polir, distilar ou animar uma interface de front-end — websites, landing pages, dashboards, UI de produto, componentes, forms, onboarding, empty states. Cobre hierarquia visual, tipografia, cor (OKLCH), espaçamento, layout, motion, micro-interações, UX copy, error states, i18n e design systems/tokens. Também para designs sem graça que precisam ficar mais ousados, ou barulhentos que precisam ficar mais quietos, ou iteração ao vivo no navegador. NÃO intercepta prompts genéricos de UI nem tarefas de implementação (essas seguem com o agente frontend-specialist); NÃO é catch-all — só age quando invocada/delegada. Não é para backend nem tarefas não-UI."
+user-invocable: false
 version: 0.1.0
 deps:
   internal:

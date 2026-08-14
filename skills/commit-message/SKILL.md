@@ -1,6 +1,7 @@
 ---
 name: commit-message
 description: "Use when writing git commit messages — follows conventional commits with context-aware scope and body"
+user-invocable: false
 ---
 
 # Commit Message

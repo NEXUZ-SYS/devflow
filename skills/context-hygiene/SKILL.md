@@ -1,6 +1,7 @@
 ---
 name: context-hygiene
 description: Use quando o projeto acumulou artefatos de processo obsoletos (planos entregues, specs órfãs, trackings pendurados) e o contexto do agente está poluído — "limpar o projeto", "context rot", "arquivar planos entregues", "/devflow cleanup". Diagnostica 3 categorias e arquiva com segurança só os planos com entrega observável no código.
+user-invocable: false
 ---
 
 # Higiene de contexto

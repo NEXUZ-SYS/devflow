@@ -1,6 +1,7 @@
 ---
 name: adr-builder
 description: "Use when the user asks to create, audit, or evolve Architecture Decision Records (ADRs). Trigger words: 'crie/criar ADR', 'gerar ADR', 'registrar decisão', 'audita ADR', 'revisa ADR', 'evolve ADR', 'patch/minor/major na ADR', 'substituir ADR'. Also trigger when the user just made an architectural decision (framework, library, pattern, auth strategy, testing approach, protocol contract) that needs recording. Three modes: CREATE (new ADR via guided/free/prefilled briefing), AUDIT (12 deterministic checks via adr-audit.mjs lib), EVOLVE (patch/minor/major/refine transition with version bump). Skill writes directly to .context/adrs/ (canonical since v1.0; legacy .context/docs/adrs/ read-only via dual-read until v1.2) — no zip packaging."
+user-invocable: false
 ---
 
 # ADR Builder — DevFlow Edition

@@ -1,6 +1,7 @@
 ---
 name: context-sync
 description: "Use to update existing .context/ docs, agents, and skills with current project state — called by /devflow:devflow-sync or automatically by /devflow init when .context/ already exists"
+user-invocable: false
 ---
 
 # Context Sync

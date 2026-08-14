@@ -1,6 +1,7 @@
 ---
 name: import-reversa
 description: Use quando o usuário pedir para importar um projeto Reversa para o DevFlow — trigger phrases '/devflow import-reversa', 'importar reversa', 'aterrissar projeto reversa', 'converter reversa para devflow'. Lê um projeto gerado pelo Reversa (.reversa/ + _reversa_sdd/, opcionalmente _reversa_forward/) e o aterrissa como EVIDÊNCIA classificada, entregando o planejamento à fase P do PREVC (o plano é autorado pelo DevFlow, não transpilado do Reversa).
+user-invocable: false
 ---
 
 # Importador Reversa → DevFlow

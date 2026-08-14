@@ -1,6 +1,7 @@
 ---
 name: doctor
 description: "Diagnose and repair DevFlow context health — MCP config/connectivity, MemPalace wings & index — with consent-gated repairs"
+user-invocable: false
 ---
 
 # Doctor

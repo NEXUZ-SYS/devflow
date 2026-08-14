@@ -1,6 +1,7 @@
 ---
 name: napkin
 description: "Persistent learning memory — curated runbook of mistakes, corrections, and patterns that work. Always active, every session."
+user-invocable: false
 ---
 
 # Napkin Runbook

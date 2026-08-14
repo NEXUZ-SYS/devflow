@@ -1,6 +1,7 @@
 ---
 name: security-audit
 description: "Use when assessing security of code, APIs, or infrastructure — OWASP-based review with severity classification"
+user-invocable: false
 ---
 
 # Security Audit

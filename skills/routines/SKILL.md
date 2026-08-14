@@ -1,6 +1,7 @@
 ---
 name: routines
 description: "Manage and execute scheduled DevFlow maintenance routines — list, run prompt chains (commands/skills/agents), snooze, enable/disable"
+user-invocable: false
 ---
 
 # Routines

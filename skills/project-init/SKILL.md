@@ -1,6 +1,7 @@
 ---
 name: project-init
 description: "Use when initializing DevFlow in a new project — scaffolds .context/ with project-aware agents, skills, and docs in dotcontext-compatible format"
+user-invocable: false
 ---
 
 # Project Init

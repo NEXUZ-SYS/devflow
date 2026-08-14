@@ -1,6 +1,7 @@
 ---
 name: prevc-planning
 description: "Use during PREVC Planning phase — combines superpowers brainstorming (9-step Socratic process) with dotcontext context enrichment and plan scaffolding"
+user-invocable: false
 ---
 
 # PREVC Planning Phase

@@ -1,6 +1,7 @@
 ---
 name: git-strategy
 description: "Gate bloqueante auto-ativado antes de qualquer edição. Detecta a estratégia git do projeto e aplica branch protection + isolamento."
+user-invocable: false
 ---
 
 # Git Strategy

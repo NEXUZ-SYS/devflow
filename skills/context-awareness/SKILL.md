@@ -1,6 +1,7 @@
 ---
 name: context-awareness
 description: "Use when you need to enrich any task with project context — codebase structure, semantic analysis, patterns, and conventions"
+user-invocable: false
 ---
 
 # Context Awareness

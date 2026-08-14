@@ -1,6 +1,7 @@
 ---
 name: bug-investigation
 description: "Use when triaging bugs, investigating unexpected behavior, or performing root cause analysis before fixing"
+user-invocable: false
 ---
 
 # Bug Investigation
