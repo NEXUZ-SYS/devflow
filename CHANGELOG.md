@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — **BREAKING**: `/devflow:design` vira `/devflow:devflow-design`
+
+Ao digitar `/devflow`, o menu de slash sugeria `devflow:config` em primeiro lugar, não o
+dispatcher. O menu do Claude Code ordena por **`(comprimento do nome, nome)`** — match exato
+e alias são inalcançáveis por um plugin, porque o `name` é sempre `plugin:nome` e o
+frontmatter de plugin não aceita `aliases`. Quatro entradas de 14 caracteres
+(`devflow:config`, `devflow:design`, `devflow:doctor`, `devflow:napkin`) batiam
+`devflow:devflow` (15), e o desempate alfabético entregava `config`.
+
+Duas correções, com um guard novo que trava o invariante
+(`tests/integration/test-slash-menu-ordering.mjs`):
+
+- **`commands/design.md` → `commands/devflow-design.md`.** Restaura a convenção `devflow-*`
+  que a v1.6.0 estabeleceu ao reverter os nomes curtos (`/devflow:status`, `:sync`,
+  `:doctor`) por colisão com comandos nativos e de outros plugins; `design` era a única
+  exceção. O comando também passa a constar do help, onde nunca estivera.
+- **43 das 44 skills recebem `user-invocable: false`** e saem do menu do usuário. O menu do
+  plugin cai de 58 para 15 itens e passa a expor **comandos**, não skills. O modelo continua
+  invocando todas as skills normalmente — `disable-model-invocation` não é usado em nenhuma.
+  Exceção declarada: `scrape-stack-batch`, que `docs/odoo-profile-standards.md` manda o
+  usuário digitar.
+
+**Migração:** projetos-cliente passam a usar `/devflow:devflow-design` após `/devflow update`
++ reinício da sessão. Nada a materializar em `.context/`.
+
+Esconder do menu **não** desregistra uma skill: o ADR-008 evoluiu para v1.2.0 distinguindo as
+três superfícies (registro — sem opt-out; menu — `user-invocable`; invocação pelo modelo —
+`disable-model-invocation`), e sua decisão segue valendo integralmente.
+
 ## [3.0.0] — 2026-08-10
 
 ### Changed — **BREAKING**: conhecimento de framework sai do namespace global
