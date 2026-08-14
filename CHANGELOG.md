@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [3.1.0] — 2026-08-14
 
-### Changed — **BREAKING**: `/devflow:design` vira `/devflow:devflow-design`
+### Changed — superfície de comando: `/devflow:design` vira `/devflow:devflow-design`
+
+> ⚠️ **Ação necessária:** quem usa `/devflow:design` precisa passar a usar
+> `/devflow:devflow-design` após atualizar. Nenhum outro comando muda de nome.
 
 Ao digitar `/devflow`, o menu de slash sugeria `devflow:config` em primeiro lugar, não o
 dispatcher. O menu do Claude Code ordena por **`(comprimento do nome, nome)`** — match exato
