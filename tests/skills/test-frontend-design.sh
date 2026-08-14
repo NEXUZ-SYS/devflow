@@ -18,8 +18,8 @@ if ! grep -qE "^name:[[:space:]]*frontend-design[[:space:]]*$" "$SKILL"; then
 fi
 
 # (2) fronteira de trigger — cita invocação/delegação e o comando
-if ! grep -qiE "/devflow:design|invocad|delega" "$SKILL"; then
-  echo "FALHA: description/skill sem fronteira de trigger (invocação/delegação /devflow:design)"; exit 1
+if ! grep -qiE "/devflow:devflow-design|invocad|delega" "$SKILL"; then
+  echo "FALHA: description/skill sem fronteira de trigger (invocação/delegação /devflow:devflow-design)"; exit 1
 fi
 # (2b) NÃO catch-all: deve dizer explicitamente que não intercepta prompts genéricos de UI
 if ! grep -qiE "n[ãa]o intercepta|n[ãa]o.*catch-all|prompts gen[ée]ricos|frontend-specialist" "$SKILL"; then

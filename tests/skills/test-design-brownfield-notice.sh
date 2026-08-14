@@ -13,8 +13,8 @@ fi
 if ! grep -qE "detect-frontend" "$GUIDE"; then
   echo "FALHA(E1): post-update-guide não usa detect-frontend na detecção"; exit 1
 fi
-if ! grep -qE "/devflow:design init" "$GUIDE"; then
-  echo "FALHA(E1): post-update-guide não ativa /devflow:design init"; exit 1
+if ! grep -qE "/devflow:devflow-design init" "$GUIDE"; then
+  echo "FALHA(E1): post-update-guide não ativa /devflow:devflow-design init"; exit 1
 fi
 
 # ── F3: guard do CLI impeccable no /devflow update ──

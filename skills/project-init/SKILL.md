@@ -161,7 +161,7 @@ DESIGN_FE=$(node "$CLAUDE_PLUGIN_ROOT/scripts/design/detect-frontend.mjs" . 2>/d
 ```
 
 - Se `DESIGN_FE=false` (backend-only): **pular** — nada a fazer (os linters de design têm `applyTo` front-end, ficam inertes).
-- Se `DESIGN_FE=true`: o enforcement determinístico (linters `std-design-*`) já se aplica automaticamente. **Após o scaffold do `.context/` (Steps 3–4)**, rodar `/devflow:design init` para o bootstrap de contexto (register brand/product em `.context/.devflow.yaml`, scaffold do knowledge `product-design-system`/`tone-of-voice`/`business-icp` via `/devflow:knowledge`, semear tokens, waivers/opt-out). Passo **não-bloqueante**; se o usuário recusar, apontar `/devflow:design init` para depois. NÃO rodar antes do `.context/` existir (o init precisa da camada de knowledge para escrever).
+- Se `DESIGN_FE=true`: o enforcement determinístico (linters `std-design-*`) já se aplica automaticamente. **Após o scaffold do `.context/` (Steps 3–4)**, rodar `/devflow:devflow-design init` para o bootstrap de contexto (register brand/product em `.context/.devflow.yaml`, scaffold do knowledge `product-design-system`/`tone-of-voice`/`business-icp` via `/devflow:knowledge`, semear tokens, waivers/opt-out). Passo **não-bloqueante**; se o usuário recusar, apontar `/devflow:devflow-design init` para depois. NÃO rodar antes do `.context/` existir (o init precisa da camada de knowledge para escrever).
 
 ## Initialization Strategy
 
