@@ -89,7 +89,9 @@ phases:
           - "Evidencia dos 3 sinais observados"
 generated: "2026-08-13"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
+lastUpdated: "2026-08-14T00:14:24.250Z"
 ---
 
 # Primeiro item do menu /devflow
@@ -154,3 +156,7 @@ requiredSignals: [unit, integration, lint]
 | Corromper YAML ao editar 43 frontmatters | `description:` é linha única em todas as 44 skills (verificado); blocos multilinha (`deps:`, `trigger_phrases:`) vêm depois. Passo de verificação de abertura/fechamento após a edição. |
 | `napkin` ser revertida pelo `/devflow update` | Step 4c usa `EXTERNAL_SKILLS_DIR` (default `~/.claude/skills`), não o diretório do plugin. A cópia bundled não é tocada. |
 | Quebrar as 4 suítes de teste do design | Estão no escopo da fase 2; `test-command-design.sh` referencia `commands/design.md` por caminho. |
+
+## Execution History
+
+> Last updated: 2026-08-14T00:14:24.250Z | Progress: 0%
