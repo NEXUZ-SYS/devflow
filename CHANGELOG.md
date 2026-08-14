@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-08-14
+
 ### Changed — **BREAKING**: `/devflow:design` vira `/devflow:devflow-design`
 
 Ao digitar `/devflow`, o menu de slash sugeria `devflow:config` em primeiro lugar, não o
