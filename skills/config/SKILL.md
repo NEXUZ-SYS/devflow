@@ -1,6 +1,7 @@
 ---
 name: config
 description: "Entrevista interativa para configurar .context/.devflow.yaml — detecta heurísticas git e pré-seleciona recomendações."
+user-invocable: false
 ---
 
 # DevFlow Config

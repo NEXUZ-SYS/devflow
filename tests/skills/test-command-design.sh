@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # tests/skills/test-command-design.sh
-# Grupo B / B3: o comando /devflow:design (commands/design.md) deve rotear para a skill
+# Grupo B / B3: o comando /devflow:devflow-design (commands/devflow-design.md) deve rotear para a skill
 # devflow:frontend-design, reconhecer os subcomandos init e live, e listar os modos.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CMD="$ROOT/commands/design.md"
+CMD="$ROOT/commands/devflow-design.md"
 
 if [ ! -f "$CMD" ]; then
-  echo "FALHA: commands/design.md não existe (→ /devflow:design)"; exit 1
+  echo "FALHA: commands/devflow-design.md não existe (→ /devflow:devflow-design)"; exit 1
 fi
 if ! grep -qiE "devflow:frontend-design|frontend-design" "$CMD"; then
   echo "FALHA: comando não roteia para a skill frontend-design"; exit 1

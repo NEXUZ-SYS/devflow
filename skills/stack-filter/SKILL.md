@@ -1,6 +1,7 @@
 ---
 name: stack-filter
 description: "Use para selecionar apenas os stacks (tecnologias) relevantes à task atual em vez de listar todos os 22 defaults — reduz ruído mantendo os stacks do(s) framework(s) detectado(s) do projeto. Invoque no início do PREVC Planning (após a task estar definida) ou sob demanda quando o usuário pedir 'filtre os stacks para X'. Usa loadStacksMerged (defaults do plugin + projeto) + stacks-filter (detecção por deps em package.json/pyproject/go.mod/Cargo.toml + alias map), e libera stacks sem-sinal (harness-engineering, gemini) por keyword-match na task. Emite um bloco <STACKS filtered> com ponteiros para o docs-mcp-server."
+user-invocable: false
 ---
 
 # stack-filter — Filtragem Contextual de Stacks

@@ -1,6 +1,7 @@
 ---
 name: adr-filter
 description: "Use para selecionar apenas as ADRs relevantes à task atual em vez de carregar todas — reduz ruído de contexto em projetos com muitas ADRs mantendo o enforcement. Invoque no início do PREVC Planning (após o task ser definida) ou sob demanda quando o usuário pedir 'filtre as ADRs para X' ou mencionar que há muitas ADRs ativas. Usa o README.md das ADRs como índice semântico e detecção de filesystem (pyproject.toml/package.json/go.mod/Cargo.toml) com fallback de precaução."
+user-invocable: false
 ---
 
 # adr-filter — Filtragem Contextual de ADRs

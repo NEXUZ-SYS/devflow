@@ -2,9 +2,12 @@
  * Guard de regressão — skills de perfil NUNCA em skills/ do plugin.
  * Run: node --test tests/integration/test-profile-skills-not-registered.mjs
  *
- * O Claude Code registra todo skills/<nome>/SKILL.md do plugin como comando
- * global (/devflow:<nome>), sem opt-out por frontmatter. Logo skill condicional
- * a framework NÃO pode morar lá — vira comando em todo projeto (ADR-008 v1.1.0).
+ * O Claude Code REGISTRA todo skills/<nome>/SKILL.md do plugin em todo projeto,
+ * sem opt-out. Esconder do menu (user-invocable: false) não desregistra: a skill
+ * segue carregada e ocupando o vocabulário do modelo. Logo skill condicional a
+ * framework NÃO pode morar lá (ADR-008 v1.2.0 — três superfícies, uma só sem
+ * opt-out; ver tests/integration/test-slash-menu-ordering.mjs para a superfície
+ * de menu).
  *
  * AC1 skills/ do plugin e o conjunto contribuído por perfis são DISJUNTOS
  * AC2 toda skill declarada por um perfil existe em assets/skills/profiles/<fw>/

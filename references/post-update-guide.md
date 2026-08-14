@@ -9,7 +9,7 @@ Cada feature tem: lógica de detecção, comando de ativação e verificação.
 
 ## Subsistema de Design (front-end)
 
-**O que é:** Guia de design de front-end (`/devflow:design`, 23 modos) + Standards determinísticos que detectam "AI tells" de design (linters `std-design-antipatterns`/`std-visual-quality`/`std-accessibility`). O enforcement dos linters é automático (defaults bundled, `applyTo` front-end); o `init` estabelece o contexto de design (register brand/product + knowledge). Ver ADR-010.
+**O que é:** Guia de design de front-end (`/devflow:devflow-design`, 23 modos) + Standards determinísticos que detectam "AI tells" de design (linters `std-design-antipatterns`/`std-visual-quality`/`std-accessibility`). O enforcement dos linters é automático (defaults bundled, `applyTo` front-end); o `init` estabelece o contexto de design (register brand/product + knowledge). Ver ADR-010.
 
 **Detecção:** projeto **front-end** (via `detect-frontend`) **e** design **não** ativado ainda (sem `design.register` no `.devflow.yaml` e sem `product-design-system.md`).
 ```bash
@@ -19,10 +19,10 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/design/detect-frontend.mjs" . 2>/dev/null | gr
 ```
 
 **Se NÃO configurado (e é front-end):**
-1. Ativar o subsistema de design: `/devflow:design init`
+1. Ativar o subsistema de design: `/devflow:devflow-design init`
    - register brand/product em `.context/.devflow.yaml`; scaffold do knowledge (`product-design-system`/`tone-of-voice`/`business-icp`) via `/devflow:knowledge`; waivers/opt-out.
-   - Se já houver um impeccable **cru** instalado (`.claude/skills/impeccable/`), rode `/devflow:design init --from-impeccable` para reconciliar (desligar o hook dele, importar waivers) — consent-gated.
-2. (Opcional) Iteração ao vivo no navegador: `/devflow:design live` — **requer o impeccable CLI + Node≥24** (bridge `npx impeccable@<pinned>`, consent-gated; DevFlow **não** auto-instala).
+   - Se já houver um impeccable **cru** instalado (`.claude/skills/impeccable/`), rode `/devflow:devflow-design init --from-impeccable` para reconciliar (desligar o hook dele, importar waivers) — consent-gated.
+2. (Opcional) Iteração ao vivo no navegador: `/devflow:devflow-design live` — **requer o impeccable CLI + Node≥24** (bridge `npx impeccable@<pinned>`, consent-gated; DevFlow **não** auto-instala).
 
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: prd-generation
 description: "Use to generate a complete product PRD with phased roadmap — supports new projects and retroactive PRD for existing codebases"
+user-invocable: false
 ---
 
 # PRD Generation

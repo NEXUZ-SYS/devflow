@@ -1,6 +1,7 @@
 ---
 name: agent-dispatch
 description: "Use when you need to discover, select, or invoke a specialist agent for a specific task or PREVC phase"
+user-invocable: false
 ---
 
 # Agent Dispatch

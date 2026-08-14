@@ -45,6 +45,7 @@ Unified entry point for DevFlow. Start workflows, initialize projects, and get h
 /devflow:devflow-doctor [--fix]                # Diagnose & repair context health (MCP, MemPalace)
 /devflow:devflow-routines <list|run|snooze>    # Scheduled maintenance routines
 /devflow:devflow-cleanup [--fix]               # Audita context rot e arquiva planos entregues
+/devflow:devflow-design <modo> [alvo]          # Guia de design de front-end (23 modos)
 ```
 
 ## Behavior
@@ -104,6 +105,7 @@ COMMANDS
   /devflow:devflow-doctor [--fix]     Diagnose & repair context health (MCP, MemPalace)
   /devflow:devflow-routines <sub>     Scheduled maintenance routines (list/run/snooze)
   /devflow:devflow-cleanup [--fix]    Audita context rot e arquiva planos entregues
+  /devflow:devflow-design <modo>      Guia de design de front-end (craft, critique, audit, …)
 
 SCALE
   /devflow scale:QUICK <d>    Bug fix, typo         → E → V
@@ -346,7 +348,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/update-default-standards.sh"
 
 **Step 4e — Design subsystem: impeccable CLI (guarded, only if present):**
 
-O modo `live` de `/devflow:design` faz bridge para o CLI upstream do impeccable. O DevFlow **nunca auto-instala** essa dependência. Este step só valida/atualiza o CLI **se ele já estiver presente** — mesmo idioma dos Steps 4/4c (guard por presença, no-op se ausente). Os linters de design e o guia `frontend-design` **não** dependem do CLI (só o `live` depende).
+O modo `live` de `/devflow:devflow-design` faz bridge para o CLI upstream do impeccable. O DevFlow **nunca auto-instala** essa dependência. Este step só valida/atualiza o CLI **se ele já estiver presente** — mesmo idioma dos Steps 4/4c (guard por presença, no-op se ausente). Os linters de design e o guia `frontend-design` **não** dependem do CLI (só o `live` depende).
 
 ```bash
 # Só se o CLI impeccable já está instalado (guard por presença — NUNCA auto-instala)
@@ -354,7 +356,7 @@ if command -v impeccable >/dev/null 2>&1; then
   CUR=$(impeccable --version 2>/dev/null | tr -d '[:space:]')
   echo "impeccable CLI presente (v${CUR}); pin testado pelo DevFlow: 3.2.0. Atualizar é opt-in: npm i -g impeccable@latest"
 fi
-# Ausente = no-op limpo. O modo /devflow:design live propõe a instalação exata sob consentimento quando usado.
+# Ausente = no-op limpo. O modo /devflow:devflow-design live propõe a instalação exata sob consentimento quando usado.
 ```
 
 **Step 5 — Report update results:**

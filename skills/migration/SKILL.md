@@ -1,6 +1,7 @@
 ---
 name: migration
 description: "Front-end interativo para migrar o layout de .context/ de v1 (subsistemas no topo) para v2 (DDC 4 camadas; subsistemas sob engineering/). Palavras-chave: '/devflow update migration', '/devflow migration', 'migrar layout de contexto', 'migrar para engineering/'."
+user-invocable: false
 ---
 
 # DevFlow Migration

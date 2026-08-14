@@ -1,6 +1,7 @@
 ---
 name: using-devflow
 description: Use when starting any conversation — establishes the unified development workflow combining superpowers discipline with dotcontext agents and PREVC workflow
+user-invocable: false
 ---
 
 <SUBAGENT-STOP>

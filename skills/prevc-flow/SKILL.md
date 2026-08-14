@@ -1,6 +1,7 @@
 ---
 name: prevc-flow
 description: "Use when starting any development task — orchestrates the PREVC workflow (Planning, Review, Execution, Validation, Confirmation) with scale-adaptive routing"
+user-invocable: false
 ---
 
 # PREVC Flow — Workflow Orchestrator

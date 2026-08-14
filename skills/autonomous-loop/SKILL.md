@@ -1,6 +1,7 @@
 ---
 name: autonomous-loop
 description: "Use during PREVC Execution phase when autonomy is assisted or autonomous — manages story-by-story loop with specialist agent dispatch, TDD enforcement, and bidirectional escalation"
+user-invocable: false
 ---
 
 # Autonomous Loop — Story Execution Engine

@@ -6,7 +6,7 @@ Estabelecer o subsistema de design do DevFlow **por projeto**: detectar o front-
 
 ## Quando usar
 
-- Primeira vez que se usa `/devflow:design` num projeto (o subsistema ainda não foi registrado).
+- Primeira vez que se usa `/devflow:devflow-design` num projeto (o subsistema ainda não foi registrado).
 - Ao (re)configurar o registro de design de um projeto existente.
 - Como preparação antes de `--from-impeccable` (reconciliação de um projeto que já usava o toolkit upstream).
 

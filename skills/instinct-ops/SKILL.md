@@ -1,6 +1,7 @@
 ---
 name: instinct-ops
 description: Use para minerar instincts do DevFlow a partir das observações de tool-use capturadas na sessão — destila comportamentos atômicos pontuados por confiança e os persiste no store. Trigger phrases '/devflow instinct mine', 'minerar instincts', 'destilar aprendizados da sessão', ou na fronteira de sessão quando o usuário optou por mineração. NÃO use para recall (isso é automático no SessionStart) nem quando instincts.enabled=false.
+user-invocable: false
 ---
 
 # Instinct Ops — Mineração de Instincts (DevFlow)

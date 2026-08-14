@@ -1,6 +1,7 @@
 ---
 name: pr-review
 description: "Use when creating or reviewing pull requests — PR description, review checklist, merge readiness"
+user-invocable: false
 ---
 
 # PR Review

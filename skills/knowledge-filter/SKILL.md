@@ -1,6 +1,7 @@
 ---
 name: knowledge-filter
 description: "Use para selecionar apenas os docs de conhecimento relevantes à task atual em vez de carregar todos — reduz ruído de contexto mantendo os docs de knowledge mais pertinentes. Invoque no início do PREVC Planning (após a task estar definida) ou sob demanda quando o usuário pedir 'filtre o knowledge para X' ou mencionar que há muitos docs de contexto ativos. Lê o índice via loadKnowledgeIndex (ou frontmatters diretos), inclui sempre os docs activation: always, adiciona on-demand cujos layer/keywords batem com a task."
+user-invocable: false
 ---
 
 # knowledge-filter — Filtragem Contextual de Knowledge Docs

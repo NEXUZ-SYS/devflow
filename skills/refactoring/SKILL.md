@@ -1,6 +1,7 @@
 ---
 name: refactoring
 description: "Use when restructuring code without changing behavior — safe patterns, test preservation, incremental steps"
+user-invocable: false
 ---
 
 # Refactoring

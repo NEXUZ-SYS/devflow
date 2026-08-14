@@ -1,6 +1,7 @@
 ---
 name: prevc-review
 description: "Use during PREVC Review phase — validates design and plan through agent-driven review with superpowers code review discipline"
+user-invocable: false
 ---
 
 # PREVC Review Phase

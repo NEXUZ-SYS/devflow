@@ -1,6 +1,7 @@
 ---
 name: feature-breakdown
 description: "Use when decomposing a large feature into implementable chunks — identifies components, dependencies, and delivery order"
+user-invocable: false
 ---
 
 # Feature Breakdown

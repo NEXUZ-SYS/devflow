@@ -1,6 +1,7 @@
 ---
 name: prevc-confirmation
 description: "Use during PREVC Confirmation phase — finalizes the branch, updates documentation, and syncs context across tools"
+user-invocable: false
 ---
 
 # PREVC Confirmation Phase

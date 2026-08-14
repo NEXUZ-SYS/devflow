@@ -1,6 +1,7 @@
 ---
 name: frontend-design
-description: "Use QUANDO invocada explicitamente via /devflow:design <modo> (ou delegada pelo agente product-context) para projetar, redesenhar, criticar, auditar, polir, distilar ou animar uma interface de front-end — websites, landing pages, dashboards, UI de produto, componentes, forms, onboarding, empty states. Cobre hierarquia visual, tipografia, cor (OKLCH), espaçamento, layout, motion, micro-interações, UX copy, error states, i18n e design systems/tokens. Também para designs sem graça que precisam ficar mais ousados, ou barulhentos que precisam ficar mais quietos, ou iteração ao vivo no navegador. NÃO intercepta prompts genéricos de UI nem tarefas de implementação (essas seguem com o agente frontend-specialist); NÃO é catch-all — só age quando invocada/delegada. Não é para backend nem tarefas não-UI."
+description: "Use QUANDO invocada explicitamente via /devflow:devflow-design <modo> (ou delegada pelo agente product-context) para projetar, redesenhar, criticar, auditar, polir, distilar ou animar uma interface de front-end — websites, landing pages, dashboards, UI de produto, componentes, forms, onboarding, empty states. Cobre hierarquia visual, tipografia, cor (OKLCH), espaçamento, layout, motion, micro-interações, UX copy, error states, i18n e design systems/tokens. Também para designs sem graça que precisam ficar mais ousados, ou barulhentos que precisam ficar mais quietos, ou iteração ao vivo no navegador. NÃO intercepta prompts genéricos de UI nem tarefas de implementação (essas seguem com o agente frontend-specialist); NÃO é catch-all — só age quando invocada/delegada. Não é para backend nem tarefas não-UI."
+user-invocable: false
 version: 0.1.0
 deps:
   internal:
@@ -10,7 +11,7 @@ deps:
     - "docs/design-rules-classification.md"
     - "scripts/design/live-bridge.mjs"
 trigger_phrases:
-  - "/devflow:design"
+  - "/devflow:devflow-design"
   - "design da UI"
   - "redesenhar interface"
   - "critique este design"
@@ -24,7 +25,7 @@ Absorve a orientação de design do [pbakaus/impeccable](https://github.com/pbak
 
 ## Fronteira & ativação (anti-conflito)
 
-Esta skill **só age quando invocada** via `/devflow:design <modo>` **ou delegada** pelo agente `product-context` (dono do `product-design-system`). Ela **NÃO** intercepta prompts genéricos de UI e **NÃO** compete por ativação com o agente `frontend-specialist` (que **implementa** UI a partir de um design). Divisão:
+Esta skill **só age quando invocada** via `/devflow:devflow-design <modo>` **ou delegada** pelo agente `product-context` (dono do `product-design-system`). Ela **NÃO** intercepta prompts genéricos de UI e **NÃO** compete por ativação com o agente `frontend-specialist` (que **implementa** UI a partir de um design). Divisão:
 - **frontend-design** (esta skill) — **define/critica/refina** o design (o "o quê" visual e o porquê).
 - **frontend-specialist** (agente) — **implementa** o design em código (o "como"), na fase E.
 

@@ -1,6 +1,7 @@
 ---
 name: knowledge
 description: "Use quando o usuário pedir para criar, auditar ou documentar um doc de conhecimento narrativo (DDC). Trigger phrases: 'crie conhecimento', 'documentar visão', 'documentar persona', 'documentar arquitetura', 'knowledge para <camada>', 'knowledge builder', 'devflow knowledge new', 'audita knowledge', 'knowledge audit'. Dois modos: CREATE (resolve o tipo via taxonomy-of-knowledge.yaml → scaffold → curador polish) e AUDIT (checks K1–K5 via CLI)."
+user-invocable: false
 version: 0.1.0
 deps:
   internal:

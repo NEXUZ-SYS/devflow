@@ -2,6 +2,7 @@
 type: skill
 name: Language Selection
 description: Set DevFlow language preference — all responses, hook messages, and interactions switch to the selected language
+user-invocable: false
 skillSlug: language
 phases: []
 generated: 2026-04-02

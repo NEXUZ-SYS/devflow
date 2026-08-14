@@ -1,6 +1,7 @@
 ---
 name: standards-builder
 description: "Use when the user asks to create, refine, audit, or migrate Standards (`.context/standards/std-X.md`) — operational conventions backed by a linter. Trigger words: 'crie/criar standard', 'gerar standard', 'std para <concern>', 'standard cross-cutting', 'consolidar standards', 'audita standard', 'migra std lib-centric', 'standards-builder'. Also trigger when devflow:adr-builder Step 5e emits a CREATE recommendation. Five modes: FROM-CONCERN (default — generate an operational std from the concern taxonomy, optionally enriched with ADR guardrails), FROM-CONCERN+ENRICH, MIGRATE (lib-centric std → concern std), AUDIT (S1-S7 gate), FROM-ADR (legacy lib-centric path — emits warning, discouraged)."
+user-invocable: false
 version: 0.2.0
 deps:
   internal:

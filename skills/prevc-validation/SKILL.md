@@ -1,6 +1,7 @@
 ---
 name: prevc-validation
 description: "Use during PREVC Validation phase — comprehensive verification including tests, security audit, and spec compliance check"
+user-invocable: false
 ---
 
 # PREVC Validation Phase

@@ -1,6 +1,7 @@
 ---
 name: skill-creation
 description: "Use when creating new DevFlow skills — follows TDD-for-docs methodology from superpowers with devflow conventions"
+user-invocable: false
 ---
 
 # Skill Creation

@@ -1,6 +1,7 @@
 ---
 name: memory-ops
 description: "Run MemPalace ingestion and maintenance operations — mine, wake-up, status, sweep, sync — scoped to the project wing"
+user-invocable: false
 ---
 
 # Memory Ops
