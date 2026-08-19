@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — escopo de instalação do próprio repositório (sem efeito no plugin publicado)
+
+Mudança de dogfooding, restrita a este repositório: `devflow@NEXUZ-SYS` sai de
+`~/.claude/settings.json` (escopo user, onde carregava em toda sessão da máquina) e passa a
+ser habilitado por projeto, no `.claude/settings.json` versionado. Esse arquivo também passa
+a declarar a marketplace `NEXUZ-SYS`, para que um clone novo resolva o plugin sem depender do
+`known_marketplaces.json` da máquina.
+
+**Nada muda para quem instala o DevFlow** — skills, comandos e hooks são os mesmos. O que
+fica registrado é o efeito operacional para quem repetir o movimento: fora do escopo user,
+todo projeto que quiser DevFlow precisa declará-lo no próprio `.claude/settings.json`,
+incluindo worktrees usadas por frotas de agentes.
+
+### Documented — o gate de branch protection alcança paths fora do repositório
+
+`docs/superpowers/2026-08-18-git-strategy-guard-fora-do-repo.md` registra um achado levantado
+durante essa migração: o gate de `hooks/pre-tool-use` nega Edit/Write em **qualquer**
+`FILE_PATH` quando a branch é protegida, sem verificar containment no repo root — a allowlist
+(`is_nonproject_path`) é por padrão de nome, não por pertencimento ao projeto. Na prática,
+`~/.claude/settings.json`, dotfiles e arquivos de outro projeto ficam hard-denied, e o usuário
+é empurrado a criar uma branch no projeto para editá-los. Documenta causa raiz com linhas,
+blast radius, correção proposta (containment via `show-toplevel` + `realpath`, `ask` em vez de
+`deny` para paths de fora) e os testes RED a escrever. **Sem correção nesta entrega.**
+
 ## [3.1.0] — 2026-08-14
 
 ### Changed — superfície de comando: `/devflow:design` vira `/devflow:devflow-design`

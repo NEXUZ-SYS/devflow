@@ -1,6 +1,15 @@
 {
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
+    "understand-anything@understand-anything": true,
     "devflow@NEXUZ-SYS": true
+  },
+  "extraKnownMarketplaces": {
+    "NEXUZ-SYS": {
+      "source": {
+        "source": "github",
+        "repo": "NEXUZ-SYS/devflow"
+      }
+    }
   }
 }
