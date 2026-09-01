@@ -1,3 +1,30 @@
+> ## ⚠ PLANO ABSORVIDO — não executar como está
+>
+> **2026-09-01.** Fundido em
+> [`2026-09-01-daily-devflow-checkup.md`](./2026-09-01-daily-devflow-checkup.md), que ataca o
+> mesmo defeito central. Este arquivo permanece como registro do diagnóstico, que continua
+> correto e foi o que encontrou a causa raiz.
+>
+> **Absorvido:** a separação `shouldRun` × `shouldSuggest` (Task 11 de lá) — que corrigiu um bug
+> no próprio plano de destino, onde o `run-checks` filtrava por `shouldSuggest` e teria recebido
+> lista vazia depois do `mark-suggested`; o fix do `snoozeUntil` em `dueRoutines`; o
+> `routines-render.mjs`; e as três classes de execução, no campo único `execution`.
+>
+> **Não absorvido, e por quê:**
+> - **Executar `/devflow:devflow-doctor` no SessionStart.** Medido: `node scripts/doctor.mjs
+>   --json` leva **16,5 s** — 330× o orçamento do checkup diário, e o `TIMEOUT_MS: 120000` do
+>   plano não limita isso. O doctor passou a ser **proposto** (classe `confirm`), nunca executado
+>   sozinho.
+> - **Manter `lastRun`/`nextRun`/`lastSuggested`/`snoozeUntil` no `templates/routines.json`.** O
+>   arquivo é versionado; com execução automática e cadência diária, toda sessão sujaria o git e
+>   a máquina que rodasse primeiro gravaria `nextRun` para todas as outras. O estado passou para
+>   `.context/runtime/routines-state.json`, por máquina.
+> - **Injetar até 4000 chars de saída no contexto a cada execução.** O checkup é silencioso
+>   quando está tudo certo.
+>
+> **Dois booleanos → um enum:** `autoRun` + `requiresConfirmation` admitem o estado contraditório
+> `autoRun: true` com `requiresConfirmation: true`. Virou `execution: auto|confirm|model`.
+
 # DevFlow Routines — Execução Automática Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

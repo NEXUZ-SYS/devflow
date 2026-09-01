@@ -55,6 +55,9 @@ repositório (replica entre dispositivos via clone/pull); o **estado de execuç�
 | D7 | O checkup nunca age: não instala, não atualiza, não escreve fora de `.context/runtime/` | `/devflow update` tem efeito colateral conhecido (Step 4d reverte standards quando o repo standalone não foi sincronizado antes). Detectar e apontar o comando é seguro; executar não é |
 | D8 | Os 4 checks vivem no `doctor.mjs` | O doctor é o lugar de checks de saúde e hoje tem a lacuna. `/devflow:devflow-doctor` ganha a cobertura de plugin de graça; o checkup diário chama um subconjunto |
 | D11 | Instalação e habilitação de plugin são **eixos independentes**; não existe "a instalação deste projeto" | Medido na fase R: este repositório declara `devflow@NEXUZ-SYS` em `.claude/settings.json`, tem **zero** entradas de `installed_plugins.json` com o seu `projectPath`, uma entrada `scope: "user"` (3.1.0) e 17 `scope: "project"` de outros projetos — e a sessão roda 3.1.0. O plugin é instalado globalmente e habilitado por projeto, que é o desenho do PR #97. Procurar a entrada "deste projeto" produziria FAIL falso |
+| D14 | Cada rotina declara **como** executa, num campo único `execution: auto\|confirm\|model` | Nem toda rotina pode rodar sozinha, e a diferença não é adivinhável: o `daily-devflow-checkup` lê JSON em milissegundos, enquanto `/devflow:devflow-doctor` leva **16,5 s medidos** e o `/devflow update` muta o ambiente. Um campo único, e não dois booleanos (`autoRun` + `requiresConfirmation`), porque dois permitem o estado contraditório `autoRun: true` com `requiresConfirmation: true` |
+| D15 | O doctor completo **nunca** roda automaticamente; a verificação barata o **propõe** | `scripts/doctor.mjs --json` leva 16,5 s — 330× o orçamento do checkup. O que roda sozinho são os checks in-process (~1 ms); quando algum acusa FAIL ou WARN, o resultado inclui a proposta de rodar o doctor completo, e a decisão é do usuário. Diagnóstico barato contínuo, diagnóstico caro sob consentimento |
+| D16 | `shouldRun` é separado de `shouldSuggest` | `shouldSuggest` carrega a guarda de 1×/dia (`lastSuggested === today`), correta para *surfacing* e errada para *execução*. Sem a separação, o bloco de routines marca a sugestão e o executor que rodar depois recebe lista vazia — o checkup nunca executaria. Origem: plano `2026-09-01-devflow-routines-auto-execution.md` |
 | D13 | A "versão publicada" tem **três** formas, todas resolvidas offline | Medido na fase R: só o `NEXUZ-SYS` declara `version` no `marketplace.json`. O `understand-anything` traz `source: "./..."` e a versão vive no `plugin.json` interno do clone. O `claude-plugins-official` traz `source: {url, sha}` — o superpowers mora num repo de terceiro e o marketplace só ancora um commit. Sem as três formas, o check cobriria **um** dos três plugins deste projeto, contra o que D5 exige. No caso do `sha`, divergência é o que se pode provar; qual lado é mais novo exigiria rede, então o diagnóstico diz "divergente", nunca "desatualizado" |
 | D12 | "Atualizado" compara a **maior** versão instalada contra a publicada | São 18 entradas, de 1.10.0 a 3.1.0, e qual delas o Claude Code resolve não é observável a partir dos arquivos. A pergunta prática — "preciso rodar `/devflow update`?" — se responde pela mais alta: se a máquina já tem a versão publicada em algum lugar, não há o que baixar, e entradas antigas de outros projetos deixam de virar WARN de ruído |
 | D10 | Um 5º check cobre o MemPalace, e o palace remoto vira spec separada | Num dispositivo novo o MemPalace ausente significa nenhuma memória de longo prazo, e hoje o `mempalace-health` devolve **OK** nesse caso ("não instalado — nada a checar"): verde sobre a ausência total. Um palace por projeto **não** resolve — é ChromaDB+SQLite binário (433 MB, 25.538 drawers na máquina atual), não versionável, logo não vem no clone. O que resolve é `mempalace serve` (palace remoto compartilhado), que envolve infra, auth e custo e merece a própria spec |
@@ -133,17 +136,58 @@ acrescentar um check no futuro não exija editar o `routines.json` de cada proje
 Passos `command` e `skill` continuam apenas sendo sugeridos, como hoje — eles precisam do LLM
 para rodar, e essa é exatamente a diferença entre um passo que executa e um que morre sugerindo.
 
-A routine nova, versionada:
+### Classes de execução (D14)
+
+| `execution` | Quem executa | Quando |
+|---|---|---|
+| `auto` | o hook, em node, sem LLM | sozinha, na data agendada |
+| `confirm` | o usuário decide | na data agendada o sistema **pergunta**; nunca roda sozinho |
+| `model` | o LLM (skill/agent/comando sem script) | quando o usuário manda rodar |
+
+Ausente, o campo é derivado: todos os passos `check` → `auto`; qualquer outra coisa → `confirm`.
+Retrocompatível — um `routines.json` já em campo não muda de comportamento sem ganhar o campo.
+
+As duas routines versionadas:
 
 ```json
 {
   "id": "daily-devflow-checkup",
-  "description": "Verifica o ambiente de plugins da máquina contra o que o projeto declara",
+  "description": "Verifica o ambiente de plugins e o MemPalace da máquina contra o que o projeto declara",
   "enabled": true,
   "frequency": "1d",
-  "prompts": [{ "type": "check", "value": "plugin-env" }]
+  "execution": "auto",
+  "prompts": [
+    { "type": "check", "value": "plugin-env" },
+    { "type": "check", "value": "mempalace-env" }
+  ]
+},
+{
+  "id": "context-maintenance",
+  "description": "Health-check completo do contexto DevFlow a cada 7 dias",
+  "enabled": true,
+  "frequency": "7d",
+  "execution": "confirm",
+  "prompts": [{ "type": "command", "value": "/devflow:devflow-doctor" }]
 }
 ```
+
+### O doctor é proposto, nunca imposto (D15)
+
+`scripts/doctor.mjs --json` leva **16,5 s** (medido). Rodá-lo no início de toda sessão seria 330×
+o orçamento do checkup. Por isso o fluxo é invertido: a verificação barata roda sempre e, **quando
+acusa FAIL ou WARN**, o bloco emitido inclui a proposta de rodar o diagnóstico completo — e o
+usuário decide. A rotina `context-maintenance`, ao vencer, também é proposta em vez de executada.
+
+Diagnóstico barato é contínuo; diagnóstico caro é sob consentimento.
+
+### Dois predicados (D16)
+
+`shouldSuggest` carrega a guarda de 1×/dia, própria de *surfacing*. `shouldRun` — `enabled`,
+`nextRun` e `snooze`, **sem** a guarda — é o predicado de *execução*. Sem a separação, o bloco de
+routines marcaria a sugestão e o executor receberia lista vazia: o checkup nunca rodaria. Como
+efeito colateral, corrige-se um defeito latente já presente — `dueRoutines`
+(`scripts/lib/routines.mjs:75`) não checa `snoozeUntil`, então uma rotina adiada pelo usuário
+aparece como vencida no `list`.
 
 ## 5. Separação de estado
 
@@ -262,7 +306,7 @@ De `ci-scaffold-verbatim-provenance`:
 
 **Novo:** `scripts/lib/plugin-env.mjs`; as quatro suítes de teste.
 
-**Editado:** `scripts/lib/doctor.mjs` (4 checks) · `scripts/doctor.mjs` (status `SKIP` no
+**Editado:** `scripts/lib/routines.mjs` (`shouldRun`, fix do snooze) · `scripts/lib/routines-render.mjs` (novo; montagem dos blocos fora do sh) · `scripts/lib/doctor.mjs` (5 checks) · `scripts/doctor.mjs` (status `SKIP` no
 ícone, contadores, resumo e `--json`; exit code inalterado) · `scripts/lib/routines.mjs` (separação de
 estado + migração) · `hooks/session-start` (execução de passos `check` + bloco) ·
 `templates/routines.json` (routine nova) · `.context/routines.json` (dogfooding) ·
