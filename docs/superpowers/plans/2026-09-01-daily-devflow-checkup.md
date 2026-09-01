@@ -41,8 +41,8 @@
     - `harness`: `"claude-code"` | `"other"`
     - `declared`: `{ [key]: { key, name, marketplace } }` — **habilitação pelo projeto**; key é `"<name>@<marketplace>"`
     - `enabledAtUser`: `{ [key]: true }` — **habilitação global**
-    - `installs`: `{ [key]: Array<{scope, projectPath, version}> }` — **instalação** (eixo distinto da habilitação)
-    - `marketplaces`: `{ [mkt]: { lastUpdated: string|null, published: { [pluginName]: version } } }`
+    - `installs`: `{ [key]: Array<{scope, projectPath, version, gitCommitSha}> }` — **instalação** (eixo distinto da habilitação)
+    - `marketplaces`: `{ [mkt]: { lastUpdated, published: { [name]: { kind: "version"|"sha", value } } } }`
   - `isInstalled(env, key) -> boolean`
   - `highestInstalled(env, key) -> string | null` — maior versão semver entre as entradas; `null` se nenhuma for comparável
 
@@ -71,7 +71,7 @@ function w(path, obj) {
 }
 
 // Monta um HOME sintético + um projeto. Devolve { home, cwd, cleanup }.
-function env({ declared = {}, userEnabled = {}, installed = {}, known = {}, published = {}, noPluginsDir = false } = {}) {
+function env({ declared = {}, userEnabled = {}, installed = {}, known = {}, published = {}, inner = {}, noPluginsDir = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "plugenv-"));
   const home = join(root, "home");
   const cwd = join(root, "proj");
@@ -85,6 +85,11 @@ function env({ declared = {}, userEnabled = {}, installed = {}, known = {}, publ
     w(join(pd, "known_marketplaces.json"), known);
     for (const [mkt, plugins] of Object.entries(published)) {
       w(join(pd, "marketplaces", mkt, ".claude-plugin", "marketplace.json"), { plugins });
+    }
+    for (const [mkt, paths] of Object.entries(inner)) {
+      for (const [rel, body] of Object.entries(paths)) {
+        w(join(pd, "marketplaces", mkt, rel, ".claude-plugin", "plugin.json"), body);
+      }
     }
   }
   return { home, cwd, cleanup: () => rmSync(root, { recursive: true, force: true }) };
@@ -171,14 +176,35 @@ test("enabledAtUser reflete só a habilitação global, não a instalação", ()
   e.cleanup();
 });
 
-test("lê a versão publicada e o lastUpdated do catálogo", () => {
+test("forma 1: version declarada no próprio marketplace.json", () => {
   const e = env({
     known: { "NEXUZ-SYS": { lastUpdated: "2026-09-01T13:34:56.748Z" } },
     published: { "NEXUZ-SYS": [{ name: "devflow", version: "3.1.0" }] },
   });
   const r = readPluginEnv({ cwd: e.cwd, home: e.home });
-  assert.equal(r.marketplaces["NEXUZ-SYS"].published.devflow, "3.1.0");
+  assert.deepEqual(r.marketplaces["NEXUZ-SYS"].published.devflow, { kind: "version", value: "3.1.0" });
   assert.equal(r.marketplaces["NEXUZ-SYS"].lastUpdated, "2026-09-01T13:34:56.748Z");
+  e.cleanup();
+});
+
+test("forma 2: source como path local — versão vem do plugin.json interno", () => {
+  const e = env({
+    known: { ua: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { ua: [{ name: "understand-anything", source: "./ua-plugin" }] },
+    inner: { ua: { "./ua-plugin": { name: "understand-anything", version: "2.7.6" } } },
+  });
+  const r = readPluginEnv({ cwd: e.cwd, home: e.home });
+  assert.deepEqual(r.marketplaces.ua.published["understand-anything"], { kind: "version", value: "2.7.6" });
+  e.cleanup();
+});
+
+test("forma 3: source url+sha — publica o sha, não uma versão", () => {
+  const e = env({
+    known: { off: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { off: [{ name: "superpowers", source: { source: "url", url: "https://x.git", sha: "b36e0829" } }] },
+  });
+  const r = readPluginEnv({ cwd: e.cwd, home: e.home });
+  assert.deepEqual(r.marketplaces.off.published.superpowers, { kind: "sha", value: "b36e0829" });
   e.cleanup();
 });
 
@@ -217,11 +243,33 @@ function readJson(path) {
   }
 }
 
+// A "versao publicada" existe de tres formas distintas nos marketplaces reais
+// desta maquina, e so a primeira e obvia:
+//   1. version no proprio marketplace.json          (NEXUZ-SYS/devflow)
+//   2. source como path local -> plugin.json dentro (understand-anything)
+//   3. source {url, sha} apontando repo de terceiro (superpowers)
+// As tres se resolvem sem rede. No caso 3 nao ha versao, so o sha: ele prova
+// DIVERGENCIA, nunca qual lado e mais novo — dizer "desatualizado" ali seria
+// afirmar o que nao se verificou.
 function readPublished(pluginsDir, mkt) {
-  const manifest = readJson(join(pluginsDir, "marketplaces", mkt, ".claude-plugin", "marketplace.json"));
+  const mktDir = join(pluginsDir, "marketplaces", mkt);
+  const manifest = readJson(join(mktDir, ".claude-plugin", "marketplace.json"));
   const out = {};
   for (const p of manifest?.plugins || []) {
-    if (p?.name && p?.version) out[p.name] = p.version;
+    if (!p?.name) continue;
+
+    if (p.version) {                                    // forma 1
+      out[p.name] = { kind: "version", value: p.version };
+      continue;
+    }
+    const src = p.source;
+    if (typeof src === "string" && src.startsWith("./")) {   // forma 2
+      const inner = readJson(join(mktDir, src, ".claude-plugin", "plugin.json"));
+      if (inner?.version) { out[p.name] = { kind: "version", value: inner.version }; continue; }
+    }
+    if (src && typeof src === "object" && src.sha) {         // forma 3
+      out[p.name] = { kind: "sha", value: src.sha };
+    }
   }
   return out;
 }
@@ -257,7 +305,7 @@ export function readPluginEnv({ cwd, home = homedir() }) {
   const installs = {};
   for (const [key, entries] of Object.entries(installsRaw)) {
     if (!Array.isArray(entries)) continue;
-    installs[key] = entries.map(e => ({ scope: e?.scope, projectPath: e?.projectPath, version: e?.version }));
+    installs[key] = entries.map(e => ({ scope: e?.scope, projectPath: e?.projectPath, version: e?.version, gitCommitSha: e?.gitCommitSha }));
   }
 
   const known = readJson(join(pluginsDir, "known_marketplaces.json")) || {};
@@ -328,7 +376,7 @@ afirmar OK sobre um ambiente que nao conseguem inspecionar."
 - Test: `tests/validation/test-doctor-plugin-checks.mjs`
 
 **Interfaces:**
-- Consumes: `readPluginEnv`, `installedFor` (Task 1)
+- Consumes: `readPluginEnv`, `isInstalled` (Task 1)
 - Produces: checks `plugin-declared-installed` e `plugin-scope` no array `CHECKS`; `ctx.home` disponível para qualquer check futuro.
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -347,7 +395,7 @@ function w(path, obj) {
   writeFileSync(path, JSON.stringify(obj, null, 2));
 }
 
-function scenario({ declared = {}, userEnabled = {}, installed = {}, known = {}, published = {}, noPluginsDir = false } = {}) {
+function scenario({ declared = {}, userEnabled = {}, installed = {}, known = {}, published = {}, inner = {}, noPluginsDir = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "plugchk-"));
   const home = join(root, "home");
   const cwd = join(root, "proj");
@@ -361,6 +409,11 @@ function scenario({ declared = {}, userEnabled = {}, installed = {}, known = {},
     w(join(pd, "known_marketplaces.json"), known);
     for (const [mkt, plugins] of Object.entries(published)) {
       w(join(pd, "marketplaces", mkt, ".claude-plugin", "marketplace.json"), { plugins });
+    }
+    for (const [mkt, paths] of Object.entries(inner)) {
+      for (const [rel, body] of Object.entries(paths)) {
+        w(join(pd, "marketplaces", mkt, rel, ".claude-plugin", "plugin.json"), body);
+      }
     }
   }
   return { cwd, ctx: { cwd, home, which: () => false, exec: () => ({ status: 1 }), today: "2026-09-01" }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
@@ -690,7 +743,7 @@ o exit code: ambiente onde a verificacao nao se aplica nao e reprovado."
 - Test: `tests/validation/test-doctor-plugin-checks.mjs` (acrescenta casos)
 
 **Interfaces:**
-- Consumes: `readPluginEnv`, `installedFor` (Task 1); `parseVersion` de `scripts/lib/version-guard.mjs`
+- Consumes: `readPluginEnv`, `isInstalled`, `highestInstalled` (Task 1); `parseVersion` de `scripts/lib/version-guard.mjs`
 - Produces: checks `plugin-marketplace-known` e `plugin-up-to-date` no array `CHECKS`.
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -776,6 +829,32 @@ test("plugin-up-to-date: versão não-semver não vira 'desatualizado'", () => {
   s.cleanup();
 });
 
+test("plugin-up-to-date: sha divergente vira WARN que NÃO afirma desatualizado", () => {
+  const s = scenario({
+    declared: { "superpowers@off": true },
+    installed: { "superpowers@off": [{ scope: "user", version: "6.3.0", gitCommitSha: "f2cbfbefebbfef77321e4c9abc9e949826bea9d7" }] },
+    known: { off: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { off: [{ name: "superpowers", source: { source: "url", url: "https://x.git", sha: "b36e0829c6d0140e93cfef2ca599b1b07d4a7797" } }] },
+  });
+  const r = getCheck("plugin-up-to-date").run(s.ctx);
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /divergente/i);
+  assert.doesNotMatch(r.diagnosis, /atrás da versão/);
+  s.cleanup();
+});
+
+test("plugin-up-to-date: sha igual ao do marketplace é OK", () => {
+  const s = scenario({
+    declared: { "superpowers@off": true },
+    installed: { "superpowers@off": [{ scope: "user", version: "6.3.0", gitCommitSha: "b36e0829c6d0140e93cfef2ca599b1b07d4a7797" }] },
+    known: { off: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { off: [{ name: "superpowers", source: { source: "url", url: "https://x.git", sha: "b36e0829c6d0140e93cfef2ca599b1b07d4a7797" } }] },
+  });
+  const r = getCheck("plugin-up-to-date").run(s.ctx);
+  assert.equal(r.status, "OK");
+  s.cleanup();
+});
+
 test("plugin-up-to-date: WARN quando o catálogo está obsoleto (>7 dias)", () => {
   const s = scenario({
     declared: { "devflow@NEXUZ-SYS": true },
@@ -854,27 +933,42 @@ const pluginUpToDate = {
     // /devflow update?" — se responde pela mais alta: se a máquina já tem a
     // versão publicada em algum lugar, não há o que baixar. Entradas antigas
     // de outros projetos deixam de gerar WARN de ruído.
-    const behind = [];
+    const behind = [];       // semver: sabemos que está atrás
+    const diverged = [];     // sha: sabemos que difere, NÃO qual é mais novo
     const uncomparable = [];
     for (const key of keys) {
       const { name, marketplace } = env.declared[key];
-      const published = env.marketplaces[marketplace]?.published?.[name];
-      if (!published) continue;
+      const pub = env.marketplaces[marketplace]?.published?.[name];
+      if (!pub) continue;
+
+      if (pub.kind === "sha") {
+        // O plugin vive num repo de terceiro; o marketplace só ancora um commit.
+        // Sha diferente prova divergência. Afirmar "desatualizado" exigiria rede.
+        const shas = (env.installs[key] || []).map(e => e.gitCommitSha).filter(Boolean);
+        if (shas.length && !shas.includes(pub.value)) {
+          diverged.push(`${key} (instalado ${shas[0].slice(0, 8)}, marketplace ${pub.value.slice(0, 8)})`);
+        }
+        continue;
+      }
+
       const highest = highestInstalled(env, key);
       if (!highest) {
         if (isInstalled(env, key)) uncomparable.push(key);
         continue;
       }
-      const pi = parseVersion(highest), pp = parseVersion(published);
+      const pi = parseVersion(highest), pp = parseVersion(pub.value);
       if (!pi || !pp) { uncomparable.push(key); continue; }
       for (let i = 0; i < 3; i++) {
-        if (pi[i] !== pp[i]) { if (pi[i] < pp[i]) behind.push(`${key}: ${highest} → ${published}`); break; }
+        if (pi[i] !== pp[i]) { if (pi[i] < pp[i]) behind.push(`${key}: ${highest} → ${pub.value}`); break; }
       }
     }
-    if (behind.length) {
+    if (behind.length || diverged.length) {
+      const parts = [];
+      if (behind.length) parts.push(`atrás da versão publicada — ${behind.join("; ")}`);
+      if (diverged.length) parts.push(`divergente do commit do marketplace, sem determinar qual é mais novo — ${diverged.join("; ")}`);
       return {
         status: "WARN",
-        diagnosis: `Plugin(s) atrás da versão publicada — ${behind.join("; ")}.`,
+        diagnosis: `Plugin(s) ${parts.join(" · ")}.`,
         repair: "Rode /devflow update.",
       };
     }
@@ -1979,10 +2073,11 @@ mempalace status (~600ms, doze vezes o orcamento do checkup diario)."
 Pontos que merecem atenção do revisor, por serem onde este plano pode estar errado:
 
 1. **Task 5 reescreve o `.context/routines.json` versionado uma vez.** É a migração e é intencional, mas significa que a primeira sessão após o merge produz um diff no repo do usuário. Confirmar que isso é aceitável e que está no CHANGELOG.
-2. **A ordem `installedFor`** prefere `scope: "project"` com `projectPath` igual ao `cwd`. Em worktree, o `cwd` é o caminho da worktree, não o do repo principal — a entrada pode não casar e cair no fallback de escopo user. Verificar se isso produz falso `FAIL` (a memória do projeto registra que worktree × permissions.yaml já falhou fechado uma vez).
+2. ~~**A ordem `installedFor`** e o caso de worktree.~~ **RESOLVIDO na fase R:** medido que este próprio repositório não tem entrada com o seu `projectPath` e o plugin funciona — instalação e habilitação são eixos independentes (D11). `installedFor` foi removido; `isInstalled` não olha `projectPath`, então worktree deixa de ser um caso especial.
 3. **`markRun` é chamado em `run-checks` mesmo quando o resultado é SKIP**, o que consome o "dia" num ambiente onde nada foi verificado. É o comportamento correto? A alternativa é só marcar quando houve verificação real.
 4. **O `ctx` de `run-checks` passa `which`/`exec` como stubs.** Se um dia um check de plugin precisar deles, o stub silencioso vira bug difícil de achar.
 5. **A Task 9 mudou o §4.6 da skill `config` de `cp` para um script.** Confirmar que rodar `/devflow config` num projeto-cliente com `routines.json` editado à mão de fato preserva tudo — este é o caminho que alcança os projetos que não são este repositório.
 6. **`test-doctor.mjs` e `test-doctor-cli.mjs` chamam `runChecks` sem passar `home`**, logo os quatro checks novos leem o `HOME` real de quem roda a suíte. Numa máquina de dev dá OK; num runner de CI sem `~/.claude/plugins` dá SKIP. O resultado difere por ambiente — avaliar se essas suítes devem passar um `home` fixo de fixture.
 7. **O `mempalace-env` (Task 10) lê `mempalace.enabled` com `readBlockField`.** O parser já mordeu este repo uma vez: comentário inline capturado junto do valor fez o `grounding-mcp` acusar ausência de um server presente. Confirmar que `enabled: true  # comentário` é lido como `true`.
-8. **A Task 9 não remove routines** que saíram do template. É deliberado (o usuário pode depender delas), mas significa que uma routine descontinuada persiste para sempre nos projetos que já a têm.
+8. **A sanitização de S1 usa allowlist Unicode** (`\p{L}\p{N}` mais pontuação). Confirmar que um diagnóstico legítimo em pt-BR com acentos e o caractere `→` sobrevive intacto — uma allowlist agressiva demais transformaria o diagnóstico em ruído ilegível, trocando um problema por outro.
+9. **A Task 9 não remove routines** que saíram do template. É deliberado (o usuário pode depender delas), mas significa que uma routine descontinuada persiste para sempre nos projetos que já a têm.
