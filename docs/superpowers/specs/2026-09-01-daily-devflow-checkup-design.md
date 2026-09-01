@@ -54,6 +54,7 @@ repositório (replica entre dispositivos via clone/pull); o **estado de execuç�
 | D6 | O schema de routines ganha passos executáveis por código (`type: check`) | Passo que é código o hook roda sozinho; passo que é comando/skill precisa de LLM e só pode ser sugerido. Sem essa distinção tudo vira sugestão |
 | D7 | O checkup nunca age: não instala, não atualiza, não escreve fora de `.context/runtime/` | `/devflow update` tem efeito colateral conhecido (Step 4d reverte standards quando o repo standalone não foi sincronizado antes). Detectar e apontar o comando é seguro; executar não é |
 | D8 | Os 4 checks vivem no `doctor.mjs` | O doctor é o lugar de checks de saúde e hoje tem a lacuna. `/devflow:devflow-doctor` ganha a cobertura de plugin de graça; o checkup diário chama um subconjunto |
+| D9 | `SKIP` vira o 4º status do doctor, ao lado de OK/WARN/FAIL | "Não consigo verificar aqui" não é nenhum dos três. Reportar OK seria confiança falsa (diria "plugins verificados" sem ter verificado nada); reportar WARN encheria CI e container de 4 avisos permanentes que se aprende a ignorar; omitir o check esconderia que quatro verificações deixaram de acontecer |
 
 ## 4. Arquitetura
 
@@ -87,6 +88,13 @@ destructive, run(ctx) }`) e consumindo `plugin-env.mjs`.
 | `plugin-scope` | plugin do projeto habilitado em escopo **user** | WARN | remover a entrada de `~/.claude/settings.json` (o que o PR #97 fez) |
 | `plugin-marketplace-known` | marketplace referenciado por `enabledPlugins` não registrado em `known_marketplaces.json` | **FAIL** | registrar o marketplace declarado em `extraKnownMarketplaces` |
 | `plugin-up-to-date` | versão instalada atrás da publicada, para **cada** plugin declarado; e catálogo obsoleto — `known_marketplaces[mkt].lastUpdated` com mais de **7 dias** | WARN | `/devflow update` |
+
+**Impacto no CLI do doctor (D9).** `scripts/doctor.mjs` hoje conhece três status: `ICON`
+(linha 43) e `counts` (linha 61) não têm `SKIP`, de modo que um check devolvendo esse status
+hoje imprimiria `undefined [SKIP]` e faria `counts[r.status]++` produzir `NaN`. A entrega
+acrescenta `SKIP` ao ícone, aos contadores e ao resumo final, e ao `--json`. `SKIP` **não**
+afeta o exit code — só `FAIL` continua fazendo o doctor sair com 1; um ambiente onde a
+verificação não se aplica não é um ambiente reprovado.
 
 `plugin-up-to-date` compara duas coisas distintas e reporta cada uma com sua própria frase:
 a versão instalada contra a publicada no catálogo local, e o frescor do próprio catálogo.
@@ -155,6 +163,7 @@ idempotente: um `routines.json` já no formato novo não é reescrito.
 | Dia novo, tudo OK | anterior a hoje | **silêncio**; apenas grava o carimbo |
 | Dia novo, com divergência | anterior a hoje | diagnóstico + comando |
 | Mesmo dia | igual a hoje | não executa nada |
+| Qualquer situação, ambiente sem `~/.claude/plugins` | irrelevante | **silêncio** — os checks retornam SKIP e nada é emitido |
 
 O bloco emitido é `<DEVFLOW_ENV_CHECKUP>`, seguindo o padrão dos demais blocos do hook
 (`escape_for_json`, conteúdo como dado apresentável, não como instrução).
@@ -179,6 +188,9 @@ Quatro suítes, todas RED antes de qualquer implementação.
    inexistente (→ `harness: "other"`).
 2. **`tests/validation/test-doctor-plugin-checks.mjs`** — os 4 checks contra essas fixtures,
    incluindo o caminho de SKIP e as severidades da tabela 4.2.
+2b. **Regressão do CLI do doctor** — `SKIP` aparece no resumo com ícone próprio e é contado;
+   `SKIP` não altera o exit code; o `--json` carrega o status. As suítes existentes
+   `test-doctor.mjs` e `test-doctor-cli.mjs` continuam verdes.
 3. **`tests/validation/test-routines-state-split.mjs`** — migração do formato antigo · a
    definição versionada não é alterada · o estado vai para o runtime · ausência de estado é
    tratada como bootstrap · `snooze` é por máquina · migração idempotente.
@@ -213,7 +225,8 @@ De `ci-scaffold-verbatim-provenance`:
 
 **Novo:** `scripts/lib/plugin-env.mjs`; as quatro suítes de teste.
 
-**Editado:** `scripts/lib/doctor.mjs` (4 checks) · `scripts/lib/routines.mjs` (separação de
+**Editado:** `scripts/lib/doctor.mjs` (4 checks) · `scripts/doctor.mjs` (status `SKIP` no
+ícone, contadores, resumo e `--json`; exit code inalterado) · `scripts/lib/routines.mjs` (separação de
 estado + migração) · `hooks/session-start` (execução de passos `check` + bloco) ·
 `templates/routines.json` (routine nova) · `.context/routines.json` (dogfooding) ·
 `skills/routines/SKILL.md` (documentar `type: check`) · `CHANGELOG.md`.
