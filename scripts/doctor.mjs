@@ -41,7 +41,9 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const ICON = { OK: "✓", WARN: "⚠", FAIL: "✗" };
+// SKIP = "não consigo verificar aqui", distinto de OK e de FAIL. Não entra no
+// exit code: ambiente onde a verificação não se aplica não é reprovado.
+const ICON = { OK: "✓", WARN: "⚠", FAIL: "✗", SKIP: "–" };
 
 async function main() {
   const args = process.argv.slice(2);
@@ -59,7 +61,7 @@ async function main() {
     return process.exit(failCount > 0 ? 1 : 0);
   }
 
-  const counts = { OK: 0, WARN: 0, FAIL: 0 };
+  const counts = { OK: 0, WARN: 0, FAIL: 0, SKIP: 0 };
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("  DevFlow Doctor — saúde do contexto");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -70,7 +72,8 @@ async function main() {
     if (r.repair) console.log(`    → Repair: ${r.repair}${r.destructive ? "  (DESTRUTIVO — confirmar)" : ""}`);
   }
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`  ${counts.FAIL} FAIL · ${counts.WARN} WARN · ${counts.OK} OK`);
+  const skipNote = counts.SKIP > 0 ? ` · ${counts.SKIP} SKIP` : "";
+  console.log(`  ${counts.FAIL} FAIL · ${counts.WARN} WARN · ${counts.OK} OK${skipNote}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   // Exit non-zero only on FAIL so scripts/routines can detect problems.
   process.exit(counts.FAIL > 0 ? 1 : 0);
