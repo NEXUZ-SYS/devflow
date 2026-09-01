@@ -54,6 +54,7 @@ repositório (replica entre dispositivos via clone/pull); o **estado de execuç�
 | D6 | O schema de routines ganha passos executáveis por código (`type: check`) | Passo que é código o hook roda sozinho; passo que é comando/skill precisa de LLM e só pode ser sugerido. Sem essa distinção tudo vira sugestão |
 | D7 | O checkup nunca age: não instala, não atualiza, não escreve fora de `.context/runtime/` | `/devflow update` tem efeito colateral conhecido (Step 4d reverte standards quando o repo standalone não foi sincronizado antes). Detectar e apontar o comando é seguro; executar não é |
 | D8 | Os 4 checks vivem no `doctor.mjs` | O doctor é o lugar de checks de saúde e hoje tem a lacuna. `/devflow:devflow-doctor` ganha a cobertura de plugin de graça; o checkup diário chama um subconjunto |
+| D10 | Um 5º check cobre o MemPalace, e o palace remoto vira spec separada | Num dispositivo novo o MemPalace ausente significa nenhuma memória de longo prazo, e hoje o `mempalace-health` devolve **OK** nesse caso ("não instalado — nada a checar"): verde sobre a ausência total. Um palace por projeto **não** resolve — é ChromaDB+SQLite binário (433 MB, 25.538 drawers na máquina atual), não versionável, logo não vem no clone. O que resolve é `mempalace serve` (palace remoto compartilhado), que envolve infra, auth e custo e merece a própria spec |
 | D9 | `SKIP` vira o 4º status do doctor, ao lado de OK/WARN/FAIL | "Não consigo verificar aqui" não é nenhum dos três. Reportar OK seria confiança falsa (diria "plugins verificados" sem ter verificado nada); reportar WARN encheria CI e container de 4 avisos permanentes que se aprende a ignorar; omitir o check esconderia que quatro verificações deixaram de acontecer |
 
 ## 4. Arquitetura
@@ -88,6 +89,16 @@ destructive, run(ctx) }`) e consumindo `plugin-env.mjs`.
 | `plugin-scope` | plugin do projeto habilitado em escopo **user** | WARN | remover a entrada de `~/.claude/settings.json` (o que o PR #97 fez) |
 | `plugin-marketplace-known` | marketplace referenciado por `enabledPlugins` não registrado em `known_marketplaces.json` | **FAIL** | registrar o marketplace declarado em `extraKnownMarketplaces` |
 | `plugin-up-to-date` | versão instalada atrás da publicada, para **cada** plugin declarado; e catálogo obsoleto — `known_marketplaces[mkt].lastUpdated` com mais de **7 dias** | WARN | `/devflow update` |
+| `mempalace-env` | `.devflow.yaml` declara `mempalace.enabled: true` mas o binário não está no PATH, ou o `palace_path` do `~/.mempalace/config.json` não existe | **FAIL** | instalar o MemPalace / `mempalace init` |
+
+**Escopo do `mempalace-env` (D10).** O check é barato de propósito: `which` mais a leitura de
+`~/.mempalace/config.json` e um `existsSync` no `palace_path` — cerca de 1 ms. Ele **não** conta
+drawers nem valida a wing do projeto: isso exige `mempalace status`, medido em ~600 ms nesta
+máquina, doze vezes o orçamento inteiro do checkup. Essa verificação continua no
+`mempalace-health`, sob demanda via `/devflow:devflow-doctor`.
+
+O check também reporta **qual** palace está em uso (global `~/.mempalace/palace` ou outro caminho),
+porque a escolha é invisível hoje e determina se a memória é compartilhada entre projetos.
 
 **Impacto no CLI do doctor (D9).** `scripts/doctor.mjs` hoje conhece três status: `ICON`
 (linha 43) e `counts` (linha 61) não têm `SKIP`, de modo que um check devolvendo esse status
@@ -220,6 +231,13 @@ De `ci-scaffold-verbatim-provenance`:
 - Migrar os 9 checks existentes do doctor para a cadência diária. Eles fazem `exec` com timeout de
   15 s e não cabem num gate de início de sessão.
 - Publicar o resultado do checkup no MemPalace para visão consolidada das máquinas do time.
+- **Migrar o MemPalace para palace remoto compartilhado** (`mempalace serve`). É o que de fato dá
+  memória de longo prazo a um dispositivo novo, mas envolve hospedagem, autenticação, custo e a
+  migração de 433 MB — spec própria. Registrado em
+  `docs/superpowers/2026-09-01-mempalace-remote-palace-followup.md`.
+- **Corrigir o `OK` falso do `mempalace-health`.** O check existente devolve OK quando o MemPalace
+  não está instalado. O `mempalace-env` (D10) cobre o caso pelo lado do projeto que o exige, mas o
+  verde enganoso continua lá para quem chamar o check antigo direto.
 
 ## 10. Arquivos
 

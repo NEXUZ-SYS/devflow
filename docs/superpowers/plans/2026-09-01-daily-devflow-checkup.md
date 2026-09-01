@@ -1096,6 +1096,7 @@ Em `scripts/lib/routines.mjs`:
 // no futuro não deve exigir editar o routines.json de cada projeto.
 export const CHECK_GROUPS = {
   "plugin-env": ["plugin-declared-installed", "plugin-scope", "plugin-marketplace-known", "plugin-up-to-date"],
+  "mempalace-env": ["mempalace-env"],
 };
 
 export function resolveCheckIds(value) {
@@ -1354,9 +1355,11 @@ for (const path of ["templates/routines.json", ".context/routines.json"]) {
     assert.ok(r, "routine daily-devflow-checkup ausente");
     assert.equal(r.frequency, "1d");
     assert.equal(r.enabled, true);
-    const step = r.prompts.find(p => p.type === "check");
-    assert.ok(step, "passo do tipo check ausente");
-    assert.ok(CHECK_GROUPS[step.value], `grupo desconhecido: ${step.value}`);
+    const steps = r.prompts.filter(p => p.type === "check");
+    assert.ok(steps.length >= 2, "esperados os passos plugin-env e mempalace-env");
+    for (const step of steps) {
+      assert.ok(CHECK_GROUPS[step.value], `grupo desconhecido: ${step.value}`);
+    }
   });
 
   test(`${path}: não carrega campos de estado (eles vivem em .context/runtime/)`, () => {
@@ -1402,7 +1405,8 @@ Acrescentar a routine em **ambos** os arquivos, preservando a `context-maintenan
       "enabled": true,
       "frequency": "1d",
       "prompts": [
-        { "type": "check", "value": "plugin-env" }
+        { "type": "check", "value": "plugin-env" },
+        { "type": "check", "value": "mempalace-env" }
       ]
     }
   ]
@@ -1636,6 +1640,181 @@ sem tocar nas existentes: descricao, cadencia e enabled sao escolha do time."
 
 ---
 
+### Task 10: check `mempalace-env`
+
+**Files:**
+- Modify: `scripts/lib/doctor.mjs` (check novo + registro)
+- Test: `tests/validation/test-doctor-mempalace-env.mjs`
+
+**Interfaces:**
+- Consumes: `readBlockField` de `scripts/lib/devflow-config.mjs` (já importado no arquivo); `ctx.home` (Task 2); `ctx.which`
+- Produces: check `mempalace-env` no array `CHECKS` e no grupo `mempalace-env`.
+
+**Por que esta task existe.** Num dispositivo novo, o MemPalace ausente significa nenhuma memória
+de longo prazo — e o `mempalace-health` atual devolve **OK** nesse caso ("MemPalace não instalado —
+nada a checar"): verde sobre a ausência total. Quando o `.devflow.yaml` do projeto declara
+`mempalace.enabled: true`, o MemPalace ausente é divergência de ambiente, não um "não se aplica".
+
+**Orçamento.** `which` + leitura de um JSON + um `existsSync`: ~1 ms. O check **não** conta
+drawers nem valida wing — isso exige `mempalace status`, medido em ~600 ms, doze vezes o orçamento
+inteiro do checkup diário. Essa parte fica no `mempalace-health`, sob demanda.
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+```js
+#!/usr/bin/env node
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { getCheck } from "../../scripts/lib/doctor.mjs";
+
+function scenario({ enabled = true, hasBin = true, palaceExists = true, writeConfig = true } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "mpenv-"));
+  const home = join(root, "home");
+  const cwd = join(root, "proj");
+  mkdirSync(join(cwd, ".context"), { recursive: true });
+  writeFileSync(join(cwd, ".context", ".devflow.yaml"), `git:\n  strategy: branch-flow\nmempalace:\n  enabled: ${enabled}\n  budget: 1000\n`);
+  const palace = join(home, ".mempalace", "palace");
+  mkdirSync(join(home, ".mempalace"), { recursive: true });
+  if (palaceExists) mkdirSync(palace, { recursive: true });
+  if (writeConfig) writeFileSync(join(home, ".mempalace", "config.json"), JSON.stringify({ palace_path: palace }));
+  return {
+    ctx: { cwd, home, which: b => (b === "mempalace" ? hasBin : false), exec: () => ({ status: 1, stdout: "", stderr: "" }), today: "2026-09-01" },
+    palace,
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+test("OK quando o projeto não exige MemPalace", () => {
+  const s = scenario({ enabled: false, hasBin: false });
+  const r = getCheck("mempalace-env").run(s.ctx);
+  assert.equal(r.status, "OK");
+  assert.match(r.diagnosis, /não exig/i);
+  s.cleanup();
+});
+
+test("FAIL quando o projeto exige e o binário não está instalado", () => {
+  const s = scenario({ hasBin: false });
+  const r = getCheck("mempalace-env").run(s.ctx);
+  assert.equal(r.status, "FAIL");
+  assert.match(r.diagnosis, /não instalado|ausente/i);
+  assert.ok(r.repair.length > 0);
+  s.cleanup();
+});
+
+test("FAIL quando o palace_path do config não existe", () => {
+  const s = scenario({ palaceExists: false });
+  const r = getCheck("mempalace-env").run(s.ctx);
+  assert.equal(r.status, "FAIL");
+  assert.match(r.repair, /mempalace init/);
+  s.cleanup();
+});
+
+test("WARN quando o binário existe mas não há config.json", () => {
+  const s = scenario({ writeConfig: false });
+  const r = getCheck("mempalace-env").run(s.ctx);
+  assert.equal(r.status, "WARN");
+  s.cleanup();
+});
+
+test("OK informa qual palace está em uso", () => {
+  const s = scenario({});
+  const r = getCheck("mempalace-env").run(s.ctx);
+  assert.equal(r.status, "OK");
+  assert.match(r.diagnosis, new RegExp(s.palace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  s.cleanup();
+});
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+Run: `node --test tests/validation/test-doctor-mempalace-env.mjs`
+Expected: FAIL — `getCheck("mempalace-env")` devolve `undefined`.
+
+- [ ] **Step 3: Implementar o mínimo**
+
+Em `scripts/lib/doctor.mjs` (o `readBlockField` já está importado no topo do arquivo):
+
+```js
+// O mempalace-health existente devolve OK quando o MemPalace nao esta instalado.
+// Quando o projeto DECLARA mempalace.enabled: true, ausencia e divergencia de
+// ambiente — num dispositivo novo, significa nenhuma memoria de longo prazo.
+const mempalaceEnv = {
+  id: "mempalace-env",
+  title: "MemPalace exigido pelo projeto está utilizável nesta máquina",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const cfgPath = join(ctx.cwd, ".context", ".devflow.yaml");
+    if (!existsSync(cfgPath)) {
+      return { status: "OK", diagnosis: "Sem .devflow.yaml — o projeto não exige MemPalace.", repair: "" };
+    }
+    let raw = "";
+    try { raw = readFileSync(cfgPath, "utf-8"); } catch { /* ignore */ }
+    const enabled = String(readBlockField(raw, "mempalace", "enabled") || "").replace(/['"]/g, "").trim();
+    if (enabled !== "true") {
+      return { status: "OK", diagnosis: "O projeto não exige MemPalace (mempalace.enabled ≠ true).", repair: "" };
+    }
+    if (!ctx.which("mempalace")) {
+      return {
+        status: "FAIL",
+        diagnosis: "O projeto declara mempalace.enabled: true, mas o binário mempalace não está no PATH — esta máquina não tem memória de longo prazo.",
+        repair: "Instale o MemPalace e rode 'mempalace init'.",
+      };
+    }
+    const confPath = join(ctx.home, ".mempalace", "config.json");
+    if (!existsSync(confPath)) {
+      return {
+        status: "WARN",
+        diagnosis: "MemPalace instalado, mas sem ~/.mempalace/config.json — o caminho do palace é indeterminado.",
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    let palacePath = "";
+    try { palacePath = JSON.parse(readFileSync(confPath, "utf-8")).palace_path || ""; } catch { /* ignore */ }
+    if (!palacePath || !existsSync(palacePath)) {
+      return {
+        status: "FAIL",
+        diagnosis: `O palace apontado pelo config não existe: ${palacePath || "(vazio)"}.`,
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    return { status: "OK", diagnosis: `MemPalace utilizável; palace em ${palacePath}.`, repair: "" };
+  },
+};
+```
+
+Registrar no array, após os quatro checks de plugin:
+
+```js
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv];
+```
+
+- [ ] **Step 4: Rodar os testes e confirmar que passam**
+
+Run: `node --test tests/validation/test-doctor-mempalace-env.mjs tests/validation/test-doctor.mjs`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/lib/doctor.mjs tests/validation/test-doctor-mempalace-env.mjs
+git commit -m "feat(doctor): check de MemPalace exigido pelo projeto
+
+O mempalace-health devolve OK quando o MemPalace nao esta instalado — verde
+sobre a ausencia total de memoria de longo prazo, exatamente o que um
+dispositivo recem-clonado encontra. Quando o .devflow.yaml declara
+mempalace.enabled: true, ausencia do binario ou palace inexistente passam a
+ser FAIL, e o diagnostico informa qual palace esta em uso.
+
+Barato de proposito (~1ms): nao conta drawers nem valida wing, o que exigiria
+mempalace status (~600ms, doze vezes o orcamento do checkup diario)."
+```
+
+---
+
 ## Notas para a fase R (Review)
 
 Pontos que merecem atenção do revisor, por serem onde este plano pode estar errado:
@@ -1646,4 +1825,5 @@ Pontos que merecem atenção do revisor, por serem onde este plano pode estar er
 4. **O `ctx` de `run-checks` passa `which`/`exec` como stubs.** Se um dia um check de plugin precisar deles, o stub silencioso vira bug difícil de achar.
 5. **A Task 9 mudou o §4.6 da skill `config` de `cp` para um script.** Confirmar que rodar `/devflow config` num projeto-cliente com `routines.json` editado à mão de fato preserva tudo — este é o caminho que alcança os projetos que não são este repositório.
 6. **`test-doctor.mjs` e `test-doctor-cli.mjs` chamam `runChecks` sem passar `home`**, logo os quatro checks novos leem o `HOME` real de quem roda a suíte. Numa máquina de dev dá OK; num runner de CI sem `~/.claude/plugins` dá SKIP. O resultado difere por ambiente — avaliar se essas suítes devem passar um `home` fixo de fixture.
-7. **A Task 9 não remove routines** que saíram do template. É deliberado (o usuário pode depender delas), mas significa que uma routine descontinuada persiste para sempre nos projetos que já a têm.
+7. **O `mempalace-env` (Task 10) lê `mempalace.enabled` com `readBlockField`.** O parser já mordeu este repo uma vez: comentário inline capturado junto do valor fez o `grounding-mcp` acusar ausência de um server presente. Confirmar que `enabled: true  # comentário` é lido como `true`.
+8. **A Task 9 não remove routines** que saíram do template. É deliberado (o usuário pode depender delas), mas significa que uma routine descontinuada persiste para sempre nos projetos que já a têm.
