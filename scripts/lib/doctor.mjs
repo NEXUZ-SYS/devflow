@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
+import { readPluginEnv, isInstalled, highestInstalled } from "./plugin-env.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -387,13 +388,69 @@ const harnessSensors = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors];
+// Os checks de plugin leem ~/.claude/plugins/*, estrutura do gerenciador de
+// plugins do Claude Code. Fora dele (omp, OpenCode, CI, container) a pergunta
+// não tem resposta certa nem errada: SKIP, nunca OK nem FAIL. Dizer OK ali
+// seria confiança falsa — o pior resultado possível para um checkup.
+const SKIP_NO_HARNESS = {
+  status: "SKIP",
+  diagnosis: "Ambiente sem ~/.claude/plugins — o estado de plugins não é verificável aqui.",
+  repair: "",
+};
+
+const pluginDeclaredInstalled = {
+  id: "plugin-declared-installed",
+  title: "Plugins declarados pelo projeto estão instalados nesta máquina",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const keys = Object.keys(env.declared);
+    if (!keys.length) {
+      return { status: "OK", diagnosis: "O projeto não declara plugins em .claude/settings.json.", repair: "" };
+    }
+    const missing = keys.filter(k => !isInstalled(env, k));
+    if (missing.length) {
+      return {
+        status: "FAIL",
+        diagnosis: `Plugin(s) declarado(s) pelo projeto e ausente(s) nesta máquina: ${missing.join(", ")}.`,
+        repair: `Instale com: ${missing.map(k => `/plugin install ${k}`).join(" && ")}`,
+      };
+    }
+    return { status: "OK", diagnosis: `Os ${keys.length} plugins declarados estão instalados.`, repair: "" };
+  },
+};
+
+const pluginScope = {
+  id: "plugin-scope",
+  title: "Plugins do projeto não estão habilitados em escopo user",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    // Só HABILITAÇÃO global. Instalação em escopo user é normal e esperada — o
+    // PR #97 removeu a habilitação global, não a instalação.
+    const leaked = Object.keys(env.declared).filter(k => env.enabledAtUser[k]);
+    if (leaked.length) {
+      return {
+        status: "WARN",
+        diagnosis: `Habilitado(s) em escopo user, carregando em todo projeto da máquina: ${leaked.join(", ")}.`,
+        repair: "Remova a(s) entrada(s) de enabledPlugins em ~/.claude/settings.json — o projeto já as declara.",
+      };
+    }
+    return { status: "OK", diagnosis: "Nenhum plugin do projeto vazando para o escopo user.", repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
 }
 
-const SEV_RANK = { FAIL: 0, WARN: 1, OK: 2 };
+const SEV_RANK = { FAIL: 0, WARN: 1, OK: 2, SKIP: 3 };
 
 export async function runChecks(ctx, ids) {
   const selected = ids && ids.length ? CHECKS.filter(c => ids.includes(c.id)) : CHECKS;

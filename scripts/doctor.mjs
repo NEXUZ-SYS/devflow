@@ -9,6 +9,7 @@
 //   node scripts/doctor.mjs --check <id>
 import { existsSync, statSync } from "node:fs";
 import { join, delimiter } from "node:path";
+import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { runChecks } from "./lib/doctor.mjs";
 
@@ -48,7 +49,7 @@ async function main() {
   const ci = args.indexOf("--check");
   const ids = ci >= 0 && args[ci + 1] ? [args[ci + 1]] : null;
 
-  const ctx = { cwd: process.cwd(), which, exec, today: today() };
+  const ctx = { cwd: process.cwd(), home: homedir(), which, exec, today: today() };
   const results = await runChecks(ctx, ids);
 
   const failCount = results.filter(r => r.status === "FAIL").length;
