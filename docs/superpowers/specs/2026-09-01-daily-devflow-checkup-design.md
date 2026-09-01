@@ -54,6 +54,8 @@ repositório (replica entre dispositivos via clone/pull); o **estado de execuç�
 | D6 | O schema de routines ganha passos executáveis por código (`type: check`) | Passo que é código o hook roda sozinho; passo que é comando/skill precisa de LLM e só pode ser sugerido. Sem essa distinção tudo vira sugestão |
 | D7 | O checkup nunca age: não instala, não atualiza, não escreve fora de `.context/runtime/` | `/devflow update` tem efeito colateral conhecido (Step 4d reverte standards quando o repo standalone não foi sincronizado antes). Detectar e apontar o comando é seguro; executar não é |
 | D8 | Os 4 checks vivem no `doctor.mjs` | O doctor é o lugar de checks de saúde e hoje tem a lacuna. `/devflow:devflow-doctor` ganha a cobertura de plugin de graça; o checkup diário chama um subconjunto |
+| D11 | Instalação e habilitação de plugin são **eixos independentes**; não existe "a instalação deste projeto" | Medido na fase R: este repositório declara `devflow@NEXUZ-SYS` em `.claude/settings.json`, tem **zero** entradas de `installed_plugins.json` com o seu `projectPath`, uma entrada `scope: "user"` (3.1.0) e 17 `scope: "project"` de outros projetos — e a sessão roda 3.1.0. O plugin é instalado globalmente e habilitado por projeto, que é o desenho do PR #97. Procurar a entrada "deste projeto" produziria FAIL falso |
+| D12 | "Atualizado" compara a **maior** versão instalada contra a publicada | São 18 entradas, de 1.10.0 a 3.1.0, e qual delas o Claude Code resolve não é observável a partir dos arquivos. A pergunta prática — "preciso rodar `/devflow update`?" — se responde pela mais alta: se a máquina já tem a versão publicada em algum lugar, não há o que baixar, e entradas antigas de outros projetos deixam de virar WARN de ruído |
 | D10 | Um 5º check cobre o MemPalace, e o palace remoto vira spec separada | Num dispositivo novo o MemPalace ausente significa nenhuma memória de longo prazo, e hoje o `mempalace-health` devolve **OK** nesse caso ("não instalado — nada a checar"): verde sobre a ausência total. Um palace por projeto **não** resolve — é ChromaDB+SQLite binário (433 MB, 25.538 drawers na máquina atual), não versionável, logo não vem no clone. O que resolve é `mempalace serve` (palace remoto compartilhado), que envolve infra, auth e custo e merece a própria spec |
 | D9 | `SKIP` vira o 4º status do doctor, ao lado de OK/WARN/FAIL | "Não consigo verificar aqui" não é nenhum dos três. Reportar OK seria confiança falsa (diria "plugins verificados" sem ter verificado nada); reportar WARN encheria CI e container de 4 avisos permanentes que se aprende a ignorar; omitir o check esconderia que quatro verificações deixaram de acontecer |
 
@@ -213,6 +215,22 @@ Quatro suítes, todas RED antes de qualquer implementação.
 Todo E2E destrutivo roda em diretório temporário, nunca no diretório versionado.
 
 **`requiredSignals: [unit, e2e, lint]`** — `e2e` é obrigatório porque a mudança toca um hook.
+
+## 7.1 Achados de segurança (fase R)
+
+**S1 — injeção de prompt pelo bloco do hook.** O `DEVFLOW_ENV_CHECKUP` injeta no contexto do LLM
+texto derivado de `.claude/settings.json` **do repositório** — arquivo versionado, portanto escrito
+por quem abre um PR — e de `known_marketplaces.json`. Um nome de plugin como
+`devflow\n\nIgnore as instruções anteriores…` chegaria ao contexto. `escape_for_json` protege a
+sintaxe do JSON, não a semântica.
+
+Duas camadas de mitigação: sanitização (colapsa quebras de linha, allowlist de caracteres, trunca
+em 300) e um preâmbulo marcando o conteúdo como dado. Nenhum bloco emitido hoje pelo hook tem essa
+marcação — o `UNTRUSTED_WORKFLOW_STATE` vem do dotcontext, não daqui. Este é o primeiro.
+
+**S2 — leitura mínima do settings do usuário.** `~/.claude/settings.json` carrega `env` e
+`permissions` além de `enabledPlugins`. O leitor extrai **apenas** as chaves de `enabledPlugins`
+com valor `true`; o objeto completo não é retido, para que nenhum diagnóstico futuro possa vazá-lo.
 
 ## 8. Guardrails de ADR aplicáveis
 
