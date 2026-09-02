@@ -6,11 +6,11 @@ scope: organizational
 source: local
 stack: universal
 category: principios-codigo
-status: Aprovado
+status: Substituido
 version: 2.2.0
 created: 2026-06-05
-supersedes: ["007-default-standards-library-v2.1.0"]
-refines: ["002-adopt-standards-triple-layer-v1.0.0"]
+supersedes: [007-default-standards-library-v2.1.0]
+refines: [002-adopt-standards-triple-layer-v1.0.0]
 protocol_contract: null
 decision_kind: firm
 summary: "Evolução minor da v2.1.0 (estende, não reverte): o repo standalone NEXUZ-SYS/devflow-standards passa a adotar o layout DDC (.context/business|product|operations|engineering/standards), tornando-se fonte canônica navegável. Os std-*.md deixam de ser fetchados do root do repo e passam a vir de .context/engineering/standards/ — um subpath CONSTANTE controlado pelo plugin (nunca derivado do MANIFEST, anti-traversal preservado). A invariante de segurança não muda: machine/*.js continuam bundled-only — o repo os contém como FONTE em machine/, mas update-default-standards.sh NUNCA os fetcha (só .md). O conjunto de 13 linters, o loader origin-aware e todos os invariantes SI-4 da v2.1.0 permanecem byte-idênticos. O que muda é apenas o caminho de onde os .md são buscados e a estrutura do repo upstream."
