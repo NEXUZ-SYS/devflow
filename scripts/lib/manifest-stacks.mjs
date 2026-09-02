@@ -241,6 +241,68 @@ function writeManifest(projectRoot, manifest) {
   writeFileSync(path, serializeManifest(manifest));
 }
 
+/**
+ * Faz o manifesto CASAR com o projeto. Diferente de addFrameworksToManifest,
+ * que e ADITIVO: aqui existe PODA — capacidade nova, e e por isso que o sync
+ * nunca conseguia corrigir nada, so acumular.
+ *
+ * Eixo `series`: as libs sao alternativas da mesma coisa (odoo-12..odoo-18);
+ * exatamente uma vale. Eixo composicao: libs coexistem, so o pin muda.
+ *
+ * FAIL-CLOSED: sem versao resolvida, NADA e podado. Poda e destrutiva e nunca
+ * acontece por adivinhacao.
+ *
+ * `writeManifest` continua privada: reconcile vive neste modulo e a chama
+ * direto — exportar ampliaria a superficie publica sem necessidade.
+ */
+export function reconcileManifest(projectRoot, { entries, versions, axis, dryRun = false }) {
+  const manifest = loadManifest(projectRoot);
+  const result = { added: [], pruned: [], repinned: [], kept: [] };
+  const list = Array.isArray(entries) ? entries : [];
+  const vers = versions instanceof Map ? versions : new Map();
+  const declared = new Set(list.map((e) => e.lib));
+
+  if (axis === "series") {
+    const family = list.find((e) => e.family)?.family;
+    const series = family != null ? vers.get(family) : undefined;
+    if (series == null) {
+      // fail-closed: mantem tudo que o perfil declara, nao poda nada
+      result.kept = Object.keys(manifest.frameworks).filter((k) => declared.has(k));
+      return result;
+    }
+    const winner = list.find((e) => String(e.series) === String(series));
+    for (const lib of Object.keys(manifest.frameworks)) {
+      if (!declared.has(lib)) continue;      // fora do escopo do perfil: intocado
+      if (winner && lib === winner.lib) result.kept.push(lib);
+      else result.pruned.push(lib);
+    }
+    if (winner && !manifest.frameworks[winner.lib]) result.added.push(winner.lib);
+  } else {
+    for (const e of list) {
+      const cur = manifest.frameworks[e.lib];
+      const real = vers.get(e.lib);
+      if (!cur) { if (real) result.added.push(e.lib); continue; }
+      result.kept.push(e.lib);
+      if (real != null && String(cur.version) !== String(real)) {
+        result.repinned.push({ lib: e.lib, from: String(cur.version), to: String(real) });
+      }
+    }
+  }
+
+  if (!dryRun) {
+    let dirty = false;
+    for (const lib of result.pruned) { delete manifest.frameworks[lib]; dirty = true; }
+    for (const { lib, to } of result.repinned) { manifest.frameworks[lib].version = to; dirty = true; }
+    for (const lib of result.added) {
+      const entry = list.find((e) => e.lib === lib);
+      manifest.frameworks[lib] = { version: String(entry?.version ?? vers.get(lib) ?? ""), mcpIndexed: true };
+      dirty = true;
+    }
+    if (dirty) writeManifest(projectRoot, manifest);
+  }
+  return result;
+}
+
 export function findMissingRefs(projectRoot) {
   const m = loadManifest(projectRoot);
   const missing = [];

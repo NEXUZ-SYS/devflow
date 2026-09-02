@@ -80,29 +80,43 @@ standards:
 stacks:
   - lib: odoo-12
     version: "12.0"
+    family: odoo
+    series: "12"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/12.0/"]
   - lib: odoo-13
     version: "13.0"
+    family: odoo
+    series: "13"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/13.0/"]
   - lib: odoo-14
     version: "14.0"
+    family: odoo
+    series: "14"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/14.0/developer/"]
   - lib: odoo-15
     version: "15.0"
+    family: odoo
+    series: "15"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/15.0/developer/"]
   - lib: odoo-16
     version: "16.0"
+    family: odoo
+    series: "16"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/16.0/developer/"]
   - lib: odoo-17
     version: "17.0"
+    family: odoo
+    series: "17"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/17.0/developer/"]
   - lib: odoo-18
     version: "18.0"
+    family: odoo
+    series: "18"
     mcpIndexed: true
     discoveryHints: ["https://www.odoo.com/documentation/18.0/developer/"]
