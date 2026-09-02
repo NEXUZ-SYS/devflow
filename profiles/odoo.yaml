@@ -31,6 +31,22 @@ skillBindings:
 dispatchKeywords:
   backend-specialist: ["odoo", "orm", "addon", "l10n_br", "nfc-e", "nf-e"]
   frontend-specialist: ["owl", "qweb", "pos"]
+# Eixo de versionamento deste perfil. `series` = odoo-12..odoo-18 sao versoes
+# ALTERNATIVAS da mesma coisa: exatamente uma vale. Resolver = escolher uma.
+# Perfis sem `axis` seguem no eixo composicao (default), onde libs coexistem.
+axis: series
+# Sondas de versao, avaliadas em ordem. Declarativas: acrescentar um perfil
+# irmao (rails.yaml) nao exige mudanca de codigo.
+# NOTA: forma em BLOCO obrigatoria — o parseYaml do repo nao suporta flow-map
+# inline ({ file: x, pattern: y }), devolveria a entrada como string crua.
+versionDetect:
+  - file: .gitmodules
+    pattern: path = odoo[\s\S]*?branch = (\d+)\.0
+  - file: Dockerfile
+    pattern: FROM\s+odoo:(\d+)\.0
+  - glob: addons/*/__manifest__.py
+    pattern: version['"]?\s*:\s*['"](\d+)\.
+    aggregate: majority
 # Profile-scoped Standards (enforcement) copied into the project's
 # .context/engineering/standards/ ONLY when this profile is detected. The ids
 # are mirrored in assets/standards/profiles/odoo/MANIFEST.txt and backed by

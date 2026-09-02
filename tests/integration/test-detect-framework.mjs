@@ -125,3 +125,42 @@ describe("contribuições de perfil (ADR-008 v1.1.0)", () => {
     assert.equal(typeof p.skillBindings, "object");
   });
 });
+
+// ─── Escopo de versão (fase E, Task 4) ──────────────────────────────────────
+
+describe("version scope: axis + versionDetect", () => {
+  const PLUGIN = resolve(process.cwd());
+  const ODOO17 = "tests/fixtures/version-scoped/odoo17";
+  const ODOO12 = "tests/fixtures/version-scoped/odoo12";
+
+  it("loadProfiles PROPAGA axis e versionDetect — allowlist não pode engoli-los", () => {
+    const odoo = loadProfiles(PLUGIN).find((p) => p.framework === "odoo");
+    assert.equal(odoo.axis, "series", "axis descartado pela allowlist de loadProfiles");
+    assert.ok(
+      Array.isArray(odoo.versionDetect) && odoo.versionDetect.length === 3,
+      "versionDetect descartado pela allowlist de loadProfiles",
+    );
+  });
+
+  it("frameworkContributions devolve stackVersions para o fixture Odoo 17", () => {
+    const c = frameworkContributions(ODOO17, PLUGIN);
+    const odoo = (c.stackVersions || []).find((s) => s.lib === "odoo");
+    assert.ok(odoo, "stackVersions deve conter a entrada do eixo série 'odoo'");
+    assert.equal(odoo.version, "17");
+    assert.equal(odoo.confidence, "high");
+    assert.equal(odoo.axis, "series");
+    assert.ok(Array.isArray(odoo.evidence) && odoo.evidence.length >= 2);
+  });
+
+  it("fixture Odoo 12 resolve 12", () => {
+    const c = frameworkContributions(ODOO12, PLUGIN);
+    assert.equal((c.stackVersions || []).find((s) => s.lib === "odoo").version, "12");
+  });
+
+  it("retrocompat: campos antigos intactos e perfil sem versionDetect fora de stackVersions", () => {
+    const c = frameworkContributions(ODOO17, PLUGIN);
+    assert.ok(Array.isArray(c.standards), "campos antigos intactos");
+    assert.ok(Array.isArray(c.stacks), "campos antigos intactos");
+    assert.ok(!(c.stackVersions || []).some((s) => s.lib === "nxz"));
+  });
+});

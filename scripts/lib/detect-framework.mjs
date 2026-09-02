@@ -22,6 +22,7 @@ import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseYaml } from "./frontmatter.mjs";
+import { resolveStackVersions } from "./framework-version.mjs";
 
 const MAX_DEPTH = 3;
 const SKIP_DIRS = new Set([
@@ -60,6 +61,12 @@ export function loadProfiles(pluginRoot = defaultPluginRoot()) {
         ? data.skillBindings : {},
       standards: Array.isArray(data.standards) ? data.standards : [],
       stacks: Array.isArray(data.stacks) ? data.stacks : [],
+      // Escopo de versao: `axis` distingue eixo serie (uma versao vale) de
+      // composicao (libs coexistem); `versionDetect` sao as sondas do perfil.
+      // Precisam estar NESTA allowlist — chave fora dela e descartada em
+      // silencio, sem erro (achado A3 da fase R).
+      axis: typeof data.axis === "string" ? data.axis : null,
+      versionDetect: data.versionDetect ?? null,
       dispatchKeywords: data.dispatchKeywords || {},
       _file: file,
     });
@@ -224,6 +231,18 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
       dispatchKeywords[agent] = [...(dispatchKeywords[agent] || []), ...(kws || [])];
     }
   }
+  // Eixo serie: resolve a versao real do framework no projeto. Perfil sem
+  // versionDetect NAO entra aqui — retrocompatibilidade.
+  const versionCandidates = active
+    .filter((p) => p.versionDetect)
+    .map((p) => ({ lib: p.framework, versionDetect: p.versionDetect, axis: p.axis || "composition" }));
+  const resolvedVersions = resolveStackVersions(projectRoot, versionCandidates);
+  const stackVersions = versionCandidates.map((c) => ({
+    lib: c.lib,
+    axis: c.axis,
+    ...resolvedVersions.get(c.lib),
+  }));
+
   return {
     frameworks: active.map((p) => p.framework),
     skills: [...skills],
@@ -232,6 +251,7 @@ export function frameworkContributions(projectRoot, pluginRoot = defaultPluginRo
     standards: [...standards],
     standardsWithOrigin: [...standardsOrigin].map(([id, framework]) => ({ id, framework })),
     stacks: [...stacksByLib.values()],
+    stackVersions,
     dispatchKeywords,
   };
 }
