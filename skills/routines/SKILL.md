@@ -6,7 +6,7 @@ user-invocable: false
 
 # Routines
 
-Gerencia e executa rotinas de manutenção agendadas (file-based, `.context/routines.json`). O estado fica num CLI Node; a **execução dos prompts** (que acionam commands/skills/agents) é conduzida por este skill (o LLM), pois slash-commands/skills não rodam via bash.
+Gerencia e executa rotinas de manutenção agendadas (file-based). O hook SessionStart **executa** sozinho as rotinas da classe `auto`; as demais são conduzidas por este skill (o LLM), pois slash-commands e skills não rodam via bash.
 
 **Announce at start:** "I'm using the devflow:routines skill to manage maintenance routines."
 
@@ -38,6 +38,46 @@ Apresentar cada routine com estado (VENCIDA / próxima data / off) e seus prompt
 
 > Se um prompt for um command que altera o projeto (ex.: doctor `--fix`), respeitar o modelo de consentimento daquele command/skill (não burlar confirmações).
 
+### Classes de execução
+
+Cada rotina declara `execution`:
+
+| Valor | Quem executa | Quando |
+|---|---|---|
+| `auto` | o **hook**, em node, sem LLM | sozinha, na data agendada |
+| `confirm` | o usuário decide | na data agendada o sistema **pergunta**; nunca roda sozinha |
+| `model` | o LLM (skill/agent/comando sem script) | quando o usuário manda rodar |
+
+Ausente, o valor é derivado: todos os passos `check` → `auto`; qualquer outra coisa → `confirm`.
+Retrocompatível — um `routines.json` já em campo não muda de comportamento.
+
+O `/devflow:devflow-doctor` é `confirm` porque leva **~16s**. A verificação barata (~0,2s) roda
+sempre e o **propõe** quando encontra divergência: diagnóstico barato é contínuo, diagnóstico caro
+é sob consentimento.
+
+### Tipos de passo
+
+| `type` | Executável sem LLM | Observação |
+|---|---|---|
+| `check` | **sim** | nomeia um **grupo** de checks do doctor (`CHECK_GROUPS` em `scripts/lib/routines.mjs`), não uma lista de ids — acrescentar um check não exige editar o `routines.json` de cada projeto |
+| `command` | não | slash-command |
+| `skill` | não | Skill tool |
+| `agent` | não | Agent tool |
+
+### Onde mora o estado
+
+| Arquivo | Git | Conteúdo |
+|---|---|---|
+| `.context/routines.json` | **versionado** | definição: `id`, `description`, `enabled`, `frequency`, `execution`, `prompts` |
+| `.context/runtime/routines-state.json` | **gitignored** | estado por máquina: `lastRun`, `nextRun`, `lastSuggested`, `snoozeUntil` |
+
+O time compartilha a agenda e ela replica entre dispositivos via clone; cada máquina tem o seu
+próprio "hoje". A ausência de qualquer `lastRun` é o sinal de **primeiro contato** (clone novo),
+que dispara o relato de bootstrap.
+
+Dois predicados, deliberadamente distintos: `shouldRun` (execução) e `shouldSuggest`
+(`shouldRun` + guarda de 1x/dia, só para surfacing).
+
 ### `snooze <id> <n>` / `enable <id>` / `disable <id>`
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/routines.mjs" snooze <id> <n>
@@ -46,6 +86,7 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/routines.mjs" disable <id>
 ```
 
 ## Guidelines
-- A sugestão automática de rotinas vencidas vem do hook SessionStart (bloco `DEVFLOW_ROUTINES_DUE`) — 1x/dia, respeitando snooze. Este skill é o executor/gestor.
+- O hook SessionStart **executa** as rotinas `auto` vencidas (bloco `DEVFLOW_ENV_CHECKUP`) e sugere as demais (`DEVFLOW_ROUTINES_DUE`). Este skill é o executor manual e o gestor.
+- O checkup fica em **silêncio** quando está tudo certo; só fala no primeiro contato pós-clone ou quando há divergência.
 - `run` só marca `mark-run` **após** executar os prompts com sucesso.
-- Rotinas são versionadas (`.context/routines.json`) — o time compartilha a agenda de manutenção.
+- A **definição** é versionada; o **estado de execução** é por máquina (ver acima).
