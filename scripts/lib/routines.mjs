@@ -17,15 +17,67 @@ function file(cwd) {
   return join(cwd, ".context", "routines.json");
 }
 
+// Campos de EXECUÇÃO. Vivem por máquina em .context/runtime/ — nunca no
+// arquivo versionado: numa cadência diária, uma máquina marcar "rodei hoje"
+// silenciaria as outras, e o working tree acumularia diff a cada sessão.
+const STATE_FIELDS = ["lastRun", "nextRun", "lastSuggested", "snoozeUntil"];
+
+function stateFile(cwd) {
+  return join(cwd, ".context", "runtime", "routines-state.json");
+}
+
+export function loadState(cwd) {
+  try {
+    return JSON.parse(readFileSync(stateFile(cwd), "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveState(cwd, state) {
+  const path = stateFile(cwd);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(state, null, 2) + "\n");
+}
+
+// Ausência do arquivo de estado é o sinal de clone novo: .context/runtime/ é
+// gitignored, logo não vem no clone. O gatilho de bootstrap sai daí, sem flag.
+export function isFirstContact(cwd) {
+  return !existsSync(stateFile(cwd));
+}
+
 export function loadRoutines(cwd) {
   const path = file(cwd);
   if (!existsSync(path)) return { routines: [], path };
+  let data;
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8"));
-    return { routines: Array.isArray(data.routines) ? data.routines : [], path };
+    data = JSON.parse(readFileSync(path, "utf-8"));
   } catch {
     return { routines: [], path };
   }
+  const defs = Array.isArray(data.routines) ? data.routines : [];
+
+  // Migração do formato antigo: campos de estado no arquivo versionado.
+  // Reescreve o versionado UMA vez — esse diff é a própria correção.
+  const state = loadState(cwd);
+  let migrated = false;
+  for (const r of defs) {
+    for (const f of STATE_FIELDS) {
+      if (f in r) {
+        state[r.id] = state[r.id] || {};
+        if (!(f in state[r.id])) state[r.id][f] = r[f];
+        delete r[f];
+        migrated = true;
+      }
+    }
+  }
+  if (migrated) {
+    saveState(cwd, state);
+    writeFileSync(path, JSON.stringify({ routines: defs }, null, 2) + "\n");
+  }
+
+  const routines = defs.map(r => ({ ...r, ...(state[r.id] || {}) }));
+  return { routines, path };
 }
 
 export function saveRoutines(cwd, routines) {
@@ -107,20 +159,33 @@ function update(cwd, id, fn) {
   return true;
 }
 
+function updateState(cwd, id, fn) {
+  const { routines } = loadRoutines(cwd);
+  if (!routines.find(x => x.id === id)) return false;
+  const state = loadState(cwd);
+  state[id] = state[id] || {};
+  fn(state[id]);
+  saveState(cwd, state);
+  return true;
+}
+
 export function markRun(cwd, id, today) {
-  return update(cwd, id, r => {
-    r.lastRun = today;
-    r.nextRun = nextRunFrom(today, r.frequency);
-    r.snoozeUntil = null;
+  const { routines } = loadRoutines(cwd);
+  const r = routines.find(x => x.id === id);
+  if (!r) return false;
+  return updateState(cwd, id, st => {
+    st.lastRun = today;
+    st.nextRun = nextRunFrom(today, r.frequency);
+    st.snoozeUntil = null;
   });
 }
 
 export function snooze(cwd, id, days, today) {
-  return update(cwd, id, r => { r.snoozeUntil = addDays(today, Number(days)); });
+  return updateState(cwd, id, st => { st.snoozeUntil = addDays(today, Number(days)); });
 }
 
 export function markSuggested(cwd, id, today) {
-  return update(cwd, id, r => { r.lastSuggested = today; });
+  return updateState(cwd, id, st => { st.lastSuggested = today; });
 }
 
 export function setEnabled(cwd, id, enabled) {
