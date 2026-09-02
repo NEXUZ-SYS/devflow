@@ -123,6 +123,23 @@ function lte(a, b) {
 }
 
 // ── scheduling ──────────────────────────────────────────────────────
+// Classes de execução. Campo único em vez de dois booleanos: autoRun +
+// requiresConfirmation admitiriam o estado contraditório "roda sozinha porém
+// exige confirmação".
+//   auto    — o hook executa sozinha na data agendada (só passos `check`)
+//   confirm — na data agendada o sistema PERGUNTA; nunca roda sozinha
+//   model   — precisa de um turno do agente
+const EXECUTION = new Set(["auto", "confirm", "model"]);
+
+export function classify(routine) {
+  if (EXECUTION.has(routine?.execution)) return routine.execution;
+  const prompts = routine?.prompts || [];
+  if (!prompts.length) return "confirm";
+  return prompts.every(p => p?.type === "check") ? "auto" : "confirm";
+}
+
+export { renderBlocks } from "./routines-render.mjs";
+
 // snoozeUntil é EXCLUSIVO: no próprio dia a rotina já volta a valer.
 function snoozed(routine, today) {
   return routine.snoozeUntil != null && !lte(routine.snoozeUntil, today);
