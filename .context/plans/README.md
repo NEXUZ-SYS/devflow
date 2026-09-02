@@ -31,7 +31,8 @@ This directory contains plans for coordinating work across documentation and pla
 26. [Standards Default Enforcement](./standards-default-enforcement.md)
 27. [Suggest Bump Postmerge Base](./suggest-bump-postmerge-base.md)
 28. [Verify Signal Pipeline](./verify-signal-pipeline.md)
-29. [Workflow Resume Session](./workflow-resume-session.md)
+29. [Version Scoped Stacks Standards](./version-scoped-stacks-standards.md)
+30. [Workflow Resume Session](./workflow-resume-session.md)
 
 ## How To Create Or Update Plans
 - Run "dotcontext plan <name>" to scaffold a new plan template.

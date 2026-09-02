@@ -154,7 +154,9 @@ phases:
           - "PR aberto; signpost de release emitido, nunca auto-disparado"
 generated: "2026-09-02"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
+lastUpdated: "2026-09-02T21:19:45.377Z"
 ---
 
 # Escopo de versão para stacks e standards de perfil
@@ -208,3 +210,7 @@ scaffoldVersion: "2.0.0"
 - Saída dos quatro runners com exit 0, registrada no ledger do contrato `verify:`.
 - `grep -r "odooTargetSeries\|MIN_SERIES" assets/standards/profiles/` vazio.
 - Manifesto do fixture Odoo 17 contendo exatamente `odoo-17` após `reconcile --yes`.
+
+## Execution History
+
+> Last updated: 2026-09-02T21:19:45.377Z | Progress: 0%
