@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -88,23 +88,25 @@ export class MyService {
     assert.equal(r.out, "");
   });
 
-  // ---- Gate de série-alvo (OWL é 16+) -------------------------------------
-  function lintInModule(manifestVersion, relpath, content) {
-    const root = mkdtempSync(join(tmpdir(), "odoo-mod-"));
-    writeFileSync(join(root, "__manifest__.py"), `{'name': 'M', 'version': '${manifestVersion}'}`);
-    const parts = relpath.split("/");
-    if (parts.length > 1) mkdirSync(join(root, ...parts.slice(0, -1)), { recursive: true });
-    writeFileSync(join(root, relpath), content);
-    try { execFileSync("node", [LINTER, join(root, relpath)], { encoding: "utf-8" }); return { code: 0 }; }
-    catch (e) { return { code: e.status }; }
-    finally { rmSync(root, { recursive: true, force: true }); }
-  }
-
-  it("NÃO flaga constructor em componente num módulo série 14 (< 16)", () => {
-    assert.equal(lintInModule("14.0.1.0.0", "static/src/c.js", `class W extends Component { constructor() {} }`).code, 0);
+  // ---- Faixa de serie: MIGROU do linter para o frontmatter -----------------
+  //
+  // Estes testes cobriam `odooTargetSeries` + MIN_SERIES DENTRO do linter.
+  // Quatro linters mantinham a propria copia dessa funcao e uma delas ja havia
+  // divergido. A resolucao saiu do linter: agora e `appliesFrom` no frontmatter,
+  // avaliada uma unica vez por findApplicableStandards contra a serie do
+  // projeto. O invariante ("modulo de serie antiga nao e flagado") continua
+  // coberto — em tests/integration/test-profile-standards-wiring.mjs.
+  it("declara appliesFrom: 16 no frontmatter — o gate nao vive mais aqui", () => {
+    const fm = readFileSync(
+      resolve(import.meta.dirname, "../../assets/standards/profiles/odoo/std-odoo-owl-patterns.md"),
+      "utf-8",
+    );
+    assert.match(fm, /^appliesFrom: "16"$/m, "piso da serie deve estar no frontmatter");
   });
 
-  it("flaga constructor em componente num módulo série 18 (>= 16)", () => {
-    assert.equal(lintInModule("18.0.1.0.0", "static/src/c.js", `class W extends Component { constructor() {} }`).code, 1);
+  it("o linter NAO resolve serie por conta propria", () => {
+    const src = readFileSync(LINTER, "utf-8");
+    assert.doesNotMatch(src, /function\s+odooTargetSeries/);
+    assert.doesNotMatch(src, /const\s+MIN_SERIES/);
   });
 });

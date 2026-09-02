@@ -3,6 +3,8 @@ id: std-odoo-js-modules
 description: Módulos JS no padrão ES (Odoo 16+) — sem odoo.define() autogerado nem require() AMD legado
 version: 1.1.0
 source: devflow-default-odoo
+appliesFrom: "16"
+appliesUntil: null
 applyTo: ["**/static/src/**/*.js"]
 activation: on-demand
 relatedAdrs: []

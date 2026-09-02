@@ -1,8 +1,10 @@
 ---
 id: std-odoo-owl-patterns
-description: Componentes OWL idiomáticos (Odoo 18) — setup() em vez de constructor() e extensão de core por patch(), não herança
+description: Componentes OWL 2 idiomáticos (Odoo 16+) — setup() em vez de constructor() e extensão de core por patch(), não herança
 version: 1.1.0
 source: devflow-default-odoo
+appliesFrom: "16"
+appliesUntil: null
 applyTo: ["**/static/src/**/*.js"]
 activation: on-demand
 relatedAdrs: []
