@@ -11,7 +11,8 @@ std-odoo-orm-discipline
 std-odoo-computed-fields
 std-odoo-i18n
 std-odoo-code-hygiene
-std-odoo-version-api-hygiene
+std-odoo-api-removed-17
+std-odoo-api-removed-18
 
 # Tier 1 — frontend + testes (lint forte)
 std-odoo-js-modules

@@ -59,7 +59,8 @@ standards:
   - std-odoo-computed-fields
   - std-odoo-i18n
   - std-odoo-code-hygiene
-  - std-odoo-version-api-hygiene
+  - std-odoo-api-removed-17
+  - std-odoo-api-removed-18
   - std-odoo-js-modules
   - std-odoo-qweb-escaping
   - std-odoo-test-discipline
