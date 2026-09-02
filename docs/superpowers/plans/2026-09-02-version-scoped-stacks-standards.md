@@ -271,12 +271,24 @@ test("runProbe glob+majority agrega manifestos", () => {
   assert.equal(r.value, "12");
 });
 
-test("aggregateMajority resolve pelo mais frequente", () => {
+test("aggregateMajority resolve pelo mais frequente E reporta a contagem do vencedor", () => {
   // caso real medido: 48 de 54 manifestos em 17
   const vals = [...Array(48).fill("17"), ...Array(6).fill("1")];
   const r = aggregateMajority(vals);
   assert.equal(r.value, "17");
   assert.equal(r.tie, false);
+  assert.equal(r.count, 48, "quantos concordaram com o VENCEDOR");
+  assert.equal(r.total, 54, "quantos produziram algum valor");
+});
+
+test("a evidência da maioria mostra a divergência, não unanimidade falsa", () => {
+  const r = runProbe(ODOO12, {
+    glob: "addons/*/__manifest__.py",
+    pattern: "['\\"]version['\\"]\\s*:\\s*['\\"](\\d+)\\.",
+    aggregate: "majority",
+  });
+  assert.doesNotMatch(r.source, /(\d+)\/\1\b/,
+    "source não pode reportar N/N quando houve divergência — a opacidade foi o que escondeu o bug original");
 });
 
 test("aggregateMajority sinaliza empate em vez de desempatar", () => {
@@ -340,6 +352,11 @@ export const CONFIDENCE = {
 
 const MAX_DEPTH = 6;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "__pycache__"]);
+// S1 (fase R): o pattern vem do bundle do plugin (TCB — loadProfiles só lê de
+// pluginRoot/profiles), mas roda contra CONTEÚDO DE ARQUIVO DO PROJETO, que é
+// atacável por um repo hostil. Backtracking em `[\s\S]*?` sobre um .gitmodules
+// forjado é DoS local. Truncar o input remove a alavanca sem tocar nos patterns.
+const MAX_PROBE_INPUT = 256 * 1024;
 
 // Compila o pattern do YAML. Padrão inválido é DADO ruim, não crash: devolve null.
 function compile(pattern) {
@@ -347,7 +364,7 @@ function compile(pattern) {
 }
 
 function firstGroup(content, re) {
-  const m = content.match(re);
+  const m = content.slice(0, MAX_PROBE_INPUT).match(re);
   return m && m[1] ? String(m[1]) : null;
 }
 
@@ -375,14 +392,19 @@ function globToRe(glob) {
   return new RegExp(`^${body}$`);
 }
 
+// Devolve TAMBÉM count/total: a evidência precisa mostrar 48/54, não 54/54.
+// Reportar "N de N" onde houve divergência recria a opacidade que escondeu o
+// bug original (spec §2: "evidência é lista, não booleano").
 export function aggregateMajority(values) {
   const clean = values.filter(Boolean);
-  if (clean.length === 0) return { value: null, tie: false };
+  if (clean.length === 0) return { value: null, tie: false, count: 0, total: 0 };
   const counts = new Map();
   for (const v of clean) counts.set(v, (counts.get(v) || 0) + 1);
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) return { value: null, tie: true };
-  return { value: sorted[0][0], tie: false };
+  if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) {
+    return { value: null, tie: true, count: sorted[0][1], total: clean.length };
+  }
+  return { value: sorted[0][0], tie: false, count: sorted[0][1], total: clean.length };
 }
 
 export function runProbe(projectRoot, probe) {
@@ -410,10 +432,13 @@ export function runProbe(projectRoot, probe) {
     }
     const agg = probe.aggregate === "majority"
       ? aggregateMajority(values)
-      : { value: values.find(Boolean) || null, tie: false };
+      : { value: values.find(Boolean) || null, tie: false, count: 0, total: 0 };
     return {
       value: agg.tie ? null : agg.value,
-      source: `${probe.glob} (${values.filter(Boolean).length}/${matched.length})`,
+      // VENCEDOR/total — nunca total/total (achado A2 da fase R).
+      source: probe.aggregate === "majority"
+        ? `${probe.glob} (${agg.count}/${agg.total})`
+        : `${probe.glob} (${matched.length} arquivos)`,
       tie: agg.tie,
     };
   }
@@ -621,6 +646,13 @@ test("frameworkContributions: fixture Odoo 12 resolve 12", () => {
   assert.equal((c.stackVersions || []).find((s) => s.lib === "odoo").version, "12");
 });
 
+test("loadProfiles PROPAGA axis e versionDetect — allowlist não pode engoli-los", () => {
+  const odoo = loadProfiles(process.cwd()).find((p) => p.framework === "odoo");
+  assert.equal(odoo.axis, "series", "axis descartado pela allowlist de loadProfiles");
+  assert.ok(Array.isArray(odoo.versionDetect) && odoo.versionDetect.length === 3,
+    "versionDetect descartado pela allowlist de loadProfiles");
+});
+
 test("retrocompat: perfil sem versionDetect não quebra e não entra em stackVersions", () => {
   // nxz.yaml não declara versionDetect — o contrato antigo é preservado
   const c = frameworkContributions("tests/fixtures/version-scoped/odoo17", process.cwd());
@@ -662,7 +694,19 @@ Em `scripts/lib/detect-framework.mjs`, adicione ao topo:
 import { resolveStackVersions } from "./framework-version.mjs";
 ```
 
-`loadProfiles` já devolve o objeto do YAML; garanta que `axis` e `versionDetect` são propagados no objeto do perfil (se o parser filtra chaves conhecidas, acrescente as duas à lista).
+**Obrigatório (achado A3 da fase R):** `loadProfiles` (`detect-framework.mjs:38-67`)
+monta o objeto do perfil com uma **allowlist** de chaves — `framework`,
+`displayName`, `detect`, `skills`, `skillBindings`, `standards`, `stacks`,
+`dispatchKeywords`. Chave fora dela é **descartada em silêncio**. Acrescente as duas:
+
+```js
+      axis: typeof data.axis === "string" ? data.axis : null,
+      versionDetect: data.versionDetect ?? null,
+```
+
+Sem isso o YAML da Step 3 é lido, aceito e jogado fora sem erro nenhum — a mesma
+classe de armadilha do frontmatter mal-tipado que já custou um diagnóstico inteiro
+neste repo.
 
 Em `frameworkContributions`, antes do `return`:
 
@@ -1251,14 +1295,17 @@ git commit -m "refactor(odoo): remove 4 cópias de odooTargetSeries; faixa vive 
 ## Task 10: `reconcileManifest` na lib de manifest
 
 **Files:**
-- Modify: `scripts/lib/manifest-stacks.mjs` (exportar `writeManifest`; adicionar `reconcileManifest`)
+- Modify: `scripts/lib/manifest-stacks.mjs` (adicionar `reconcileManifest`)
 - Test: `tests/lib/test-manifest-reconcile.mjs` (criar)
 
 **Interfaces:**
 - Consumes: `stackVersions` da Task 4.
 - Produces:
-  - `writeManifest(projectRoot, manifest)` — **passa a ser exportada** (hoje é `function` privada na linha 237).
   - `reconcileManifest(projectRoot, { entries, versions, axis }) -> { added, pruned, repinned, kept }` — **calcula e devolve o plano sem escrever** quando `dryRun: true`.
+
+`writeManifest` **permanece privada** (achado A1 da fase R): tem um único caller
+interno hoje e `reconcileManifest` vive no mesmo módulo, então chama a função
+direto. Exportá-la ampliaria a superfície pública da lib sem necessidade.
 
 Poda é destrutiva: a lib devolve o plano; quem escreve é o CLI da Task 11, depois da confirmação.
 
@@ -1321,7 +1368,7 @@ Expected: FAIL — `reconcileManifest is not a function`.
 
 - [ ] **Step 3: Implementar**
 
-Troque `function writeManifest(` por `export function writeManifest(` na linha 237 e acrescente:
+`writeManifest` fica como está — privada. Acrescente ao mesmo módulo:
 
 ```js
 /**
