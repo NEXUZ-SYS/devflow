@@ -19,8 +19,10 @@ import {
   validateManifest,
   findMissingRefs,
   addFrameworksToManifest,
+  reconcileManifest,
 } from "./lib/manifest-stacks.mjs";
 import { contextPaths } from "./lib/context-paths.mjs";
+import { frameworkContributions } from "./lib/detect-framework.mjs";
 import { isWithinDir } from "./lib/path-guard.mjs";
 
 const EJECT_CONCERNS = [
@@ -247,6 +249,7 @@ export function parseArgs(argv) {
     else if (arg === "--auto-fallback") opts.autoFallback = true;
     else if (arg === "--strict") opts.strict = true;
     else if (arg === "--force") opts.force = true;
+    else if (arg === "--yes") opts.yes = true;
     else if (arg.startsWith("--source=")) opts.source = arg.slice(9);
     else if (arg.startsWith("--from=")) opts.from = arg.slice(7);
     else if (arg.startsWith("--project=")) opts.project = arg.slice(10);
@@ -313,13 +316,53 @@ export async function cmdEject(rawLib, projectRoot, opts = {}) {
   return 0;
 }
 
+// reconcile [--yes] — faz o manifesto CASAR com a versao real do projeto.
+//
+// Sem --yes e um DRY-RUN quando ha poda: imprime o plano e nao escreve. Poda e
+// destrutiva; a decisao 3 da spec rejeitou mutacao silenciosa, nao o lugar.
+function cmdReconcile(opts, projectRoot) {
+  const pluginRoot = opts.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT;
+  const c = frameworkContributions(projectRoot, pluginRoot);
+  const versions = new Map((c.stackVersions || []).map((s) => [s.lib, s.version]));
+  const seriesEntries = (c.stacks || []).filter((s) => s.family);
+
+  // Evidencia primeiro: opacidade aqui foi o que tornou o bug original invisivel.
+  for (const sv of c.stackVersions || []) {
+    console.log(`${sv.lib}: ${sv.version ?? "<nao resolvida>"} (${sv.confidence})`);
+    for (const e of sv.evidence || []) {
+      console.log(`  - ${e.probe}: ${e.value ?? "—"} [${e.source}]`);
+    }
+  }
+  if ((c.stackVersions || []).length === 0) {
+    console.log("nenhum perfil com versionDetect casou — nada a reconciliar.");
+    return 0;
+  }
+
+  const plan = reconcileManifest(projectRoot, {
+    axis: "series", entries: seriesEntries, versions, dryRun: true,
+  });
+  console.log(`manter: ${plan.kept.join(", ") || "—"}`);
+  console.log(`podar:  ${plan.pruned.join(", ") || "—"}`);
+  console.log(`re-pin: ${plan.repinned.map((r) => `${r.lib} ${r.from}->${r.to}`).join(", ") || "—"}`);
+
+  if (plan.pruned.length > 0 && !opts.yes) {
+    console.log("\nPoda e destrutiva. Reveja o plano acima e confirme com --yes.");
+    return 0;
+  }
+  reconcileManifest(projectRoot, {
+    axis: "series", entries: seriesEntries, versions, dryRun: false,
+  });
+  console.log("manifesto reconciliado.");
+  return 0;
+}
+
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const opts = parseArgs(rest);
   const projectRoot = opts.project ? resolve(opts.project) : process.cwd();
 
   if (!sub) {
-    console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|eject> [args]");
+    console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|eject|reconcile> [args]");
     process.exit(2);
   }
 
@@ -356,12 +399,17 @@ async function main() {
       const code = await cmdEject(lib, projectRoot, { force: opts.force });
       process.exit(code);
     }
+    case "reconcile": {
+      const code = cmdReconcile(opts, projectRoot);
+      process.exit(code);
+    }
     default:
       console.error(`Unknown subcommand: ${sub}`);
-      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|discover-source|eject> [args]");
+      console.error("Usage: devflow stacks <scrape-batch|scrape|validate|audit|discover-source|eject|reconcile> [args]");
       console.error("  audit <lib>@<version>          Deep audit of refs/<lib>@<version>.md (5 checks)");
       console.error("  discover-source <lib>          List candidate URLs to scrape (curated + heuristic)");
       console.error("  eject <lib> [--force]          Copia o stack default <lib>.md → .context/engineering/stacks/");
+      console.error("  reconcile [--yes]              Faz o manifesto casar com a versão real do projeto (poda só com --yes)");
       process.exit(2);
   }
 }
