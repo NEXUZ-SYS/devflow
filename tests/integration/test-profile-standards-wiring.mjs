@@ -13,11 +13,12 @@
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadProfiles, frameworkContributions } from "../../scripts/lib/detect-framework.mjs";
-import { parseYaml } from "../../scripts/lib/frontmatter.mjs";
+import { parseYaml, parseFrontmatter } from "../../scripts/lib/frontmatter.mjs";
+import { findApplicableStandards } from "../../scripts/lib/standards-loader.mjs";
 
 const REPO = resolve(import.meta.dirname, "../..");
 
@@ -115,5 +116,78 @@ describe("profile standards/stacks wiring", () => {
           `stack ${s.lib} discoveryHint not an official odoo.com docs URL: ${url}`);
       }
     }
+  });
+});
+
+// ─── Escopo de versão (fase E, Task 9) ──────────────────────────────────────
+
+const ODOO_DIR = "assets/standards/profiles/odoo";
+const ODOO_MACHINE = join(ODOO_DIR, "machine");
+
+// Le os standards REAIS do perfil e os molda como o loader faz. Testa dado de
+// producao contra o predicado de producao — nao um fixture paralelo que poderia
+// divergir em silencio.
+function profileStandards() {
+  return readdirSync(ODOO_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => {
+      const fm = parseFrontmatter(readFileSync(join(ODOO_DIR, f), "utf-8")).data || {};
+      return {
+        id: fm.id,
+        applyTo: Array.isArray(fm.applyTo) ? fm.applyTo : [],
+        appliesFrom: fm.appliesFrom != null ? String(fm.appliesFrom) : null,
+        appliesUntil: fm.appliesUntil != null ? String(fm.appliesUntil) : null,
+        framework: "odoo",
+      };
+    })
+    .filter((s) => s.id);
+}
+
+describe("version scope: faixa substitui os gates internos", () => {
+  it("nenhum linter do perfil odoo resolve versão por conta própria", () => {
+    for (const f of readdirSync(ODOO_MACHINE).filter((x) => x.endsWith(".js"))) {
+      const src = readFileSync(join(ODOO_MACHINE, f), "utf-8");
+      assert.doesNotMatch(src, /function\s+odooTargetSeries/, `${f} ainda define resolução de série`);
+      assert.doesNotMatch(src, /const\s+MIN_SERIES/, `${f} ainda tem gate de série próprio`);
+      assert.doesNotMatch(src, /odooTargetSeries\s*\(/, `${f} ainda chama resolução de série`);
+    }
+  });
+
+  it("as faixas declaradas batem com os pisos que os MIN_SERIES codificavam", () => {
+    const byId = Object.fromEntries(profileStandards().map((s) => [s.id, s]));
+    assert.equal(byId["std-odoo-js-modules"].appliesFrom, "16");
+    assert.equal(byId["std-odoo-owl-patterns"].appliesFrom, "16");
+    assert.equal(byId["std-odoo-qweb-escaping"].appliesFrom, "15");
+    assert.equal(byId["std-odoo-api-removed-17"].appliesFrom, "17");
+    assert.equal(byId["std-odoo-api-removed-18"].appliesFrom, "18");
+  });
+
+  it("REGRESSÃO nexuz/odoo_17: nenhuma regra exclusiva do 18 se aplica a um projeto 17", () => {
+    const ids = findApplicableStandards(
+      "addons/nxz_cadastro/views/cadastro_views.xml",
+      profileStandards(),
+      { versions: new Map([["odoo", "17"]]) },
+    ).map((s) => s.id);
+    assert.ok(!ids.includes("std-odoo-api-removed-18"),
+      "a regra de <tree>/attrs é do 18 — 47 falso-positivos vinham daqui");
+  });
+
+  it("REGRESSÃO Odoo 12: nem as regras de 17 nem as de 18 se aplicam", () => {
+    const ids = findApplicableStandards(
+      "addons/legacy_cadastro/models/cadastro.py",
+      profileStandards(),
+      { versions: new Map([["odoo", "12"]]) },
+    ).map((s) => s.id);
+    assert.ok(!ids.includes("std-odoo-api-removed-17"));
+    assert.ok(!ids.includes("std-odoo-api-removed-18"));
+  });
+
+  it("no Odoo 18 a regra do 18 VOLTA a se aplicar — a faixa não é um mute permanente", () => {
+    const ids = findApplicableStandards(
+      "addons/nxz_cadastro/views/cadastro_views.xml",
+      profileStandards(),
+      { versions: new Map([["odoo", "18"]]) },
+    ).map((s) => s.id);
+    assert.ok(ids.includes("std-odoo-api-removed-18"));
   });
 });

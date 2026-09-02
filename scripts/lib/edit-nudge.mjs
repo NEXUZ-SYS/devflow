@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
+import { readFrameworkVersionsFromPath } from "./devflow-config.mjs";
 import { deriveRefsForStandards } from "./standard-refs.mjs";
 
 const CACHE_REL = ".context/cache/session-injected.json";
@@ -27,7 +28,11 @@ export function buildNudge({ tool, path, projectRoot }) {
   if (!path || typeof path !== "string") return null;
 
   const standards = loadStandards(projectRoot);
-  const applicable = findApplicableStandards(path, standards);
+  // Mesmo escopo de versao do run-linter: o nudge nao pode sugerir standard
+  // que o linter nao vai enforcar. Sem onSkip — o nudge e informativo.
+  const applicable = findApplicableStandards(path, standards, {
+    versions: readFrameworkVersionsFromPath(join(projectRoot, ".context", ".devflow.yaml")),
+  });
   if (applicable.length === 0) return null;
 
   const cache = loadCache(projectRoot);

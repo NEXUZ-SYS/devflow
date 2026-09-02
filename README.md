@@ -133,6 +133,7 @@ A partir da v1.0, o `.context/` ganha 4 dimensões novas que transformam o DevFl
 ```bash
 devflow stacks scrape-batch --from-package    # bootstrap stack docs from package.json
 devflow stacks validate                        # check artisanalRef integrity + SI-6 fence
+devflow stacks reconcile                       # casa o manifesto com a série real (poda só com --yes)
 devflow standards new error-handling           # scaffold std-<id>.md + linter template
 devflow standards verify --strict              # fail CI on weak-standards
 ```

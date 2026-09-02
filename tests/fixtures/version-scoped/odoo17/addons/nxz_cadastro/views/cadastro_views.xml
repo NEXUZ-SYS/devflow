@@ -1,0 +1,9 @@
+<odoo>
+    <record id="view_cadastro_tree" model="ir.ui.view">
+        <field name="arch" type="xml">
+            <tree string="Cadastros">
+                <field name="name"/>
+            </tree>
+        </field>
+    </record>
+</odoo>

@@ -3,6 +3,8 @@ id: std-odoo-qweb-escaping
 description: Escaping anti-XSS em templates QWeb — sem t-raw nem t-esc; saída sempre via t-out, com HTML confiável só por markupsafe.Markup
 version: 1.1.0
 source: devflow-default-odoo
+appliesFrom: "15"
+appliesUntil: null
 applyTo: ["**/*.xml", "**/static/src/**/*.xml"]
 activation: on-demand
 relatedAdrs: []

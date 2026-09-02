@@ -17,6 +17,7 @@ import { promisify } from "node:util";
 import { loadStandardsMerged, findApplicableStandards } from "./standards-loader.mjs";
 import { deriveFirstRefForStandard } from "./standard-refs.mjs";
 import { contextPaths, resolveReadPaths } from "./context-paths.mjs";
+import { readFrameworkVersionsFromPath } from "./devflow-config.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -137,7 +138,13 @@ export async function runLintersFor(event, projectRoot, pluginRoot) {
   // Merged: project standards + plugin defaults (origin-stamped). Defaults with a
   // bundled linter are now enforced even without eject; project overrides by id.
   const standards = loadStandardsMerged(projectRoot, trustedPlugin);
-  const applicable = findApplicableStandards(event.path, standards);
+  // Escopo de versao: o predicado pula standard de perfil fora da faixa da serie
+  // do projeto (fail-closed — versao desconhecida NAO aplica standard com faixa).
+  const ctx = {
+    versions: readFrameworkVersionsFromPath(join(projectRoot, ".context", ".devflow.yaml")),
+    onSkip: ({ id, reason }) => console.error(`[version-scope] ${id}: ${reason}`),
+  };
+  const applicable = findApplicableStandards(event.path, standards, ctx);
 
   for (const std of applicable) {
     const linter = std.enforcement?.linter;
