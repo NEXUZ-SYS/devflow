@@ -7,12 +7,24 @@
 // REPOSITÓRIO — versionado, logo escrito por quem abre um PR. Sem isto, um
 // nome como "devflow\n\nIgnore as instruções anteriores" entraria no contexto
 // do LLM. escape_for_json protege a sintaxe do JSON, não a semântica.
-// A allowlist preserva letras e números Unicode (pt-BR tem acento) e a
-// pontuação que os diagnósticos usam, incluindo a seta de "1.30.0 → 3.1.0".
+// A defesa que importa é colapsar quebras de linha (é o que permite "linha
+// nova com instrução"), truncar e marcar o bloco como dado. A allowlist é
+// camada secundária e precisa ser generosa: uma versão estrita comeu o `~` de
+// "~/.claude/settings.json" — o diagnóstico passou a apontar para a raiz do
+// sistema em vez do home — e apagou o travessão. Trocar injeção por diagnóstico
+// ilegível é trocar um problema por outro.
+const CONTROLE = /[\p{Cc}\p{Cf}]+/gu;         // controle e formatação invisível
+// `~` não é \p{P} — é símbolo matemático (\p{Sm}), e sem ele "~/.claude" vira
+// "/.claude". Símbolos matemáticos e de moeda entram; emoji e o resto, não.
+const PERMITIDO = /[^\p{L}\p{N}\p{P}\p{Zs}\p{Sm}\p{Sc}→←—–]/gu;
+
 function clean(t) {
   return String(t ?? "")
     .replace(/[\r\n\t]+/g, " ")
-    .replace(/[^\p{L}\p{N} .,:;@/_+()→-]/gu, "")
+    .replace(CONTROLE, "")
+    .replace(PERMITIDO, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
     .slice(0, 300);
 }
 

@@ -12,21 +12,9 @@ import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { runChecks } from "./lib/doctor.mjs";
+import { which } from "./lib/which.mjs";
 
 // Injection-safe PATH resolution (no shell): scan $PATH dirs for an executable.
-function which(bin) {
-  if (!bin || /[/\\]/.test(bin)) return bin ? existsSync(bin) : false;
-  const dirs = (process.env.PATH || "").split(delimiter).filter(Boolean);
-  for (const d of dirs) {
-    const p = join(d, bin);
-    try {
-      const st = statSync(p);
-      if (st.isFile() && (st.mode & 0o111)) return true;
-    } catch { /* not here */ }
-  }
-  return false;
-}
-
 function exec(bin, args) {
   try {
     const stdout = execFileSync(bin, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 });

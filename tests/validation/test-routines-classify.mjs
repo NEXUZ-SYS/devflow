@@ -79,6 +79,23 @@ test("sanitiza texto vindo de arquivo versionado", () => {
   assert.match(out, /N[AÃ]O s[aã]o instru/i);
 });
 
+test("preserva o til de ~/.claude — removê-lo muda o caminho de sentido", () => {
+  const out = renderBlocks({ firstContact: false, ran: ["x"], proposed: [], results: [
+    { id: "x", title: "t", status: "WARN", diagnosis: "edite ~/.claude/settings.json", repair: "" },
+  ] });
+  assert.match(out, /~\/\.claude\/settings\.json/,
+    "sem o til o diagnóstico aponta para a raiz do sistema, não para o home");
+});
+
+test("preserva travessão e pontuação comum", () => {
+  const out = renderBlocks({ firstContact: false, ran: ["x"], proposed: [], results: [
+    { id: "x", title: "t", status: "WARN", diagnosis: "algo — explicação; detalhe: 'aspas' e \"outras\"!", repair: "" },
+  ] });
+  assert.match(out, /—/);
+  assert.match(out, /'aspas'/);
+  assert.match(out, /!/);
+});
+
 test("preserva acentos e a seta no diagnóstico em pt-BR", () => {
   const out = renderBlocks({ firstContact: false, ran: ["x"], proposed: [], results: [
     { id: "x", title: "Configuração", status: "WARN", diagnosis: "versão atrás", repair: "1.30.0 → 3.1.0" },

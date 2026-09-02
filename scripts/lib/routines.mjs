@@ -123,6 +123,18 @@ function lte(a, b) {
 }
 
 // ── scheduling ──────────────────────────────────────────────────────
+// Um passo `check` nomeia um GRUPO, não a lista de ids: acrescentar um check
+// no futuro não deve exigir editar o routines.json de cada projeto.
+export const CHECK_GROUPS = {
+  "plugin-env": ["plugin-declared-installed", "plugin-scope", "plugin-marketplace-known", "plugin-up-to-date"],
+  "mempalace-env": ["mempalace-env"],
+};
+
+export function resolveCheckIds(value) {
+  if (CHECK_GROUPS[value]) return [...CHECK_GROUPS[value]];
+  return Object.values(CHECK_GROUPS).some(ids => ids.includes(value)) ? [value] : [];
+}
+
 // Classes de execução. Campo único em vez de dois booleanos: autoRun +
 // requiresConfirmation admitiriam o estado contraditório "roda sozinha porém
 // exige confirmação".

@@ -3,8 +3,10 @@
 // State-only: lists/snoozes/enables/records runs. It does NOT execute prompts
 // (running commands/skills/agents is the LLM skill's job) — this CLI just
 // manages the schedule file. `--today YYYY-MM-DD` overrides the date (tests).
+import { homedir } from "node:os";
 import {
-  loadRoutines, dueRoutines, shouldSuggest, snooze, setEnabled, markRun, markSuggested,
+  loadRoutines, dueRoutines, shouldSuggest, shouldRun, classify, resolveCheckIds,
+  snooze, setEnabled, markRun, markSuggested, isFirstContact,
 } from "./lib/routines.mjs";
 
 function arg(args, name) {
@@ -16,7 +18,7 @@ function todayOf(args) {
   return arg(args, "--today") || process.env.DEVFLOW_TODAY || new Date().toISOString().slice(0, 10);
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   const cwd = process.cwd();
@@ -71,7 +73,50 @@ function main() {
     process.exit(markSuggested(cwd, id, today) ? 0 : 1);
   }
 
-  console.error("uso: routines.mjs <due|list|snooze|enable|disable|mark-run|mark-suggested> [args] [--json] [--today YYYY-MM-DD]");
+  if (cmd === "run-checks") {
+    // shouldRun, NÃO shouldSuggest: a guarda de 1x/dia vale para surfacing.
+    // O bloco de routines roda antes no mesmo hook e chama mark-suggested; com
+    // shouldSuggest este executor receberia lista vazia e nunca rodaria.
+    const { routines } = loadRoutines(cwd);
+    const firstContact = isFirstContact(cwd);
+    const eligiveis = routines.filter(r => shouldRun(r, today));
+
+    const ids = [];
+    const ran = [];
+    for (const r of eligiveis.filter(r => classify(r) === "auto")) {
+      const stepIds = (r.prompts || [])
+        .filter(p => p?.type === "check")
+        .flatMap(p => resolveCheckIds(p.value));
+      if (stepIds.length) { ran.push(r.id); ids.push(...stepIds); }
+    }
+
+    // Rotinas `confirm` são PROPOSTAS, nunca executadas — e não recebem
+    // markRun: nada rodou, e marcar adiaria a próxima proposta.
+    const proposed = eligiveis
+      .filter(r => classify(r) === "confirm")
+      .map(r => ({ id: r.id, commands: (r.prompts || []).map(p => p?.value).filter(Boolean) }));
+
+    let results = [];
+    if (ids.length) {
+      const { runChecks } = await import("./lib/doctor.mjs");
+      const { which } = await import("./lib/which.mjs");
+      const ctx = {
+        cwd, home: homedir(), today, which,
+        // Nenhum check deste conjunto faz exec — rodar processo violaria o
+        // orçamento do checkup. O stub existe só para satisfazer a forma do
+        // ctx compartilhada com os nove checks originais; `which` NÃO pode ser
+        // stub, porque mempalace-env o usa e um false constante daria FAIL
+        // falso numa máquina com o binário instalado.
+        exec: () => ({ status: 1, stdout: "", stderr: "" }),
+      };
+      results = await runChecks(ctx, [...new Set(ids)]);
+    }
+    for (const id of ran) markRun(cwd, id, today);
+    console.log(JSON.stringify({ firstContact, ran, proposed, results }));
+    return process.exit(0);
+  }
+
+  console.error("uso: routines.mjs <due|list|snooze|enable|disable|mark-run|mark-suggested|run-checks> [args] [--json] [--today YYYY-MM-DD]");
   process.exit(2);
 }
 
