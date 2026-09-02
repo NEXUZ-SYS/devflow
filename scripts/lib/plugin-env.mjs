@@ -120,16 +120,24 @@ function cmpParts(a, b) {
 // Maior versão semver entre todas as entradas. Responde à pergunta prática
 // "preciso atualizar?" sem depender de saber qual entrada vence. Null quando
 // nenhuma versão é comparável (há plugin instalado como SHA).
-export function highestInstalled(env, key) {
+// Entrada de maior versão semver. Null quando nenhuma é comparável (há plugin
+// instalado como SHA). Devolve a entrada inteira porque o gitCommitSha dela
+// também importa: reportar o sha de uma entrada arbitrária do array citaria a
+// instalação mais antiga, não a que vale.
+export function highestInstalledEntry(env, key) {
   let best = null;
   let bestParts = null;
   for (const e of env.installs[key] || []) {
     const parts = parseVersion(e.version);
     if (!parts) continue;
     if (!bestParts || cmpParts(parts, bestParts) > 0) {
-      best = e.version;
+      best = e;
       bestParts = parts;
     }
   }
   return best;
+}
+
+export function highestInstalled(env, key) {
+  return highestInstalledEntry(env, key)?.version ?? null;
 }

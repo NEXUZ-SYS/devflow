@@ -19,7 +19,8 @@ import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
-import { readPluginEnv, isInstalled, highestInstalled } from "./plugin-env.mjs";
+import { readPluginEnv, isInstalled, highestInstalled, highestInstalledEntry } from "./plugin-env.mjs";
+import { parseVersion } from "./version-guard.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -444,7 +445,112 @@ const pluginScope = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope];
+const CATALOG_STALE_DAYS = 7;
+
+const pluginMarketplaceKnown = {
+  id: "plugin-marketplace-known",
+  title: "Marketplaces dos plugins declarados estão registrados",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const needed = [...new Set(Object.values(env.declared).map(d => d.marketplace))];
+    if (!needed.length) return { status: "OK", diagnosis: "O projeto não declara plugins.", repair: "" };
+    const missing = needed.filter(m => !env.marketplaces[m]);
+    if (missing.length) {
+      return {
+        status: "FAIL",
+        diagnosis: `Marketplace(s) referenciado(s) pelo projeto e não registrado(s) nesta máquina: ${missing.join(", ")}.`,
+        repair: "Registre com /plugin marketplace add <repo>, ou confirme extraKnownMarketplaces em .claude/settings.json.",
+      };
+    }
+    return { status: "OK", diagnosis: `Os ${needed.length} marketplaces necessários estão registrados.`, repair: "" };
+  },
+};
+
+// Dias inteiros entre duas datas ISO; null quando alguma é inválida.
+function daysBetween(isoA, isoB) {
+  const a = Date.parse(isoA), b = Date.parse(isoB);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.floor((b - a) / 86400000);
+}
+
+const pluginUpToDate = {
+  id: "plugin-up-to-date",
+  title: "Plugins declarados estão atualizados",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const keys = Object.keys(env.declared);
+    if (!keys.length) return { status: "OK", diagnosis: "O projeto não declara plugins.", repair: "" };
+
+    // Compara a MAIOR versão instalada contra a publicada: qual entrada o
+    // Claude Code resolve não é observável daqui, e a pergunta prática
+    // ("preciso rodar /devflow update?") se responde pela mais alta.
+    const behind = [];     // semver: sabemos que está atrás
+    const diverged = [];   // sha: sabemos que difere, NÃO qual é mais novo
+    const uncomparable = [];
+    for (const key of keys) {
+      const { name, marketplace } = env.declared[key];
+      const pub = env.marketplaces[marketplace]?.published?.[name];
+      if (!pub) continue;
+
+      if (pub.kind === "sha") {
+        // O plugin vive num repo de terceiro; o marketplace só ancora um
+        // commit. Sha diferente prova divergência; dizer "desatualizado"
+        // exigiria rede.
+        const shas = (env.installs[key] || []).map(e => e.gitCommitSha).filter(Boolean);
+        if (shas.length && !shas.includes(pub.value)) {
+          // O sha citado é o da MAIOR versão instalada; o array traz também
+          // instalações antigas, e citar a primeira apontaria a errada.
+          const mine = highestInstalledEntry(env, key)?.gitCommitSha || shas[0];
+          diverged.push(`${key} (instalado ${mine.slice(0, 8)}, marketplace ${pub.value.slice(0, 8)})`);
+        }
+        continue;
+      }
+
+      const highest = highestInstalled(env, key);
+      if (!highest) {
+        if (isInstalled(env, key)) uncomparable.push(key);
+        continue;
+      }
+      const pi = parseVersion(highest), pp = parseVersion(pub.value);
+      if (!pi || !pp) { uncomparable.push(key); continue; }
+      for (let i = 0; i < 3; i++) {
+        if (pi[i] !== pp[i]) { if (pi[i] < pp[i]) behind.push(`${key}: ${highest} → ${pub.value}`); break; }
+      }
+    }
+
+    if (behind.length || diverged.length) {
+      const parts = [];
+      if (behind.length) parts.push(`atrás da versão publicada — ${behind.join("; ")}`);
+      if (diverged.length) parts.push(`divergente do commit do marketplace, sem determinar qual é mais novo — ${diverged.join("; ")}`);
+      return { status: "WARN", diagnosis: `Plugin(s) ${parts.join(" · ")}.`, repair: "Rode /devflow update." };
+    }
+
+    // Afirmar "atualizado" com base num catálogo velho é afirmação sem lastro.
+    const stale = [...new Set(Object.values(env.declared).map(d => d.marketplace))]
+      .filter(m => {
+        const d = daysBetween(env.marketplaces[m]?.lastUpdated, `${ctx.today}T00:00:00.000Z`);
+        return d != null && d > CATALOG_STALE_DAYS;
+      });
+    if (stale.length) {
+      return {
+        status: "WARN",
+        diagnosis: `Nenhuma versão atrasada, mas o catálogo local de ${stale.join(", ")} tem mais de ${CATALOG_STALE_DAYS} dias — a comparação pode estar desatualizada.`,
+        repair: "Rode /devflow update para atualizar o catálogo.",
+      };
+    }
+
+    const note = uncomparable.length ? ` (não comparáveis, versão não-semver: ${uncomparable.join(", ")})` : "";
+    return { status: "OK", diagnosis: `Todos os plugins declarados estão na versão publicada${note}.`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
