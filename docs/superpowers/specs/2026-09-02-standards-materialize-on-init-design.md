@@ -2,7 +2,9 @@
 
 **Data:** 2026-09-02
 **Workflow PREVC:** `standards-materialize-on-init` · **Escala:** MEDIUM · **Autonomia:** supervised
-**Status:** aprovado em brainstorming, aguardando revisão da spec
+**Status:** spec aprovada; **execução adiada** — depende de
+`2026-09-02-version-scoped-stacks-standards-design.md`, que entra primeiro
+(ver "Ordem em relação à spec version-scoped")
 
 ---
 
@@ -210,6 +212,47 @@ live-load, eject por projeto sob demanda*. A evolução é honesta e datada:
 A fase P oferece `adr:evolve` sobre `007-default-standards-library`. Os guardrails
 de fetch/anti-RCE do v2.2.0 permanecem válidos e intocados — a evolução altera
 **distribuição para o projeto**, não a origem remota nem o TCB dos `.js`.
+
+## Ordem em relação à spec version-scoped
+
+Esta spec **executa depois** de `2026-09-02-version-scoped-stacks-standards-design.md`.
+A ordem não é preferência de escopo — são pontos de contato que ficam mais baratos
+nesta sequência:
+
+| Ponto de contato | Consequência da ordem |
+|---|---|
+| Fiação de `project-init` + `context-sync` | A §6 da version-scoped move a decisão para `devflow-stacks.mjs reconcile` (*"os skills param de decidir e passam a chamar"*). Esta spec adiciona materialização nos mesmos dois pontos. Invertendo a ordem, a fiação é escrita duas vezes. |
+| `findApplicableStandards` | A §4 dela muda a assinatura (`ctx.versions`). Hoje é `(filePath, standards)` com 3 consumidores + 4 suítes. Esta spec usa o mesmo predicado como critério de seleção — tocá-lo duas vezes refaz os testes de ambas. |
+| `provenance-sync` | Sem conflito, aditivo nos dois sentidos: esta spec acrescenta a 3ª família + `transform`; a version-scoped só consome o que já existe e depende dele para preservar as correções manuais do `nexuz/odoo_17`. |
+| `source: devflow-default` | Compatibilidade **verificada**: os 26 defaults carregam o campo, e a materialização copia o frontmatter íntegro (só a linha `linter:` é reescrita). O discriminador da §3 dela — *"standard default não pode declarar `appliesFrom`"* — continua funcionando depois desta mudança. |
+
+### A assimetria de filtragem é deliberada
+
+A §4 da version-scoped justifica filtrar standards **na hora de aplicar** (copiar
+todos): *"baratos de ter; faixa é dinâmica; ao migrar 17→18 os de 18 passam a valer
+sem re-sync"*. A D3 desta spec faz o oposto para os defaults: filtra **na hora de
+copiar**.
+
+As duas coexistem porque **filtram propriedades diferentes**, e a natureza de cada
+propriedade decide o momento certo:
+
+| Eixo | Propriedade | Como muda | Momento do filtro |
+|---|---|---|---|
+| **Linguagem** (esta spec) | o repositório contém arquivos `.ts`/`.py`/`.css` | raramente, e como evento visível — adotar TypeScript num addon Odoo é uma decisão, não um efeito colateral | na **cópia**; a rotina reconcilia |
+| **Versão de framework** (version-scoped) | o projeto está no Odoo 17 ou 18 | numa migração, que é exatamente o caso que ela otimiza | no **apply**; sem re-sync |
+
+Filtrar linguagem no apply não daria ganho — `applyTo` já faz isso em tempo de lint,
+e o standard inerte existiria só como arquivo. Filtrar versão na cópia custaria um
+re-sync obrigatório em toda migração de série, que é o atrito que ela remove.
+
+O custo consciente desta assimetria é uma janela de defasagem: um projeto que adota
+TypeScript só recebe `std-typescript-strict` na passada seguinte da rotina (≤7 dias),
+e não instantaneamente. Aceito, porque o standard não teria o que lintar até que os
+arquivos `.ts` existam de fato.
+
+Registro explícito, e não premissa implícita, porque foi assim que os quatro
+`odooTargetSeries` divergiram: cada consumidor decidiu por conta e ninguém escreveu
+a regra.
 
 ## Testes
 
