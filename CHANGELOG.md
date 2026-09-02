@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-09-02
+
 ### Added
 - **Checkup de ambiente no início do dia** — na 1ª sessão do dia em cada máquina, o hook `session-start` verifica se os plugins declarados em `.claude/settings.json` estão instalados, no escopo certo e atualizados, e se o MemPalace exigido pelo projeto está utilizável. Reporta só quando há divergência; no primeiro contato após o clone, confirma o ambiente. Medido em ~0,2s.
 - **`doctor`: cinco checks novos** — `plugin-declared-installed`, `plugin-scope`, `plugin-marketplace-known`, `plugin-up-to-date` e `mempalace-env`, disponíveis também via `/devflow:devflow-doctor`. Cobrem todos os plugins declarados pelo projeto, com três estratégias offline para descobrir a versão publicada (campo `version`, `plugin.json` do clone, ou comparação de `gitCommitSha` quando o plugin vive em repo de terceiro).
