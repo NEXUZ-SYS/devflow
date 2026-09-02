@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — Escopo de versão para stacks e standards de perfil (o Odoo 17 parava de receber regra do 18) — 12 tasks
+
+Nem stacks nem standards de perfil conheciam a **versão do framework** que o projeto realmente usa. Medido no `nexuz/odoo_17` — projeto exclusivamente 17 (submódulo `branch = 17.0`, imagem `odoo:17.0`, 48 de 54 manifestos `nxz` e 52 de 52 OCA em 17.x):
+
+- o `/devflow init` semeava as **7 séries** (`odoo-12` … `odoo-18`) no manifesto — não era detecção, era cópia verbatim de uma lista plana;
+- o linter `std-odoo-version-api-hygiene` produzia **47 violações em 589 arquivos, todas falso-positivo**: 46 × `<tree>` (a tag *correta* no 17 — a renomeação para `<list>` é do **18**) e 1 × `attrs=` (removido no **18**). As regras Python do mesmo linter davam **zero**;
+- **quatro** linters de perfil implementavam `odooTargetSeries()` por conta própria, cada um com seu piso, e uma das cópias **já havia divergido**;
+- o `context-sync` reproduzia o defeito: mandava semear "cada stack ausente", aditivo e incondicional — qualquer poda manual era desfeita no sync seguinte.
+
+Sob `grounding: docs-only`, uma série declarada a mais deixa de ser ruído de lint e vira **fonte de resposta errada**: o agente consulta a doc da 12.0 para responder sobre código 17.
+
+- **`scripts/lib/framework-version.mjs` (novo)** — resolve a versão no nível do projeto por sondas **declaradas no YAML do perfil**, não em código: `{file, pattern}` ou `{glob, pattern, aggregate}`, mais a sonda embutida `npmDep` (cobre o ecossistema npm inteiro). Acrescentar um perfil irmão (`rails.yaml`) não exige mudança de código. Confiança em 4 níveis (`high`/`medium`/`ambiguous`/`unknown`) e **evidência em lista** (`[{probe, value, source}]`) — a sonda de maioria reporta **vencedor/total** (`48/54`), nunca `54/54`: reportar unanimidade onde há divergência recriaria a opacidade que escondeu o bug. Empate resolve para `ambiguous`, jamais por desempate arbitrário. Input truncado antes do match (o pattern é do TCB do plugin, mas o arquivo lido vem do projeto).
+- **`appliesFrom` / `appliesUntil`** (ambos inclusivos) no frontmatter de standard de **perfil**, avaliados no chokepoint único `findApplicableStandards(filePath, standards, ctx)`. `ctx` é o **3º parâmetro opcional**: sem ele o comportamento é idêntico ao anterior — **retrocompatibilidade é a propriedade de segurança principal** e tem teste dedicado. Fail-closed: versão desconhecida **pula** o standard com faixa e **registra** via `onSkip`. Comparação numérica, não lexicográfica (`"9" < "10"` seria falso).
+- **Novo check S8 no `standard-audit`** — standard **default** não pertence a framework nenhum, então não há série contra a qual comparar: declarar faixa nele é erro de autoria e é reprovado. Os ~26 defaults seguem intocados.
+- **`std-odoo-version-api-hygiene` foi dividido** em `std-odoo-api-removed-17` (Python, `appliesFrom: "17"`) e `std-odoo-api-removed-18` (XML, `appliesFrom: "18"`) — um standard com duas faixas **é** o defeito.
+- **As 4 cópias de `odooTargetSeries`/`MIN_SERIES` foram removidas.** A faixa vive no frontmatter e é avaliada **uma vez**. Rótulo do `std-odoo-owl-patterns` corrigido de "Odoo 18" para "OWL 2 — Odoo 16+".
+- **`reconcileManifest` + `devflow stacks reconcile` (novos)** — fazem o manifesto **casar** com o projeto: adicionam o que falta, **podam** o que está fora e re-pinam o eixo composição. **Poda é capacidade nova** — até aqui só existia `add`, aditivo, e é por isso que o sync não conseguia corrigir nada. Sem `--yes` o comando **imprime o plano e não escreve**; sem versão resolvida **nada é podado**.
+- **`readFrameworkVersions` no parser único** (ADR-011) — os leitores existentes cobrem 1–2 níveis, `frameworks.<fw>.version` tem 3. Segue a convenção `FromPath` do `readVerifyFromPath`, preservando a invariante de pureza do módulo.
+- **`project-init` e `context-sync` param de decidir e passam a chamar** o `reconcile`; o `/devflow update` **apenas aponta** para o sync — reconciliar manifesto de projeto não é escopo de atualizar plugin, e poda é destrutiva.
+- **Dois eixos** ficam explícitos: `axis: series` (versões alternativas — exatamente uma vale) e composição (libs coexistem, só o pin muda).
+
+Fixtures de regressão executáveis (`odoo17`, `odoo12`, `ts-src`). Suíte: unit 2166 → 2221, integration 147 → 164, e2e 24 — quatro sinais observados no ledger do contrato `verify:`.
+
 ## [3.2.0] — 2026-09-02
 
 ### Added
