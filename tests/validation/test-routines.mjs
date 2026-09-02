@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   loadRoutines, saveRoutines, nextRunFrom, dueRoutines,
-  markRun, snooze, shouldSuggest, markSuggested,
+  markRun, snooze, shouldSuggest, markSuggested, shouldRun,
 } from "../../scripts/lib/routines.mjs";
 
 function repoWith(routines) {
@@ -81,4 +81,34 @@ test("loadRoutines returns empty list when file absent", () => {
   const dir = mkdtempSync(join(tmpdir(), "routines-empty-"));
   const { routines } = loadRoutines(dir);
   assert.deepEqual(routines, []);
+});
+
+// ── shouldRun: elegibilidade de EXECUÇÃO (≠ de sugestão) ──────────────
+test("shouldRun ignora a guarda de 1x/dia do shouldSuggest", () => {
+  const r = { id: "a", enabled: true, nextRun: null, lastSuggested: "2026-09-01" };
+  assert.equal(shouldSuggest(r, "2026-09-01"), false, "suggest: já sugerida hoje");
+  assert.equal(shouldRun(r, "2026-09-01"), true, "run: sugestão não bloqueia execução");
+});
+
+test("shouldRun respeita enabled:false", () => {
+  assert.equal(shouldRun({ id: "a", enabled: false, nextRun: null }, "2026-09-01"), false);
+});
+
+test("shouldRun respeita nextRun no futuro", () => {
+  const r = { id: "a", enabled: true, nextRun: "2026-09-08" };
+  assert.equal(shouldRun(r, "2026-09-01"), false);
+  assert.equal(shouldRun(r, "2026-09-08"), true, "vencimento é inclusivo");
+});
+
+test("shouldRun respeita snoozeUntil", () => {
+  const r = { id: "a", enabled: true, nextRun: null, snoozeUntil: "2026-09-05" };
+  assert.equal(shouldRun(r, "2026-09-01"), false, "sob snooze");
+  assert.equal(shouldRun(r, "2026-09-05"), true, "snoozeUntil é exclusivo");
+});
+
+test("dueRoutines honra snoozeUntil (regressão do defeito latente)", () => {
+  const rs = [{ id: "a", enabled: true, nextRun: null, snoozeUntil: "2026-09-05" }];
+  assert.deepEqual(dueRoutines(rs, "2026-09-01").map(r => r.id), [],
+    "rotina adiada não pode aparecer como vencida");
+  assert.deepEqual(dueRoutines(rs, "2026-09-05").map(r => r.id), ["a"]);
 });

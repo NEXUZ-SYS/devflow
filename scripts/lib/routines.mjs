@@ -71,15 +71,29 @@ function lte(a, b) {
 }
 
 // ── scheduling ──────────────────────────────────────────────────────
+// snoozeUntil é EXCLUSIVO: no próprio dia a rotina já volta a valer.
+function snoozed(routine, today) {
+  return routine.snoozeUntil != null && !lte(routine.snoozeUntil, today);
+}
+
+// Elegibilidade de EXECUÇÃO. Distinta de shouldSuggest: sem a guarda de 1x/dia
+// (lastSuggested), que só faz sentido para surfacing. Um item já mencionado
+// hoje continua precisando rodar — sem esta separação, qualquer executor que
+// rode depois do bloco de sugestão recebe lista vazia.
+export function shouldRun(routine, today) {
+  if (routine.enabled === false) return false;
+  if (snoozed(routine, today)) return false;
+  if (routine.nextRun != null && !lte(routine.nextRun, today)) return false;
+  return true;
+}
+
 export function dueRoutines(routines, today) {
-  return routines.filter(r => r.enabled !== false && (r.nextRun == null || lte(r.nextRun, today)));
+  return routines.filter(r => shouldRun(r, today));
 }
 
 export function shouldSuggest(routine, today) {
-  if (routine.enabled === false) return false;
-  if (routine.snoozeUntil && !lte(routine.snoozeUntil, today)) return false; // still snoozed (until is exclusive)
-  if (routine.nextRun != null && !lte(routine.nextRun, today)) return false; // not due
-  if (routine.lastSuggested === today) return false; // already suggested today (1x/day)
+  if (!shouldRun(routine, today)) return false;
+  if (routine.lastSuggested === today) return false; // 1x/dia — só surfacing
   return true;
 }
 
