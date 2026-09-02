@@ -40,10 +40,14 @@ function saveState(cwd, state) {
   writeFileSync(path, JSON.stringify(state, null, 2) + "\n");
 }
 
-// Ausência do arquivo de estado é o sinal de clone novo: .context/runtime/ é
-// gitignored, logo não vem no clone. O gatilho de bootstrap sai daí, sem flag.
+// Primeiro contato = nenhuma routine jamais EXECUTOU nesta máquina. O sinal
+// não pode ser "o arquivo de estado existe": o bloco de routines roda antes do
+// checkup no mesmo hook e chama markSuggested, que cria o arquivo — a sugestão
+// consumiria o bootstrap antes de o checkup olhar. Sugerir não é executar.
+// .context/runtime/ é gitignored, logo um clone novo começa sem lastRun algum.
 export function isFirstContact(cwd) {
-  return !existsSync(stateFile(cwd));
+  const state = loadState(cwd);
+  return !Object.values(state).some(st => st?.lastRun);
 }
 
 export function loadRoutines(cwd) {

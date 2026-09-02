@@ -28,6 +28,18 @@ test("sem arquivo de estado, é primeiro contato (clone novo)", () => {
   rmSync(d, { recursive: true, force: true });
 });
 
+test("mark-suggested NÃO consome o sinal de primeiro contato", () => {
+  // O bloco de routines roda antes do checkup no mesmo hook e chama
+  // mark-suggested. Se bootstrap fosse "o arquivo de estado existe", essa
+  // escrita destruiria o sinal antes de o checkup consultá-lo.
+  const d = repo({ routines: [{ id: "x", enabled: true, frequency: "1d", prompts: [] }] });
+  markSuggested(d, "x", "2026-09-01");
+  assert.equal(isFirstContact(d), true, "sugerir não é executar");
+  markRun(d, "x", "2026-09-01");
+  assert.equal(isFirstContact(d), false, "depois de executar, não é mais primeiro contato");
+  rmSync(d, { recursive: true, force: true });
+});
+
 test("markRun grava no estado local, não no arquivo versionado", () => {
   const d = repo({ routines: [{ id: "x", enabled: true, frequency: "1d", prompts: [] }] });
   markRun(d, "x", "2026-09-01");
