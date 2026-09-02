@@ -106,7 +106,9 @@ phases:
           - "suítes preexistentes verdes"
 generated: "2026-09-01"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
+lastUpdated: "2026-09-01T23:51:45.118Z"
 ---
 
 # Checkup de início de dia do DevFlow — tracking
@@ -149,3 +151,7 @@ entre dispositivos; o estado de execução é por máquina.
 ## Sinais exigidos
 
 `requiredSignals: [unit, e2e, lint]` — `e2e` é obrigatório porque a mudança toca um hook.
+
+## Execution History
+
+> Last updated: 2026-09-01T23:51:45.118Z | Progress: 0%
