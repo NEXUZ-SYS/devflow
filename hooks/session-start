@@ -320,6 +320,34 @@ if [ -f "${project_root}/.context/routines.json" ] && command -v node >/dev/null
   fi
 fi
 
+# --- Env checkup (1x/dia por máquina, EXECUTADO — não sugerido) ---
+# Roda os passos `check` das routines `auto` vencidas. Fala no primeiro contato
+# após o clone (estado ausente em .context/runtime/, que é gitignored e não vem
+# no clone) e, nos demais dias, só quando há divergência. Nunca executa o doctor
+# completo — ~16s: ele é PROPOSTO. Toda falha é silenciosa: um checkup de
+# ambiente jamais trava uma sessão.
+
+env_checkup_ctx=""
+if [ -f "${project_root}/.context/routines.json" ] && command -v node >/dev/null 2>&1; then
+  checkup_json=$(cd "${project_root}" && node "${PLUGIN_ROOT}/scripts/routines.mjs" run-checks 2>/dev/null || true)
+  if [ -n "$checkup_json" ]; then
+    checkup_text=$(printf '%s' "$checkup_json" | node -e '
+      let raw = "";
+      process.stdin.on("data", d => raw += d);
+      process.stdin.on("end", async () => {
+        try {
+          const { renderBlocks } = await import(process.argv[1]);
+          process.stdout.write(renderBlocks(JSON.parse(raw)));
+        } catch { process.exit(0); }
+      });
+    ' "${PLUGIN_ROOT}/scripts/lib/routines-render.mjs" 2>/dev/null || true)
+    if [ -n "$checkup_text" ]; then
+      checkup_escaped=$(escape_for_json "$checkup_text")
+      env_checkup_ctx="\\n<DEVFLOW_ENV_CHECKUP>\\n${checkup_escaped}\\n</DEVFLOW_ENV_CHECKUP>\\n"
+    fi
+  fi
+fi
+
 # --- MemPalace auto-recall ---
 
 mempalace_context=""
@@ -524,7 +552,7 @@ if [ "${DEVFLOW_INSTINCTS_ENABLED:-}" != "0" ] && [ "${DEVFLOW_INSTINCT_PROFILE:
   [ -n "$INSTINCT_DIGEST" ] && instinct_context="$(escape_for_json "$INSTINCT_DIGEST")\n"
 fi
 
-session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${resume_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${mempalace_context}\n${instinct_context}</DEVFLOW_CONTEXT>"
+session_context="<DEVFLOW_CONTEXT>\nYou have DevFlow installed.\n\n**Below is the full content of your 'devflow:using-devflow' skill — your entry point for the unified development workflow. For all other skills, use the 'Skill' tool:**\n\n${using_devflow_escaped}\n\n${mode_escaped}\n${autonomous_escaped}\n${resume_escaped}\n${napkin_context}\n${adr_context}\n${context_index_context}\n${knowledge_index_context}\n${docs_mcp_recommendation}\n${grounding_context}\n${routines_due_ctx}\n${env_checkup_ctx}\n${mempalace_context}\n${instinct_context}</DEVFLOW_CONTEXT>"
 
 # --- Output for platform ---
 

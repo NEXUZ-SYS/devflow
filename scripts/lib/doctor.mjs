@@ -19,6 +19,8 @@ import { join } from "node:path";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
+import { readPluginEnv, isInstalled, highestInstalled, highestInstalledEntry } from "./plugin-env.mjs";
+import { parseVersion } from "./version-guard.mjs";
 
 function readMcp(cwd) {
   const path = join(cwd, ".mcp.json");
@@ -387,13 +389,223 @@ const harnessSensors = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors];
+// Os checks de plugin leem ~/.claude/plugins/*, estrutura do gerenciador de
+// plugins do Claude Code. Fora dele (omp, OpenCode, CI, container) a pergunta
+// não tem resposta certa nem errada: SKIP, nunca OK nem FAIL. Dizer OK ali
+// seria confiança falsa — o pior resultado possível para um checkup.
+const SKIP_NO_HARNESS = {
+  status: "SKIP",
+  diagnosis: "Ambiente sem ~/.claude/plugins — o estado de plugins não é verificável aqui.",
+  repair: "",
+};
+
+const pluginDeclaredInstalled = {
+  id: "plugin-declared-installed",
+  title: "Plugins declarados pelo projeto estão instalados nesta máquina",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const keys = Object.keys(env.declared);
+    if (!keys.length) {
+      return { status: "OK", diagnosis: "O projeto não declara plugins em .claude/settings.json.", repair: "" };
+    }
+    const missing = keys.filter(k => !isInstalled(env, k));
+    if (missing.length) {
+      return {
+        status: "FAIL",
+        diagnosis: `Plugin(s) declarado(s) pelo projeto e ausente(s) nesta máquina: ${missing.join(", ")}.`,
+        repair: `Instale com: ${missing.map(k => `/plugin install ${k}`).join(" && ")}`,
+      };
+    }
+    return { status: "OK", diagnosis: `Os ${keys.length} plugins declarados estão instalados.`, repair: "" };
+  },
+};
+
+const pluginScope = {
+  id: "plugin-scope",
+  title: "Plugins do projeto não estão habilitados em escopo user",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    // Só HABILITAÇÃO global. Instalação em escopo user é normal e esperada — o
+    // PR #97 removeu a habilitação global, não a instalação.
+    const leaked = Object.keys(env.declared).filter(k => env.enabledAtUser[k]);
+    if (leaked.length) {
+      return {
+        status: "WARN",
+        diagnosis: `Habilitado(s) em escopo user, carregando em todo projeto da máquina: ${leaked.join(", ")}.`,
+        repair: "Remova a(s) entrada(s) de enabledPlugins em ~/.claude/settings.json — o projeto já as declara.",
+      };
+    }
+    return { status: "OK", diagnosis: "Nenhum plugin do projeto vazando para o escopo user.", repair: "" };
+  },
+};
+
+const CATALOG_STALE_DAYS = 7;
+
+const pluginMarketplaceKnown = {
+  id: "plugin-marketplace-known",
+  title: "Marketplaces dos plugins declarados estão registrados",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const needed = [...new Set(Object.values(env.declared).map(d => d.marketplace))];
+    if (!needed.length) return { status: "OK", diagnosis: "O projeto não declara plugins.", repair: "" };
+    const missing = needed.filter(m => !env.marketplaces[m]);
+    if (missing.length) {
+      return {
+        status: "FAIL",
+        diagnosis: `Marketplace(s) referenciado(s) pelo projeto e não registrado(s) nesta máquina: ${missing.join(", ")}.`,
+        repair: "Registre com /plugin marketplace add <repo>, ou confirme extraKnownMarketplaces em .claude/settings.json.",
+      };
+    }
+    return { status: "OK", diagnosis: `Os ${needed.length} marketplaces necessários estão registrados.`, repair: "" };
+  },
+};
+
+// Dias inteiros entre duas datas ISO; null quando alguma é inválida.
+function daysBetween(isoA, isoB) {
+  const a = Date.parse(isoA), b = Date.parse(isoB);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.floor((b - a) / 86400000);
+}
+
+const pluginUpToDate = {
+  id: "plugin-up-to-date",
+  title: "Plugins declarados estão atualizados",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const env = readPluginEnv({ cwd: ctx.cwd, home: ctx.home });
+    if (env.harness !== "claude-code") return SKIP_NO_HARNESS;
+    const keys = Object.keys(env.declared);
+    if (!keys.length) return { status: "OK", diagnosis: "O projeto não declara plugins.", repair: "" };
+
+    // Compara a MAIOR versão instalada contra a publicada: qual entrada o
+    // Claude Code resolve não é observável daqui, e a pergunta prática
+    // ("preciso rodar /devflow update?") se responde pela mais alta.
+    const behind = [];     // semver: sabemos que está atrás
+    const diverged = [];   // sha: sabemos que difere, NÃO qual é mais novo
+    const uncomparable = [];
+    for (const key of keys) {
+      const { name, marketplace } = env.declared[key];
+      const pub = env.marketplaces[marketplace]?.published?.[name];
+      if (!pub) continue;
+
+      if (pub.kind === "sha") {
+        // O plugin vive num repo de terceiro; o marketplace só ancora um
+        // commit. Sha diferente prova divergência; dizer "desatualizado"
+        // exigiria rede.
+        const shas = (env.installs[key] || []).map(e => e.gitCommitSha).filter(Boolean);
+        if (shas.length && !shas.includes(pub.value)) {
+          // O sha citado é o da MAIOR versão instalada; o array traz também
+          // instalações antigas, e citar a primeira apontaria a errada.
+          const mine = highestInstalledEntry(env, key)?.gitCommitSha || shas[0];
+          diverged.push(`${key} (instalado ${mine.slice(0, 8)}, marketplace ${pub.value.slice(0, 8)})`);
+        }
+        continue;
+      }
+
+      const highest = highestInstalled(env, key);
+      if (!highest) {
+        if (isInstalled(env, key)) uncomparable.push(key);
+        continue;
+      }
+      const pi = parseVersion(highest), pp = parseVersion(pub.value);
+      if (!pi || !pp) { uncomparable.push(key); continue; }
+      for (let i = 0; i < 3; i++) {
+        if (pi[i] !== pp[i]) { if (pi[i] < pp[i]) behind.push(`${key}: ${highest} → ${pub.value}`); break; }
+      }
+    }
+
+    if (behind.length || diverged.length) {
+      const parts = [];
+      if (behind.length) parts.push(`atrás da versão publicada — ${behind.join("; ")}`);
+      if (diverged.length) parts.push(`divergente do commit do marketplace, sem determinar qual é mais novo — ${diverged.join("; ")}`);
+      return { status: "WARN", diagnosis: `Plugin(s) ${parts.join(" · ")}.`, repair: "Rode /devflow update." };
+    }
+
+    // Afirmar "atualizado" com base num catálogo velho é afirmação sem lastro.
+    const stale = [...new Set(Object.values(env.declared).map(d => d.marketplace))]
+      .filter(m => {
+        const d = daysBetween(env.marketplaces[m]?.lastUpdated, `${ctx.today}T00:00:00.000Z`);
+        return d != null && d > CATALOG_STALE_DAYS;
+      });
+    if (stale.length) {
+      return {
+        status: "WARN",
+        diagnosis: `Nenhuma versão atrasada, mas o catálogo local de ${stale.join(", ")} tem mais de ${CATALOG_STALE_DAYS} dias — a comparação pode estar desatualizada.`,
+        repair: "Rode /devflow update para atualizar o catálogo.",
+      };
+    }
+
+    const note = uncomparable.length ? ` (não comparáveis, versão não-semver: ${uncomparable.join(", ")})` : "";
+    return { status: "OK", diagnosis: `Todos os plugins declarados estão na versão publicada${note}.`, repair: "" };
+  },
+};
+
+const mempalaceEnv = {
+  id: "mempalace-env",
+  title: "MemPalace exigido pelo projeto está utilizável nesta máquina",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const cfgPath = join(ctx.cwd, ".context", ".devflow.yaml");
+    if (!existsSync(cfgPath)) {
+      return { status: "OK", diagnosis: "Sem .devflow.yaml — o projeto não exige MemPalace.", repair: "" };
+    }
+    let raw = "";
+    try { raw = readFileSync(cfgPath, "utf-8"); } catch { /* ignore */ }
+    const enabled = String(readBlockField(raw, "mempalace", "enabled") || "").replace(/['"]/g, "").trim();
+    if (enabled !== "true") {
+      return { status: "OK", diagnosis: "O projeto não exige MemPalace (mempalace.enabled ≠ true).", repair: "" };
+    }
+    // Barato de propósito: which + um JSON + um existsSync (~1ms). Contar
+    // drawers exigiria `mempalace status`, medido em ~600ms — doze vezes o
+    // orçamento inteiro do checkup diário. Isso fica no mempalace-health.
+    if (!ctx.which("mempalace")) {
+      return {
+        status: "FAIL",
+        diagnosis: "O projeto declara mempalace.enabled: true, mas o binário mempalace não está no PATH — esta máquina não tem memória de longo prazo.",
+        repair: "Instale o MemPalace e rode 'mempalace init'.",
+      };
+    }
+    const confPath = join(ctx.home, ".mempalace", "config.json");
+    if (!existsSync(confPath)) {
+      return {
+        status: "WARN",
+        diagnosis: "MemPalace instalado, mas sem ~/.mempalace/config.json — o caminho do palace é indeterminado.",
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    let palacePath = "";
+    try { palacePath = JSON.parse(readFileSync(confPath, "utf-8")).palace_path || ""; } catch { /* ignore */ }
+    if (!palacePath || !existsSync(palacePath)) {
+      return {
+        status: "FAIL",
+        diagnosis: `O palace apontado pelo config não existe: ${palacePath || "(vazio)"}.`,
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    // Informa QUAL palace está em uso: a escolha é invisível hoje e determina
+    // se a memória é compartilhada entre projetos.
+    return { status: "OK", diagnosis: `MemPalace utilizável; palace em ${palacePath}.`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
 }
 
-const SEV_RANK = { FAIL: 0, WARN: 1, OK: 2 };
+const SEV_RANK = { FAIL: 0, WARN: 1, OK: 2, SKIP: 3 };
 
 export async function runChecks(ctx, ids) {
   const selected = ids && ids.length ? CHECKS.filter(c => ids.includes(c.id)) : CHECKS;

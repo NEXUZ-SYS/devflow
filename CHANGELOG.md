@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Checkup de ambiente no início do dia** — na 1ª sessão do dia em cada máquina, o hook `session-start` verifica se os plugins declarados em `.claude/settings.json` estão instalados, no escopo certo e atualizados, e se o MemPalace exigido pelo projeto está utilizável. Reporta só quando há divergência; no primeiro contato após o clone, confirma o ambiente. Medido em ~0,2s.
+- **`doctor`: cinco checks novos** — `plugin-declared-installed`, `plugin-scope`, `plugin-marketplace-known`, `plugin-up-to-date` e `mempalace-env`, disponíveis também via `/devflow:devflow-doctor`. Cobrem todos os plugins declarados pelo projeto, com três estratégias offline para descobrir a versão publicada (campo `version`, `plugin.json` do clone, ou comparação de `gitCommitSha` quando o plugin vive em repo de terceiro).
+- **`doctor`: status `SKIP`** — para checks que não se aplicam ao ambiente (CI, container, harness que não é o Claude Code). Não altera o exit code.
+- **`routines`: passo do tipo `check`** — executável pelo hook sem LLM, nomeando um grupo de checks do doctor.
+- **`routines`: campo `execution`** (`auto` | `confirm` | `model`) por rotina. Ausente, é derivado. O `/devflow:devflow-doctor` é `confirm`: leva ~16s e passa a ser **proposto** quando a verificação barata acha divergência, nunca executado sozinho.
+
+### Fixed
+- **`routines`: estado de execução saiu do arquivo versionado** para `.context/runtime/routines-state.json`. Antes, numa cadência diária, uma máquina marcar "rodei hoje" silenciava as demais e toda sessão sujava o working tree. A migração é automática e idempotente.
+- **`routines`: `shouldRun` separado de `shouldSuggest`** — a guarda de 1x/dia é própria de *surfacing*; qualquer consumidor que perguntasse o que deve **rodar** recebia lista vazia após a primeira sugestão do dia.
+- **`routines`: `dueRoutines` ignorava `snoozeUntil`** — uma rotina adiada pelo usuário aparecia como vencida no `list`.
+- **`config` §4.6: seed incremental de routines** — o `cp` condicional só criava o arquivo quando ausente, de modo que um projeto já configurado nunca receberia uma routine nova.
+
 ### Changed — escopo de instalação do próprio repositório (sem efeito no plugin publicado)
 
 Mudança de dogfooding, restrita a este repositório: `devflow@NEXUZ-SYS` sai de

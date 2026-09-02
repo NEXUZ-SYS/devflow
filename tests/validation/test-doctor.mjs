@@ -20,6 +20,11 @@ function tmpRepo() {
 function ctx(cwd, over = {}) {
   return {
     cwd,
+    // HOME sintético e SEM ~/.claude/plugins: os checks de plugin dão SKIP de
+    // forma determinística em qualquer máquina. Sem isto, a suíte lia o HOME
+    // real de quem a roda — OK na máquina do dev, SKIP no runner do CI — e o
+    // resultado dependia do ambiente.
+    home: over.home || join(cwd, "__home__"),
     which: over.which || (() => false),
     exec: over.exec || (() => ({ status: 1, stdout: "", stderr: "" })),
     today: over.today || "2026-05-28",
@@ -32,17 +37,19 @@ test("every check honors the result contract", async () => {
   for (const check of CHECKS) {
     const r = await check.run(ctx(dir));
     for (const k of ["status", "diagnosis"]) assert.ok(k in r, `${check.id} missing ${k}`);
-    assert.match(r.status, /^(OK|WARN|FAIL)$/, `${check.id} bad status ${r.status}`);
+    assert.match(r.status, /^(OK|WARN|FAIL|SKIP)$/, `${check.id} bad status ${r.status}`);
     assert.match(check.severity, /^(info|warn|critical)$/);
     assert.equal(typeof check.destructive, "boolean");
   }
 });
 
-test("runChecks aggregates and sorts FAIL before WARN before OK", async () => {
+test("runChecks aggregates and sorts FAIL before WARN before OK before SKIP", async () => {
   const dir = tmpRepo();
   const results = await runChecks(ctx(dir));
   assert.ok(Array.isArray(results));
-  const rank = { FAIL: 0, WARN: 1, OK: 2 };
+  // SKIP ordena por último: não é acionável, e não deve competir com FAIL/WARN
+  // pela atenção de quem lê o relatório.
+  const rank = { FAIL: 0, WARN: 1, OK: 2, SKIP: 3 };
   for (let i = 1; i < results.length; i++) {
     assert.ok(rank[results[i - 1].status] <= rank[results[i].status], "not sorted by severity");
   }

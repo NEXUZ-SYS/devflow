@@ -42,8 +42,13 @@ test("due --json lists overdue routines", () => {
 test("snooze updates snoozeUntil and removes it from due", () => {
   const dir = repo();
   run(dir, ["snooze", "context-maintenance", "5", "--today", "2026-05-28"]);
-  const data = JSON.parse(readFileSync(join(dir, ".context", "routines.json"), "utf-8"));
-  assert.equal(data.routines[0].snoozeUntil, "2026-06-02");
+  // O estado de execução mora por máquina em .context/runtime/, não no
+  // arquivo versionado: numa cadência diária, uma máquina marcar silenciaria
+  // as outras e toda sessão sujaria o working tree.
+  const state = JSON.parse(readFileSync(join(dir, ".context", "runtime", "routines-state.json"), "utf-8"));
+  assert.equal(state["context-maintenance"].snoozeUntil, "2026-06-02");
+  const versionado = JSON.parse(readFileSync(join(dir, ".context", "routines.json"), "utf-8"));
+  assert.equal("snoozeUntil" in versionado.routines[0], false);
   const { stdout } = run(dir, ["due", "--json", "--today", "2026-05-29"]);
   assert.equal(JSON.parse(stdout).due.length, 0);
 });
@@ -51,9 +56,11 @@ test("snooze updates snoozeUntil and removes it from due", () => {
 test("mark-run records lastRun and recomputes nextRun", () => {
   const dir = repo();
   run(dir, ["mark-run", "context-maintenance", "--today", "2026-05-28"]);
-  const data = JSON.parse(readFileSync(join(dir, ".context", "routines.json"), "utf-8"));
-  assert.equal(data.routines[0].lastRun, "2026-05-28");
-  assert.equal(data.routines[0].nextRun, "2026-06-04");
+  const state = JSON.parse(readFileSync(join(dir, ".context", "runtime", "routines-state.json"), "utf-8"));
+  assert.equal(state["context-maintenance"].lastRun, "2026-05-28");
+  assert.equal(state["context-maintenance"].nextRun, "2026-06-04");
+  const versionado = JSON.parse(readFileSync(join(dir, ".context", "routines.json"), "utf-8"));
+  assert.equal("lastRun" in versionado.routines[0], false);
 });
 
 test("disable removes from due", () => {

@@ -2,15 +2,32 @@
   "routines": [
     {
       "id": "context-maintenance",
-      "description": "Health-check do contexto DevFlow (MCP, MemPalace, config) a cada 7 dias",
+      "description": "Health-check completo do contexto DevFlow (MCP, MemPalace, config) a cada 7 dias",
       "enabled": true,
       "frequency": "7d",
-      "lastRun": null,
-      "nextRun": null,
-      "lastSuggested": null,
-      "snoozeUntil": null,
+      "execution": "confirm",
       "prompts": [
-        { "type": "command", "value": "/devflow:devflow-doctor" }
+        {
+          "type": "command",
+          "value": "/devflow:devflow-doctor"
+        }
+      ]
+    },
+    {
+      "id": "daily-devflow-checkup",
+      "description": "Verifica 1x/dia se os plugins declarados pelo projeto e o MemPalace estao utilizaveis nesta maquina",
+      "enabled": true,
+      "frequency": "1d",
+      "execution": "auto",
+      "prompts": [
+        {
+          "type": "check",
+          "value": "plugin-env"
+        },
+        {
+          "type": "check",
+          "value": "mempalace-env"
+        }
       ]
     }
   ]

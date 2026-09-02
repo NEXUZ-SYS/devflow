@@ -599,7 +599,7 @@ Substituir `<MODE>` por `suggest` (opção "Sugerir quando compensar") ou `auto`
 **Regras de geração no modo patch incremental (Step 5.3):**
 - **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
 - Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
-- `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (`|| cp` e merge dentro de `mcpServers`) — não sobrescrever.
+- `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (seed incremental por id e merge dentro de `mcpServers`) — não sobrescrever.
 - Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
 - **`orchestrator:`** — **somente** se o Step 2.6 foi respondido (não pulado): se ausente, gerar via `orchestratorBlock(...)` e anexar; se presente, substituir o bloco inteiro preservando as demais seções. Usar `{enabled:false}` quando "Não usar" ou `NEEDS_USER_SCOPE`; usar `{mode:'<MODE>'}` quando habilitado. Se o Step 2.6 foi pulado, **não tocar** na seção `orchestrator:` (ausência continua significando não configurado).
 
@@ -644,10 +644,12 @@ AskUserQuestion:
 
 ### 4.6 Semear rotinas de manutenção (`.context/routines.json`)
 
-Se ainda não existir `.context/routines.json`, criar a partir do template para habilitar o health-check periódico do contexto (`/devflow:devflow-doctor` via routine `context-maintenance`):
+Acrescenta ao projeto as routines do template que ele ainda não tem, **por id** — nunca altera nem sobrescreve as existentes (descrição, cadência e `enabled` são escolha do time). Cria o arquivo inteiro quando ausente.
+
+Seed incremental, e não `cp` condicional: com o `cp`, um projeto que já tivesse `routines.json` jamais receberia uma routine nova, e o checkup diário ficaria restrito ao repositório do plugin.
 
 ```bash
-[ -f .context/routines.json ] || cp "$CLAUDE_PLUGIN_ROOT/templates/routines.json" .context/routines.json
+node "$CLAUDE_PLUGIN_ROOT/scripts/lib/routines-seed.mjs" "$PWD" "$CLAUDE_PLUGIN_ROOT/templates/routines.json"
 ```
 
 O SessionStart passa a **sugerir** rodar `/devflow:devflow-routines run context-maintenance` quando vencer (a cada 7d), sem executar. O usuário pode `snooze`/`disable` via `/devflow:devflow-routines`.
@@ -776,7 +778,7 @@ Para **cada** unidade selecionada, rodar **somente** o(s) bloco(s) de pergunta c
 | MemPalace | P6–P8 + oferta de hook §4.5 | `mergeSection(yaml, "mempalace", <bloco mempalace:>)` + §4.5 |
 | docs-mcp-server | §2.4 / P9 | editar `.mcp.json` (merge em `mcpServers`) |
 | Doc-grounding | §2.5 / P10 | `mergeSection(yaml, "grounding", <bloco grounding:>)` |
-| Rotinas de manutenção | §4.6 | criar `.context/routines.json` (só se ausente) |
+| Rotinas de manutenção | §4.6 | acrescentar as routines ausentes, preservando as existentes |
 
 Ao final, reimprimir o painel 5.1 atualizado para confirmar o que mudou.
 

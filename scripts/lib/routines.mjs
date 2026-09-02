@@ -17,15 +17,71 @@ function file(cwd) {
   return join(cwd, ".context", "routines.json");
 }
 
+// Campos de EXECUÇÃO. Vivem por máquina em .context/runtime/ — nunca no
+// arquivo versionado: numa cadência diária, uma máquina marcar "rodei hoje"
+// silenciaria as outras, e o working tree acumularia diff a cada sessão.
+const STATE_FIELDS = ["lastRun", "nextRun", "lastSuggested", "snoozeUntil"];
+
+function stateFile(cwd) {
+  return join(cwd, ".context", "runtime", "routines-state.json");
+}
+
+export function loadState(cwd) {
+  try {
+    return JSON.parse(readFileSync(stateFile(cwd), "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveState(cwd, state) {
+  const path = stateFile(cwd);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(state, null, 2) + "\n");
+}
+
+// Primeiro contato = nenhuma routine jamais EXECUTOU nesta máquina. O sinal
+// não pode ser "o arquivo de estado existe": o bloco de routines roda antes do
+// checkup no mesmo hook e chama markSuggested, que cria o arquivo — a sugestão
+// consumiria o bootstrap antes de o checkup olhar. Sugerir não é executar.
+// .context/runtime/ é gitignored, logo um clone novo começa sem lastRun algum.
+export function isFirstContact(cwd) {
+  const state = loadState(cwd);
+  return !Object.values(state).some(st => st?.lastRun);
+}
+
 export function loadRoutines(cwd) {
   const path = file(cwd);
   if (!existsSync(path)) return { routines: [], path };
+  let data;
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8"));
-    return { routines: Array.isArray(data.routines) ? data.routines : [], path };
+    data = JSON.parse(readFileSync(path, "utf-8"));
   } catch {
     return { routines: [], path };
   }
+  const defs = Array.isArray(data.routines) ? data.routines : [];
+
+  // Migração do formato antigo: campos de estado no arquivo versionado.
+  // Reescreve o versionado UMA vez — esse diff é a própria correção.
+  const state = loadState(cwd);
+  let migrated = false;
+  for (const r of defs) {
+    for (const f of STATE_FIELDS) {
+      if (f in r) {
+        state[r.id] = state[r.id] || {};
+        if (!(f in state[r.id])) state[r.id][f] = r[f];
+        delete r[f];
+        migrated = true;
+      }
+    }
+  }
+  if (migrated) {
+    saveState(cwd, state);
+    writeFileSync(path, JSON.stringify({ routines: defs }, null, 2) + "\n");
+  }
+
+  const routines = defs.map(r => ({ ...r, ...(state[r.id] || {}) }));
+  return { routines, path };
 }
 
 export function saveRoutines(cwd, routines) {
@@ -71,15 +127,58 @@ function lte(a, b) {
 }
 
 // ── scheduling ──────────────────────────────────────────────────────
+// Um passo `check` nomeia um GRUPO, não a lista de ids: acrescentar um check
+// no futuro não deve exigir editar o routines.json de cada projeto.
+export const CHECK_GROUPS = {
+  "plugin-env": ["plugin-declared-installed", "plugin-scope", "plugin-marketplace-known", "plugin-up-to-date"],
+  "mempalace-env": ["mempalace-env"],
+};
+
+export function resolveCheckIds(value) {
+  if (CHECK_GROUPS[value]) return [...CHECK_GROUPS[value]];
+  return Object.values(CHECK_GROUPS).some(ids => ids.includes(value)) ? [value] : [];
+}
+
+// Classes de execução. Campo único em vez de dois booleanos: autoRun +
+// requiresConfirmation admitiriam o estado contraditório "roda sozinha porém
+// exige confirmação".
+//   auto    — o hook executa sozinha na data agendada (só passos `check`)
+//   confirm — na data agendada o sistema PERGUNTA; nunca roda sozinha
+//   model   — precisa de um turno do agente
+const EXECUTION = new Set(["auto", "confirm", "model"]);
+
+export function classify(routine) {
+  if (EXECUTION.has(routine?.execution)) return routine.execution;
+  const prompts = routine?.prompts || [];
+  if (!prompts.length) return "confirm";
+  return prompts.every(p => p?.type === "check") ? "auto" : "confirm";
+}
+
+export { renderBlocks } from "./routines-render.mjs";
+
+// snoozeUntil é EXCLUSIVO: no próprio dia a rotina já volta a valer.
+function snoozed(routine, today) {
+  return routine.snoozeUntil != null && !lte(routine.snoozeUntil, today);
+}
+
+// Elegibilidade de EXECUÇÃO. Distinta de shouldSuggest: sem a guarda de 1x/dia
+// (lastSuggested), que só faz sentido para surfacing. Um item já mencionado
+// hoje continua precisando rodar — sem esta separação, qualquer executor que
+// rode depois do bloco de sugestão recebe lista vazia.
+export function shouldRun(routine, today) {
+  if (routine.enabled === false) return false;
+  if (snoozed(routine, today)) return false;
+  if (routine.nextRun != null && !lte(routine.nextRun, today)) return false;
+  return true;
+}
+
 export function dueRoutines(routines, today) {
-  return routines.filter(r => r.enabled !== false && (r.nextRun == null || lte(r.nextRun, today)));
+  return routines.filter(r => shouldRun(r, today));
 }
 
 export function shouldSuggest(routine, today) {
-  if (routine.enabled === false) return false;
-  if (routine.snoozeUntil && !lte(routine.snoozeUntil, today)) return false; // still snoozed (until is exclusive)
-  if (routine.nextRun != null && !lte(routine.nextRun, today)) return false; // not due
-  if (routine.lastSuggested === today) return false; // already suggested today (1x/day)
+  if (!shouldRun(routine, today)) return false;
+  if (routine.lastSuggested === today) return false; // 1x/dia — só surfacing
   return true;
 }
 
@@ -93,20 +192,33 @@ function update(cwd, id, fn) {
   return true;
 }
 
+function updateState(cwd, id, fn) {
+  const { routines } = loadRoutines(cwd);
+  if (!routines.find(x => x.id === id)) return false;
+  const state = loadState(cwd);
+  state[id] = state[id] || {};
+  fn(state[id]);
+  saveState(cwd, state);
+  return true;
+}
+
 export function markRun(cwd, id, today) {
-  return update(cwd, id, r => {
-    r.lastRun = today;
-    r.nextRun = nextRunFrom(today, r.frequency);
-    r.snoozeUntil = null;
+  const { routines } = loadRoutines(cwd);
+  const r = routines.find(x => x.id === id);
+  if (!r) return false;
+  return updateState(cwd, id, st => {
+    st.lastRun = today;
+    st.nextRun = nextRunFrom(today, r.frequency);
+    st.snoozeUntil = null;
   });
 }
 
 export function snooze(cwd, id, days, today) {
-  return update(cwd, id, r => { r.snoozeUntil = addDays(today, Number(days)); });
+  return updateState(cwd, id, st => { st.snoozeUntil = addDays(today, Number(days)); });
 }
 
 export function markSuggested(cwd, id, today) {
-  return update(cwd, id, r => { r.lastSuggested = today; });
+  return updateState(cwd, id, st => { st.lastSuggested = today; });
 }
 
 export function setEnabled(cwd, id, enabled) {
