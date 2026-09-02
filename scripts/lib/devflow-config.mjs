@@ -8,7 +8,7 @@
 //   node scripts/lib/devflow-config.mjs read-versioning <path>  → local | pipeline | none
 // Qualquer erro de leitura/parse/arquivo-grande imprime o fallback seguro.
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, existsSync } from "node:fs";
 import { parseYaml } from "./frontmatter.mjs";
 
 const MAX_BYTES = 256 * 1024; // cap anti-ReDoS / arquivo absurdo → fallback
@@ -261,4 +261,50 @@ function main(argv) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main(process.argv.slice(2));
+}
+
+/**
+ * Le o bloco `frameworks:` do .devflow.yaml -> Map<framework, serie>.
+ *
+ * Os leitores existentes (readField/readBlockField) cobrem 1-2 niveis;
+ * `frameworks.<fw>.version` tem 3. Este leitor mora AQUI, e nao no consumidor,
+ * porque o ADR-011 exige parser unico de .devflow.yaml.
+ *
+ * Persiste-se so o eixo SERIE: versoes do eixo composicao saem do package.json
+ * na hora, e persistir daria estado velho no dia seguinte a um `npm upgrade`.
+ */
+export function readFrameworkVersions(src) {
+  const out = new Map();
+  if (typeof src !== "string") return out;
+  const lines = src.split("\n");
+  const start = lines.findIndex((l) => /^frameworks\s*:\s*$/.test(l));
+  if (start === -1) return out;
+
+  let current = null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === "") continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent === 0) break;                       // desindentou: fim do bloco
+
+    const stripped = line.replace(/\s+#.*$/, "");  // comentario inline
+    const fw = stripped.match(/^\s{2}([A-Za-z0-9_-]+)\s*:\s*$/);
+    if (fw) { current = fw[1]; continue; }
+
+    const ver = stripped.match(/^\s{4}version\s*:\s*["']?([^"'\s]+)["']?\s*$/);
+    if (ver && current) out.set(current, ver[1]);
+  }
+  return out;
+}
+
+/**
+ * Le do path dado. Espelha readVerifyFromPath: quem resolve o caminho e o
+ * chamador — assim este modulo nao precisa de node:path e a invariante de
+ * pureza (tests/lib/devflow-config-pure.test.mjs) fica intacta.
+ * Nunca lanca.
+ */
+export function readFrameworkVersionsFromPath(path) {
+  if (!path || !existsSync(path)) return new Map();
+  try { return readFrameworkVersions(readFileSync(path, "utf-8")); }
+  catch { return new Map(); }
 }
