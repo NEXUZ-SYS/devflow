@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  runProbe, aggregateMajority, classifyConfidence,
+  runProbe, aggregateMajority, classifyConfidence, npmDep, resolveStackVersions,
 } from "../../scripts/lib/framework-version.mjs";
 
 const ODOO17 = "tests/fixtures/version-scoped/odoo17";
@@ -96,4 +96,56 @@ test("classifyConfidence: sondas discordando é ambiguous", () => {
 test("classifyConfidence: nenhuma sonda casou é unknown", () => {
   assert.equal(classifyConfidence([]), "unknown");
   assert.equal(classifyConfidence([{ probe: "a", value: null, source: "s" }]), "unknown");
+});
+
+const TS = "tests/fixtures/version-scoped/ts-src";
+
+test("npmDep extrai o major de dependencies e devDependencies", () => {
+  assert.equal(npmDep(TS, "react").value, "18");
+  assert.equal(npmDep(TS, "typescript").value, "5");
+});
+
+test("npmDep devolve null para lib ausente e para projeto sem package.json", () => {
+  assert.equal(npmDep(TS, "vue").value, null);
+  assert.equal(npmDep(ODOO17, "react").value, null);
+});
+
+test("resolveStackVersions: sondas declarativas concordando dão high com evidência de lista", () => {
+  const m = resolveStackVersions(ODOO17, [{
+    lib: "odoo",
+    versionDetect: [
+      { file: ".gitmodules", pattern: "path = odoo[\\s\\S]*?branch = (\\d+)\\.0" },
+      { file: "Dockerfile", pattern: "FROM\\s+odoo:(\\d+)\\.0" },
+    ],
+  }]);
+  const r = m.get("odoo");
+  assert.equal(r.version, "17");
+  assert.equal(r.confidence, "high");
+  assert.equal(r.evidence.length, 2, "evidência é LISTA, não booleano");
+  assert.ok(r.evidence.every((e) => e.probe && e.source));
+});
+
+test("resolveStackVersions: versionDetect string resolve pela sonda embutida npmDep", () => {
+  const m = resolveStackVersions(TS, [{ lib: "react", versionDetect: "npmDep" }]);
+  assert.equal(m.get("react").version, "18");
+  assert.equal(m.get("react").confidence, "medium");
+});
+
+test("resolveStackVersions: sonda embutida desconhecida é unknown, não crash", () => {
+  const m = resolveStackVersions(TS, [{ lib: "react", versionDetect: "cargoDep" }]);
+  assert.equal(m.get("react").confidence, "unknown");
+});
+
+test("resolveStackVersions: sondas discordando dão ambiguous e preservam as duas evidências", () => {
+  const m = resolveStackVersions(ODOO17, [{
+    lib: "odoo",
+    versionDetect: [
+      { file: ".gitmodules", pattern: "path = odoo[\\s\\S]*?branch = (\\d+)\\.0" },
+      { file: "Dockerfile", pattern: "FROM\\s+odoo:17\\.(\\d+)" },
+    ],
+  }]);
+  const r = m.get("odoo");
+  assert.equal(r.confidence, "ambiguous");
+  assert.equal(r.version, null, "ambiguous NÃO escolhe uma das versões");
+  assert.equal(r.evidence.length, 2);
 });

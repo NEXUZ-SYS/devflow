@@ -118,3 +118,53 @@ export function classifyConfidence(evidence) {
   if (distinct.size > 1) return CONFIDENCE.AMBIGUOUS;
   return values.length >= 2 ? CONFIDENCE.HIGH : CONFIDENCE.MEDIUM;
 }
+
+// Sonda EMBUTIDA: cobre o ecossistema npm inteiro sem configuração por entrada.
+export function npmDep(projectRoot, lib) {
+  const p = join(projectRoot, "package.json");
+  if (!existsSync(p)) return { value: null, source: "package.json" };
+  let pkg;
+  try { pkg = JSON.parse(readFileSync(p, "utf-8")); } catch { return { value: null, source: "package.json" }; }
+  const range = (pkg.dependencies || {})[lib] ?? (pkg.devDependencies || {})[lib];
+  if (typeof range !== "string") return { value: null, source: "package.json" };
+  const m = range.match(/(\d+)\./);
+  return { value: m ? m[1] : null, source: `package.json (${lib}@${range})` };
+}
+
+const BUILTIN_PROBES = { npmDep };
+
+export function resolveStackVersions(projectRoot, candidates) {
+  const out = new Map();
+  for (const cand of candidates || []) {
+    if (!cand || !cand.lib) continue;
+    const detect = cand.versionDetect;
+    const evidence = [];
+
+    if (typeof detect === "string") {
+      const fn = BUILTIN_PROBES[detect];
+      if (fn) {
+        const r = fn(projectRoot, cand.lib);
+        evidence.push({ probe: detect, value: r.value, source: r.source });
+      }
+      // sonda embutida desconhecida → sem evidência → unknown (fail-closed)
+    } else if (Array.isArray(detect)) {
+      for (const probe of detect) {
+        const r = runProbe(projectRoot, probe);
+        evidence.push({
+          probe: probe.file ? `file:${probe.file}` : `glob:${probe.glob}`,
+          value: r.value,
+          source: r.source,
+        });
+      }
+    }
+
+    const confidence = classifyConfidence(evidence);
+    const resolved = evidence.map((e) => e.value).filter(Boolean);
+    out.set(cand.lib, {
+      version: confidence === CONFIDENCE.HIGH || confidence === CONFIDENCE.MEDIUM ? resolved[0] : null,
+      confidence,
+      evidence,
+    });
+  }
+  return out;
+}
