@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.3.0] — 2026-09-02
+
 ### Fixed — Escopo de versão para stacks e standards de perfil (o Odoo 17 parava de receber regra do 18) — 12 tasks
 
 Nem stacks nem standards de perfil conheciam a **versão do framework** que o projeto realmente usa. Medido no `nexuz/odoo_17` — projeto exclusivamente 17 (submódulo `branch = 17.0`, imagem `odoo:17.0`, 48 de 54 manifestos `nxz` e 52 de 52 OCA em 17.x):
