@@ -11,7 +11,7 @@
 // instalação deste projeto": procurar a entrada cujo projectPath é o cwd
 // modelaria errado a realidade e produziria FAIL falso.
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { parseVersion } from "./version-guard.mjs";
 
@@ -41,8 +41,20 @@ function readEnabledPlugins(path) {
 //   3. source {url, sha} apontando repo de terceiro (superpowers)
 // As três se resolvem sem rede. No caso 3 não há versão, só o sha: ele prova
 // DIVERGÊNCIA, nunca qual lado é mais novo.
+// Containment: o caminho resolvido tem de ficar DENTRO da raiz. O
+// marketplace.json é clonado de um repositório de terceiro, então tanto o nome
+// do marketplace quanto o `source` de cada plugin são conteúdo não confiável —
+// um `source: "./../../../.ssh"` faria o leitor abrir um arquivo arbitrário.
+function containedIn(root, ...parts) {
+  const alvo = resolve(root, ...parts);
+  const raiz = resolve(root);
+  return alvo === raiz || alvo.startsWith(raiz + sep) ? alvo : null;
+}
+
 function readPublished(pluginsDir, mkt) {
-  const mktDir = join(pluginsDir, "marketplaces", mkt);
+  const marketplacesDir = join(pluginsDir, "marketplaces");
+  const mktDir = containedIn(marketplacesDir, mkt);
+  if (!mktDir) return {};
   const manifest = readJson(join(mktDir, ".claude-plugin", "marketplace.json"));
   const out = {};
   for (const p of manifest?.plugins || []) {
@@ -54,7 +66,8 @@ function readPublished(pluginsDir, mkt) {
     }
     const src = p.source;
     if (typeof src === "string" && src.startsWith("./")) {
-      const inner = readJson(join(mktDir, src, ".claude-plugin", "plugin.json"));
+      const innerDir = containedIn(mktDir, src);
+      const inner = innerDir ? readJson(join(innerDir, ".claude-plugin", "plugin.json")) : null;
       if (inner?.version) {
         out[p.name] = { kind: "version", value: inner.version };
         continue;

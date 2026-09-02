@@ -159,3 +159,42 @@ test("JSON corrompido não lança — trata como ausente", () => {
   assert.deepEqual(r.installs, {});
   e.cleanup();
 });
+
+// ── containment: o marketplace.json vem de repo de TERCEIRO ────────────
+test("source com traversal não escapa do diretório do marketplace", () => {
+  const e = env({
+    known: { evil: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { evil: [{ name: "p", source: "./../../../../escape" }] },
+  });
+  // marketplaces/evil + ../../../.. resolve para <home>/escape — é ali que o
+  // traversal chegaria, então é ali que o arquivo tem de estar plantado para
+  // o teste exercitar o vetor de verdade.
+  const fora = join(e.home, "escape", ".claude-plugin", "plugin.json");
+  w(fora, { name: "p", version: "9.9.9" });
+  const r = readPluginEnv({ cwd: e.cwd, home: e.home });
+  assert.equal(r.marketplaces.evil.published.p, undefined,
+    "não pode ler plugin.json fora do diretório do marketplace");
+  e.cleanup();
+});
+
+test("nome de marketplace com traversal é ignorado", () => {
+  const e = env({
+    known: { "../../../etc": { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: {},
+  });
+  const r = readPluginEnv({ cwd: e.cwd, home: e.home });
+  assert.deepEqual(r.marketplaces["../../../etc"]?.published ?? {}, {},
+    "marketplace com path traversal não resolve nada");
+  e.cleanup();
+});
+
+test("source local legítimo continua funcionando", () => {
+  const e = env({
+    known: { ok: { lastUpdated: "2026-09-01T00:00:00.000Z" } },
+    published: { ok: [{ name: "p", source: "./sub/dir" }] },
+    inner: { ok: { "./sub/dir": { name: "p", version: "1.2.3" } } },
+  });
+  const r = readPluginEnv({ cwd: e.cwd, home: e.home });
+  assert.deepEqual(r.marketplaces.ok.published.p, { kind: "version", value: "1.2.3" });
+  e.cleanup();
+});
