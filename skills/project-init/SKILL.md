@@ -653,15 +653,25 @@ E.g. an NXZ project copies `std-odoo-naming-conventions` from `profiles/odoo/` a
 **Never overwrite** a `.context/engineering/standards/<id>.md` that already exists with
 user edits, and honor `.context/standards.local.yaml` `disable:` — skip disabled ids.
 
-**Profile Stacks (seed manifest):** for every entry in the detector's `stacks` list, add
-it to the project's stack manifest so `devflow stacks scrape` can index the official docs
-into the docs-mcp-server global store (one key per series, `mcpIndexed: true`):
+**Profile Stacks (reconcile, NOT blanket seed):** do **not** loop `stacks add` over every
+entry in the detector's `stacks` list. That was a blanket seed: an Odoo 17 project got all
+seven series (`odoo-12` … `odoo-18`) in its manifest, and under `grounding: docs-only` an
+extra series stops being lint noise and becomes a **wrong answer** — the agent consults the
+12.0 docs to answer about 17 code.
+
+Delegate to `reconcile`, which resolves the project's real framework version and makes the
+manifest match it:
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add \
-  --lib=<stack.lib> --version=<stack.version> \
-  --discovery-hint=<stack.discoveryHints[0]> --project=<PWD>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" reconcile --project=<PWD>
 ```
-E.g. an Odoo project seeds `odoo-12@12.0`, `odoo-17@17.0`, `odoo-18@18.0`. The actual
+On a green-field init there is nothing to prune, so it seeds the resolved series and is
+silent. It prints the resolution evidence (which probe saw which version, and the
+winner/total ratio of the majority probe) — surface it. If the version comes back
+`ambiguous` or `unknown`, **ask the user** which series the project targets instead of
+guessing; nothing is pruned without a resolved version, and nothing is pruned at all
+without `--yes`.
+
+E.g. an Odoo 17 project seeds `odoo-17@17.0` only. The actual
 scrape is a follow-up the user runs (`/devflow:scrape-stack-batch`); init only declares
 the wishlist.
 

@@ -207,9 +207,30 @@ Retorna `{updated, preserved, skipped, current, needsConfirm, refused, mustWrite
   `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/release-scaffold.mjs" verify` depois (N6a); `ok:false` → pare.
 - **`refused`** — contenção (symlink, `..`, diretório-pai apontando fora da raiz).
 
-Para cada `stack` ausente no manifest, semear via
-`node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" add --lib=<lib> --version=<ver> --discovery-hint=<url> --project=<PWD>`
-(idempotente; o scrape real é follow-up via `/devflow:scrape-stack-batch`).
+### Stacks — reconciliação, não semeadura
+
+**NÃO** adicione stacks ausentes um a um. Essa instrução era aditiva e incondicional, e
+desfazia qualquer poda manual no sync seguinte — é exatamente onde o bug do escopo de
+versão se reproduzia: um projeto Odoo 17 reacumulava as 7 séries a cada sync.
+
+Delegue ao `reconcile`, que faz o manifesto **casar** com o projeto — adiciona o que
+falta e está na faixa, **poda** o que está fora, e re-pina o eixo composição:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-stacks.mjs" reconcile --project=<PWD>
+```
+
+Sem `--yes` ele **mostra o plano e não escreve** quando há poda. Comportamento por operação:
+
+| Operação | Comportamento |
+|---|---|
+| Adicionar stack dentro da faixa | silencioso (seguro, é o de hoje) |
+| Re-pinar versão do eixo composição | silencioso se só muda o pin |
+| **Podar** stack fora da faixa | **mostre o plano e pergunte** antes de repetir com `--yes` |
+
+O comando imprime a evidência da resolução (qual sonda viu qual versão, e a razão
+vencedor/total da maioria) — mostre-a ao usuário junto do plano. O scrape real segue
+sendo follow-up via `/devflow:scrape-stack-batch`.
 
 ## Step 4: Reportar
 

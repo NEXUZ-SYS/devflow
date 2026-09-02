@@ -188,3 +188,19 @@ ls .context/engineering/standards/std-*.md >/dev/null 2>&1
 - (Opcional) Manutenção ao vivo: `/devflow update` (Step 4d) refresca os defaults via fetch do repo standalone.
 
 **Verificação:** SessionStart lista os standards default `[default]` no índice de contexto.
+
+## Escopo de versão de stacks
+
+**O que é:** stacks e standards de perfil passam a conhecer a **série real** do framework do projeto. Antes, o init semeava todas as séries do perfil (num projeto Odoo, `odoo-12` … `odoo-18`) e os linters de perfil resolviam a versão cada um por conta própria. Sob `grounding: docs-only` uma série a mais deixa de ser ruído e vira **resposta errada** — o agente consulta a doc da 12.0 para responder sobre código 17.
+
+**Detecção:** o manifesto declara mais de uma série da mesma família
+```bash
+grep -cE '^  odoo-[0-9]+:' .context/engineering/stacks/manifest.yaml 2>/dev/null
+```
+
+**Se NÃO configurado (mais de uma série no manifesto):**
+- Rode `/devflow:devflow-sync`. Ele delega a `devflow stacks reconcile`, que resolve a série real (sondas declaradas no perfil: submódulo, imagem Docker, maioria dos `__manifest__.py`), imprime a evidência e **mostra o plano de poda antes de escrever**.
+- A poda só acontece com confirmação. Sem versão resolvida, nada é podado.
+- Standards de perfil passam a declarar `appliesFrom`/`appliesUntil`: um standard exclusivo do 18 não dispara num projeto 17.
+
+**Verificação:** o manifesto passa a ter uma única série da família, e `devflow stacks reconcile` reporta `podar: —`.

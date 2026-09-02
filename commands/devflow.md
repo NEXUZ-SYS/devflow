@@ -403,6 +403,15 @@ Then show a consolidated "Next Steps" section with only the features that are **
 
 **If any step fails:** Report the error, continue with the remaining steps, and include the failure in the summary. Do NOT stop on the first failure.
 
+**Escopo de versão de stacks:** se `.context/engineering/stacks/manifest.yaml` declara **mais de uma série da mesma família** (ex.: `odoo-12` e `odoo-17` juntos), inclua na seção "Available features" do Step 6:
+
+```
+▸ Escopo de versão de stacks — o manifesto pode ter séries que o projeto não usa
+  Para ativar:  /devflow:devflow-sync
+```
+
+O `update` **apenas aponta**: atualizar plugin e toolchain é o escopo dele; reconciliar o manifesto do projeto é do sync, e a poda é destrutiva — nunca acontece aqui.
+
 **Step 7 — Structural drift detection:**
 
 After Step 6, read `.context/.layout-version` in the current project directory (if `.context/` exists). Also detect a **structurally-v2** layout: a `.context/` that already has the `engineering/` DDC layer is on v2 even when the `.layout-version` marker is missing (older v2 projects predate the marker, or it was never written):
