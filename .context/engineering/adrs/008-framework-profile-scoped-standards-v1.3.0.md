@@ -1,13 +1,13 @@
 ---
 type: adr
 name: framework-profile-scoped-standards
-description: Artefatos condicionais a framework (Standards e skills) moram sob assets/<classe>/profiles/<fw>/ e são copiados no init — localização é o contrato de registro; perfis não contribuem agents
+description: Artefatos condicionais a framework moram sob assets/<classe>/profiles/<fw>/ e são copiados no init; v1.3.0 acrescenta a dimensão de VERSÃO — faixa appliesFrom/appliesUntil e resolução declarativa por sonda
 scope: organizational
 source: local
 stack: universal
 category: principios-codigo
 status: Proposto
-version: 1.2.0
+version: 1.3.0
 created: 2026-06-09
 supersedes: []
 refines: [002-adopt-standards-triple-layer-v1.0.0]
@@ -68,6 +68,24 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 
 10. **O vínculo skill↔agente é declarado, não inferido.** `profiles/<fw>.yaml` ganha `skillBindings: { <papel>: [<slugs>] }`; o sync grava `skills: [...]` no frontmatter do agente, de forma **aditiva e idempotente**, reaplicada a cada execução. `dispatchKeywords` passa a mapear keyword → **papel de agente de projeto**, nunca um agente do plugin.
 
+**v1.3.0 — a dimensão de versão.** Ser condicional a framework não bastava: o artefato
+precisa declarar **a que versões se aplica**. O gate anterior era `MIN_SERIES` dentro de
+cada linter, que modela *"a partir de quando"* e nunca *"até quando"* — uma regra exclusiva
+do Odoo 18 (`<tree>`→`<list>`) não tinha como se declarar e disparava no 17, onde `<tree>`
+é correto: 47 falso-positivos em 589 arquivos. Quatro linters mantinham a própria cópia de
+`odooTargetSeries()`, e uma já havia divergido.
+
+| Eixo | Semântica | Resolver é | Filtro |
+|---|---|---|---|
+| `axis: series` | versões alternativas da mesma coisa (`odoo-12`…`odoo-18`); uma vale | escolher uma, descartar o resto | na **semeadura** (scrape é caro; série errada = resposta errada) |
+| composição (default) | libs coexistem, versão independente | re-pinar cada uma | no **apply** (faixa é dinâmica; 17→18 vale sem re-sync) |
+
+A resolução é **declarativa no YAML do perfil** (`versionDetect`: `{file, pattern}`,
+`{glob, pattern, aggregate}` ou sonda embutida `npmDep`) — acrescentar um perfil irmão
+segue sendo "acrescente um YAML". A faixa `appliesFrom`/`appliesUntil` (inclusivas) vive no
+frontmatter e é avaliada **uma vez** no chokepoint `findApplicableStandards`; o linter volta
+a conter apenas a regra.
+
 ## Alternativas Consideradas
 
 - **Pôr os Standards de framework no set universal `assets/standards/`** — fariam lint em todo projeto, inclusive não-Odoo; lib-centric (S7 WARN). Rejeitado.
@@ -115,6 +133,14 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - QUANDO um artefato for retirado do bundle, ENTÃO tratar o deploy remanescente como órfão: preservar e reportar, com remoção só sob confirmação humana (coerente com o ADR-012).
 - SEMPRE validar frontmatter gravado em agente de projeto com o parser do **próprio dotcontext** — NUNCA com `pyyaml`, que dá falso-OK enquanto um campo mal-tipado descarta o frontmatter inteiro.
 
+- **v1.3.0** — SEMPRE declarar a faixa de versão no **frontmatter** do artefato de perfil — NUNCA como constante dentro do linter. Quatro cópias de `odooTargetSeries` divergiram porque cada consumidor resolvia por conta própria.
+- **v1.3.0** — NUNCA declarar `appliesFrom`/`appliesUntil` em standard **default**: ele não pertence a framework nenhum, logo não há série contra a qual comparar. O `standard-audit` reprova (check S8).
+- **v1.3.0** — SEMPRE tratar versão não-resolvida como **fail-closed**: artefato com faixa é pulado e o motivo é registrado; manifesto não é podado. NUNCA adivinhar a série.
+- **v1.3.0** — SEMPRE reportar evidência como **lista** `[{probe, value, source}]` e a maioria como **vencedor/total** (`48/54`), NUNCA `total/total`: unanimidade falsa recria a opacidade que tornou o defeito invisível. QUANDO sondas discordarem ENTÃO `ambiguous` + pergunta no init, nunca desempate arbitrário.
+- **v1.3.0** — SEMPRE manter o 3º parâmetro (`ctx`) de `findApplicableStandards` **opcional**: sem ele o comportamento é o anterior à faixa. Retrocompatibilidade é a propriedade de segurança principal desta evolução.
+- **v1.3.0** — NUNCA podar entrada do manifesto sem confirmação explícita (`--yes`); poda é destrutiva e o sync a executa sob revisão do plano.
+- **v1.3.0** — SEMPRE fazer `project-init` e `context-sync` **chamarem** a operação única de reconciliação — NUNCA decidir cada um por conta, que é a mesma doença dos quatro `odooTargetSeries`.
+
 ## Enforcement
 
 - [ ] `tests/integration/test-profile-standards-wiring.mjs` — `frameworkContributions` expõe `standards`/`stacks`; `loadProfiles` normaliza as chaves; backward-compat (perfil sem as chaves → arrays vazios).
@@ -130,10 +156,15 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 - [x] `test-agent-skill-binding.mjs` — frontmatter validado pelo parser do **dotcontext**; **contenção**: papel é nome de arquivo, `isWithinDir` + recusa de symlink.
 - [ ] Verificação **manual pós-release**: o plugin carregado vem do **cache do release**, não do working tree — reiniciar a sessão não basta. Só após `/devflow update`. Observação, nunca sinal verde.
 
+- [ ] **v1.3.0** — `standard-audit` check S8 reprova faixa em standard default
+- [ ] **v1.3.0** — teste de retrocompatibilidade: `findApplicableStandards` sem `ctx` é idêntico ao anterior
+- [ ] **v1.3.0** — teste: nenhum linter sob `assets/standards/profiles/**/machine/` define ou chama resolução de série
+- [ ] **v1.3.0** — teste: `reconcile` sem `--yes` não escreve, sem versão resolvida não poda, e a maioria não reporta `N/N` sob divergência
+
 ## Evidências
 
 **Referências internas:** plano `.context/plans/odoo-profile-standards.md` (spec + faseamento PREVC) · doc `docs/odoo-profile-standards.md` · `scripts/lib/standards-loader.mjs` (`loadStandardsMerged`, `readStandardsFromDir`) · `scripts/lib/run-linter.mjs` (`resolveAndCheckSandbox`, sandbox SI-4 origin-aware) · `scripts/lib/detect-framework.mjs` (`loadProfiles`/`frameworkContributions`) · `profiles/odoo.yaml`. Refina o ADR-002 (Standard triple-layer); coexiste com o ADR-007 (default standards library / sync do repo standalone), cujo invariante anti-RCE (`.js` bundled-only, allowlist `origin:"default"`) permanece intocado por esta decisão. Estende o mecanismo de perfis de framework introduzido na v1.13.0 (agents/skills) para também carregar Standards e stacks.
 
 **Acrescentado na v1.2.0:** spec `docs/superpowers/specs/2026-08-13-slash-menu-first-command-design.md` (workflow `slash-menu-first-command`) · bundle do Claude Code **2.1.231** — loader de plugin skill/command (default de `user-invocable`), dispatch (`cmd_not_user_invocable`) e função `H8l` (comparador do menu de `/`). Lido do binário, não de documentação: o campo não consta do material público de plugins.
 
-**Acrescentado na v1.1.0:** spec `docs/superpowers/specs/2026-08-04-deframework-plugin-namespace-design.md` (workflow PREVC `deframework-plugin-namespace`) · `scripts/lib/provenance-sync.mjs` (`resolveArtifacts`, `applySync`) · `scripts/lib/gen-known-hashes.mjs` (`distributableFiles`, `genBackfill` — hash de conteúdo, path-agnóstico). Reconcilia com o ADR-006 pela distinção materializar ≠ autorar (item 9 da Decisão) e apoia-se no ADR-012 para a política de órfão (preservar, reportar, remover só sob confirmação).
+**Acrescentado na v1.1.0:** spec `docs/superpowers/specs/2026-08-04-deframework-plugin-namespace-design.md` (workflow PREVC `deframework-plugin-namespace`) · `scripts/lib/provenance-sync.mjs` (`resolveArtifacts`, `applySync`) · `scripts/lib/gen-known-hashes.mjs` (`distributableFiles`, `genBackfill` — hash de conteúdo, path-agnóstico). Reconcilia com o ADR-006 pela distinção materializar ≠ autorar (item 9 da Decisão) e apoia-se no ADR-012 para a política de órfão (preservar, reportar, remover só sob confirmação). · **v1.3.0:** spec `docs/superpowers/specs/2026-09-02-version-scoped-stacks-standards-design.md` + plano `docs/superpowers/plans/2026-09-02-version-scoped-stacks-standards.md`; defeito medido no `nexuz/odoo_17` (47 falso-positivos em 589 arquivos; 7 séries semeadas num projeto 17).
