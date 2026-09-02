@@ -550,7 +550,56 @@ const pluginUpToDate = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate];
+const mempalaceEnv = {
+  id: "mempalace-env",
+  title: "MemPalace exigido pelo projeto está utilizável nesta máquina",
+  severity: "critical",
+  destructive: false,
+  run(ctx) {
+    const cfgPath = join(ctx.cwd, ".context", ".devflow.yaml");
+    if (!existsSync(cfgPath)) {
+      return { status: "OK", diagnosis: "Sem .devflow.yaml — o projeto não exige MemPalace.", repair: "" };
+    }
+    let raw = "";
+    try { raw = readFileSync(cfgPath, "utf-8"); } catch { /* ignore */ }
+    const enabled = String(readBlockField(raw, "mempalace", "enabled") || "").replace(/['"]/g, "").trim();
+    if (enabled !== "true") {
+      return { status: "OK", diagnosis: "O projeto não exige MemPalace (mempalace.enabled ≠ true).", repair: "" };
+    }
+    // Barato de propósito: which + um JSON + um existsSync (~1ms). Contar
+    // drawers exigiria `mempalace status`, medido em ~600ms — doze vezes o
+    // orçamento inteiro do checkup diário. Isso fica no mempalace-health.
+    if (!ctx.which("mempalace")) {
+      return {
+        status: "FAIL",
+        diagnosis: "O projeto declara mempalace.enabled: true, mas o binário mempalace não está no PATH — esta máquina não tem memória de longo prazo.",
+        repair: "Instale o MemPalace e rode 'mempalace init'.",
+      };
+    }
+    const confPath = join(ctx.home, ".mempalace", "config.json");
+    if (!existsSync(confPath)) {
+      return {
+        status: "WARN",
+        diagnosis: "MemPalace instalado, mas sem ~/.mempalace/config.json — o caminho do palace é indeterminado.",
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    let palacePath = "";
+    try { palacePath = JSON.parse(readFileSync(confPath, "utf-8")).palace_path || ""; } catch { /* ignore */ }
+    if (!palacePath || !existsSync(palacePath)) {
+      return {
+        status: "FAIL",
+        diagnosis: `O palace apontado pelo config não existe: ${palacePath || "(vazio)"}.`,
+        repair: "Rode 'mempalace init'.",
+      };
+    }
+    // Informa QUAL palace está em uso: a escolha é invisível hoje e determina
+    // se a memória é compartilhada entre projetos.
+    return { status: "OK", diagnosis: `MemPalace utilizável; palace em ${palacePath}.`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
