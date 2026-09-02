@@ -228,3 +228,52 @@ test("faixa é sempre STRING — `appliesFrom: 16` sem aspas viraria Number", ()
   assert.equal(typeof s.appliesFrom, "string",
     "comparação homogênea depende disso; Number quebraria o inRange");
 });
+
+// ─── Predicado de faixa no chokepoint (fase E, Task 6) ──────────────────────
+
+const RANGED = [
+  { id: "std-a", applyTo: ["**/*.xml"], appliesFrom: "18", appliesUntil: null, framework: "odoo" },
+  { id: "std-b", applyTo: ["**/*.xml"], appliesFrom: "17", appliesUntil: null, framework: "odoo" },
+  { id: "std-c", applyTo: ["**/*.xml"], appliesFrom: null, appliesUntil: null },
+];
+
+test("faixa: no Odoo 17 o standard exclusivo do 18 NÃO se aplica", () => {
+  const ctx = { versions: new Map([["odoo", "17"]]) };
+  const ids = findApplicableStandards("views/x.xml", RANGED, ctx).map((s) => s.id);
+  assert.deepEqual(ids.sort(), ["std-b", "std-c"]);
+});
+
+test("faixa: no Odoo 18 ambos se aplicam", () => {
+  const ctx = { versions: new Map([["odoo", "18"]]) };
+  const ids = findApplicableStandards("views/x.xml", RANGED, ctx).map((s) => s.id);
+  assert.deepEqual(ids.sort(), ["std-a", "std-b", "std-c"]);
+});
+
+test("faixa: appliesUntil é INCLUSIVO", () => {
+  const stds = [{ id: "s", applyTo: ["**/*.xml"], appliesFrom: "15", appliesUntil: "17", framework: "odoo" }];
+  assert.equal(findApplicableStandards("x.xml", stds, { versions: new Map([["odoo", "17"]]) }).length, 1);
+  assert.equal(findApplicableStandards("x.xml", stds, { versions: new Map([["odoo", "18"]]) }).length, 0);
+});
+
+test("faixa: comparação é numérica, não lexicográfica ('9' < '10')", () => {
+  const stds = [{ id: "s", applyTo: ["**/*.xml"], appliesFrom: "9", appliesUntil: null, framework: "odoo" }];
+  assert.equal(
+    findApplicableStandards("x.xml", stds, { versions: new Map([["odoo", "10"]]) }).length, 1,
+    "série 10 >= piso 9; comparação lexicográfica diria o contrário",
+  );
+});
+
+test("fail-closed: versão desconhecida PULA o standard com faixa e registra", () => {
+  const skipped = [];
+  const ctx = { versions: new Map(), onSkip: (e) => skipped.push(e) };
+  const ids = findApplicableStandards("views/x.xml", RANGED, ctx).map((s) => s.id);
+  assert.deepEqual(ids, ["std-c"], "só o sem-faixa sobrevive");
+  assert.equal(skipped.length, 2, "os pulados são registrados, não silenciados");
+  assert.ok(skipped.every((s) => s.reason));
+});
+
+test("RETROCOMPAT: sem ctx, o comportamento é idêntico ao de hoje", () => {
+  const ids = findApplicableStandards("views/x.xml", RANGED).map((s) => s.id);
+  assert.deepEqual(ids.sort(), ["std-a", "std-b", "std-c"],
+    "sem ctx nenhum standard é filtrado por versão");
+});

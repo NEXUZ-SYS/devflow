@@ -137,7 +137,14 @@ export async function runLintersFor(event, projectRoot, pluginRoot) {
   // Merged: project standards + plugin defaults (origin-stamped). Defaults with a
   // bundled linter are now enforced even without eject; project overrides by id.
   const standards = loadStandardsMerged(projectRoot, trustedPlugin);
-  const applicable = findApplicableStandards(event.path, standards);
+  // Escopo de versao: o predicado pula standard de perfil fora da faixa da serie
+  // do projeto (fail-closed — versao desconhecida NAO aplica standard com faixa).
+  // Task 7 substitui este stub pelo leitor de .devflow.yaml.
+  const ctx = {
+    versions: new Map(),
+    onSkip: ({ id, reason }) => console.error(`[version-scope] ${id}: ${reason}`),
+  };
+  const applicable = findApplicableStandards(event.path, standards, ctx);
 
   for (const std of applicable) {
     const linter = std.enforcement?.linter;

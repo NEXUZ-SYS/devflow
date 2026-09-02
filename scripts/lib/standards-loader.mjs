@@ -88,17 +88,56 @@ export function loadStandards(projectRoot) {
   return standards;
 }
 
-export function findApplicableStandards(filePath, standards) {
+// Comparacao por SERIE: inteiros, nunca lexicografica ("9" < "10" seria falso).
+function inRange(series, from, until) {
+  const n = Number(series);
+  if (!Number.isFinite(n)) return false;
+  if (from != null && n < Number(from)) return false;
+  if (until != null && n > Number(until)) return false; // appliesUntil e INCLUSIVO
+  return true;
+}
+
+/**
+ * Chokepoint unico do filtro de standards.
+ *
+ * `ctx` e OPCIONAL (3o parametro): sem ele o comportamento e byte-identico ao
+ * anterior a faixa de versao — retrocompatibilidade e a propriedade de
+ * seguranca principal desta feature.
+ *   ctx.versions: Map<framework, serie>
+ *   ctx.onSkip:   ({id, reason}) => void   (fail-closed nunca e silencioso)
+ */
+export function findApplicableStandards(filePath, standards, ctx = {}) {
   if (!Array.isArray(standards)) return [];
+  const versions = ctx.versions instanceof Map ? ctx.versions : null;
   return standards.filter(std => {
     if (!Array.isArray(std.applyTo) || std.applyTo.length === 0) return false;
-    return std.applyTo.some(pattern => {
+    const pathMatches = std.applyTo.some(pattern => {
       try {
         return matchGlob(pattern, filePath);
       } catch {
         return false;
       }
     });
+    if (!pathMatches) return false;
+
+    const hasRange = std.appliesFrom != null || std.appliesUntil != null;
+    if (!hasRange) return true;   // sem faixa: aplica como sempre
+    if (!versions) return true;   // sem ctx: contrato antigo preservado
+
+    const series = versions.get(std.framework);
+    if (series == null) {         // fail-closed: nao adivinha, pula e registra
+      if (typeof ctx.onSkip === "function") {
+        ctx.onSkip({ id: std.id, reason: `versao de '${std.framework}' desconhecida — standard com faixa pulado` });
+      }
+      return false;
+    }
+    if (!inRange(series, std.appliesFrom, std.appliesUntil)) {
+      if (typeof ctx.onSkip === "function") {
+        ctx.onSkip({ id: std.id, reason: `serie ${series} fora da faixa [${std.appliesFrom ?? "-"}, ${std.appliesUntil ?? "-"}]` });
+      }
+      return false;
+    }
+    return true;
   });
 }
 
