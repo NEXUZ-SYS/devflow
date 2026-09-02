@@ -161,6 +161,10 @@ async function handleMajor(file, opts) {
 
   // New ADR carries supersedes ref to old slug-without-extension (Opção Y)
   const today = new Date().toISOString().slice(0, 10);
+  // Bump derivado da versão real — não pode ser hardcoded '2.0.0': uma ADR já em
+  // 2.x produziria o nome de uma versão histórica existente, e o writeFile abaixo
+  // sobrescreveria história imutável (Substituido).
+  const newVersion = bumpSemver(oldFm.version || '1.0.0', 'major');
   const newFm = Object.create(null);
   Object.assign(newFm, {
     type: 'adr',
@@ -170,7 +174,7 @@ async function handleMajor(file, opts) {
     stack: oldFm.stack,
     category: oldFm.category,
     status: 'Proposto',
-    version: '2.0.0',
+    version: newVersion,
     created: today,
     supersedes: [oldSlug],
     refines: [],
@@ -179,8 +183,8 @@ async function handleMajor(file, opts) {
   });
   const newBody = '\n# ADR — <a definir — major bump>\n\n## Contexto\n\n<a definir>\n\n## Decisão\n\n<a definir>\n';
 
-  // New filename: replace v1.x.y → v2.0.0 in the path
-  const newFile = file.replace(/-v\d+\.\d+\.\d+\.md$/, '-v2.0.0.md');
+  // New filename: replace the old vX.Y.Z with the bumped version
+  const newFile = file.replace(/-v\d+\.\d+\.\d+\.md$/, `-v${newVersion}.md`);
 
   // Old ADR: mark Substituido in place (filename DOES NOT change)
   oldFm.status = 'Substituido';

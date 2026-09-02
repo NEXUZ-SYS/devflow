@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FIX_PROJ = './tests/validation/fixtures/adr-project/';
@@ -86,6 +86,56 @@ test('major: create new file with supersedes; old becomes Substituido', () => {
   assert.match(newContent, /version: 2\.0\.0/);
   assert.match(newContent, /supersedes: \[001-zod-validation-v1\.0\.0\]/);
   assert.match(newContent, /status: Proposto/);
+
+  rmSync(tmp, { recursive: true });
+});
+
+// Regressão: handleMajor hardcodava version '2.0.0' e o replace do filename,
+// em vez de usar bumpSemver como patch/minor fazem. O teste acima passava por
+// coincidência (1.0.0 --major É 2.0.0). A partir de 2.x o número saía errado e
+// o writeFile sobrescrevia história imutável já existente com aquele nome.
+test('major: bump a partir de 2.2.0 é 3.0.0, não 2.0.0', () => {
+  const tmp = setupTmpProject();
+  const adrDir = join(tmp, '.context/docs/adrs');
+
+  // ADR já em v2.2.0 (como a 007 real deste repo)
+  const oldFile = join(adrDir, '004-versioned-adr-v2.2.0.md');
+  writeFileSync(oldFile, [
+    '---', 'type: adr', 'name: versioned-adr',
+    'description: ADR já evoluída duas vezes', 'scope: organizational',
+    'source: local', 'stack: universal', 'category: arquitetura',
+    'status: Aprovado', 'version: 2.2.0', 'created: 2026-06-05',
+    'supersedes: ["004-versioned-adr-v2.1.0"]', 'refines: []',
+    'protocol_contract: null', 'decision_kind: firm', '---', '',
+    '# ADR — versionada', '', '## Contexto', '', 'corpo', '',
+  ].join('\n'));
+
+  // História imutável que o bug sobrescreveria
+  const historic = join(adrDir, '004-versioned-adr-v2.0.0.md');
+  const historicContent = [
+    '---', 'type: adr', 'name: versioned-adr',
+    'description: primeira major', 'scope: organizational', 'source: local',
+    'stack: universal', 'category: arquitetura', 'status: Substituido',
+    'version: 2.0.0', 'created: 2026-06-04', 'supersedes: []', 'refines: []',
+    'protocol_contract: null', 'decision_kind: firm', '---', '',
+    '# ADR — versão histórica INTOCÁVEL', '',
+  ].join('\n');
+  writeFileSync(historic, historicContent);
+
+  const r = runEvolve(oldFile, '--kind=major', '--apply');
+
+  assert.equal(r.kind, 'major');
+  assert.match(r.new, /004-versioned-adr-v3\.0\.0\.md$/, 'novo arquivo deve ser v3.0.0');
+
+  const newFile = join(adrDir, '004-versioned-adr-v3.0.0.md');
+  assert.ok(existsSync(newFile), 'v3.0.0 deve existir');
+  assert.match(readFileSync(newFile, 'utf-8'), /version: 3\.0\.0/);
+
+  // A história não foi tocada
+  assert.equal(
+    readFileSync(historic, 'utf-8'), historicContent,
+    'v2.0.0 (Substituido) não pode ser sobrescrita pelo major bump',
+  );
 
   rmSync(tmp, { recursive: true });
 });
