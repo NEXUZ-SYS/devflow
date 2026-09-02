@@ -205,14 +205,15 @@ test("S6: detects lib via std body even when std applyTo is unrelated", () => {
   } finally { cleanup(); }
 });
 
-test("S6: counts as 6th check in summary", () => {
+test("S6: counts among the audit checks in summary", () => {
   const { root, cleanup } = fixture();
   try {
     writeManifest(root, {});
     writeStd(root, "minimal");
     const r = auditStandard(join(root, ".context/standards/std-minimal.md"), root);
-    assert.equal(r.checks.length, 7, "audit now runs 7 checks (S1-S7, S7=concern alignment)");
+    // S8 (faixa de versão só em standard de perfil) entrou com o escopo de versão.
+    assert.equal(r.checks.length, 8, "audit runs 8 checks (S1-S8)");
     const ids = r.checks.map(c => c.id).sort();
-    assert.deepEqual(ids, ["S1", "S2", "S3", "S4", "S5", "S6", "S7"]);
+    assert.deepEqual(ids, ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]);
   } finally { cleanup(); }
 });

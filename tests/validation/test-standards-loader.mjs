@@ -201,3 +201,30 @@ weakStandardWarning: true
   assert.equal(result[0].id, "std-x");
   cleanup();
 });
+
+// ─── Faixa de versão (fase E, Task 5) ───────────────────────────────────────
+
+const RANGE_FIXTURE = "tests/fixtures/version-scoped/std-range";
+
+test("loader propaga appliesFrom/appliesUntil quando declarados", () => {
+  const stds = loadStandards(RANGE_FIXTURE);
+  const s = stds.find((x) => x.id === "std-range-demo");
+  assert.ok(s, "fixture std-range-demo deve carregar");
+  assert.equal(s.appliesFrom, "16");
+  assert.equal(s.appliesUntil, "17");
+});
+
+test("retrocompat: standard sem faixa carrega com null nos dois campos", () => {
+  const stds = loadStandards(RANGE_FIXTURE);
+  const s = stds.find((x) => x.id === "std-no-range-demo");
+  assert.ok(s, "fixture std-no-range-demo deve carregar");
+  assert.equal(s.appliesFrom, null);
+  assert.equal(s.appliesUntil, null);
+});
+
+test("faixa é sempre STRING — `appliesFrom: 16` sem aspas viraria Number", () => {
+  const stds = loadStandards(RANGE_FIXTURE);
+  const s = stds.find((x) => x.id === "std-range-demo");
+  assert.equal(typeof s.appliesFrom, "string",
+    "comparação homogênea depende disso; Number quebraria o inRange");
+});

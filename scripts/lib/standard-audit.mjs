@@ -327,6 +327,23 @@ export function auditStandard(stdPath, projectRoot, options = {}) {
     }
   }
 
+  // S8 — Faixa de versao so em standard de PERFIL.
+  // Um standard default nao pertence a framework nenhum, entao nao ha serie
+  // contra a qual comparar appliesFrom/appliesUntil: declarar faixa nele e
+  // erro de autoria, nao configuracao.
+  {
+    const hasRange = fm.appliesFrom != null || fm.appliesUntil != null;
+    const isDefault = typeof fm.source === "string" && fm.source.startsWith("devflow-default");
+    checks.push({
+      id: "S8",
+      name: "Faixa de versão só em standard de perfil",
+      status: hasRange && isDefault ? "FAIL" : "PASS",
+      diagnosis: hasRange && isDefault
+        ? `${fm.id}: standard default não pertence a framework nenhum — não há série contra a qual comparar appliesFrom/appliesUntil`
+        : hasRange ? "faixa declarada em standard de perfil (ok)" : "sem faixa declarada",
+    });
+  }
+
   // Summary
   const summary = {
     pass: checks.filter(c => c.status === "PASS").length,

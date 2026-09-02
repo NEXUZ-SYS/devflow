@@ -75,6 +75,11 @@ export function loadStandards(projectRoot) {
       version: fm.version || "0.0.0",
       applyTo,
       relatedAdrs: fm.relatedAdrs || [],
+      // Faixa de versao do framework do perfil dono (inclusiva nos dois lados).
+      // String(...) e deliberado: `appliesFrom: 16` sem aspas vira Number no
+      // YAML, e a comparacao precisa ser homogenea.
+      appliesFrom: fm.appliesFrom != null ? String(fm.appliesFrom) : null,
+      appliesUntil: fm.appliesUntil != null ? String(fm.appliesUntil) : null,
       enforcement: fm.enforcement || {},
       weak,
       body: parsed.body || "",
@@ -194,6 +199,11 @@ function readStandardsFromDir(dir, origin) {
       version: fm.version || "0.0.0",
       applyTo,
       relatedAdrs: fm.relatedAdrs || [],
+      // Faixa de versao do framework do perfil dono (inclusiva nos dois lados).
+      // String(...) e deliberado: `appliesFrom: 16` sem aspas vira Number no
+      // YAML, e a comparacao precisa ser homogenea.
+      appliesFrom: fm.appliesFrom != null ? String(fm.appliesFrom) : null,
+      appliesUntil: fm.appliesUntil != null ? String(fm.appliesUntil) : null,
       enforcement: fm.enforcement || {},
       body: parsed.body || "",
       origin,
