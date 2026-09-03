@@ -96,3 +96,36 @@ export function selectDefaults({ projectRoot, pluginRoot }) {
   }
   return selected;
 }
+
+// Caminho canonico do linter no PROJETO — relativo a `.context/`, que e a base
+// do sandbox origin:"project" em resolveAndCheckSandbox. O bundle usa
+// `machine/<id>.js`, relativo a `assets/standards/`. A mesma string NAO serve
+// as duas origens; e por isso que a copia do .md nao e verbatim.
+export function projectLinterRel(id) {
+  return `engineering/standards/machine/${id}.js`;
+}
+
+/**
+ * Reescreve `enforcement.linter` do .md para a forma canonica do projeto.
+ *
+ * NUNCA produz `linter: null` — e a diferenca entre esta funcao e o `eject`
+ * simples, que ANULA o linter (devflow-standards.mjs:594) e por isso nao serve
+ * para materializar: aplicado aos 26 defaults, desligaria os 20 linters ativos.
+ *
+ * So o FRONTMATTER e tocado: o corte no segundo `---` garante que uma mencao a
+ * `linter:` no corpo nao seja reescrita. Deterministico e idempotente — o hash
+ * do resultado precisa bater dos dois lados (plugin e projeto).
+ */
+export function retargetLinter(mdContent, id) {
+  if (typeof mdContent !== "string" || !mdContent.startsWith("---")) return mdContent;
+  const end = mdContent.indexOf("\n---", 3);
+  if (end === -1) return mdContent;
+  const head = mdContent.slice(0, end);
+  const rest = mdContent.slice(end);
+  // `linter: null` (warn-only) fica como esta: nao ha linter a retargetar.
+  const retargeted = head.replace(
+    /^(\s*)linter:\s*machine\/[^\s]+\.js\s*$/m,
+    `$1linter: ${projectLinterRel(id)}`,
+  );
+  return retargeted + rest;
+}

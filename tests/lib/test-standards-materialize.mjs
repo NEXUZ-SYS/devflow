@@ -1,10 +1,12 @@
 // Suite — seleção e transform da materialização dos standards default.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listProjectFiles, selectDefaults } from "../../scripts/lib/standards-materialize.mjs";
+import {
+  listProjectFiles, selectDefaults, retargetLinter, projectLinterRel,
+} from "../../scripts/lib/standards-materialize.mjs";
 
 const PLUGIN = process.cwd();
 const R = "tests/fixtures/standards-materialize";
@@ -73,4 +75,58 @@ test("cada selecionado traz mdSrc e, quando existe, jsSrc", () => {
   const warn = sel.find((s) => s.id === "std-commit-hygiene");
   assert.equal(warn.jsSrc, null, "warn-only não tem machine/");
   assert.equal(warn.hasLinter, false);
+});
+
+// ─── transform do enforcement.linter (Task 3) ───────────────────────────────
+
+test("retargetLinter reescreve para o caminho canônico do projeto", () => {
+  const md = `---\nid: std-security\nenforcement:\n  linter: machine/std-security.js\n---\n\n# corpo\n`;
+  const out = retargetLinter(md, "std-security");
+  assert.match(out, /linter: engineering\/standards\/machine\/std-security\.js/);
+  assert.doesNotMatch(out, /linter: machine\//);
+});
+
+test("retargetLinter NUNCA produz linter: null", () => {
+  const md = `---\nid: std-security\nenforcement:\n  linter: machine/std-security.js\n---\n`;
+  assert.doesNotMatch(retargetLinter(md, "std-security"), /linter:\s*null/,
+    "null num default enforçado desliga 20 linters silenciosamente");
+});
+
+test("retargetLinter é idempotente — aplicar 2× é igual a 1×", () => {
+  const md = `---\nid: std-security\nenforcement:\n  linter: machine/std-security.js\n---\n`;
+  const once = retargetLinter(md, "std-security");
+  assert.equal(retargetLinter(once, "std-security"), once);
+});
+
+test("retargetLinter não toca warn-only (linter: null é o valor do bundle)", () => {
+  const md = `---\nid: std-caching\nenforcement:\n  linter: null\n---\n`;
+  assert.equal(retargetLinter(md, "std-caching"), md, "sem linter, nada a retargetar");
+});
+
+test("retargetLinter preserva o corpo byte-a-byte", () => {
+  const body = "\n# Standard\n\n## Princípios\n\nTexto com `linter: machine/x.js` no corpo.\n";
+  const md = `---\nid: std-security\nenforcement:\n  linter: machine/std-security.js\n---${body}`;
+  const out = retargetLinter(md, "std-security");
+  assert.ok(out.endsWith(body), "só o frontmatter muda; o corpo é intocado");
+});
+
+test("projectLinterRel é o path relativo a .context/ (base do sandbox project)", () => {
+  assert.equal(projectLinterRel("std-security"), "engineering/standards/machine/std-security.js");
+});
+
+test("TODOS os defaults com linter sobrevivem ao transform sem virar null", () => {
+  // A invariante e sobre os 26 defaults do bundle, nao sobre os selecionados de
+  // um fixture: em ts-src so 17 casam (accessibility, design-antipatterns e
+  // visual-quality exigem .css/.html/.tsx, ausentes ali).
+  const dir = join(PLUGIN, "assets", "standards");
+  const comLinter = readdirSync(dir)
+    .filter((f) => f.endsWith(".md") && f !== "README.md")
+    .map((f) => ({ id: f.replace(/\.md$/, ""), mdSrc: join(dir, f) }))
+    .filter(({ id }) => existsSync(join(dir, "machine", `${id}.js`)));
+  assert.equal(comLinter.length, 20, "o bundle tem 20 defaults com linter");
+  for (const { id, mdSrc } of comLinter) {
+    const out = retargetLinter(readFileSync(mdSrc, "utf-8"), id);
+    assert.match(out, new RegExp(`linter: engineering/standards/machine/${id}\\.js`), `${id} não retargetado`);
+    assert.doesNotMatch(out, /linter:\s*null/, `${id} virou null`);
+  }
 });
