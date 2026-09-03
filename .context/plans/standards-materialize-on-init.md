@@ -133,7 +133,9 @@ phases:
           - "update-default-standards.sh inalterado; guardrail anti-RCE literal"
 generated: "2026-09-02"
 status: filled
+progress: 0
 scaffoldVersion: "2.0.0"
+lastUpdated: "2026-09-03T00:19:03.965Z"
 ---
 
 # Materialização dos Standards default em todo projeto
@@ -176,3 +178,7 @@ scaffoldVersion: "2.0.0"
 - Três runners com exit 0, registrados no ledger do contrato `verify:`.
 - `grep -L "linter: engineering/standards/machine" ` sobre os `.md` materializados com linter → vazio.
 - Relatório do sync mostrando `preserved` após edição local deliberada.
+
+## Execution History
+
+> Last updated: 2026-09-03T00:19:03.965Z | Progress: 0%

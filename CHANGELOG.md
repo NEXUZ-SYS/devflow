@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Materialização dos Standards default em todo projeto (ADR-007 v3.0.0) — 8 tasks
+
+Ao instalar o DevFlow num Odoo 17, o operador viu 15 `std-odoo-*.md` aparecerem em `.context/engineering/standards/` e concluiu que valeria para **todo** projeto. Aqueles eram Standards de **perfil** (ADR-008, copiados por design); os ~26 **universais** eram *live-merged* do plugin em tempo de lint e **nunca** tocavam o disco. Três custos vinham disso: nada em `.context/` revelava quais standards governavam o projeto (não há o que revisar em PR), customizar exigia `standards eject <id>` um a um, e sem o plugin instalado o projeto não tinha nem o texto nem o enforcement.
+
+Os defaults **aplicáveis** passam a ser materializados no projeto — `.md` **e** `machine/*.js` — por `project-init`, `context-sync` e uma rotina periódica, todos delegando ao mesmo `applySync`.
+
+- **`scripts/lib/standards-materialize.mjs` (novo)** — decide **o que** materializar casando `applyTo` contra os **caminhos reais** do repositório, não contra extensões sintetizadas: 3 defaults têm prefixo `src/**`, e um projeto TypeScript **sem** `src/` não pode recebê-los. Honra `standards.local.yaml` `disable:`. Walk alinhado com os demais do repo (profundidade 6) e com teto de arquivos — a pergunta é booleana e `resolveArtifacts` roda em todo sync.
+- **`transform` no `applySync`** — a cópia do `.md` **não é verbatim**: `resolveAndCheckSandbox` resolve o path do linter contra bases diferentes por origem (`default` → `assets/standards/`; `project` → `.context/`), então `enforcement.linter` precisa ser reescrito para `engineering/standards/machine/<id>.js`. O `pluginHash` passa a ser computado sobre os **bytes escritos** — usar o hash da origem classificaria todo projeto como `edited` já na 1ª passada e **congelaria o sync**, transformando a feature em cópia-congelada acidental.
+- **Invariante dura: `enforcement.linter` nunca vira `null`.** 20 dos 26 defaults trazem linter bundlado e são enforçados hoje **sem** eject; `null` seria downgrade silencioso. É exatamente o que `standards eject <id>` faz (`devflow-standards.mjs:594`) — e por isso o eject **não serve** para materializar.
+- **`gen-known-hashes` ganha a 3ª raiz** (`assets/standards/`), indexando o conteúdo **cru e o transformado**: sem o transformado, um projeto materializado por versão anterior seria classificado `edited` e nunca mais atualizaria. Registry 399 → 465 (+66; os 6 warn-only não têm transform e o `Set` deduplica).
+- **`standards.materialize`** (default **ligado**) no parser único do ADR-011 — opt-out por `false`, sem import novo, preservando a invariante de pureza do módulo.
+- **O live-merge NÃO é removido.** É ele que faz um default **novo** do plugin valer imediatamente, antes de a materialização convergir. Medido num projeto Odoo: **26 standards = 17 `origin: project` + 9 `origin: default`**.
+
+Verificação ponta a ponta num projeto Odoo real: 17 `.md` + 13 linters escritos; o `std-secret-conventions` materializado **executa a partir do projeto** e acusa uma chave hard-coded (`exit=1`); 2ª passada é no-op (`current: 30`); edição local é preservada e reportada; `materialize: false` → 0; `disable: [std-security]` → 16 de 17. O guardrail anti-RCE segue literal — `update-default-standards.sh` **intocado**: `machine/*.js` nunca é fetchado da rede, só copiado do bundle local.
+
+### Fixed — `adr-evolve --kind=major` sobrescrevia história imutável
+
+`handleMajor` gravava `version: '2.0.0'` e reescrevia o filename para `-v2.0.0.md` **fixos**, enquanto `handlePatch` e `handleMinor` já derivavam via `bumpSemver`. O teste existente passava por coincidência: `1.0.0 --major` **é** `2.0.0`.
+
+Em qualquer ADR já em 2.x o nome gerado colide com uma versão histórica existente (`status: Substituido`) e o `writeFile` a sobrescreve. Reproduzido no dry-run da ADR-007 deste repo (v2.2.0), que propôs criar `007-default-standards-library-v2.0.0.md` — arquivo que já existe. Teste de regressão cobre `2.2.0 → 3.0.0` e assere byte-a-byte que a v2.0.0 permanece intacta.
+
 ## [3.3.0] — 2026-09-02
 
 ### Fixed — Escopo de versão para stacks e standards de perfil (o Odoo 17 parava de receber regra do 18) — 12 tasks
