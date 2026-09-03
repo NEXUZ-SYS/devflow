@@ -791,7 +791,23 @@ Each directory receives a minimal `README.md` placeholder (in the user's selecte
 | `.context/operations/` | `operations-context` | runbooks, on-call, SLOs, infra |
 | `.context/engineering/` | `engineering-context` | architecture, standards, subsystems |
 
-**Standards default:** o DevFlow já disponibiliza ~20 standards default de engenharia (warn-only, concern-first) via plugin — não precisam ser scaffoldados. Eles aparecem no índice do SessionStart e são filtrados por `applyTo`/task. Para customizar um, use `/devflow standards eject <id>` (copia para `.context/engineering/standards/`, editável, com linter opcional em `machine/`).
+**Standards default (materializados):** os ~26 standards default de engenharia são
+**materializados** no projeto — `.md` **e** `machine/*.js` — para os que se aplicam a este
+repositório (um std entra se **algum caminho real** casa seu `applyTo`; um projeto sem
+`src/` não recebe os `src/**`). A escrita passa pelo sync de procedência, então re-rodar é
+no-op e edição local é preservada:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/provenance-sync.mjs" apply --project=<PWD> --plugin="${CLAUDE_PLUGIN_ROOT}"
+```
+
+O `enforcement.linter` é **retargetado** para o caminho canônico do projeto na cópia — nunca
+anulado. (É por isso que `standards eject <id>` **não** serve para materializar: ele grava
+`linter: null`, o que desligaria os 20 defaults hoje enforçados.)
+
+O live-merge continua ativo: um default **novo** do plugin vale **imediatamente**, antes de
+a materialização convergir. Para desligar tudo: `standards.materialize: false` em
+`.devflow.yaml`. Para suprimir um id: `disable: [std-<id>]` em `.context/standards.local.yaml`.
 
 ### Engineering subsystems relocation (migration guard)
 

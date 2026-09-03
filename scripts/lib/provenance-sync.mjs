@@ -2,9 +2,11 @@
  * provenance-sync — sync provenance-aware de artefatos do plugin para .context/.
  *
  * Distingue deploy intocado (auto-update) de edição local (preserva+reporta) via
- * hash, com contenção de segurança (isWithinDir + recusa de symlink). Cobre apenas
- * artefatos VERBATIM: skills + standards de profile. Agents (preenchidos no deploy)
- * e std-*.md raiz (live-loaded) ficam fora.
+ * hash, com contenção de segurança (isWithinDir + recusa de symlink). Cobre
+ * artefatos VERBATIM (skills + standards de profile) e, via `transform`,
+ * artefatos cujo conteúdo é DERIVADO do bundle — os std-*.md raiz
+ * materializados, cujo `enforcement.linter` é retargetado na cópia. Agents
+ * (preenchidos no deploy) ficam fora.
  *
  * Lib API:
  *   hashFile(path) -> string|null
@@ -24,6 +26,12 @@ import {
 import { join, dirname, relative, resolve } from "node:path";
 import { isWithinDir } from "./path-guard.mjs";
 import { frameworkContributions } from "./detect-framework.mjs";
+import { resolveMaterializedStandards } from "./standards-materialize.mjs";
+import { readStandardsMaterialize } from "./devflow-config.mjs";
+
+function sha256(buf) {
+  return createHash("sha256").update(buf).digest("hex");
+}
 
 export function hashFile(path) {
   try { return createHash("sha256").update(readFileSync(path)).digest("hex"); }
@@ -116,6 +124,15 @@ export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
       });
     }
   }
+  // Standards default MATERIALIZADOS (std-*.md raiz + machine/*.js). Opt-out
+  // por `standards.materialize: false` — default LIGADO. Um so caminho de
+  // codigo serve init, sync e a rotina periodica.
+  const cfgPath = join(projectRoot, ".context", ".devflow.yaml");
+  const cfg = existsSync(cfgPath) ? readFileSync(cfgPath, "utf-8") : "";
+  if (readStandardsMaterialize(cfg)) {
+    arts.push(...resolveMaterializedStandards({ projectRoot, pluginRoot }));
+  }
+
   return arts;
 }
 
@@ -125,15 +142,24 @@ export function applySync({ projectRoot, pluginRoot, artifacts, registry, source
   const byPath = new Map(manifest.artifacts.map((a) => [a.path, a]));
   const report = { added: [], updated: [], current: [], preserved: [], refused: [] };
 
-  for (const { src, dest, framework } of artifacts) {
+  for (const { src, dest, framework, transform } of artifacts) {
     const rel = relative(projectRoot, dest);
     // Contenção (segurança): src no plugin, dest em .context, sem symlink.
     if (!isWithinDir(src, pluginRoot) || !isWithinDir(dest, contextRoot) || isSymlink(src) || isSymlink(dest)) {
       report.refused.push(rel);
       continue;
     }
+    // Artefato com `transform` NAO e verbatim: o conteudo escrito difere da
+    // origem. O hash de procedencia tem de ser o dos bytes ESCRITOS — usar o
+    // hash da origem classificaria todo projeto como "edited" na 1a passada e
+    // congelaria o sync para sempre.
+    let bytes = null;
+    if (typeof transform === "function") {
+      try { bytes = Buffer.from(transform(readFileSync(src, "utf-8")), "utf-8"); }
+      catch { bytes = null; }   // origem ilegivel: cai no caminho verbatim, que ja trata
+    }
     const projHash = hashFile(dest);
-    const pluginHash = hashFile(src);
+    const pluginHash = bytes ? sha256(bytes) : hashFile(src);
     const recorded = byPath.get(rel)?.hash ?? null;
     const { action } = decideArtifact({ projHash, pluginHash, recorded, registry });
 
@@ -141,7 +167,8 @@ export function applySync({ projectRoot, pluginRoot, artifacts, registry, source
       report.refused.push(rel);
     } else if (action === "add" || action === "untouched") {
       mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(src, dest);
+      if (bytes) writeFileSync(dest, bytes);
+      else copyFileSync(src, dest);
       byPath.set(rel, { path: rel, hash: pluginHash, sourceVersion, framework });
       (action === "add" ? report.added : report.updated).push(rel);
     } else if (action === "current") {

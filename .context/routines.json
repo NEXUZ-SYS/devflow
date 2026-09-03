@@ -29,6 +29,19 @@
           "value": "mempalace-env"
         }
       ]
+    },
+    {
+      "id": "standards-materialize",
+      "description": "Reconcilia os standards default materializados no projeto (atualiza intocados, preserva editados)",
+      "enabled": true,
+      "frequency": "7d",
+      "execution": "confirm",
+      "prompts": [
+        {
+          "type": "command",
+          "value": "/devflow:devflow-sync"
+        }
+      ]
     }
   ]
 }

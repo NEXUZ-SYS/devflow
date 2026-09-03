@@ -13,6 +13,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { retargetLinter } from "./standards-materialize.mjs";
 
 function walk(root, sub, out) {
   let entries;
@@ -36,7 +37,11 @@ export function distributableFiles(pluginRoot) {
   walk(pluginRoot, "skills", out);
   walk(pluginRoot, join("assets", "skills", "profiles"), out);
   walk(pluginRoot, join("assets", "standards", "profiles"), out);
-  return out.filter((f) => f.endsWith(".md") || f.endsWith(".js"));
+  // 3a raiz: os std da RAIZ passaram a ser MATERIALIZADOS no projeto (.md +
+  // machine/*.js), entao o registry precisa reconhece-los. O walk desta raiz
+  // ja engloba profiles/ — o Set abaixo remove a sobreposicao.
+  walk(pluginRoot, join("assets", "standards"), out);
+  return [...new Set(out)].filter((f) => f.endsWith(".md") || f.endsWith(".js"));
 }
 
 // Artefatos de scaffold de CI (ADR-012): assets/release-scaffold/** (.yml + .sh + .mjs).
@@ -60,6 +65,19 @@ export function genFromWorkingTree(pluginRoot) {
   for (const rel of indexedFiles(pluginRoot)) {
     try { set.add(createHash("sha256").update(readFileSync(join(pluginRoot, rel))).digest("hex")); }
     catch { /* skip */ }
+
+    // Variante MATERIALIZADA: o projeto guarda o std-*.md da raiz com o
+    // `enforcement.linter` retargetado, nao o conteudo cru. Sem este hash, todo
+    // projeto materializado por uma versao anterior seria classificado "edited"
+    // e nunca mais atualizaria. Para os 6 warn-only o retarget e no-op e o Set
+    // deduplica — dai o acrescimo ser 66, nao 72.
+    const m = rel.match(/^assets[/\\]standards[/\\](std-[a-z0-9-]+)\.md$/);
+    if (m) {
+      try {
+        const transformed = retargetLinter(readFileSync(join(pluginRoot, rel), "utf-8"), m[1]);
+        set.add(createHash("sha256").update(Buffer.from(transformed, "utf-8")).digest("hex"));
+      } catch { /* skip */ }
+    }
   }
   return set;
 }

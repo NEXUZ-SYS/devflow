@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { SCAFFOLD, syncScaffold } from "../../scripts/lib/release-scaffold.mjs";
 import { distributableFiles, scaffoldFiles, indexedFiles, genFromWorkingTree } from "../../scripts/lib/gen-known-hashes.mjs";
+import { retargetLinter } from "../../scripts/lib/standards-materialize.mjs";
 import { applySync } from "../../scripts/lib/provenance-sync.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -310,4 +311,39 @@ test("D.g contenção mantida — pai symlink fora da raiz → refused", () => {
     `esperava recusa por pai-symlink, veio: ${JSON.stringify(r.refused)}`,
   );
   assert.equal(readFileSync(join(outside, "bump-version.sh"), "utf8"), "ALVO\n", "escreveu fora do projectRoot");
+});
+
+// ─── 3ª raiz: assets/standards/ (materialização) ────────────────────────────
+
+test("distributableFiles indexa a raiz assets/standards/", () => {
+  const files = distributableFiles(process.cwd());
+  assert.ok(files.includes("assets/standards/std-security.md"),
+    "o .md da raiz precisa ser indexado — o projeto passa a tê-lo em disco");
+  assert.ok(files.includes("assets/standards/machine/std-security.js"),
+    "o linter bundlado também é materializado");
+});
+
+test("os standards de PERFIL continuam indexados (sem regressão)", () => {
+  const files = distributableFiles(process.cwd());
+  assert.ok(files.some((f) => f.startsWith("assets/standards/profiles/odoo/")));
+});
+
+test("não duplica caminho quando a raiz e o subdir se sobrepõem", () => {
+  const files = distributableFiles(process.cwd());
+  assert.equal(files.length, new Set(files).size, "sem entradas duplicadas");
+});
+
+test("o hash indexado do .md é o do conteúdo TRANSFORMADO", () => {
+  const set = genFromWorkingTree(process.cwd());
+  const raw = readFileSync("assets/standards/std-security.md", "utf-8");
+  const transformed = retargetLinter(raw, "std-security");
+  const h = createHash("sha256").update(Buffer.from(transformed, "utf-8")).digest("hex");
+  assert.ok(set.has(h),
+    "sem o hash transformado, todo projeto materializado por versão anterior vira 'edited'");
+});
+
+test("o hash CRU do .md também é indexado (os 6 warn-only vão verbatim)", () => {
+  const set = genFromWorkingTree(process.cwd());
+  const h = createHash("sha256").update(readFileSync("assets/standards/std-caching.md")).digest("hex");
+  assert.ok(set.has(h), "warn-only não tem transform: o que vai a disco é o cru");
 });
