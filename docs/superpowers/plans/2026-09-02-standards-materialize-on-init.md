@@ -47,6 +47,8 @@ A spec foi escrita **antes** da version-scoped entrar. O que mudou e importa aqu
 | `gen-known-hashes` | varre `skills/`, `assets/skills/profiles/`, `assets/standards/profiles/` + `release-scaffold` | `assets/standards/` (raiz) segue fora — a 3ª raiz é trabalho desta feature. |
 | `project-init` Step 3c-5 | já delega stacks ao `reconcile`; linha 794 ainda diz "não precisam ser scaffoldados" | É o texto que a Task 7 substitui. |
 | `provenance-sync` (cabeçalho) | ainda declara *"std-\*.md raiz (live-loaded) ficam fora"* | É a exclusão que esta feature remove. |
+| `decideArtifact` | `projHash === pluginHash → current` vem **antes** do registry | Achado R1: num checkout CRLF, plugin e projeto têm os mesmos bytes, resolvem `current`, e o registry nem é consultado. Divergência de fim-de-linha degrada para `edited` (= preserva), nunca para sobrescrita. Pré-existente: vale igual para os artefatos verbatim de hoje. |
+| `known-hashes.json` | 399 hashes | Achado R2: o acréscimo é **66** (26 crus + 20 transformados + 20 `.js`), não 72 — `retargetLinter` devolve o warn-only inalterado, e o `Set` deduplica. +17%. |
 
 ---
 
@@ -81,7 +83,7 @@ A spec foi escrita **antes** da version-scoped entrar. O que mudou e importa aqu
 - [ ] **Step 1: Criar os quatro fixtures**
 
 ```bash
-mkdir -p tests/fixtures/standards-materialize/{odoo-py/addons/m/models,odoo-py/addons/m/views,ts-src/src,ts-nosrc/lib,empty}
+mkdir -p tests/fixtures/standards-materialize/{odoo-py/addons/m/{models,views,static},ts-src/src,ts-nosrc/lib,empty}
 
 # odoo-py — Python + JS + XML, SEM src/
 cat > tests/fixtures/standards-materialize/odoo-py/addons/m/models/model.py <<'PY'
@@ -91,10 +93,7 @@ from odoo import models
 class M(models.Model):
     _name = "m"
 PY
-echo 'export const x = 1;' > tests/fixtures/standards-materialize/odoo-py/addons/m/static/src.js
-mkdir -p tests/fixtures/standards-materialize/odoo-py/addons/m/static
 echo 'export const x = 1;' > tests/fixtures/standards-materialize/odoo-py/addons/m/static/app.js
-rm -f tests/fixtures/standards-materialize/odoo-py/addons/m/static/src.js
 echo '<odoo><record id="r" model="ir.ui.view"/></odoo>' > tests/fixtures/standards-materialize/odoo-py/addons/m/views/v.xml
 
 # ts-src — TypeScript COM src/
@@ -219,6 +218,11 @@ test("projeto sem arquivo de código seleciona só os applyTo **/*", () => {
     "só os dois de applyTo **/* casam um README.md");
 });
 
+test("listProjectFiles respeita o teto de arquivos", () => {
+  const files = listProjectFiles(join(R, "odoo-py"), 2);
+  assert.equal(files.length, 2, "o walk para no teto — pergunta booleana não precisa do repo inteiro");
+});
+
 test("standards.local.yaml disable: suprime o id", () => {
   const root = mkdtempSync(join(tmpdir(), "mat-disable-"));
   mkdirSync(join(root, ".context"), { recursive: true });
@@ -268,23 +272,31 @@ import { matchGlob } from "./glob.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__", "coverage"]);
-const MAX_DEPTH = 12;
+// Alinhado com os demais walks do repo (detect-framework usa 3,
+// framework-version usa 6). 12 era arbitrario (achado R4 da fase R).
+const MAX_DEPTH = 6;
+// Teto de arquivos: a pergunta e BOOLEANA por padrao ("existe algum .ts sob
+// src/?"), entao varrer um monorepo inteiro e desperdicio. Se o teto for
+// atingido antes de um padrao casar, o std simplesmente NAO e materializado —
+// o lado conservador (nao escreve).
+const MAX_FILES = 20000;
 
-export function listProjectFiles(projectRoot) {
+export function listProjectFiles(projectRoot, limit = MAX_FILES) {
   const out = [];
-  walk(projectRoot, "", out, 0);
+  walk(projectRoot, "", out, 0, limit);
   return out;
 }
 
-function walk(root, sub, out, depth) {
-  if (depth > MAX_DEPTH) return;
+function walk(root, sub, out, depth, limit) {
+  if (depth > MAX_DEPTH || out.length >= limit) return;
   let entries;
   try { entries = readdirSync(join(root, sub), { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
+    if (out.length >= limit) return;
     if (e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
     if (e.isSymbolicLink()) continue;
     const rel = sub ? `${sub}/${e.name}` : e.name;
-    if (e.isDirectory()) walk(root, rel, out, depth + 1);
+    if (e.isDirectory()) walk(root, rel, out, depth + 1, limit);
     else if (e.isFile()) out.push(rel);
   }
 }
@@ -322,6 +334,8 @@ export function selectDefaults({ projectRoot, pluginRoot }) {
     if (!fm.id || fm.deprecated === true) continue;
     if (disabled.has(fm.id)) continue;
 
+    // some() ja para no primeiro casamento: a pergunta e booleana, nao precisa
+    // enumerar todos os arquivos que casam.
     const applyTo = Array.isArray(fm.applyTo) ? fm.applyTo : [];
     const matches = applyTo.some((pattern) =>
       files.some((f) => { try { return matchGlob(pattern, f); } catch { return false; } }),
