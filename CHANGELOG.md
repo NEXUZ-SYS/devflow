@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.4.0] — 2026-09-03
+
 ### Added — Materialização dos Standards default em todo projeto (ADR-007 v3.0.0) — 8 tasks
 
 Ao instalar o DevFlow num Odoo 17, o operador viu 15 `std-odoo-*.md` aparecerem em `.context/engineering/standards/` e concluiu que valeria para **todo** projeto. Aqueles eram Standards de **perfil** (ADR-008, copiados por design); os ~26 **universais** eram *live-merged* do plugin em tempo de lint e **nunca** tocavam o disco. Três custos vinham disso: nada em `.context/` revelava quais standards governavam o projeto (não há o que revisar em PR), customizar exigia `standards eject <id>` um a um, e sem o plugin instalado o projeto não tinha nem o texto nem o enforcement.
