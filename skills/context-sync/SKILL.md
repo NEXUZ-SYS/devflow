@@ -207,6 +207,17 @@ Retorna `{updated, preserved, skipped, current, needsConfirm, refused, mustWrite
   `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/release-scaffold.mjs" verify` depois (N6a); `ok:false` → pare.
 - **`refused`** — contenção (symlink, `..`, diretório-pai apontando fora da raiz).
 
+### Standards default — materializados
+
+O mesmo `provenance-sync apply` **materializa os standards default aplicáveis** no projeto
+(`.md` + `machine/*.js`), com o `enforcement.linter` retargetado para o caminho canônico.
+Deploy intocado é atualizado; **edição local é preservada e reportada** — mostre a lista de
+`preserved` ao usuário, porque é ali que uma correção oficial pode estar sendo substituída
+por um patch local antigo.
+
+Opt-out: `standards.materialize: false` em `.devflow.yaml`. Supressão por id:
+`disable: [std-<id>]` em `.context/standards.local.yaml`.
+
 ### Stacks — reconciliação, não semeadura
 
 **NÃO** adicione stacks ausentes um a um. Essa instrução era aditiva e incondicional, e

@@ -26,6 +26,8 @@ import {
 import { join, dirname, relative, resolve } from "node:path";
 import { isWithinDir } from "./path-guard.mjs";
 import { frameworkContributions } from "./detect-framework.mjs";
+import { resolveMaterializedStandards } from "./standards-materialize.mjs";
+import { readStandardsMaterialize } from "./devflow-config.mjs";
 
 function sha256(buf) {
   return createHash("sha256").update(buf).digest("hex");
@@ -122,6 +124,15 @@ export function resolveArtifacts({ projectRoot, pluginRoot, baseSkills = [] }) {
       });
     }
   }
+  // Standards default MATERIALIZADOS (std-*.md raiz + machine/*.js). Opt-out
+  // por `standards.materialize: false` — default LIGADO. Um so caminho de
+  // codigo serve init, sync e a rotina periodica.
+  const cfgPath = join(projectRoot, ".context", ".devflow.yaml");
+  const cfg = existsSync(cfgPath) ? readFileSync(cfgPath, "utf-8") : "";
+  if (readStandardsMaterialize(cfg)) {
+    arts.push(...resolveMaterializedStandards({ projectRoot, pluginRoot }));
+  }
+
   return arts;
 }
 

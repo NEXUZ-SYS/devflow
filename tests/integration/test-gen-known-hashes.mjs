@@ -8,13 +8,17 @@ import { hashFile } from "../../scripts/lib/provenance-sync.mjs";
 const REPO = resolve(import.meta.dirname, "../..");
 const PROFILE_SKILL = join(REPO, "assets", "skills", "profiles", "odoo", "odoo-development", "SKILL.md");
 
-describe("gen-known-hashes (verbatim only)", () => {
-  it("distributableFiles inclui skills e standards de profile; exclui agents e std raiz", () => {
+describe("gen-known-hashes", () => {
+  it("distributableFiles inclui skills, standards de profile E std raiz; exclui agents", () => {
     const f = distributableFiles(REPO);
     assert.ok(f.some((x) => x.startsWith("skills/")), "skills/");
     assert.ok(f.some((x) => x.startsWith(join("assets", "standards", "profiles"))), "profiles");
     assert.ok(!f.some((x) => x.startsWith("agents/")), "agents fora");
-    assert.ok(!f.some((x) => /^assets[/\\]standards[/\\]std-.*\.md$/.test(x)), "std raiz fora");
+    // Os std da RAIZ passaram a ser MATERIALIZADOS no projeto, então o registry
+    // precisa reconhecê-los. A exclusão anterior era correta enquanto eles eram
+    // apenas live-loaded; a materialização inverteu a premissa deliberadamente.
+    assert.ok(f.some((x) => /^assets[/\\]standards[/\\]std-.*\.md$/.test(x)), "std raiz DENTRO");
+    assert.ok(f.some((x) => /^assets[/\\]standards[/\\]machine[/\\]std-.*\.js$/.test(x)), "linter bundlado dentro");
   });
 
   it("genFromWorkingTree é Set e contém hash de uma skill atual", () => {
