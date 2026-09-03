@@ -308,3 +308,15 @@ export function readFrameworkVersionsFromPath(path) {
   try { return readFrameworkVersions(readFileSync(path, "utf-8")); }
   catch { return new Map(); }
 }
+
+/**
+ * `standards.materialize` — default LIGADO. So `false` explicito desliga.
+ *
+ * Reusa readBlockField (ADR-011: parser unico, sem re-parse ad-hoc). Nao
+ * importa node:path — a invariante de pureza do modulo e travada por
+ * tests/lib/devflow-config-pure.test.mjs.
+ */
+export function readStandardsMaterialize(src) {
+  const v = readBlockField(src, "standards", "materialize");
+  return String(v).trim() !== "false";
+}
