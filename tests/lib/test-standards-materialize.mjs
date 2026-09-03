@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   listProjectFiles, selectDefaults, retargetLinter, projectLinterRel,
+  resolveMaterializedStandards,
 } from "../../scripts/lib/standards-materialize.mjs";
 
 const PLUGIN = process.cwd();
@@ -128,5 +129,47 @@ test("TODOS os defaults com linter sobrevivem ao transform sem virar null", () =
     const out = retargetLinter(readFileSync(mdSrc, "utf-8"), id);
     assert.match(out, new RegExp(`linter: engineering/standards/machine/${id}\\.js`), `${id} não retargetado`);
     assert.doesNotMatch(out, /linter:\s*null/, `${id} virou null`);
+  }
+});
+
+// ─── artefatos no formato do applySync (Task 5) ─────────────────────────────
+
+test("resolveMaterializedStandards devolve .md com transform e machine/ verbatim", () => {
+  const arts = resolveMaterializedStandards({ projectRoot: join(R, "ts-src"), pluginRoot: PLUGIN });
+  const md = arts.find((a) => a.dest.endsWith("engineering/standards/std-security.md"));
+  const js = arts.find((a) => a.dest.endsWith("engineering/standards/machine/std-security.js"));
+  assert.ok(md, "o .md do std-security deve estar na lista");
+  assert.ok(js, "o machine/ do std-security deve estar na lista");
+  assert.equal(typeof md.transform, "function", "o .md precisa de transform");
+  assert.equal(js.transform, undefined, "o .js é verbatim");
+  assert.equal(md.framework, "default");
+});
+
+test("warn-only entra sem transform e sem machine/", () => {
+  const arts = resolveMaterializedStandards({ projectRoot: join(R, "ts-src"), pluginRoot: PLUGIN });
+  const md = arts.find((a) => a.dest.endsWith("std-commit-hygiene.md"));
+  assert.ok(md);
+  assert.equal(md.transform, undefined, "linter: null não tem o que retargetar");
+  assert.ok(!arts.some((a) => a.dest.includes("machine/std-commit-hygiene.js")));
+});
+
+test("o transform do artefato produz o path canônico do projeto", () => {
+  const arts = resolveMaterializedStandards({ projectRoot: join(R, "ts-src"), pluginRoot: PLUGIN });
+  const md = arts.find((a) => a.dest.endsWith("std-security.md"));
+  const out = md.transform(readFileSync(md.src, "utf-8"));
+  assert.match(out, /linter: engineering\/standards\/machine\/std-security\.js/);
+});
+
+test("projeto vazio produz só os artefatos dos applyTo **/*", () => {
+  const arts = resolveMaterializedStandards({ projectRoot: join(R, "empty"), pluginRoot: PLUGIN });
+  const ids = arts.filter((a) => a.dest.endsWith(".md")).map((a) => a.dest.split("/").pop());
+  assert.deepEqual(ids.sort(), ["std-commit-hygiene.md", "std-pre-commit-hygiene.md"]);
+});
+
+test("todo dest cai dentro de .context/engineering/standards/", () => {
+  const arts = resolveMaterializedStandards({ projectRoot: join(R, "ts-src"), pluginRoot: PLUGIN });
+  assert.ok(arts.length > 0);
+  for (const a of arts) {
+    assert.match(a.dest, /\.context\/engineering\/standards\//, `dest fora do diretório: ${a.dest}`);
   }
 });

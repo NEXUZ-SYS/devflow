@@ -16,6 +16,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { matchGlob } from "./glob.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
+import { contextPaths } from "./context-paths.mjs";
 
 const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__", "coverage",
@@ -128,4 +129,30 @@ export function retargetLinter(mdContent, id) {
     `$1linter: ${projectLinterRel(id)}`,
   );
   return retargeted + rest;
+}
+
+/**
+ * Lista de artefatos no formato que applySync consome.
+ *
+ * O .md leva `transform` (retarget do linter) quando tem linter; o
+ * machine/*.js vai VERBATIM — copiado do bundle LOCAL do plugin, nunca
+ * fetchado da rede, entao o guardrail anti-RCE da ADR-007 permanece literal.
+ */
+export function resolveMaterializedStandards({ projectRoot, pluginRoot }) {
+  const stdDir = contextPaths(projectRoot).standards;
+  const machineDir = contextPaths(projectRoot).standardsMachine;
+  const arts = [];
+
+  for (const { id, mdSrc, jsSrc, hasLinter } of selectDefaults({ projectRoot, pluginRoot })) {
+    arts.push({
+      src: mdSrc,
+      dest: join(stdDir, `${id}.md`),
+      framework: "default",
+      ...(hasLinter ? { transform: (c) => retargetLinter(c, id) } : {}),
+    });
+    if (jsSrc) {
+      arts.push({ src: jsSrc, dest: join(machineDir, `${id}.js`), framework: "default" });
+    }
+  }
+  return arts;
 }
