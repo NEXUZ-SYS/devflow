@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — ADR-008 v1.3.1: compactação e nota de densidade
+
+O `adr-audit` reprovava a ADR-008 no check 9 (170 linhas > 120). A v1.3.1 remove o que era **tutorial de implementação**, não decisão — mecânica do `readStandardsFromDir`, paths do sandbox, o snippet do plugin loader do Claude Code: 170 → 150 linhas, com os 12 checks substantivos passando e **nenhum** guardrail, item de decisão ou teste citado perdido (verificado por diff: 10 decisões, 21 guardrails e 9 testes intactos).
+
+O check **segue reprovando**, e isso passa a ser aceito e documentado no próprio arquivo: o limite de 120 pressupõe *uma* decisão por arquivo, e esta ADR carrega **quatro versões** (v1.0→v1.3) porque `minor`/`patch` renomeiam e só `major` cria arquivo novo. Só o conteúdo obrigatório do schema já passa de 70 linhas antes de qualquer prosa, e uma ADR sem Contexto falharia o outro braço do mesmo check. Fica registrado o veículo correto para o futuro: se crescer de novo, `refine` (ADR-filha) em vez de `minor`.
+
 ## [3.4.0] — 2026-09-03
 
 ### Added — Materialização dos Standards default em todo projeto (ADR-007 v3.0.0) — 8 tasks

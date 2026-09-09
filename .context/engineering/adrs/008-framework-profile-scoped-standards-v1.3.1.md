@@ -26,31 +26,25 @@ A v1.13.0 introduziu **perfis de framework** (`profiles/<fw>.yaml`, lidos por `d
 
 Faltava um equivalente para **Standards**: regras de enforcement específicas de um framework (ex.: disciplina de ORM, escaping QWeb, higiene de manifest no Odoo) que **não** devem rodar em projetos de outro stack. Pôr essas regras no set universal `assets/standards/` faria o hook lintar regra de OWL/l10n_br em projeto não-Odoo (e o audit S7 do standards-builder as marcaria como lib-centric). Era preciso um mecanismo **condicional por framework**, sem relaxar o sandbox crítico do set universal.
 
-### Contexto adicional da v1.1.0 — a razão dura do subdir
+### v1.1.0 / v1.2.0 — a razão dura do subdir
 
-A v1.0.0 justificava o subdir por um motivo de **loader** (`readStandardsFromDir` não recursa). Operando o mecanismo apareceu razão mais dura: o Claude Code **registra todo `skills/<nome>/SKILL.md`** e **todo `agents/<nome>.md` como agent type**, em **todo** projeto, sem opt-out. Logo **a localização é o contrato de registro** — morar em `skills/` é *estar no vocabulário global*, independentemente do perfil; o gating governa só a **cópia** para `.context/`, nunca o registro. Evidência: o próprio repo do DevFlow (bridge Node/bash, zero Odoo) expunha `devflow:odoo-*`, `devflow:nxz-go-test` e o agent type `devflow:Odoo Specialist`, enquanto os 15 `std-odoo-*` já sob `assets/standards/profiles/odoo/` **nunca vazaram** — o padrão da v1.0.0 estava certo, só não fora aplicado a skills e agents.
-
-### Contexto adicional da v1.2.0 — três superfícies, um único opt-out ausente
-
-A v1.1.0 dizia que a skill "vira comando sem opt-out": conclusão certa, argumento errado. O loader de plugin do Claude Code 2.1.231 (`let z = a["user-invocable"], V = (z === void 0 ? true : …)`) e o dispatch (`if (g.userInvocable === false)`) separam três superfícies:
+A v1.0.0 justificava o subdir por mecânica de loader; operando o mecanismo apareceu razão mais dura: o Claude Code **registra** todo `skills/<nome>/SKILL.md` e todo `agents/<nome>.md` em **todo** projeto. **A localização é o contrato de registro** — morar em `skills/` é estar no vocabulário global; o gating governa só a **cópia** para `.context/`, nunca o registro. Evidência: o próprio repo do DevFlow (zero Odoo) expunha `devflow:odoo-*` e o agent type `devflow:Odoo Specialist`, enquanto os 15 `std-odoo-*` já sob `profiles/odoo/` **nunca vazaram**. A v1.2.0 precisou o enunciado: são três superfícies e só a primeira não tem opt-out.
 
 | Superfície | Opt-out? | Mecanismo |
 |---|---|---|
 | **Registro** / vocabulário exposto ao modelo | **Não** | — |
-| Menu de slash / digitação pelo usuário | Sim | `user-invocable: false` |
+| Menu de slash / digitação | Sim | `user-invocable: false` |
 | Invocação pelo modelo | Sim | `disable-model-invocation: true` |
-
-Nenhum dos dois opt-outs desregistra: a skill de framework segue carregada e ocupando o vocabulário do modelo em todo projeto — o defeito que esta ADR endereça. O enunciado correto é *registrada* sem opt-out, e o subdir de perfil continua sendo o único mecanismo que resolve.
 
 ## Decisão
 
 1. **A biblioteca default passa a comportar conjuntos *profile-scoped*.** Um perfil declara seus Standards em `profiles/<fw>.yaml` na chave `standards:` (lista de ids), espelhada num `MANIFEST.txt` do subdir do perfil.
 
-2. **Os arquivos moram num subdir bundled ignorado pelo loader universal.** `assets/standards/profiles/<fw>/std-<id>.md` + `machine/std-<id>.js`. O `readStandardsFromDir` do loader universal lê só `*.md` do **topo** de `assets/standards/` e não recursa em subdiretórios — então o subdir `profiles/` nunca é carregado como default universal.
+2. **Os arquivos moram num subdir bundled** (`assets/standards/profiles/<fw>/`) que o loader universal ignora — ele lê só o topo de `assets/standards/` e não recursa.
 
-3. **Ativação por cópia no init/sync (origin:project), não live-merge.** Quando o perfil casa, `project-init`/`context-sync` **copiam** `std-<id>.md` + `machine/std-<id>.js` para `.context/engineering/standards/` (+`machine/`) do projeto. Lá viram `origin:"project"` e rodam sob o sandbox de linter do **projeto** (`contextPaths(projectRoot).standardsMachine`), que já os permite. É o mesmo modelo de cópia usado para as skills de perfil (item 7).
+3. **Ativação por cópia no init/sync, não live-merge.** Perfil casou, `project-init`/`context-sync` copiam `.md` + `machine/.js` para `.context/engineering/standards/`, onde viram `origin:"project"` e rodam sob o sandbox do projeto. Mesmo modelo das skills de perfil (item 7).
 
-4. **O sandbox `origin:"default"` (anti-RCE do ADR-007) NÃO muda.** Live-merge dos linters profile-scoped exigiria estender a allowlist `origin:"default"` para incluir `assets/standards/profiles/*/machine/` — abrindo a superfície de segurança que o ADR-007 fecha. Rejeitado em favor da cópia, que mantém o sandbox crítico **byte-idêntico**.
+4. **O sandbox `origin:"default"` (anti-RCE do ADR-007) NÃO muda.** Live-merge exigiria estender a allowlist para `profiles/*/machine/`, abrindo a superfície que o ADR-007 fecha. A cópia mantém o sandbox crítico byte-idêntico.
 
 5. **`profiles/<fw>.yaml` ganha também `stacks:`** — wishlist de docs versionados (`lib`/`version`/`discoveryHints`/`applyTo`), semeada no `manifest.yaml` de stacks do **projeto** como entradas `mcpIndexed: true` (via `devflow stacks add`). O scrape real para o store global do `docs-mcp-server` é follow-up do usuário. O manifest do self-repo permanece vazio (bridge plugin).
 
@@ -64,27 +58,18 @@ Primeiro consumidor: o **perfil Odoo**, com 17 `std-odoo-*` (Tier 1 forte, Tier 
 
 8. **Perfis DEIXAM de contribuir agents.** A chave `agents:` sai de `profiles/<fw>.yaml` e `frameworkContributions()` para de agregá-la. **Criar agente de projeto é exclusividade do dotcontext.** O mecanismo veio da v1.13.0 e nunca teve ADR própria; esta versão o revoga.
 
-9. **Materializar ≠ autorar** — reconcilia com o ADR-006 (*"NUNCA mover ou criar arquivos em `docs/`, `agents/`, `skills/`, `plans/` via mecanismos devflow"*), que ao pé da letra proibiria a cópia que esta ADR sanciona. Leitura coerente: o devflow **MATERIALIZA** contribuições de perfil (cópia verbatim rastreada por proveniência) mas **não AUTORA** conteúdo ali. Agente escrito à mão no plugin e depositado no projeto viola a segunda metade; skill copiada verbatim, não.
+9. **Materializar ≠ autorar** — reconcilia com o ADR-006, que ao pé da letra proibiria esta cópia. O devflow **materializa** contribuição de perfil (cópia verbatim rastreada por proveniência) mas **não autora** conteúdo no projeto: agente escrito à mão no plugin e depositado viola; skill copiada verbatim, não.
 
 10. **O vínculo skill↔agente é declarado, não inferido.** `profiles/<fw>.yaml` ganha `skillBindings: { <papel>: [<slugs>] }`; o sync grava `skills: [...]` no frontmatter do agente, de forma **aditiva e idempotente**, reaplicada a cada execução. `dispatchKeywords` passa a mapear keyword → **papel de agente de projeto**, nunca um agente do plugin.
 
-**v1.3.0 — a dimensão de versão.** Ser condicional a framework não bastava: o artefato
-precisa declarar **a que versões se aplica**. O gate anterior era `MIN_SERIES` dentro de
-cada linter, que modela *"a partir de quando"* e nunca *"até quando"* — uma regra exclusiva
-do Odoo 18 (`<tree>`→`<list>`) não tinha como se declarar e disparava no 17, onde `<tree>`
-é correto: 47 falso-positivos em 589 arquivos. Quatro linters mantinham a própria cópia de
-`odooTargetSeries()`, e uma já havia divergido.
+**v1.3.0 — a dimensão de versão.** Ser condicional a framework não bastava: o artefato precisa declarar **a que versões se aplica**. O gate anterior era `MIN_SERIES` dentro de cada linter, que modela *"a partir de quando"* e nunca *"até quando"* — uma regra exclusiva do Odoo 18 (`<tree>`→`<list>`) não tinha como se declarar e disparava no 17, onde `<tree>` é correto: **47 falso-positivos em 589 arquivos**. Quatro linters mantinham cópia própria de `odooTargetSeries()`, e uma já havia divergido.
 
 | Eixo | Semântica | Resolver é | Filtro |
 |---|---|---|---|
 | `axis: series` | versões alternativas da mesma coisa (`odoo-12`…`odoo-18`); uma vale | escolher uma, descartar o resto | na **semeadura** (scrape é caro; série errada = resposta errada) |
 | composição (default) | libs coexistem, versão independente | re-pinar cada uma | no **apply** (faixa é dinâmica; 17→18 vale sem re-sync) |
 
-A resolução é **declarativa no YAML do perfil** (`versionDetect`: `{file, pattern}`,
-`{glob, pattern, aggregate}` ou sonda embutida `npmDep`) — acrescentar um perfil irmão
-segue sendo "acrescente um YAML". A faixa `appliesFrom`/`appliesUntil` (inclusivas) vive no
-frontmatter e é avaliada **uma vez** no chokepoint `findApplicableStandards`; o linter volta
-a conter apenas a regra.
+A resolução é **declarativa no YAML do perfil** (`versionDetect`) — acrescentar um perfil irmão segue sendo "acrescente um YAML". A faixa `appliesFrom`/`appliesUntil` (inclusivas) vive no frontmatter e é avaliada **uma vez** no chokepoint `findApplicableStandards`; o linter volta a conter apenas a regra.
 
 ## Alternativas Consideradas
 
@@ -109,11 +94,10 @@ a conter apenas a regra.
 
 **Negativas**
 - Os Standards de perfil só passam a valer após `init`/`sync` copiá-los (não são live como os universais). Aceitável — consistente com as skills de perfil.
-- Cópia cria snapshots no projeto que podem divergir do bundle ao longo do tempo; `context-sync` reconcilia sem sobrescrever customizações.
-- *(v1.1.0)* **BREAKING**: comandos `devflow:<skill-de-framework>` e o agent type do perfil somem; deploys anteriores viram órfãos no `.context/` do cliente. E o efeito principal — o desaparecimento do namespace — **não é observável por teste automatizado** (depende do Claude Code reindexar): o teste de disjunção é proxy estrutural, a confirmação é manual.
+- *(v1.1.0)* **BREAKING**: comandos `devflow:<skill-de-framework>` e o agent type do perfil somem; deploys anteriores viram órfãos no cliente. O efeito principal — o namespace sumir — **não é observável por teste** (depende do Claude Code reindexar): a disjunção é proxy estrutural, a confirmação é manual.
 
 **Riscos aceitos**
-- Drift entre o `.md`/`.js` copiado e o bundle do plugin — mitigado pelo `context-sync` (cópia incremental, não sobrescreve edição do projeto; respeita `standards.local.yaml disable:`).
+- Drift entre a cópia e o bundle — mitigado pelo `context-sync` (incremental, não sobrescreve edição; respeita `disable:`).
 - Órfão no trio yaml/MANIFEST/arquivos — mitigado pelo teste de integridade (fail-closed no CI).
 
 ## Guardrails
@@ -149,17 +133,21 @@ a conter apenas a regra.
 - [ ] `tests/odoo-standards/*.test.mjs` — 17 linters `std-odoo-*` com fixtures BAD/GOOD (RED→GREEN).
 
 - [x] **v1.1.0** — `test-profile-skills-not-registered.mjs` — **guard do defeito**, 4 ACs: disjunção; skill de perfil existe sob `assets/`; nenhum `SKILL.md` de `skills/` com path absoluto de máquina; `skills/` bate com `skills/MANIFEST.txt`. Os dois últimos existem porque a disjunção sozinha ignora skill que **nenhum perfil declara** — o caso `nxz-go-test`.
-- [x] `test-framework-profiles-integrity.mjs` — 7 ACs: trio sem órfãos, perfil **não** declara `agents`, `skillBindings` só cita skill declarada, `dispatchKeywords` concorda nos papéis. Mutation-tested.
-- [x] `test-provenance-sync.mjs` — `dest` explícito por slug (segmento, não substring); órfão por manifesto **e** `detectRetired` sobre `assets/provenance/retired.json`, que alcança classes fora do manifesto (agents); nada removido.
-- [x] `test-gen-known-hashes.mjs` — relocação não altera o conjunto de hashes.
-- [x] `test-detect-framework.mjs` — sem `agents`; com `skillsWithOrigin`/`skillBindings`.
-- [x] `test-agent-skill-binding.mjs` — frontmatter validado pelo parser do **dotcontext**; **contenção**: papel é nome de arquivo, `isWithinDir` + recusa de symlink.
-- [ ] Verificação **manual pós-release**: o plugin carregado vem do **cache do release**, não do working tree — reiniciar a sessão não basta. Só após `/devflow update`. Observação, nunca sinal verde.
+- [x] `test-framework-profiles-integrity.mjs` (7 ACs, mutation-tested) · `test-provenance-sync.mjs` (`dest` por slug; órfão por manifesto **e** `detectRetired`) · `test-gen-known-hashes.mjs` (relocação não altera hashes) · `test-detect-framework.mjs` (sem `agents`, com `skillsWithOrigin`) · `test-agent-skill-binding.mjs` (frontmatter pelo parser do dotcontext; contenção `isWithinDir` + recusa de symlink).
+- [ ] Verificação **manual pós-release**: o plugin vem do cache do release, não do working tree — só após `/devflow update`. Observação, nunca sinal verde.
 
 - [ ] **v1.3.0** — `standard-audit` check S8 reprova faixa em standard default
 - [ ] **v1.3.0** — teste de retrocompatibilidade: `findApplicableStandards` sem `ctx` é idêntico ao anterior
 - [ ] **v1.3.0** — teste: nenhum linter sob `assets/standards/profiles/**/machine/` define ou chama resolução de série
 - [ ] **v1.3.0** — teste: `reconcile` sem `--yes` não escreve, sem versão resolvida não poda, e a maioria não reporta `N/N` sob divergência
+
+## Nota de densidade
+
+O check 9 do `adr-audit` reprova este arquivo (150 linhas > 120) e **isso é aceito**. O limite pressupõe *uma* decisão por arquivo; esta ADR carrega **quatro versões** (v1.0→v1.3), porque `minor`/`patch` renomeiam o arquivo e só `major` cria um novo. Só o conteúdo obrigatório do schema — frontmatter, 10 itens de decisão, 21 guardrails, 11 de enforcement, 4 alternativas — passa de 70 linhas antes de qualquer prosa, e uma ADR sem Contexto falha o outro braço do mesmo check (`< 50, likely incomplete`).
+
+A v1.3.1 já removeu o que era tutorial de implementação (mecânica do loader, paths do sandbox, snippet do plugin loader): 170 → 150, com os 12 checks substantivos passando e nenhum guardrail, decisão ou teste citado perdido. O restante só sairia tirando substância.
+
+Se esta ADR crescer de novo, o veículo certo **não** é compactar: é `refine` (ADR-filha) em vez de `minor` — a dimensão de versão da v1.3.0, por exemplo, é uma decisão distinta da de localização/registro e caberia melhor em arquivo próprio.
 
 ## Evidências
 
