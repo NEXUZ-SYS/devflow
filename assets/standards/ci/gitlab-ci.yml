@@ -1,0 +1,97 @@
+# .gitlab/ci/devflow-standards.yml — gate de standards do DevFlow (ADR-015), para o GitLab CI.
+#
+# Copiado VERBATIM do plugin DevFlow (ADR-012). Não edite: um arquivo editado deixa de ser
+# atualizado pelo /devflow:devflow-sync. Para ligar, inclua no .gitlab-ci.yml do projeto:
+#
+#   include:
+#     - local: /.gitlab/ci/devflow-standards.yml
+#
+# O que roda, nos pipelines de merge request: a catraca contra a base (baseline, níveis,
+# linters, shim e verify.standards) e o check dos standards. A versão do plugin vem de
+# .context/bin/devflow-plugin.ref — o da base; o da branch só enquanto a base não tem.
+#
+# SEM OVERRIDE. No GitHub, um enfraquecimento deliberado é liberado por rótulo + review de
+# quem é dono dos arquivos, conferidos na API do GitHub. No GitLab esse mecanismo não existe:
+# a catraca enfraquecida deixa o job vermelho, e aceitar é decisão de quem pode fazer o merge
+# com o job falhando.
+#
+# Base: sempre a ponta da branch de destino, nunca a base do diff do merge request (o ponto em
+# que a branch saiu do destino). Com "merged results pipelines" o GitLab entrega essa ponta e o
+# job roda sobre o merge. Sem elas — ou quando o GitLab cai no pipeline comum de merge request
+# por conflito — o job busca a branch de destino no origin e usa a ponta buscada. Se o merge
+# request estiver atrás do destino, o job falha (exit 3) em vez de julgá-lo pelas regras do
+# commit em que ele saiu: atualize a branch do merge request com a branch de destino (rebase ou
+# merge) e rode o pipeline de novo, ou ligue merged results pipelines no projeto.
+#
+# O job usa o stage padrão (`test`) e roda em pipeline de merge request. Isso depende de o
+# projeto ter pipelines de merge request configurados no próprio .gitlab-ci.yml (`rules:` ou
+# `workflow: rules` com `merge_request_event`): a documentação do GitLab diz que regras
+# definidas em `include:` não satisfazem esse requisito, e a regra deste job está neste
+# arquivo incluído. Não foi conferido se, só com ela, o GitLab cria o pipeline. Sem o pipeline
+# de merge request o gate não roda e nada acusa erro. Para conferir, abra um merge request de
+# teste: o job `devflow-standards` tem de aparecer no pipeline do merge request.
+#
+# Marcar "Pipelines must succeed" nas configurações de merge request é necessário para o job
+# valer como garantia, mas não basta se o merge request puder alterar o .gitlab-ci.yml ou este
+# arquivo: o gate não protege o próprio CI. Veja "Limites e resíduos conhecidos" no guia de
+# enforcement de standards do DevFlow (docs/guia-enforcement-standards.md, no repositório do
+# plugin).
+
+devflow-standards:
+  image: node:22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      set -eu
+      fail() { echo "devflow-standards: $1" >&2; exit 3; }
+      [ -d .context ] || fail "sem .context/ na raiz do repositório: este job assume o projeto DevFlow na raiz"
+
+      # Nenhum código do projeto roda antes do gate: só git, para achar a base e ler o pin.
+      # A base é a ponta da branch de destino. Com merged results pipelines ela vem pronta; sem
+      # elas a variável vem vazia e o job busca a branch de destino no origin.
+      base="${CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-}"
+      if [ -z "$base" ]; then
+        # O nome da branch é dado do ambiente do CI: só é usado depois de validado, sempre entre
+        # aspas e como refspec completo. O nome que o git devolve tem de ser o que chegou (um
+        # "@{-1}" seria expandido para outra branch).
+        target="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
+        [ -n "$target" ] || fail "sem a branch de destino do merge request (CI_MERGE_REQUEST_TARGET_BRANCH_NAME vazia): o job só roda em pipeline de merge request"
+        checked="$(git check-ref-format --branch "$target" 2> /dev/null)" || checked=""
+        [ "$checked" = "$target" ] || fail "CI_MERGE_REQUEST_TARGET_BRANCH_NAME não traz um nome de branch válido: o job não busca a branch de destino"
+        git fetch --quiet --no-tags origin "refs/heads/${target}" || fail "não deu para buscar do origin a branch de destino (refs/heads/${target}): confira se ela existe e se o job lê o repositório, ou ligue merged results pipelines no projeto"
+        base="$(git rev-parse --verify --quiet 'FETCH_HEAD^{commit}')" || fail "a branch de destino buscada do origin (refs/heads/${target}) não aponta para um commit"
+        echo "base: a ponta de refs/heads/${target}, buscada do origin (${base})"
+      fi
+      printf '%s\n' "$base" | grep -Eqx '[0-9a-f]{40}' || fail "a base do merge request não é um SHA de 40 dígitos (o job só roda em pipeline de merge request)"
+      git rev-parse --verify --quiet "${base}^{commit}" > /dev/null || fail "o commit da base do merge request não está no clone (GIT_DEPTH tem de ser 0)"
+      # Merge request atrás do destino: o job não julga com base velha, e para antes de baixar o plugin.
+      git merge-base --is-ancestor "$base" HEAD || fail "o merge request está atrás da branch de destino: a ponta dela (${base}) não é ancestral do HEAD, e o gate não compara com base velha. Atualize a branch do merge request com a branch de destino (rebase ou merge) e rode o pipeline de novo, ou ligue merged results pipelines no projeto"
+
+      pin=".context/bin/devflow-plugin.ref"
+      if [ -n "$(git ls-tree "$base" -- "$pin")" ]; then
+        ref="$(git cat-file blob "${base}:${pin}")"
+      elif [ -f "$pin" ] && [ ! -L "$pin" ]; then
+        ref="$(head -c 128 "$pin")"
+      else
+        fail "falta ${pin}: rode /devflow:devflow-sync no projeto e versione o arquivo"
+      fi
+      ref="$(printf '%s' "$ref" | tr -d '\r')"
+      [ "$(printf '%s\n' "$ref" | wc -l)" -eq 1 ] || fail "${pin} inválido: esperado uma linha só"
+      if printf '%s\n' "$ref" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+'; then
+        ref="refs/tags/${ref}"
+      elif ! printf '%s\n' "$ref" | grep -Eqx '[0-9a-f]{40}'; then
+        fail "${pin} inválido: esperado vX.Y.Z ou um SHA de 40 dígitos"
+      fi
+
+      # O plugin, fixado nessa versão (repositório público).
+      plugin="$(mktemp -d)"
+      trap 'rm -rf "$plugin"' EXIT
+      git init --quiet "$plugin"
+      git -C "$plugin" fetch --quiet --depth 1 https://github.com/NEXUZ-SYS/devflow.git "$ref"
+      git -C "$plugin" checkout --quiet --detach FETCH_HEAD
+      echo "plugin DevFlow em ${ref}"
+
+      node "$plugin/scripts/devflow-standards.mjs" gate --base-ref="$base" --ci

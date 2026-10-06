@@ -7,7 +7,7 @@ source: local
 stack: universal
 category: principios-codigo
 status: Proposto
-version: 3.0.0
+version: 3.1.0
 created: 2026-09-02
 supersedes: [007-default-standards-library-v2.2.0]
 refines: [002-adopt-standards-triple-layer-v1.0.0]
@@ -58,6 +58,7 @@ e o scaffold de CI (ADR-012). A premissa da decisão anterior deixou de ser verd
    sobre o histórico de commits.
 6. **Escape hatch** `standards.materialize: false` em `.devflow.yaml` (parser do
    ADR-011), default ligado.
+7. **(v3.1.0, ADR-015)** `enforcement.level` (`block|warn|review`) + `enforcement.rules` por `ruleId`; os 17 linters de regra única no protocolo v2 (os 3 multi-regra — `std-design-antipatterns`, `std-visual-quality`, `std-accessibility` — ficam no legado estruturado `VIOLATION: [advisory] <regra> — …`); contrato de saída: exit 0 limpo, 0/1 com `VIOLATION` = achados, o resto é erro.
 
 ## Preservações
 
@@ -97,19 +98,15 @@ só recebe os standards dela na passada seguinte da rotina (≤7 dias).
 
 ## Guardrails
 
-- SEMPRE reescrever `enforcement.linter` para o caminho canônico do projeto ao materializar
-  — NUNCA para `null`, que num default enforçado desliga 20 linters silenciosamente.
-- SEMPRE computar o hash de procedência sobre os bytes **transformados** — NUNCA sobre
-  os de origem, que classificariam todo projeto como `edited` já na primeira passada,
-  congelando o sync.
-- NUNCA fetchar `machine/*.js` da rede: a materialização copia do bundle **local**
-  do plugin; o guardrail anti-RCE da v2.2.0 permanece literal e intacto.
+- SEMPRE reescrever `enforcement.linter` para o caminho canônico do projeto ao materializar — NUNCA para `null`, que num default enforçado desliga 20 linters silenciosamente.
+- SEMPRE computar o hash de procedência sobre os bytes **transformados** — NUNCA sobre os de origem, que classificariam todo projeto como `edited` já na primeira passada, congelando o sync.
+- NUNCA fetchar `machine/*.js` da rede: a materialização copia do bundle **local** do plugin; o guardrail anti-RCE da v2.2.0 permanece literal e intacto.
 - SEMPRE honrar `standards.local.yaml` `disable:` — id desabilitado não é escrito.
-- SEMPRE manter o live-merge ativo — é ele que faz um default novo valer antes de a
-  materialização convergir.
-- QUANDO o hash de um linter materializado divergir do bundlado ENTÃO reportar no
-  sync e no doctor — NUNCA sobrescrever silenciosamente.
+- SEMPRE manter o live-merge ativo — é ele que faz um default novo valer antes de a materialização convergir.
+- QUANDO o hash de um linter materializado divergir do bundlado ENTÃO reportar no sync e no doctor — NUNCA sobrescrever silenciosamente.
 - NUNCA materializar standard de perfil por esta via — perfis seguem o ADR-008.
+- SEMPRE materializar default com `enforcement.level: warn`; `level`/`rules` editados no projeto sobrevivem ao sync (v3.1.0).
+- SEMPRE emitir achados de linter de regra única no protocolo v2 (`VIOLATION <ruleId> <arquivo>:<linha> <msg>`), `ruleId` estável, e sair com 1; sem violação, nada e exit 0 — qualquer outro exit é erro do linter (ADR-015).
 
 ## Enforcement
 
@@ -117,6 +114,7 @@ só recebe os standards dela na passada seguinte da rotina (≤7 dias).
 - [ ] Teste: `transform` idempotente; 2ª passada é `current`; edição local vira `edited` e é preservada
 - [ ] Teste (regressão): `gen-known-hashes` indexa a raiz `assets/standards/` e `update-default-standards.sh` segue sem fetchar `.js`
 - [ ] Teste: `standards.materialize: false` é no-op; id em `disable:` não é materializado
+- [ ] Teste (v3.1.0): default sai `level: warn`, `level` local sobrevive ao sync; os 17 linters de regra única emitem protocolo v2 e os 20 respeitam o contrato de saída
 
 ## Evidências
 

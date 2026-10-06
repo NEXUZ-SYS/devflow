@@ -46,14 +46,15 @@ printf 'export const x = 1;\n' > "$TMP/src/foo.ts"
 event=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/src/foo.ts"},"cwd":"%s"}' "$TMP" "$TMP")
 
 # --- Run the hook ---
-out=$(cd "$TMP" && printf '%s' "$event" | bash "$REPO_ROOT/hooks/pre-tool-use" 2>&1 || true)
+out=$(cd "$TMP" && printf '%s' "$event" | bash "$REPO_ROOT/hooks/pre-tool-use" 2>/dev/null || true)
 
 # --- Assert knowledge body was injected ---
-if printf '%s' "$out" | grep -q "arquitetura hexagonal"; then
-  echo "PASS: corpo knowledge on-demand injetado"
+if printf '%s' "$out" | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())["hookSpecificOutput"]
+sys.exit(0 if "arquitetura hexagonal" in d.get("additionalContext", "") else 1)
+'; then
+  echo "PASS: corpo knowledge on-demand injetado via additionalContext"
 else
-  echo "FAIL: corpo knowledge on-demand não injetado"
-  echo "--- hook output ---"
-  printf '%s\n' "$out"
-  exit 1
+  echo "FAIL: corpo knowledge on-demand não injetado"; printf '%s\n' "$out"; exit 1
 fi

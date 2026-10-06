@@ -21,6 +21,7 @@ Atualiza o `.context/` existente com o estado atual do projeto. Diferente do `pr
 2. **Identificar escopo** — sync completo ou parcial (docs/agents/skills/knowledge)
 3. **Executar sync** — atualizar usando dotcontext MCP ou scan standalone
 3e. **Re-sync camadas de conhecimento** — delegar a cada curador (business-context, product-context, operations-context, engineering-context) e regenerar índice de conhecimento
+3f. **Gates de standards (opt-in)** — oferecer shim + pre-commit, gate no CI, `verify.standards`, CODEOWNERS e a entrada do `.gitignore`, um item por vez, escrevendo só depois do sim do operador
 4. **Reportar** — listar o que foi atualizado
 
 ## Step 1: Detectar Modo
@@ -217,6 +218,89 @@ por um patch local antigo.
 
 Opt-out: `standards.materialize: false` em `.devflow.yaml`. Supressão por id:
 `disable: [std-<id>]` em `.context/standards.local.yaml`.
+
+### Gates de standards (opt-in, com consentimento)
+
+Fora da sessão, os standards só viram gate se o projeto ligar o pre-commit e o CI. Nada aqui é
+automático: **ofereça um item por vez e só escreva depois do sim do operador**.
+
+1. Rode o comando abaixo. Ele **só imprime** JSON — o que copiar, o que acrescentar e o estado
+   de cada item no projeto. Quem escreve é você, com a ferramenta `Write` (ou `Edit`, para
+   acrescentar a um arquivo que já existe), depois do consentimento. Mostre ao operador os
+   `warnings`, se houver. Com `autonomy` diferente de `supervised`, não escreva nada: a oferta
+   exige o operador presente — registre que ela ficou pendente.
+
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/standards-gates.mjs" "$PWD"
+   ```
+
+2. **Baseline.** Com `baseline.exists: false`, explique que sem baseline o hook não bloqueia e
+   peça ao operador para rodar, **no terminal dele**, o comando de `baseline.initCommand`
+   (`… baseline init`). O CLI recusa esse comando sem terminal interativo: não tente rodá-lo.
+
+3. **Itens copiados byte a byte** — `shim`, `githubActions` e `gitlab` são arquivos fixos do
+   plugin (ADR-012). Leia `from` e grave em `to` sem mudar um byte; rode o comando de novo e
+   confira o `state`: tem de voltar `current`. Se não voltar, pare e avise. O `state` decide o
+   que oferecer:
+
+   | `state` | O que fazer |
+   |---|---|
+   | `absent` | oferecer |
+   | `current` | nada |
+   | `outdated` | cópia intocada de outra versão do plugin: mostre o `diff` e atualize só com o sim |
+   | `edited` | edição local: **não sobrescreva**; mostre o `diff` e siga adiante |
+   | `blocked` | não leia nem escreva; mostre o `reason` ao operador |
+
+4. Ofereça, um por vez:
+   - **Shim + pre-commit** — atrito local, não garantia (sai do caminho com `--no-verify`).
+     O shim vai para `.context/bin/devflow-standards.mjs` e acha o plugin instalado na máquina
+     de quem commita; ao gravá-lo, o hook da catraca pede a confirmação do operador — é o
+     esperado. Acrescente `preCommit.content` em `preCommit.file` (o gerenciador de `manager`;
+     sem nenhum, `lefthook.yml`) sem apagar o que já existe lá. O comando instalado é
+     `node .context/bin/devflow-standards.mjs check --staged`.
+   - **Gate no CI** — a garantia; só com `applicable: true`. O job faz checkout do plugin
+     (repositório público) na versão de `.context/bin/devflow-plugin.ref` e roda o `gate`
+     contra a base do PR, sem executar nada do PR antes. Projeto Python ou Odoo não precisa de
+     Node: o runner instala. Grave o pin (`pin.content` em `pin.file`) junto com o arquivo de
+     CI; com `pin.state: differs`, ofereça atualizá-lo para a versão instalada.
+     - **GitHub** — `.github/workflows/devflow-standards.yml`. Um enfraquecimento deliberado da
+       catraca é liberado pelo rótulo `standards-ratchet-approved` **e** por um review `APPROVED`
+       no último commit do PR, os dois de quem é dono, no CODEOWNERS da base, dos arquivos da
+       catraca alterados — nunca o autor do PR, bot ou GitHub App. Um push depois da aprovação
+       a invalida. Dono do tipo `@org/time` exige um token com `read:org`, que fica ao alcance
+       dos linters do PR: prefira citar pessoas. Avise o operador de que só ele configura, no
+       repositório, o job como *required status check* da branch protegida.
+     - **GitLab** — `.gitlab/ci/devflow-standards.yml`, mais o `gitlab.include` no `.gitlab-ci.yml`.
+       No GitLab não há override: a catraca enfraquecida deixa o job vermelho.
+   - **`verify.standards`** — com `verify.declared: false`, acrescente
+     `standards: ["devflow-standards", "gate"]` ao bloco `verify:` do `.context/.devflow.yaml`.
+     O argv é reservado: quem resolve o comando é o plugin, e outro valor é recusado.
+   - **CODEOWNERS** — pergunte quem é o dono das normas e rode o comando de novo com
+     `--owner=@usuario` (mais de um: `--owner=@ana,@org/time`). Acrescente `codeowners.content`
+     **no fim** de `codeowners.file`; nunca reescreva o arquivo nem ponha o bloco no meio dele
+     (no CODEOWNERS vale a última regra que casa). Rode de novo: `codeowners.covered` tem de
+     voltar `true`. A proteção de branch "Require review from Code Owners" é configuração do
+     repositório, feita pelo operador. Recomende também uma regra para o próprio arquivo
+     (`codeowners.file`): sem dono, um PR comum pode trocar quem é o dono da catraca.
+   - **`.gitignore`** — com `gitignore.ignored: false`, acrescente `.context/runtime/`: o cache
+     pré-edição e o contador do anti-loop gravam lá.
+
+5. Liste os standards de `standards.local` (autorais) e de `standards.defaults`, com o nível de
+   cada um, e ofereça promover os defaults relevantes: ejetar **com o linter**
+   (`node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" eject <id> --with-linter`) e depois
+   `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" enforce <id> --level block`.
+   Sem `--with-linter` o `eject` zera o campo `linter`: o standard vira `block` só no texto e
+   nenhum hook nem o CI o executa.
+   **Antes de ejetar, confira a ordem.** O linter que o `eject --with-linter` grava é arquivo novo
+   em `machine/`. Num projeto que já tem algo nos diretórios de standards
+   (`.context/engineering/standards/` ou `.context/standards/`) na branch base, o PR que o traz é
+   violação da catraca e pede o override do dono, e o override é conferido contra o CODEOWNERS
+   **da base**. O CODEOWNERS com o dono precisa estar na branch base **antes** desse PR: se os
+   dois entrarem no mesmo PR, ninguém aprova e o gate fica vermelho. Avise o operador e deixe o
+   `eject` para um PR seguinte ao do CODEOWNERS. (No GitLab não há override: o job desse PR fica
+   vermelho e o merge é decisão de quem mantém o projeto.)
+
+Nunca escreva nenhum desses arquivos sem o sim do operador.
 
 ### Stacks — reconciliação, não semeadura
 

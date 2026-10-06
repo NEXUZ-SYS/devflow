@@ -18,6 +18,11 @@ import { join, dirname } from "node:path";
 import { loadStandards, findApplicableStandards } from "./standards-loader.mjs";
 import { readFrameworkVersionsFromPath } from "./devflow-config.mjs";
 import { deriveRefsForStandards } from "./standard-refs.mjs";
+import { frameProjectData, safeName, inlineSafe } from "./untrusted-frame.mjs";
+
+// Teto por campo de contexto injetado: o Claude Code corta em 10.000 e entrega só uma prévia.
+export const NUDGE_MAX_CHARS = 9000;
+const FOOTER_ROOM = 160; // espaço guardado para o aviso do que ficou de fora
 
 const CACHE_REL = ".context/cache/session-injected.json";
 const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -138,23 +143,34 @@ export function isFresh(cache) {
 
 // ─── Render ────────────────────────────────────────────────────────────────
 
-export function renderNudgeText(nudge) {
+/**
+ * Texto do nudge, com no máximo `maxChars` caracteres (unidades UTF-16, como o Claude Code mede
+ * o campo) e nunca mais que NUDGE_MAX_CHARS. Quem chama desconta de `maxChars` o que mais vai
+ * no mesmo `additionalContext`.
+ */
+export function renderNudgeText(nudge, { maxChars = NUDGE_MAX_CHARS } = {}) {
   if (!nudge) return "";
+  const limit = Math.min(Number.isFinite(maxChars) ? maxChars : 0, NUDGE_MAX_CHARS);
+  // O que sai FORA da moldura também vem do projeto: o id do standard (frontmatter), o caminho
+  // do arquivo e o `lib@version`/`refPath` do manifesto de stacks. Passam pelos mesmos helpers
+  // do contexto pré-edição e do SessionStart — id por `safeName`, o resto por `inlineSafe` (uma
+  // linha, sem controle nem `<>`). O cache de entrega continua pelo id real (`matchedStandards`).
+  const libRef = (r) => inlineSafe(`${r.lib}@${r.version}`, 160);
   const lines = [];
-  lines.push(`DevFlow: ${nudge.tool} em ${nudge.path}`);
-  lines.push(`Standards aplicáveis: ${nudge.matchedStandards.join(", ")}`);
+  lines.push(`DevFlow: ${nudge.tool} em ${inlineSafe(nudge.path, 240)}`);
+  lines.push(`Standards aplicáveis: ${nudge.matchedStandards.map(id => safeName(id)).join(", ")}`);
   if (nudge.derivedRefs.length > 0) {
     // Fase B: 3 ref states. MCP-indexed libs query via MCP tool; legacy
     // .md refs read from disk; pending-scrape are declared but not indexed.
     const mcpIndexed = nudge.derivedRefs.filter(r => r.status === "mcp-indexed");
     const scraped = nudge.derivedRefs
       .filter(r => r.status === "scraped")
-      .map(r => `.context/stacks/${r.refPath}`);
+      .map(r => inlineSafe(`.context/stacks/${r.refPath}`, 240));
     const pending = nudge.derivedRefs
       .filter(r => r.status === "pending-scrape")
-      .map(r => `${r.lib}@${r.version}`);
+      .map(libRef);
     if (mcpIndexed.length > 0) {
-      const libList = mcpIndexed.map(r => `${r.lib}@${r.version}`).join(", ");
+      const libList = mcpIndexed.map(libRef).join(", ");
       lines.push(`Refs MCP-indexed: ${libList}`);
       lines.push(`  → query: mcp__docs-mcp-server__search_docs(<lib>, "<question>")`);
     }
@@ -166,21 +182,28 @@ export function renderNudgeText(nudge) {
     }
   }
 
+  // Sem espaço nem para o cabeçalho: nada sai (quem chama não marca os standards como entregues).
+  let out = lines.join("\n");
+  if (out.length > limit) return "";
+
   // Camada 3: include rule body on first-touch. The cache (recordInjection)
   // ensures these only ship once per std per session.
-  if (nudge.rules && nudge.rules.length > 0) {
-    for (const rule of nudge.rules) {
-      lines.push("");
-      lines.push(`### Regras de ${rule.stdId} (primeira aparição)`);
-      if (rule.principios) {
-        lines.push("#### Princípios");
-        lines.push(rule.principios);
-      }
-      if (rule.antiPatterns) {
-        lines.push("#### Anti-patterns");
-        lines.push(rule.antiPatterns);
-      }
-    }
+  // O corpo vem do repositório: cada standard sai numa moldura de dado não confiável
+  // (frameProjectData, a mesma do contexto pré-edição). Uma moldura entra inteira ou não entra:
+  // cortar no meio deixaria o bloco sem o fechamento. O que não cabe no teto vira um aviso.
+  let omitted = 0;
+  for (const rule of nudge.rules || []) {
+    const body =
+      (rule.principios ? `#### Princípios\n${rule.principios}\n` : "") +
+      (rule.antiPatterns ? `#### Anti-patterns\n${rule.antiPatterns}\n` : "");
+    const name = safeName(rule.stdId);
+    const block = `\n\n### Regras de ${name} (primeira aparição)\n${frameProjectData(name, body).trimEnd()}`;
+    if (out.length + block.length <= limit - FOOTER_ROOM) out += block;
+    else omitted++;
   }
-  return lines.join("\n");
+  if (omitted > 0) {
+    const footer = `\n\n(regras de ${omitted} standard(s) não couberam no limite deste aviso; leia o arquivo de cada standard listado acima)`;
+    if (out.length + footer.length <= limit) out += footer;
+  }
+  return out;
 }

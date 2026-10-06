@@ -29,4 +29,5 @@ verify:
   integration: ["bash", "tests/run-integration.sh"]
   e2e:         ["bash", "tests/run-e2e.sh"]
   lint:        ["bash", "tests/run-lint.sh"]
+  standards:   ["devflow-standards", "gate"]
   onTaskComplete: [unit]

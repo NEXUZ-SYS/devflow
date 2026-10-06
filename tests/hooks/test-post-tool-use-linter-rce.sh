@@ -30,6 +30,26 @@ run_hook() {
 }
 
 # Mark the file system to prove no execution happened
+SYNC_HOOK="$PROJECT_ROOT/hooks/post-tool-use-lint"
+
+# T14 (D9): o mesmo std envenenado, promovido a block, vai para o hook síncrono.
+# Ele também não pode executar o linter; a saída é UM JSON ou nada.
+run_sync_hook() {
+  local cwd="$1" tool_input="$2" std="$3" out
+  sed -i 's|^  linter: .*$|&\n  level: block|' "$std"
+  out=$( cd "$cwd" && printf '{"tool_name":"Edit","tool_input":%s}' "$tool_input" | "$SYNC_HOOK" 2>/dev/null )
+  if [ -f "$CANARY_FILE" ]; then
+    echo "FAIL [sync]: poisoned linter EXECUTED pelo post-tool-use-lint ($std)"
+    exit 1
+  fi
+  # O std foi avaliado (e recusado pelo SI-4): a recusa aparece num único JSON.
+  printf '%s' "$out" | python3 -c '
+import json,sys
+d=json.loads(sys.stdin.read())
+assert "decision" not in d and "std-poison" in d["hookSpecificOutput"]["additionalContext"], d' \
+    || { echo "FAIL [sync]: esperava UM JSON citando a recusa do std-poison: $out"; exit 1; }
+}
+
 CANARY_FILE="/tmp/devflow-rce-canary-$$"
 
 # ─── Test 1: path traversal ─────────────────────────────────────────────────
@@ -54,12 +74,16 @@ if [ -f "$CANARY_FILE" ]; then
   exit 1
 fi
 # Verify hook returned successfully (didn't crash)
-if [ -z "$out1" ]; then
-  echo "FAIL [test 1]: hook returned empty output"
-  exit 1
-fi
+# A metade async também precisa ter AVALIADO o std (e recusado pelo SI-4): "std-poison: <motivo
+# do SI-4>" aparece no lembrete. Saída não vazia não prova nada (o lembrete de handoff sai
+# sempre), nem o id solto (o nudge da Camada 2 cita os std aplicáveis).
+require_poison() {
+  printf '%s' "$2" | grep -qE 'std-poison: [^"]*(linter|path)' || { echo "FAIL [$1]: async não citou a recusa do std-poison pelo SI-4: $2"; exit 1; }
+}
+require_poison "test 1" "$out1"
+run_sync_hook "$TMP1" '{"file_path":"src/foo.ts"}' "$TMP1/.context/standards/std-poison.md"
 rm -f /tmp/evil.sh
-echo "PASS [test 1]: path traversal linter rejected"
+echo "PASS [test 1]: path traversal linter rejected (async + sync)"
 
 # ─── Test 2: absolute path ──────────────────────────────────────────────────
 TMP2=$(mktemp -d "$TMP_ROOT/rce-abs-XXXXXX")
@@ -67,11 +91,13 @@ mkdir -p "$TMP2/.context/standards/machine"
 echo "${ADR_FRONTMATTER//LINTER_PATH//etc/passwd}" > "$TMP2/.context/standards/std-poison.md"
 
 out2=$(run_hook "$TMP2" '{"file_path":"src/foo.ts"}')
+require_poison "test 2" "$out2"
 if [ -f "$CANARY_FILE" ]; then
   echo "FAIL [test 2]: absolute-path linter EXECUTED"
   exit 1
 fi
-echo "PASS [test 2]: absolute path linter rejected"
+run_sync_hook "$TMP2" '{"file_path":"src/foo.ts"}' "$TMP2/.context/standards/std-poison.md"
+echo "PASS [test 2]: absolute path linter rejected (async + sync)"
 
 # ─── Test 3: shell metacharacters ───────────────────────────────────────────
 TMP3=$(mktemp -d "$TMP_ROOT/rce-shell-XXXXXX")
@@ -81,11 +107,13 @@ poisoned='"foo.js; touch '"$CANARY_FILE"'"'
 echo "${ADR_FRONTMATTER//LINTER_PATH/$poisoned}" > "$TMP3/.context/standards/std-poison.md"
 
 out3=$(run_hook "$TMP3" '{"file_path":"src/foo.ts"}')
+require_poison "test 3" "$out3"
 if [ -f "$CANARY_FILE" ]; then
   echo "FAIL [test 3]: shell-metachar linter EXECUTED"
   exit 1
 fi
-echo "PASS [test 3]: shell metacharacter linter rejected"
+run_sync_hook "$TMP3" '{"file_path":"src/foo.ts"}' "$TMP3/.context/standards/std-poison.md"
+echo "PASS [test 3]: shell metacharacter linter rejected (async + sync)"
 
 echo ""
 echo "ALL PASS: SI-4 rejects 3 poisoned linter vectors"

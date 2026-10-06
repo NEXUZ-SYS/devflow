@@ -59,3 +59,40 @@ test("validateSubset: accepts valid subset", () => {
   assert.doesNotThrow(() => validateSubset("src/middleware.ts"));
   assert.doesNotThrow(() => validateSubset("?"));
 });
+
+// T18, rodada 2: o `**` virava `.*`, e o `.` do JS não casa "\n", "\r", U+2028 nem U+2029. Um
+// arquivo com um desses no nome (ou num diretório do caminho) ficava fora de TODO applyTo com
+// `**` — e, no evaluator de permissões, fora de todo `deny` com `**`.
+const TERMINATORS = [["\\n", "\n"], ["\\r", "\r"], ["U+2028", "\u2028"], ["U+2029", "\u2029"], ["\\r\\n", "\r\n"]];
+
+test("matchGlob: ** casa terminador de linha no nome do arquivo e no meio do caminho", () => {
+  for (const [label, ch] of TERMINATORS) {
+    assert.equal(matchGlob("src/**", `src/mod${ch}.js`), true, `src/** × nome com ${label}`);
+    assert.equal(matchGlob("src/**", `src/util${ch}/x.js`), true, `src/** × diretório com ${label}`);
+    assert.equal(matchGlob("**", `a${ch}b`), true, `** × ${label}`);
+    assert.equal(matchGlob("**/*.js", `src/dir${ch}/x.js`), true, `**/*.js × diretório com ${label}`);
+    assert.equal(matchGlob("**/.env*", `conf${ch}/.env.local`), true, `**/.env* × ${label}`);
+    assert.equal(matchGlob("src/**/x.js", `src/a${ch}b/x.js`), true, `src/**/x.js × ${label}`);
+    assert.equal(matchGlob("**/*.{ts,tsx}", `src/a${ch}/b.tsx`), true, `chaves × ${label}`);
+  }
+});
+
+test("matchGlob: * e ? também casam terminador de linha (e continuam sem atravessar '/')", () => {
+  for (const [label, ch] of TERMINATORS) {
+    assert.equal(matchGlob("src/*.js", `src/mod${ch}.js`), true, `* × ${label}`);
+    assert.equal(matchGlob("*", `a${ch}b`), true, `* sozinho × ${label}`);
+  }
+  for (const [label, ch] of TERMINATORS.slice(0, 4)) assert.equal(matchGlob("src/a?b.js", `src/a${ch}b.js`), true, `? × ${label}`);
+  assert.equal(matchGlob("src/*.js", "src/a\n/b.js"), false, "* não atravessa a barra");
+  assert.equal(matchGlob("src/a?b.js", "src/a/b.js"), false, "? não casa a barra");
+});
+
+test("matchGlob: o alargamento do ** não muda o que já casava nem o que não casava", () => {
+  assert.equal(matchGlob("src/**", "lib/x.js"), false);
+  assert.equal(matchGlob("src/**", "srcx/y.js"), false);
+  assert.equal(matchGlob("**/*.ts", "a/b.js"), false);
+  assert.equal(matchGlob("src/**", "src/a\tb.js"), true);
+  assert.equal(matchGlob("src/**", "outro\nsrc/x.js"), false, "a âncora do começo continua valendo");
+  assert.equal(matchGlob("src/**/x.js", "src/a/y.js\n"), false, "a âncora do fim continua valendo");
+});
+

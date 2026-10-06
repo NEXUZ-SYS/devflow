@@ -1,0 +1,124 @@
+# .github/workflows/devflow-standards.yml — gate de standards do DevFlow (ADR-015).
+#
+# Copiado VERBATIM do plugin DevFlow (ADR-012). Não edite: um arquivo editado deixa de ser
+# atualizado pelo /devflow:devflow-sync. Nada aqui é preenchido por projeto — a branch base vem
+# do evento e a versão do plugin vem de .context/bin/devflow-plugin.ref.
+#
+# O que roda: a catraca contra a base do PR (baseline, níveis, linters, shim e
+# verify.standards) e o check dos standards sobre o merge do PR. O pre-commit é atrito; este
+# job é a garantia — desde que o operador configure, no repositório:
+#   - este job como "required status check" da branch protegida;
+#   - "Require review from Code Owners", com o CODEOWNERS dando dono aos caminhos da catraca
+#     e a este arquivo (o workflow que julga o PR vem do próprio PR).
+#
+# Override de um enfraquecimento deliberado: o rótulo `standards-ratchet-approved` E um review
+# APPROVED no último commit do PR, os dois de quem é dono, no CODEOWNERS da base, dos arquivos
+# da catraca que o PR alterou — nunca o autor do PR, bot ou GitHub App. O gate confere isso na
+# API a cada execução; por isso o job roda de novo quando o rótulo ou o review mudam. Um push
+# depois da aprovação troca o último commit e a aprovação deixa de valer sozinha: nenhum passo
+# precisa tirar o rótulo.
+#
+# Dono do tipo @org/time: a credencial padrão do job não lê a composição de times, e o gate
+# fecha (ninguém aprova). Cite pessoas no CODEOWNERS. Trocar o GH_TOKEN por uma credencial com
+# `read:org` também funciona, mas ela fica no ambiente do gate, que executa os linters do
+# projeto — inclusive os que o próprio PR trouxe.
+#
+# Se a branch base andar depois que o GitHub montou o merge do PR, o gate fecha com erro
+# ("a base não é ancestral do HEAD") em vez de comparar com uma base velha: rode o job de novo.
+#
+# Projeto sem Node (Python, Odoo…): o job instala o Node no runner; o projeto não precisa dele.
+
+name: DevFlow standards
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: devflow-standards-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: standards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Nenhum passo executa código do PR antes do gate: nada de instalar dependências, rodar
+      # script do repositório ou usar action local. O único código do projeto que roda são os
+      # linters dos standards, chamados pelo gate (os que já existiam na base antes dos novos).
+      - name: Checkout do merge do PR, com o histórico completo
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+          path: project
+
+      - name: Versão do plugin (a da base; a do PR só enquanto a base não tem)
+        id: pin
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          pin=".context/bin/devflow-plugin.ref"
+          base="refs/remotes/origin/${BASE_BRANCH}"
+          if ! git -C project rev-parse --verify --quiet "${base}^{commit}" > /dev/null; then
+            echo "::error::a branch base do PR não está no checkout"
+            exit 3
+          fi
+          if [ -n "$(git -C project ls-tree "$base" -- "$pin")" ]; then
+            ref="$(git -C project cat-file blob "${base}:${pin}")"
+            from="a base"
+          elif [ -f "project/${pin}" ] && [ ! -L "project/${pin}" ]; then
+            ref="$(head -c 128 "project/${pin}")"
+            from="o PR (a base ainda não tem o arquivo)"
+          else
+            echo "::error::falta ${pin}: rode /devflow:devflow-sync no projeto e versione o arquivo"
+            exit 3
+          fi
+          ref="${ref%$'\r'}"
+          if [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            ref="refs/tags/${ref}"
+          elif ! [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::${pin} inválido: esperado vX.Y.Z ou um SHA de 40 dígitos"
+            exit 3
+          fi
+          echo "plugin DevFlow em ${ref} (lido de ${from})"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout do plugin DevFlow na versão fixada (repositório público)
+        uses: actions/checkout@v4
+        with:
+          repository: NEXUZ-SYS/devflow
+          ref: ${{ steps.pin.outputs.ref }}
+          persist-credentials: false
+          path: devflow-plugin
+
+      - name: Node para rodar o plugin
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Gate de standards (catraca contra a base + check)
+        working-directory: project
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ ! -d .context ]; then
+            echo "::error::sem .context/ na raiz do repositório: este workflow assume o projeto DevFlow na raiz"
+            exit 3
+          fi
+          node "$GITHUB_WORKSPACE/devflow-plugin/scripts/devflow-standards.mjs" gate \
+            --base-ref="refs/remotes/origin/${BASE_BRANCH}" --ci \
+            --allow-weakening --pr="$PR_NUMBER" --repo="$REPO"

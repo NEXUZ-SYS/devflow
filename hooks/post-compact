@@ -26,6 +26,11 @@ escape_for_json() {
     printf '%s' "$s"
 }
 
+# --- Contexto pré-edição: o que foi injetado antes da compactação se perdeu ---
+# Limpa o cache por sessão/agente do pre-tool-use (T9) para as normas voltarem na próxima
+# edição. Sem saída (o stdout deste hook é o JSON de reidratação); falha aberto.
+node "${PLUGIN_ROOT}/scripts/lib/pre-edit-context.mjs" --clear "${PWD}" >/dev/null 2>&1 || true
+
 # --- Build rehydration context ---
 
 rehydration="$MSG_REHYDRATION_HEADER"

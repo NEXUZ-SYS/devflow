@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFrameworkVersions, readFrameworkVersionsFromPath } from "../../scripts/lib/devflow-config.mjs";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -66,4 +67,53 @@ test("readFrameworkVersionsFromPath lê do disco e nunca lança em path ausente"
   assert.equal(readFrameworkVersionsFromPath(join(dir, "ausente.yaml")).size, 0);
   assert.equal(readFrameworkVersionsFromPath(null).size, 0);
   rmSync(dir, { recursive: true });
+});
+
+// T14 rodada 1 (Important): .devflow.yaml como FIFO ou symlink para /dev/zero travava o hook
+// síncrono (RSS de 12 GB). Roda num filho com teto de memória virtual e timeout, para o RED
+// não derrubar a máquina.
+const CFG_URL = new URL("../../scripts/lib/devflow-config.mjs", import.meta.url).href;
+function versionsInChild(path) {
+  // Imprime as versões e o pico de RSS (kB): sob o ulimit, a leitura de /dev/zero falharia com
+// ENOMEM e cairia no catch — o RSS denuncia que a leitura aconteceu.
+  const code = `import(${JSON.stringify(CFG_URL)}).then(m=>{const v=[...m.readFrameworkVersionsFromPath(process.argv[1])];console.log(JSON.stringify({v,rss:process.resourceUsage().maxRSS}))})`;
+  const t0 = Date.now();
+  const r = spawnSync("bash", ["-c", 'ulimit -v 3000000; exec "$0" --input-type=module -e "$1" "$2"', process.execPath, code, path],
+    { encoding: "utf8", timeout: 3000, killSignal: "SIGKILL" });
+  return { ms: Date.now() - t0, r };
+}
+
+test("readFrameworkVersionsFromPath: FIFO → Map vazio, sem travar", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fw-fifo-"));
+  try {
+    const p = join(dir, ".devflow.yaml");
+    spawnSync("mkfifo", [p]);
+    const { ms, r } = versionsInChild(p);
+    assert.ok(ms < 2000, `travou: ${ms}ms (signal ${r.signal})`);
+    assert.deepEqual(JSON.parse(r.stdout).v, []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("readFrameworkVersionsFromPath: symlink para /dev/zero → Map vazio, sem estourar memória", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fw-zero-"));
+  try {
+    const p = join(dir, ".devflow.yaml");
+    symlinkSync("/dev/zero", p);
+    const { ms, r } = versionsInChild(p);
+    assert.ok(ms < 2000, `travou: ${ms}ms (signal ${r.signal})`);
+    const out = JSON.parse(r.stdout);
+    assert.deepEqual(out.v, []);
+    assert.ok(out.rss < 300 * 1024, `leu /dev/zero: pico de RSS ${Math.round(out.rss / 1024)} MB`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("readFrameworkVersionsFromPath: arquivo acima de 1 MiB → Map vazio", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fw-big-"));
+  try {
+    const p = join(dir, ".devflow.yaml");
+    writeFileSync(p, SRC + "#".repeat(1024 * 1024));
+    assert.equal(readFrameworkVersionsFromPath(p).size, 0);
+    writeFileSync(p, SRC);
+    assert.equal(readFrameworkVersionsFromPath(p).get("odoo"), "17");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

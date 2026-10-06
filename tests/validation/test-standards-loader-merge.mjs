@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadStandardsMerged } from "../../scripts/lib/standards-loader.mjs";
@@ -45,5 +46,19 @@ test("R7 symlink no dir de standards é ignorado (não lê fora)", () => {
   try { symlinkSync("/etc/hostname", join(root, ".context", "engineering", "standards", "std-evil.md")); } catch { cleanup(); return; }
   const list = loadStandardsMerged(root, plugin);
   assert.ok(!list.find((s) => s.id && s.origin === "project" && s.id !== "std-security" && s.id !== "std-caching" && /etc|hostname/i.test(JSON.stringify(s))));
+  cleanup();
+});
+
+// Correção rodada 1 — item barato: standards.local.yaml como FIFO travava os dois hooks de
+// SessionStart (readFileSync bloqueia abrindo um FIFO sem escritor). readRegularFileSafe
+// (O_NOFOLLOW|O_NONBLOCK) faz o arquivo "ilegível" virar disableSet vazio, nunca travar.
+test("standards.local.yaml como FIFO: não trava (vale como sem disable)", () => {
+  const { root, plugin, cleanup } = fixture();
+  execFileSync("mkfifo", [join(root, ".context", "standards.local.yaml")]);
+  const start = Date.now();
+  const list = loadStandardsMerged(root, plugin);
+  const dt = Date.now() - start;
+  assert.ok(dt < 2000, `travou (${dt} ms)`);
+  assert.ok(list.find((s) => s.id === "std-security"), "defaults continuam presentes");
   cleanup();
 });

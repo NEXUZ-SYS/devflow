@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# hooks/subagent-start — entrega as normas do projeto (as mesmas do SessionStart, T10) a todo
+# subagente, num campo próprio do SubagentStart, ≤ 9000 caracteres. `SubagentStart` aceita
+# `hookSpecificOutput.additionalContext` (hooks.md:2382, já conferido na T11/E11 do design).
+#
+# Toda a lógica de montar o texto vive em scripts/lib/session-norms.mjs (buildSessionNorms) —
+# a mesma função que o session-start-norms usa. Não existe um subagent-context.mjs: seria só um
+# repasse sem lógica própria (decisão do controller R4). Este script só encaminha cwd e
+# empacota o JSON com o hookEventName de SubagentStart, que o session-norms.mjs não conhece.
+#
+# Saída: um único JSON válido (o contrato SubagentStart) ou nada — nunca texto solto.
+# Falha aberta: qualquer erro aqui vira silêncio, nunca trava nem quebra o subagente.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+INPUT=$(cat)
+CWD=$(printf '%s' "$INPUT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cwd",""))' 2>/dev/null || echo "")
+CTX=$(node "${PLUGIN_ROOT}/scripts/lib/session-norms.mjs" "${CWD:-$PWD}" 2>/dev/null || true)
+[ -n "$CTX" ] || exit 0
+printf '%s' "$CTX" | python3 -c '
+import json,sys
+print(json.dumps({"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":sys.stdin.read()}}))' 2>/dev/null || true
+exit 0

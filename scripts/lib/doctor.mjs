@@ -369,8 +369,9 @@ const harnessSensors = {
     }
 
     let ids = [];
+    let raw;
     try {
-      const raw = JSON.parse(readFileSync(catalogPath, "utf-8"));
+      raw = JSON.parse(readFileSync(catalogPath, "utf-8"));
       ids = (raw.sensors || []).map((s) => s && s.id).filter(Boolean);
     } catch {
       return { status: "WARN", diagnosis: "sensors.json ilegível ou malformado.", repair };
@@ -383,6 +384,20 @@ const harnessSensors = {
         diagnosis: `Catálogo desatualizado: sinal(is) do verify: sem sensor — ${missing.join(", ")}.`,
         repair,
       };
+    }
+
+    // O sensor reservado aponta para o verify-run do plugin por caminho absoluto: após
+    // atualizar o plugin, o caminho antigo some e o sensor quebra em silêncio.
+    if (names.includes("standards")) {
+      const std = (raw.sensors || []).find((s) => s && s.id === "standards");
+      const script = std ? String(std.command || "").split(" ")[1] || "" : "";
+      if (!script || !existsSync(script)) {
+        return {
+          status: "WARN",
+          diagnosis: `Sensor 'standards' aponta para ${script || "(nada)"}, que não existe (plugin atualizado?).`,
+          repair,
+        };
+      }
     }
 
     return { status: "OK", diagnosis: `Catálogo cobre os ${names.length} sinais do verify:.`, repair: "" };

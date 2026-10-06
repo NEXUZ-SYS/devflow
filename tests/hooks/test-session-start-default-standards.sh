@@ -165,17 +165,23 @@ assert_contains \
   "$cli_output3" \
   "std-security"
 
-# ─── Test 4: plugin dir without assets/standards/ passes --plugin → empty defaults ─
+# ─── Test 4: --plugin no longer controls standards (T10/C16, ADR-015 D5) ──────
+#
+# collectStandards agora usa loadEffectiveStandards, que deriva a raiz do plugin do
+# próprio import.meta.url (verifyPluginRoot) — nunca do --plugin recebido pela CLI.
+# Um --plugin apontando para um dir vazio NÃO suprime mais os defaults reais deste
+# repo: eles vêm da raiz confiável, não do argumento. A supressão real é
+# .context/standards.local.yaml `disable:` (D5).
 
 echo ""
-echo "=== --plugin dir without assets/standards → no extra defaults ==="
+echo "=== --plugin não controla mais standards: defaults reais aparecem mesmo assim ==="
 
 tmp_project4="${TMP_DIR}/project-no-defaults"
 mkdir -p "$tmp_project4"
 
 tmp_plugin_empty="${TMP_DIR}/plugin-empty"
 mkdir -p "$tmp_plugin_empty"
-# No assets/standards/ inside
+# No assets/standards/ inside — irrelevante para standards desde o C16.
 
 cli_output4=$(
   node "${PROJECT_ROOT}/scripts/lib/context-index-cli.mjs" \
@@ -185,51 +191,74 @@ cli_output4=$(
     2>/dev/null || true
 )
 
-assert_not_contains \
-  "empty plugin dir produces no default standards in text" \
+assert_contains \
+  "--plugin vazio não suprime os defaults reais (raiz confiável, não o argumento)" \
   "$cli_output4" \
   "[default]"
 
-# ─── Test 5: --plugin flag forwarded to CLI produces [default] in output ─────
+# ─── Test 5: --plugin com id exclusivo NÃO consegue injetar standard (D5) ────
+#
+# Correção rodada 1: a versão antiga passava --plugin="${PROJECT_ROOT}" (a própria raiz
+# confiável) e checava só "[default] aparece" — isso passaria idêntico se --plugin fosse
+# completamente ignorado (é exatamente o que acontece desde o C16), então não provava
+# encaminhamento nenhum. Um plugin FORJADO com id exclusivo (std-evil) prova a contrapartida
+# real do contrato: --plugin não controla mais standards.
 
 echo ""
-echo "=== CLI: --plugin flag produces [default] markers ==="
+echo "=== CLI: --plugin com id exclusivo (std-evil) não aparece no índice ==="
+
+tmp_plugin_evil="${TMP_DIR}/plugin-evil"
+std_evil_dir="${tmp_plugin_evil}/assets/standards"
+mkdir -p "$std_evil_dir"
+cat > "${std_evil_dir}/std-evil.md" << 'MD'
+---
+id: "std-evil"
+description: "injetado por um pluginRoot forjado"
+version: "1.0.0"
+applyTo: ["**/*.ts"]
+---
+
+MD
 
 cli_output5=$(
   node "${PROJECT_ROOT}/scripts/lib/context-index-cli.mjs" \
     --project="$tmp_project" \
-    --plugin="${PROJECT_ROOT}" \
+    --plugin="$tmp_plugin_evil" \
     --format=text \
     2>/dev/null || true
 )
 
 assert_contains \
-  "CLI --plugin=PROJECT_ROOT produces text with [default] markers" \
+  "defaults reais continuam com [default] mesmo com --plugin forjado" \
   "$cli_output5" \
   "[default]"
 
-# JSON output also carries origin field
+assert_not_contains \
+  "std-evil do plugin forjado NÃO aparece no texto" \
+  "$cli_output5" \
+  "std-evil"
+
 json_output5=$(
   node "${PROJECT_ROOT}/scripts/lib/context-index-cli.mjs" \
     --project="$tmp_project" \
-    --plugin="${PROJECT_ROOT}" \
+    --plugin="$tmp_plugin_evil" \
     2>/dev/null || true
 )
 
-# Verify at least one standard has origin=default in JSON
 has_default_origin=$(echo "$json_output5" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 defaults = [s for s in d.get('standards', []) if s.get('origin') == 'default']
-print('yes' if defaults else 'no')
+evil = [s for s in d.get('standards', []) if s.get('id') == 'std-evil']
+print('yes' if defaults and not evil else 'no')
 " 2>/dev/null || echo "parse_error")
 
 TESTS_TOTAL=$((TESTS_TOTAL + 1))
 if [ "$has_default_origin" = "yes" ]; then
-  echo -e "  ${GREEN}✓${NC} JSON output carries origin='default' for bundled standards"
+  echo -e "  ${GREEN}✓${NC} JSON: defaults reais presentes, std-evil ausente mesmo com --plugin forjado"
   TESTS_PASSED=$((TESTS_PASSED + 1))
 else
-  echo -e "  ${RED}✗${NC} JSON output carries origin='default' for bundled standards"
+  echo -e "  ${RED}✗${NC} JSON: defaults reais presentes, std-evil ausente mesmo com --plugin forjado"
   echo "    python3 check returned: $has_default_origin"
   TESTS_FAILED=$((TESTS_FAILED + 1))
 fi

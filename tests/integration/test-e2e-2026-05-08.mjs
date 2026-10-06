@@ -18,9 +18,15 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { defaultIds } from "../helpers/standards-fixture.mjs";
 
 const REPO_ROOT = process.cwd();
 const FIXTURE = join(REPO_ROOT, "tests", "2026-05-08");
+// T10/C16 (ADR-015 D5): collectStandards agora sempre carrega os defaults REAIS deste
+// plugin (loadEffectiveStandards, raiz confiável) — esta fixture não tem
+// standards.local.yaml, então os 26 std-* de assets/standards/ aparecem ao lado dos 19
+// próprios dela. Calculado (não hardcoded) para não empedernir contra o nº de defaults.
+const DEFAULT_STDS_COUNT = defaultIds().length;
 const INDEX_CLI = join(REPO_ROOT, "scripts", "lib", "context-index-cli.mjs");
 const NUDGE_CLI = join(REPO_ROOT, "scripts", "lib", "edit-nudge-cli.mjs");
 const LINTER_CLI = join(REPO_ROOT, "scripts", "lib", "run-linter-cli.mjs");
@@ -63,11 +69,12 @@ test("fixture: 20 ADRs, 19 standards, 13 manifest entries presentes", () => {
 
 // ─── Camada 1: session-start index ──────────────────────────────────────────
 
-test("Camada 1: índice lista 19 stds e 13 refs scrapeados", () => {
+test("Camada 1: índice lista 19 stds próprios (+ defaults do plugin) e 13 refs scrapeados", () => {
   const r = spawnSync("node", [INDEX_CLI, `--project=${FIXTURE}`, "--format=json"], { encoding: "utf-8" });
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const idx = JSON.parse(r.stdout);
-  assert.equal(idx.totals.standards, 19);
+  assert.equal(idx.standards.filter(s => s.origin !== "default").length, 19, "19 stds próprios da fixture");
+  assert.equal(idx.totals.standards, 19 + DEFAULT_STDS_COUNT);
   assert.equal(idx.totals.refs, 13);
   assert.equal(idx.totals.refsScraped, 13,
     "todos 13 refs scrapeados (best-effort completou após escolha de URLs canônicas)");

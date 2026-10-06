@@ -44,14 +44,17 @@ const LEGACY = {
 };
 
 // Only keys present in LEGACY get fallback resolution; other keys return [canonical].
-export function resolveReadPaths(projectRoot, key) {
+// `includeMissing: true` devolve também os legados que ainda não existem no disco — é o
+// conjunto de diretórios que o loader PODE vir a ler (o guard da catraca, T16, simula a
+// criação de um std num legado inexistente).
+export function resolveReadPaths(projectRoot, key, { includeMissing = false } = {}) {
   const p = contextPaths(projectRoot);
   const canonical = p[key];
   if (!canonical) throw new Error(`context-paths: unknown key '${key}'`);
   const reads = [canonical];
   for (const segs of LEGACY[key] ?? []) {
     const legacy = join(projectRoot, ".context", ...segs);
-    if (legacy !== canonical && existsSync(legacy)) reads.push(legacy);
+    if (legacy !== canonical && (includeMissing || existsSync(legacy))) reads.push(legacy);
   }
   return reads;
 }

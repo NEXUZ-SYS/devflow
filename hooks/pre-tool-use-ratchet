@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# hooks/pre-tool-use-ratchet — catraca de standards no Bash, NotebookEdit e MCP (ADR-015 D6, T17).
+#
+# Hook dedicado (matcher `Bash|NotebookEdit|mcp__.*`), separado do `pre-tool-use`: aquele roda o
+# evaluator de permissões e os outros guards, e não é para todo Bash passar por eles.
+#
+# HEURÍSTICO por desenho: olha o texto da chamada. Variável, base64, glob ou script intermediário
+# passam; a garantia é o `gate` do CI contra o merge-base (T18). Aqui é atrito.
+#
+# Saída (P0): UM JSON `ask` numa linha, ou nada. Nunca `allow` — um allow de hook pularia o prompt
+# de permissão — e nunca `deny`. Só três textos saem daqui: o `ask` do decisor (conferido abaixo
+# antes de ser repassado) e os dois `ask` fixos deste arquivo.
+#
+# Caminho rápido — todo evento que não cita a catraca: só builtins do bash. Sem subshell, sem
+# cat, node ou python3. Lê o stdin e procura um marcador; sem marcador, sai calado.
+#
+# O stdin é lido ATÉ O FIM em todos os caminhos. O Claude Code descarta o stdout do hook que
+# fecha o stdin antes de receber o evento inteiro (EPIPE vira "stdout vazio, status 1"; conferido
+# na 2.1.289): um `ask` emitido sem ler tudo se perderia.
+#
+# Evento maior que MAX_BYTES (1 MiB): os blocos seguintes são lidos um a um, só atrás de
+# marcador — a memória fica limitada a um bloco. Se algum bloco cita a catraca, o hook pede
+# `ask` sem analisar (com o evento partido não dá para decidir); se nenhum cita, sai calado.
+# O custo acima do teto é linear (~30 ms por MiB); o hook tem 10 s (hooks.json).
+set -u
+LC_ALL=C # bytes, não caracteres: a leitura e o casamento não dependem do locale da sessão
+MAX_BYTES=1048576
+OVERLAP=64 # bytes do fim de um bloco repetidos no começo do seguinte (marcador na fronteira)
+# Marcadores (ERE, sem distinção de caixa). É a MESMA expressão de RATCHET_MARKERS em
+# scripts/lib/standards-ratchet-bash.mjs; o separador aceita "/", "\" e as formas escapadas do JSON.
+MARKERS='baseline\.json|devflow-standards|standards\.local\.yaml|(engineering|\.context)[/\\]+standards'
+ASK_HEAD='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"[devflow standards] '
+ASK_CLOSE='"}}'
+ASK_TAIL=" (ADR-015 D6)${ASK_CLOSE}"
+
+# Lê até MAX_BYTES em CHUNK. Status 0 = o bloco encheu (ainda pode haver mais); ≠ 0 = fim do stdin.
+CHUNK=""
+if ((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 1))); then
+  read_chunk() { IFS= read -r -N "$MAX_BYTES" CHUNK; }
+else
+  # bash < 4.1 (o do macOS de fábrica) não tem -N: lê até MAX_BYTES ou até um byte nulo.
+  read_chunk() { IFS= read -r -d '' -n "$MAX_BYTES" CHUNK; }
+fi
+
+shopt -s nocasematch
+read_chunk
+MORE=$?
+INPUT="$CHUNK"
+HIT=0
+OVER=0
+[[ $INPUT =~ $MARKERS ]] && HIT=1
+if ((MORE == 0)); then
+  TAIL="${INPUT: -$OVERLAP}"
+  while :; do
+    read_chunk
+    MORE=$?
+    if [ -n "$CHUNK" ]; then
+      OVER=1
+      if ((HIT == 0)) && [[ "${TAIL}${CHUNK}" =~ $MARKERS ]]; then HIT=1; fi
+      TAIL="${CHUNK: -$OVERLAP}"
+    fi
+    ((MORE == 0)) || break
+  done
+fi
+shopt -u nocasematch
+((HIT)) || exit 0
+
+# --- A partir daqui o evento cita a catraca ---------------------------------------------------
+
+emit_ask() {
+  printf '%s\n' "${ASK_HEAD}$1${ASK_TAIL}"
+  exit 0
+}
+
+if ((OVER)); then
+  emit_ask "O evento desta chamada passa de 1 MiB e cita a catraca de standards: não foi analisado e exige confirmação do operador."
+fi
+
+# SI-1: o decisor é um arquivo que recebe o evento pelo stdin. A raiz do plugin vem do caminho
+# deste arquivo (expansão de parâmetro, sem dirname).
+HOOK_DIR="${BASH_SOURCE[0]%/*}"
+[ "$HOOK_DIR" != "${BASH_SOURCE[0]}" ] || HOOK_DIR="."
+OUT=$(printf '%s' "$INPUT" 2>/dev/null | node "${HOOK_DIR}/../scripts/lib/standards-ratchet-bash-cli.mjs" 2>/dev/null)
+RC=$?
+
+# O decisor rodou e não tem o que perguntar.
+if [ -z "$OUT" ] && [ "$RC" -eq 0 ]; then exit 0; fi
+
+# O decisor pede ask: só é repassado se for exatamente o formato esperado — o prefixo fixo, uma
+# linha, e um corpo de string JSON sem aspas soltas, sem barra invertida solta e sem caractere de
+# controle. Assim nada do que o node escreva vira outra chave (outra decisão) na saída.
+# Os padrões vêm de variáveis entre aspas (casamento literal): barra invertida escrita direto num
+# padrão muda de sentido conforme as aspas em volta e a versão do bash.
+if [[ ${#OUT} -le 2048 && "$OUT" == "${ASK_HEAD}"*"${ASK_CLOSE}" ]]; then
+  BS='\'
+  DQ='"'
+  BODY=${OUT#"$ASK_HEAD"}
+  BODY=${BODY%"$ASK_CLOSE"}
+  BODY=${BODY//"${BS}${BS}"/} # tira cada barra invertida escapada (par)
+  BODY=${BODY//"${BS}${DQ}"/} # e cada aspa escapada; o que sobrar de aspa ou barra está solto
+  case "$BODY" in
+    *"$DQ"* | *"$BS"* | *[[:cntrl:]]*) ;;
+    *)
+      printf '%s\n' "$OUT"
+      exit 0
+      ;;
+  esac
+fi
+
+# node ausente, quebrado ou com saída estranha num evento que cita a catraca: na dúvida, ask.
+emit_ask "O guard da catraca não pôde avaliar esta chamada, que cita a catraca de standards: exige confirmação do operador."

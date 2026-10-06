@@ -7,13 +7,13 @@ source: local
 stack: universal
 category: arquitetura
 status: Aprovado
-version: 1.1.1
+version: 1.2.0
 created: 2026-07-09
 supersedes: []
 refines: []
 protocol_contract: null
 decision_kind: firm
-summary: Artefatos de CI scaffoldados vivem verbatim no plugin (assets/release-scaffold/), são copiados sem interpolação, e o drift é resolvido por hash (intocado→atualiza, editado→preserva). A CI nunca depende do plugin.
+summary: Artefatos de CI scaffoldados vivem verbatim no plugin (assets/release-scaffold/ e assets/standards/), são copiados sem interpolação, e o drift é resolvido por hash (intocado→atualiza, editado→preserva). O scaffold de release é autossuficiente; o gate de standards faz checkout do plugin público numa versão fixada em .context/bin/devflow-plugin.ref, lida da base.
 ---
 
 # ADR — Scaffold de infra de CI: self-contained, verbatim e governado por proveniência
@@ -37,6 +37,8 @@ O DevFlow quer oferecer scaffold de uma pipeline de release a projetos que escol
 
 Manter os artefatos de scaffold em `assets/release-scaffold/` no plugin, **verbatim**, indexados em `known-hashes.json`. O `devflow:config` os copia (**opt-in explícito**, apenas com repositório git **e** remote GitHub) para `.github/workflows/` e `scripts/`. O `/devflow update` aplica `provenance-sync` a essas cópias: **intocado → atualiza; editado localmente → preserva e reporta; ausente → não recria** (scaffold é opt-in). Nenhum artefato scaffoldado é templatizado — configuração por projeto é resolvida por **detecção em runtime** (ex.: o `bump-version.sh` genérico detecta os version files presentes).
 
+**Evolução v1.2.0 — o scaffold de standards (ADR-015).** O gate de standards roda o código do plugin, então esse scaffold **não** é autossuficiente: `assets/standards/ci/` traz um workflow do GitHub (`.github/workflows/devflow-standards.yml`) e um job do GitLab (`.gitlab/ci/devflow-standards.yml`), e `assets/standards/bin/` traz o shim (`.context/bin/devflow-standards.mjs`). Os três continuam **verbatim** e governados por hash. O job faz checkout do repositório **público** `NEXUZ-SYS/devflow` na versão de `.context/bin/devflow-plugin.ref` (`vX.Y.Z` ou SHA de 40 dígitos), lida **da base** do PR (a do PR só na adoção), e nenhum código do PR roda antes do gate. O pin não é templatizado: é um arquivo de dado do projeto, não parte do workflow.
+
 ## Alternativas Consideradas
 
 - **Delegar ao ecossistema** — o workflow usa `npm version`/`poetry version`/`cargo` conforme o manifest detectado. Copia pouco código, mas ramifica por ecossistema (multi-stack confuso) e perde os guards (`version-guard`/`changelog-guard`) que barram pulo/regressão de versão e release sem notas.
@@ -56,6 +58,8 @@ Manter os artefatos de scaffold em `assets/release-scaffold/` no plugin, **verba
 
 **Riscos aceitos**
 - Escrever em `.github/workflows/` executa CI no repo do usuário — mitigado por opt-in explícito, gate git+GitHub e "nunca sobrescrever".
+- (v1.2.0) O pin quebrado na base só sai com bypass de admin, e ele só funciona a partir de uma release do plugin que contenha o gate. O pin não é arquivo da catraca: a cadeia só é segura porque o CI o lê da base e o CODEOWNERS cobre `/.context/bin/`, o que depende de "Require review from Code Owners" (ação humana, fora do repositório).
+- (v1.2.0) Um projeto em subdiretório do repositório e o GitHub Enterprise não são cobertos pela oferta; o trecho de `CODEOWNERS` gerado dá dono aos dois layouts de standards (`.context/engineering/standards/` e o legado `.context/standards/`); nada do scaffold de standards rodou num GitHub ou GitLab reais.
 
 **Fronteira de confiança (v1.1.0)**
 
@@ -71,9 +75,10 @@ Disso decorre a assimetria dos dois controles de escrita:
 - SEMPRE copiar artefatos de scaffold **verbatim** (byte-a-byte do plugin).
 - NUNCA interpolar/templatizar um artefato scaffoldado — a proveniência por hash só cobre verbatim.
 - NUNCA sobrescrever arquivo existente do usuário ao scaffoldar; preservar e reportar.
-- NUNCA fazer um artefato que roda em CI depender de `${CLAUDE_PLUGIN_ROOT}` — a CI não alcança o plugin.
+- NUNCA fazer um artefato que roda em CI depender de `${CLAUDE_PLUGIN_ROOT}` — a CI não alcança o plugin instalado.
+- QUANDO um artefato de CI precisar rodar código do plugin (gate de standards), ENTÃO ele faz checkout do repositório público numa versão FIXADA em `.context/bin/devflow-plugin.ref`, lida da base; NUNCA de branch móvel, e NUNCA com código do PR executado antes do gate.
 - QUANDO um scaffold precisar de configuração por projeto, ENTÃO detectar em runtime, nunca gerar por substituição.
-- NUNCA criar workflows de CI sem opt-in explícito, repositório git e remote GitHub.
+- NUNCA criar workflows de CI sem opt-in explícito, repositório git e remote do forge correspondente (GitHub para os dois scaffolds; GitLab também para o asset de standards).
 - NUNCA aplicar update em artefato **classe-CI** sem **diff + confirmação** humana; `untouched` + asset mudou → `needsConfirm`, nunca auto-overwrite.
 - NUNCA escrever scaffold sem confirmação humana; NUNCA escrever com `autonomy: autonomous`. `.github/workflows/**` é gravado pela ferramenta **`Write`** (que passa pelo gate de permissões), **nunca** por `node:fs`.
 - NUNCA deixar hardcode específico do plugin (`.claude-plugin/`, `.cursor-plugin/`, `marketplace.json`, `known-hashes`, `grep` de manifest fixo) num asset de release-scaffold — o asset roda no repo do **usuário**.

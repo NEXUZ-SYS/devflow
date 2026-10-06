@@ -39,3 +39,8 @@ test("stdout MISTO: knowledge raw + additionalContext JSON → injeta ambos", ()
   assert.match(r.contextToInject, /Persona X/);
   assert.match(r.contextToInject, /STD-idx/);
 });
+test("decision block de PostToolUse → block com reason", () => {
+  const r = parseHookOutput(JSON.stringify({ decision: "block", reason: "src/a.js:2 no-bad" }));
+  assert.equal(r.block, true);
+  assert.equal(r.reason, "src/a.js:2 no-bad");
+});

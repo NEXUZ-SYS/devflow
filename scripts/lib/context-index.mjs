@@ -20,7 +20,8 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { loadStandardsMerged } from "./standards-loader.mjs";
+import { loadEffectiveStandards } from "./standards-engine.mjs";
+import { resolveLevel, maxLevel } from "./standards-level.mjs";
 import { loadStacksMerged } from "./stacks-loader.mjs";
 import { filterStacks } from "./stacks-filter.mjs";
 
@@ -28,11 +29,13 @@ import { filterStacks } from "./stacks-filter.mjs";
  * Build the context index for Camada 1.
  *
  * @param {string} projectRoot  — absolute path to the project root
- * @param {string} [pluginRoot] — optional plugin root; defaults to
- *   process.env.CLAUDE_PLUGIN_ROOT (R9 env fallback in loadStandardsMerged)
+ * @param {string} [pluginRoot] — plugin root usado só para os stack refs
+ *   (collectRefs); os standards (collectStandards) SEMPRE derivam a raiz do
+ *   plugin de loadEffectiveStandards (ADR-015 D5/C16) — este parâmetro nunca
+ *   influencia quais standards default aparecem no índice.
  */
 export function buildContextIndex(projectRoot, pluginRoot) {
-  const standards = collectStandards(projectRoot, pluginRoot);
+  const standards = collectStandards(projectRoot);
   const refs = collectRefs(projectRoot, pluginRoot);
   return {
     standards,
@@ -46,10 +49,12 @@ export function buildContextIndex(projectRoot, pluginRoot) {
   };
 }
 
-function collectStandards(projectRoot, pluginRoot) {
-  // loadStandardsMerged handles env fallback (CLAUDE_PLUGIN_ROOT) internally
-  // when pluginRoot is undefined.
-  const stds = loadStandardsMerged(projectRoot, pluginRoot);
+// C16 (ADR-015 D5): a raiz do plugin usada para os defaults vem de loadEffectiveStandards
+// (derivada do próprio import.meta.url, verificada por verifyPluginRoot) — nunca de um
+// pluginRoot recebido por parâmetro nem de CLAUDE_PLUGIN_ROOT. Um consumidor não decide mais
+// de onde vêm os standards default; só o engine decide.
+function collectStandards(projectRoot) {
+  const stds = loadEffectiveStandards(projectRoot);
   return stds.map(s => ({
     id: s.id,
     description: s.description,
@@ -58,6 +63,12 @@ function collectStandards(projectRoot, pluginRoot) {
     hasLinter: !!(s.enforcement && s.enforcement.linter),
     // origin: "default" | "project" — exposed so renderer can tag [default]
     origin: s.origin || "project",
+    // nível efetivo (T10): resolveLevel na regra "" é o nível base do std; maxLevel é o
+    // teto que alguma regra dele pode atingir (enforcement.rules pode ter regras mais
+    // severas que o nível base).
+    level: resolveLevel(s, ""),
+    maxLevel: maxLevel(s),
+    source: s.source || null,
   }));
 }
 
@@ -135,7 +146,7 @@ export function renderContextIndexText(idx) {
         : apply.join(", ");
       // Origin tag: [default] for plugin-bundled defaults, blank for project.
       const originTag = s.origin === "default" ? "[default] " : "";
-      lines.push(`  - ${originTag}${s.id} — ${applyToText} (${linter})`);
+      lines.push(`  - ${originTag}${s.id} · ${s.level} — ${applyToText} (${linter})`);
     }
   }
   lines.push("");

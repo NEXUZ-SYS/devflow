@@ -63,6 +63,7 @@ Review the implementation plan for:
 - **TDD compliance:** Every task follows RED-GREEN-REFACTOR
 - **Granularity:** Each step is 2-5 minutes (superpowers standard)
 - **Agent annotations:** Correct roles assigned to task groups
+- **Standards declared:** Cada grupo de tarefas do plano declara `**Standards:** <ids>` (Planning — Standards Layer Loading); confira que esses ids batem com `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" explain <caminhos do grupo>` para os caminhos que o grupo cria ou altera. Divergência entre o declarado e o `explain` é BLOCK.
 
 ## Step 4: Security Review (if applicable)
 

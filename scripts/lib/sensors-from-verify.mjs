@@ -10,6 +10,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { readVerifyFromPath, VERIFY_ALLOWLIST } from "./devflow-config.mjs";
+import { trustedPluginRoot } from "./standards-engine.mjs";
 
 const SHELL_META = /[;|&$`><(){}]/;
 const CATALOG_REL = join(".context", "config", "sensors.json");
@@ -38,6 +39,17 @@ export function assertShellSafe(argv, name) {
   }
 }
 
+// O sinal reservado não é argv do projeto (ADR-013 v1.1.0): o harness roda o verify-run do
+// plugin no cwd do projeto, e ele expande o token e grava o ledger. Raiz não verificada →
+// lança (o catálogo não nasce com um sensor que não roda). Caminho com espaço cai no
+// assertShellSafe.
+export function harnessArgv(name, argv) {
+  if (name !== "standards") return argv;
+  const root = trustedPluginRoot();
+  if (!root) throw new Error("sensor 'standards': raiz do plugin não verificada");
+  return ["node", join(root, "scripts", "lib", "verify-run.mjs"), "standards"];
+}
+
 function sensor(id, argv, description) {
   return {
     id,
@@ -55,8 +67,9 @@ export function buildCatalog(verify) {
   const sensors = [];
 
   for (const [name, argv] of Object.entries(signals)) {
-    assertShellSafe(argv, name);
-    sensors.push(sensor(name, argv, `Sinal '${name}' do contrato verify: (ADR-013).`));
+    const a = harnessArgv(name, argv);
+    assertShellSafe(a, name);
+    sensors.push(sensor(name, a, `Sinal '${name}' do contrato verify: (ADR-013).`));
   }
 
   // O phase-defaults do harness procura o id `tests`. Espelhamos o loop rápido

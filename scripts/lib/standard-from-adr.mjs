@@ -333,6 +333,7 @@ export function buildStandardFromAdrs(adrSlugs, options = {}) {
     `id: ${stdId}`,
     `description: ${description}`,
     `version: 1.0.0`,
+    `source: local`,
     `applyTo: [${applyTo.map(g => `"${g}"`).join(", ")}]`,
     `relatedAdrs: [${relatedAdrs.map(s => `"${s}"`).join(", ")}]`,
     `enforcement:`,

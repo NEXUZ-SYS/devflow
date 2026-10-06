@@ -10,7 +10,7 @@ has() { if grep -qF "$2" "$WF"; then echo "  PASS: $1"; PASS=$((PASS+1)); else e
 if python3 -c "import yaml,sys; yaml.safe_load(open('$WF'))" 2>/dev/null; then echo "  PASS: YAML válido"; PASS=$((PASS+1)); else echo "  FAIL: YAML inválido"; FAIL=$((FAIL+1)); fi
 has "roda em pull_request" "pull_request"
 has "fetch-depth 0 (merge-base dos guards)" "fetch-depth: 0"
-has "matriz dos 4 sinais" "[unit, integration, e2e, lint]"
+has "matriz dos 5 sinais (inclui standards)" "[unit, integration, e2e, lint, standards]"
 has "usa o executor verify-run (que lê o .devflow.yaml → runners)" "verify-run.mjs"
 has "passa BASE_REF aos guards" "BASE_REF"
 has "permissões read-only (não pull_request_target)" "contents: read"

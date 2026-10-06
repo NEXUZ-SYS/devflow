@@ -21,6 +21,63 @@ load_i18n
 
 INPUT=$(cat)
 
+# --- Saída única do hook (P0, ADR-015) ---
+# Todo JSON que este hook imprime sai daqui. A razão chega crua (pode ter C0, aspas,
+# barras, bidi) e o json.dumps do Python serializa. Texto fora do JSON anula a decisão
+# (hooks.md), por isso nada mais escreve no stdout.
+ADDL_CTX=""
+ADDL_IDS=""
+SESSION_KEY=""
+DECIDED=0
+# Razão de um `ask` da catraca de standards (T16), emitido só na saída: um deny posterior
+# (branch protegida, config-guard) prevalece sobre ele.
+STDGUARD_PENDING=""
+emit_decision() {
+  local decision="$1" reason="${2:-}" out=""
+  DECIDED=1
+  out=$(printf '%s' "$ADDL_CTX" | DEVFLOW_DECISION="$decision" DEVFLOW_REASON="$reason" python3 -c '
+import json, os, sys
+MAX = 9000  # em unidades UTF-16: é assim que o Claude Code mede o campo
+def u16(s):
+    return len(s.encode("utf-16-le", "surrogatepass")) // 2
+ctx = sys.stdin.buffer.read().decode("utf-8", "replace")
+if u16(ctx) > MAX:
+    note = "\n…(contexto truncado no limite de 9000 caracteres; leia os arquivos citados)"
+    # Corta em unidades UTF-16; "ignore" descarta a metade alta órfã de um par partido.
+    head = ctx.encode("utf-16-le", "surrogatepass")[: 2 * (MAX - u16(note))]
+    ctx = head.decode("utf-16-le", "ignore") + note
+h = {"hookEventName": "PreToolUse"}
+d = os.environ.get("DEVFLOW_DECISION", "")
+if d in ("deny", "ask"):
+    h["permissionDecision"] = d
+    h["permissionDecisionReason"] = os.environ.get("DEVFLOW_REASON", "")
+if ctx:
+    h["additionalContext"] = ctx
+if len(h) > 1:
+    print(json.dumps({"hookSpecificOutput": h}))
+' 2>/dev/null) || out=""
+  if [ -z "$out" ] && { [ "$decision" = "deny" ] || [ "$decision" = "ask" ]; }; then
+    out="{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"${decision}\",\"permissionDecisionReason\":\"[devflow] decisao sem detalhe (falha ao serializar a razao)\"}}"
+  fi
+  if [ -n "$out" ]; then printf '%s\n' "$out"; fi
+  # Allow com contexto já ESCRITO: só agora marca os ids como injetados (em deny/ask a
+  # entrega não é garantida e o contexto volta na próxima edição). Sem session_id (chave
+  # ":…") não há cache. Saída descartada: nada além do JSON sai do hook.
+  if [ "$decision" = "context" ] && [ -n "$out" ] && [ -n "${ADDL_IDS:-}" ] \
+     && [ -n "${SESSION_KEY:-}" ] && [ "${SESSION_KEY#:}" = "$SESSION_KEY" ]; then
+    node "${PLUGIN_ROOT}/scripts/lib/pre-edit-context.mjs" --mark "${PROJECT_ROOT:-${CWD:-$PWD}}" "${SESSION_KEY}" "${ADDL_IDS}" >/dev/null 2>&1 || true
+  fi
+  exit 0
+}
+# Caminho de allow (nenhuma decisão emitida): entrega o contexto; a marcação no cache
+# acontece dentro de emit_decision, depois de a saída ter sido escrita. Um ask pendente da
+# catraca (T16) vira a decisão aqui — também quando o hook sai por erro depois do guard.
+flush_context() {
+  if [ "$DECIDED" = "0" ] && [ -n "$STDGUARD_PENDING" ]; then emit_decision ask "$STDGUARD_PENDING"; fi
+  if [ "$DECIDED" = "0" ] && [ -n "$ADDL_CTX" ]; then emit_decision context ""; fi
+}
+trap flush_context EXIT
+
 TOOL_NAME=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -35,7 +92,7 @@ print(d.get('cwd', ''))
 
 # --- Permissions evaluator (Task 3.2, SI compliance — runs FIRST) ---
 # Loads .context/permissions.yaml and evaluates deny → allow → mode → callback.
-# A 'deny' decision exits the hook immediately with permissionDecision=deny;
+# A 'deny' decision exits the hook immediately (deny via emit_decision);
 # 'allow' continues to existing branch protection (defense-in-depth);
 # 'prompt' falls through to the legacy logic.
 #
@@ -87,23 +144,20 @@ except: print('')
 " 2>/dev/null || echo "")
 
     if [ "$PERM_DECISION" = "deny" ]; then
-      # Inline JSON escape (escape_for_json is defined later in the script)
-      REASON_ESCAPED=$(printf '%s' "$PERM_OUT" | python3 -c "
+      PERM_REASON=$(printf '%s' "$PERM_OUT" | python3 -c "
 import json, sys
 try:
     reason = json.load(sys.stdin).get('reason', 'permissions.yaml denied')
-except:
+except Exception:
     reason = 'permissions.yaml denied'
-prefixed = f'[devflow permissions.yaml] {reason}'
-# JSON-escape into a string-safe form (drops the surrounding quotes)
-print(json.dumps(prefixed)[1:-1])
-" 2>/dev/null || echo "permissions.yaml denied")
-      printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
-      # OTel: emit deny span before exiting (4.3)
+print(f'[devflow permissions.yaml] {reason}')
+" 2>/dev/null || echo "[devflow permissions.yaml] denied")
+      # OTel antes da decisão e sem stdout: nada além do JSON pode sair do hook.
       if [ -f "${PERMS_DIR}/.context/observability.yaml" ]; then
         printf '{"event":"devflow.permission.deny","attributes":{"devflow.permission.decision":"deny","gen_ai.tool.name":"%s"}}' "$TOOL_NAME" \
-          | (cd "${PERMS_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") 2>/dev/null || true
+          | (cd "${PERMS_DIR}" && node "${PLUGIN_ROOT}/scripts/lib/otel-cli.mjs") >/dev/null 2>&1 || true
       fi
+      emit_decision deny "$PERM_REASON"
       exit 0
     fi
   fi
@@ -148,11 +202,11 @@ if mode != 'off' and block_web:
               "SÓ do MCP de documentação. Use mcp__%s__search_docs / find_version. Se a "
               "doc não estiver indexada, rode /devflow:scrape-stack-batch ou declare a "
               "incerteza — NUNCA responda de memória de treino." % (mode, tool, server))
-    print(json.dumps(reason)[1:-1])  # JSON-escaped; surrounding quotes stripped
+    print(reason)  # cru: emit_decision serializa
 PYEOF
 )
       if [ -n "$GROUNDING_REASON" ]; then
-        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$GROUNDING_REASON"
+        emit_decision deny "$GROUNDING_REASON"
         exit 0
       fi
     fi
@@ -186,9 +240,9 @@ try:
     reason = json.load(sys.stdin).get('reason', 'git op bloqueada na branch protegida')
 except:
     reason = 'git op bloqueada na branch protegida'
-print(json.dumps(f'[devflow git-guard] {reason}')[1:-1])
+print(f'[devflow git-guard] {reason}')
 " 2>/dev/null || echo "git op bloqueada na branch protegida")
-        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$GITGUARD_REASON"
+        emit_decision deny "$GITGUARD_REASON"
         exit 0
       fi
       ;;
@@ -210,14 +264,60 @@ ti = d.get('tool_input', {})
 print(ti.get('file_path', ti.get('file', '')))
 " 2>/dev/null || echo "")
 
-# --- Stage-2: inject on-demand knowledge bodies relevant to the edited file ---
-# Emits a <KNOWLEDGE_ONDEMAND> block with bodies of relevant on-demand knowledge docs.
-# Guard with || true — never blocks the hook. Runs before branch-protection checks
-# so context is always surfaced even when the hook later denies/asks on the edit.
-
+# --- Contexto pré-edição (normas + knowledge), emoldurado e com orçamento (T9) ---
+# Vai para ADDL_CTX (NUNCA stdout cru). Roda antes dos checks de branch protection para
+# que o contexto chegue mesmo quando o hook depois nega/pergunta: emit_decision anexa
+# ADDL_CTX como additionalContext, e o trap flush_context o entrega nos caminhos de allow
+# (marcando os ids no cache da sessão/agente). A 1ª linha do CLI são os ids; o resto, o
+# texto. SESSION_KEY = session_id:agent_id (agent_id vazio no agente principal). SI-1: o
+# CLI é arquivo com args. || true: nunca bloqueia.
 PROJECT_ROOT="${CWD:-$PWD}"
-if [ -n "$FILE_PATH" ] && [ -f "${PLUGIN_ROOT}/scripts/lib/print-knowledge-bodies.mjs" ]; then
-  node "${PLUGIN_ROOT}/scripts/lib/print-knowledge-bodies.mjs" "${PROJECT_ROOT}" "${FILE_PATH}" 2>/dev/null || true
+if [ -n "$FILE_PATH" ]; then
+  SESSION_KEY=$(printf '%s' "$INPUT" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+key = str(d.get("session_id") or "") + ":" + str(d.get("agent_id") or "")
+print(key.replace("\n", " ").replace("\r", " "))
+' 2>/dev/null || echo ":")
+  PRE_EDIT_OUT=$(node "${PLUGIN_ROOT}/scripts/lib/pre-edit-context.mjs" "${PROJECT_ROOT}" "${FILE_PATH}" "${SESSION_KEY}" 2>/dev/null || true)
+  if [ -n "$PRE_EDIT_OUT" ] && [ "${PRE_EDIT_OUT#*$'\n'}" != "$PRE_EDIT_OUT" ]; then
+    ADDL_IDS="${PRE_EDIT_OUT%%$'\n'*}"
+    ADDL_CTX="${PRE_EDIT_OUT#*$'\n'}"
+  fi
+fi
+
+# --- Guard da catraca de standards (ADR-015 D6/D8) ---
+# O CLI compara o enforcement efetivo antes/depois com o parser do loader e classifica pelo
+# caminho e pelo realpath. deny (baseline) sai já; ask fica pendente e é emitido na saída
+# (flush_context), para que um deny posterior (branch protegida, config-guard) prevaleça.
+# Falha do CLI (saída vazia ou estranha): fallback pelo texto do caminho — baseline → deny,
+# outro arquivo da catraca → ask, resto segue (D4: o hook só falha aberto fora da catraca).
+# SI-1: CLI é arquivo com stdin. A razão vem crua e sai por emit_decision.
+if [ -n "$FILE_PATH" ]; then
+  STDGUARD_OUT=$(printf '%s' "$INPUT" | node "${PLUGIN_ROOT}/scripts/lib/standards-guard-cli.mjs" 2>/dev/null || true)
+  case "$STDGUARD_OUT" in
+    '{"decision":"",'*) ;;
+    '{"decision":"deny",'*|'{"decision":"ask",'*)
+      STDGUARD_REASON=$(printf '%s' "$STDGUARD_OUT" | python3 -c 'import json, sys
+try: print(json.load(sys.stdin).get("reason") or "")
+except Exception: print("")' 2>/dev/null || true)
+      [ -n "$STDGUARD_REASON" ] || STDGUARD_REASON="[devflow standards] Edição de arquivo da catraca de standards: exige confirmação do operador (ADR-015 D6)."
+      case "$STDGUARD_OUT" in
+        '{"decision":"deny",'*) emit_decision deny "$STDGUARD_REASON" ;;
+        *) STDGUARD_PENDING="$STDGUARD_REASON" ;;
+      esac
+      ;;
+    *)
+      shopt -s nocasematch
+      case "$FILE_PATH" in
+        *.context*standards*baseline.json*)
+          emit_decision deny "[devflow standards] O baseline é da autoridade humana (ADR-015 D6) e o guard da catraca falhou: o agente não o edita." ;;
+        *.context*standards*|*.context*devflow.yaml*|*devflow-standards.mjs*)
+          STDGUARD_PENDING="[devflow standards] O guard da catraca falhou ao avaliar a edição de um arquivo da catraca: exige confirmação do operador (ADR-015 D6)." ;;
+      esac
+      shopt -u nocasematch
+      ;;
+  esac
 fi
 
 # --- Allow workflow/infrastructure files on any branch ---
@@ -274,9 +374,9 @@ try:
     reason = json.load(sys.stdin).get('reason', '.devflow.yaml enfraquece a proteção git')
 except:
     reason = '.devflow.yaml enfraquece a proteção git'
-print(json.dumps(f'[devflow config-guard] {reason}')[1:-1])
+print(f'[devflow config-guard] {reason}')
 " 2>/dev/null || echo ".devflow.yaml enfraquece a proteção git")
-        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$CFGGUARD_REASON"
+        emit_decision deny "$CFGGUARD_REASON"
         exit 0
       fi
       exit 0
@@ -297,18 +397,6 @@ if [ -z "$BRANCH" ]; then
   exit 0
 fi
 
-# --- Escape for JSON (needed for deny responses) ---
-
-escape_for_json() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//\"/\\\"}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    s="${s//$'\t'/\\t}"
-    printf '%s' "$s"
-}
-
 # --- Non-project paths (auto-memory, napkin) ---
 # These are NOT project source code: auto-memory lives outside the repo
 # (~/.claude/projects/*/memory/*) and the curated napkin is operational
@@ -324,10 +412,13 @@ is_nonproject_path() {
 }
 
 emit_ask_nonproject() {
-  local fp="$1" br="$2" ask_reason reason_escaped
-  ask_reason=$(render_msg "$MSG_ASK_HEADER" "file_path=${fp}" "branch=${br}")
-  reason_escaped=$(escape_for_json "$ask_reason")
-  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "ask",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$reason_escaped"
+  local msg
+  msg="$(render_msg "$MSG_ASK_HEADER" "file_path=${1}" "branch=${2}")"
+  # Ask pendente da catraca (T16): o caminho de memória/napkin pode ser um link para um
+  # arquivo da catraca — as duas razões chegam ao operador.
+  if [ -n "$STDGUARD_PENDING" ]; then msg="${msg}
+${STDGUARD_PENDING}"; fi
+  emit_decision ask "$msg"
 }
 
 # --- Also check: is the file being edited inside the plugin itself? ---
@@ -360,8 +451,7 @@ if [ -z "$DEVFLOW_CONFIG" ] || [ ! -f "$DEVFLOW_CONFIG" ]; then
     emit_ask_nonproject "$FILE_PATH" "$BRANCH"
     exit 0
   fi
-  REASON_ESCAPED=$(escape_for_json "$MSG_NO_CONFIG")
-  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
+  emit_decision deny "$MSG_NO_CONFIG"
   exit 0
 fi
 
@@ -445,7 +535,7 @@ fi
 
 # --- ASK: on protected branch, editing confirmable paths (memory/napkin) ---
 # Non-project files: auto-memory (outside the repo) and curated napkin (inside .context/).
-# Emit permissionDecision=ask so Claude Code prompts the user per edit.
+# Emite ask: o Claude Code pede confirmação por edição.
 
 if [ -n "$FILE_PATH" ] && is_nonproject_path "$FILE_PATH"; then
   emit_ask_nonproject "$FILE_PATH" "$BRANCH"
@@ -465,8 +555,6 @@ ${blocked_file}
 
 ${MSG_BLOCKED_NOTE}"
 
-REASON_ESCAPED=$(escape_for_json "$REASON")
-
-printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PreToolUse",\n    "permissionDecision": "deny",\n    "permissionDecisionReason": "%s"\n  }\n}\n' "$REASON_ESCAPED"
+emit_decision deny "$REASON"
 
 exit 0

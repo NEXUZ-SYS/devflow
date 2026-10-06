@@ -9,13 +9,20 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildContextIndex } from "../../scripts/lib/context-index.mjs";
+import { isolateFromDefaults } from "../helpers/standards-fixture.mjs";
 
 const TEST_TMP_ROOT = "./tests/validation/tmp/";
 const CLI = new URL("../../scripts/lib/context-index-cli.mjs", import.meta.url).pathname;
 
+// T10/C16 (ADR-015 D5): collectStandards agora sempre carrega os defaults REAIS deste
+// plugin via loadEffectiveStandards (raiz confiável, não mais o `pluginRoot` desta CLI).
+// Sem isolamento, os 26 std-* de assets/standards/ apareceriam ao lado do standard que
+// cada teste escreve, quebrando as contagens exatas abaixo — isolateFromDefaults desliga
+// os defaults via .context/standards.local.yaml, igual ao que demoProject() já faz.
 function fixture() {
   mkdirSync(TEST_TMP_ROOT, { recursive: true });
   const root = mkdtempSync(join(TEST_TMP_ROOT, "ctxidx-"));
+  isolateFromDefaults(root);
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
