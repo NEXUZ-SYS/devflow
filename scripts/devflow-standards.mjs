@@ -23,6 +23,7 @@ const SCAFFOLD_TEMPLATE = (id) => `---
 id: std-${id}
 description: <one-line description>
 version: 1.0.0
+source: local
 applyTo: ["src/**"]
 relatedAdrs: []
 enforcement:
@@ -55,9 +56,10 @@ corretivo ou patch concreto que o agent pode aplicar.
 
 ## Linter
 
-\`./machine/std-${id}.js\` (TODO: implementar regra real — scaffold inicial
-apenas exit 0). O linter recebe \`process.argv[2]\` (filePath) e deve emitir
-\`VIOLATION: <regra> (<file>:<line>) — <correção>\` quando detectar falha.
+\`./machine/std-${id}.js\` (TODO: implementar regra real). O linter recebe
+\`process.argv[2]\` (filePath) e emite, por ocorrência,
+\`VIOLATION <regra> <arquivo>:<linha> <correção>\` e sai com 1; sem violação, nada e exit 0.
+Qualquer outro exit é tratado como erro do linter (ADR-015 D4).
 
 ## Referência
 
@@ -66,26 +68,29 @@ apenas exit 0). O linter recebe \`process.argv[2]\` (filePath) e deve emitir
 `;
 
 const LINTER_TEMPLATE = (id) => `#!/usr/bin/env node
-// .context/standards/machine/std-${id}.js
-// Linter para std-${id}. Recebe filePath via process.argv[2].
-// Saída: stdout 'VIOLATION: <msg>' + exit 1 quando violação detectada.
-
+// std-${id}.js — linter do standard std-${id}. Recebe filePath via process.argv[2].
+// Protocolo v2 (ADR-007 v3.1.0): uma linha por ocorrência
+//   VIOLATION <regra> <arquivo>:<linha> <mensagem>   e exit 1
+// Sem violação: nada no stdout e exit 0. Qualquer outro exit é erro do linter (ADR-015 D4).
 import { readFileSync } from "node:fs";
 
+const RULE = "${id}";
 const filePath = process.argv[2];
 if (!filePath) process.exit(0);
+let content = "";
+try { content = readFileSync(filePath, "utf-8"); } catch { process.exit(0); }
 
-const content = readFileSync(filePath, "utf-8");
-
-// TODO: implement rule check.
-// Example pattern:
-//   const matches = content.match(/badPattern/g);
-//   if (matches) {
-//     console.log(\`VIOLATION: \${matches.length} instances of badPattern in \${filePath}. Replace with goodPattern.\`);
-//     process.exit(1);
-//   }
-
-process.exit(0);
+let hits = 0;
+content.split("\\n").forEach((line, i) => {
+  // TODO: trocar pela regra real.
+  if (/badPattern/.test(line)) {
+    hits++;
+    console.log(\`VIOLATION \${RULE} \${filePath}:\${i + 1} troque badPattern por goodPattern\`);
+  }
+});
+// process.exitCode, não process.exit(): em pipe o console.log é assíncrono e o exit() encerra o
+// processo antes de a fila de escrita drenar, cortando achados.
+process.exitCode = hits > 0 ? 1 : 0;
 `;
 
 async function cmdNew(id, projectRoot, opts = {}) {
@@ -607,17 +612,27 @@ async function cmdEject(rawId, projectRoot, opts = {}) {
 function ejectLinterStub(id) {
   return `#!/usr/bin/env node
 // .context/engineering/standards/machine/std-${id}.js
-// Linter para std-${id}. Contrato SI-4: filePath em process.argv[2];
-// em violação imprime 'VIOLATION: <msg>' + exit 1; senão exit 0.
+// Linter para std-${id}. Contrato SI-4: filePath em process.argv[2].
+// Protocolo v2 (ADR-007 v3.1.0): uma linha por ocorrência
+//   VIOLATION <regra> <arquivo>:<linha> <mensagem>   e exit 1
+// Sem violação: nada no stdout e exit 0. Qualquer outro exit é erro do linter (ADR-015 D4).
 import { readFileSync } from "node:fs";
+const RULE = "${id}";
 const filePath = process.argv[2];
 if (!filePath) process.exit(0);
 const content = readFileSync(filePath, "utf-8");
-// TODO: implemente a regra do concern.
-//   const m = content.match(/badPattern/g);
-//   if (m) { console.log(\`VIOLATION: \${m.length} ... \`); process.exit(1); }
+let hits = 0;
+// TODO: implemente a regra do concern. Exemplo (uma linha VIOLATION por ocorrência):
+//   content.split("\\n").forEach((line, i) => {
+//     if (/badPattern/.test(line)) {
+//       hits++;
+//       console.log(\`VIOLATION \${RULE} \${filePath}:\${i + 1} troque badPattern por goodPattern\`);
+//     }
+//   });
 void content;
-process.exit(0);
+// process.exitCode, não process.exit(): em pipe o console.log é assíncrono e o exit() encerra o
+// processo antes de a fila de escrita drenar, cortando achados.
+process.exitCode = hits > 0 ? 1 : 0;
 `;
 }
 
@@ -708,7 +723,23 @@ async function main() {
     return;
   }
 
-  console.error("Usage: devflow standards <new|verify|audit|search|eject> [args]");
+  if (["check", "baseline", "enforce", "explain", "gate"].includes(sub)) {
+    // Fail-closed: falha ao carregar o módulo é erro de execução (3), nunca o exit 1 do
+    // main().catch, que o gate leria como "violação".
+    let runStandardsCommand;
+    try {
+      ({ runStandardsCommand } = await import("./lib/standards-check-cli.mjs"));
+    } catch (err) {
+      console.error(`erro: ${err.message}`);
+      process.exitCode = 3;
+      return;
+    }
+    // exitCode + return (e não process.exit): não corta a saída pendente num pipe.
+    process.exitCode = await runStandardsCommand(sub, args.slice(1), projectRoot);
+    return;
+  }
+
+  console.error("Usage: devflow standards <new|verify|audit|search|eject|check|baseline|enforce|explain|gate> [args]");
   console.error("  new --concern=<id>                    Generate std from concern taxonomy (concern-first — preferred)");
   console.error("  new --concern=<id> --enrich-from-adr=<csv>  Concern std enriched with ADR guardrails");
   console.error("  new <id>                              Scaffold std-<id>.md + machine/std-<id>.js (TODO markers)");
@@ -720,6 +751,12 @@ async function main() {
   console.error("  search --by-concern=<concern-id>      List ADRs matching a concern (JSON)");
   console.error("  eject <id> [--force]                  Copy plugin default std-<id>.md → project (linter anulado)");
   console.error("  eject <id> --with-linter [--force]    Eject + traz/cria o linter no machine/ do projeto e religa enforcement");
+  console.error("  check [--staged|--all|<paths>] [--json] [--base-ref=<ref>] [--ci]  Gate determinístico (0 ok · 1 violação · 2 uso · 3 erro)");
+  console.error("  baseline init|prune|accept <fp> --reason \"<texto>\"   Catraca (init/accept: só no terminal do operador)");
+  console.error("  enforce <id> --level block|warn|review         Promove (livre) ou rebaixa (operador) um standard");
+  console.error("  explain <paths>                                Normas aplicáveis e nível");
+  console.error("  gate [--base-ref=<ref>] [--ci]                 Catraca vs a base + check --all (CI e fase V); base padrão refs/remotes/origin/main");
+  console.error("       [--allow-weakening --pr=<n> --repo=<owner>/<nome>]  Override: rótulo + review no head, de quem é dono dos arquivos da catraca alterados (só com --ci)");
   console.error("");
   console.error("  Common: --project=<path> to operate on a fixture/sub-project.");
   process.exit(2);

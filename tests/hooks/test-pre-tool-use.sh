@@ -41,6 +41,22 @@ assert_empty() {
   fi
 }
 
+# Allow com contexto (T9): stdout vazio OU um JSON sem permissionDecision. Os standards
+# default do plugin geram additionalContext no allow, então "silencioso" deixou de ser vazio.
+assert_no_decision() {
+  local desc="$1" output="$2"
+  if [ -z "$output" ] || printf '%s' "$output" | python3 -c '
+import json, sys
+h = json.loads(sys.stdin.read())["hookSpecificOutput"]
+sys.exit(0 if h.get("hookEventName") == "PreToolUse" and "permissionDecision" not in h else 1)' 2>/dev/null; then
+    printf '  PASS: %s\n' "$desc"
+    PASS=$((PASS + 1))
+  else
+    printf '  FAIL: %s — expected empty output or JSON without permissionDecision, got: %s\n' "$desc" "$output"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 # Create a sandbox git repo on "main" with .devflow.yaml configured
 setup_sandbox() {
   local dir
@@ -77,15 +93,15 @@ assert_empty "Read produces no output" "$output"
 # Test 2: Allowlist paths bypass on protected branch (silent allow)
 echo "Test 2: .context/workflow/ bypasses silently"
 output=$(echo '{"tool_name":"Write","tool_input":{"file_path":"'"$SANDBOX"'/.context/workflow/status.yaml"},"cwd":"'"$SANDBOX"'"}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "workflow file silent allow" "$output"
+assert_no_decision "workflow file silent allow" "$output"
 
 echo "Test 3: .context/plans/ bypasses silently"
 output=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"'"$SANDBOX"'/.context/plans/foo.md"},"cwd":"'"$SANDBOX"'"}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "plans file silent allow" "$output"
+assert_no_decision "plans file silent allow" "$output"
 
 echo "Test 4: docs/superpowers/ bypasses silently"
 output=$(echo '{"tool_name":"Write","tool_input":{"file_path":"'"$SANDBOX"'/docs/superpowers/specs/x.md"},"cwd":"'"$SANDBOX"'"}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "superpowers file silent allow" "$output"
+assert_no_decision "superpowers file silent allow" "$output"
 
 # Test 5: Arbitrary source file on protected branch → DENY
 echo "Test 5: Arbitrary source file on main DENIED"
@@ -112,7 +128,7 @@ echo "Test 8: On feature branch, arbitrary file passes"
   git checkout -q -b feature/test
 )
 output=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"'"$SANDBOX"'/src/foo.js"},"cwd":"'"$SANDBOX"'"}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "feature branch silent allow" "$output"
+assert_no_decision "feature branch silent allow" "$output"
 
 # Test 9: Memory file on non-protected branch → allow (no ask needed)
 echo "Test 9: Memory file on feature branch passes silently"
@@ -183,12 +199,12 @@ FALLBACK_SB=$(setup_sandbox)
   git checkout -q -b feature/work
 )
 output=$(cd "$FALLBACK_SB" && echo '{"tool_name":"Edit","tool_input":{"file_path":"'"$FALLBACK_SB"'/src/foo.js"},"cwd":""}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "empty-cwd project file allowed via PWD fallback" "$output"
+assert_no_decision "empty-cwd project file allowed via PWD fallback" "$output"
 
 # Test 16: Project file, missing cwd field, on a NON-protected branch → ALLOW
 echo "Test 16: Project file with missing cwd field on feature branch is allowed"
 output=$(cd "$FALLBACK_SB" && echo '{"tool_name":"Write","tool_input":{"file_path":"'"$FALLBACK_SB"'/src/bar.js"}}' | bash "$HOOK" 2>/dev/null || true)
-assert_empty "missing-cwd project file allowed via PWD fallback" "$output"
+assert_no_decision "missing-cwd project file allowed via PWD fallback" "$output"
 rm -rf "$FALLBACK_SB"
 
 echo ""

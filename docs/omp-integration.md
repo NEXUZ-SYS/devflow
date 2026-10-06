@@ -76,13 +76,15 @@ bash. A tabela abaixo mapeia cada subsistema do DevFlow ao seu modo e mecanismo:
 
 | Subsistema | Modo | Mecanismo no omp |
 |---|---|---|
-| **standards** | Full | Índice injetado no session_start (system prompt) + linter rodando no `tool_result` (pós-edição) |
+| **standards** | Full | Índice e normas da sessão (`session-start-norms`) no system prompt via launcher + linter síncrono (`post-tool-use-lint`) no `tool_result`: o bloqueio vira mensagem na fila (`BLOQUEIO DE STANDARD (corrija antes de seguir): …`), sem desfazer a edição |
 | **ADR** | Full | Guardrails de arquitetura no session_start + handoff guard nas transições de fase |
 | **knowledge** / produto | Full | Índice no session_start + carregamento on-demand por layer/keyword |
 | **napkin** | Full | Runbook injetado no session_start + curate no `session_before_compact` + re-injeção no `session_compact` |
 | **routines** | Full | Rotinas agendadas via wrap dos hooks de manutenção |
 | **MemPalace** | Full | MCP nativo do omp + `recall` (busca de memórias) + `compact` (consolidação no ciclo de compactação) |
 | **permissions.yaml** | Full | Tool-gating no `tool_call` (`checkPermission`) — 4 categorias: allow / deny / prompt / git-guard |
+| **subagentes (SubagentStart)** | Lite / não suportado | O omp não expõe evento de início de subagente (equivalente não verificado); o contexto de standards/ADR não é injetado no start do subagente |
+| **catraca em Bash** | Lite | O `tool_call` do omp só traduz edições; a garantia é o `gate` do CI |
 
 Modos: **Full** = paridade com o Claude Code; **Lite** = subconjunto degradado
 quando algum pré-requisito não está disponível.
@@ -129,3 +131,11 @@ Itens deixados para uma fase C futura (não implementados nesta integração):
   durante a sessão (via evento `context`) **não** tem a mesma autoridade do
   system prompt. Por isso o contexto autoritativo é entregue pelo launcher
   (`devflow omp`) no turno 1, e o evento `context` cobre apenas o reforço dinâmico.
+- **Lint de standards em subagent com worktree isolada — não verificado.** Os dois
+  hooks de lint do `tool_result` (`post-tool-use` e `post-tool-use-lint`) recebem como
+  raiz do projeto o diretório da **sessão** (`ctx.cwd`), nunca o do arquivo editado.
+  Se o `ctx.cwd` de um subagent em worktree isolada for o repositório principal, e
+  não a worktree, as edições dele na worktree ficam fora da raiz e não são analisadas
+  (ou, quando a worktree fica dentro do repositório, são analisadas com o caminho
+  errado e os `applyTo` não casam). Qual diretório o subagent recebe não foi
+  verificado numa sessão real do omp. A garantia continua sendo o `gate` do CI.

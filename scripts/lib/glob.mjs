@@ -41,8 +41,12 @@ function globToRegex(pattern) {
   while (i < pattern.length) {
     const c = pattern[i];
     if (c === "*" && pattern[i + 1] === "*") {
-      // ** matches any depth (including zero segments)
-      re += ".*";
+      // ** matches any depth (including zero segments).
+      // `[\s\S]*`, não `.*`: o `.` do JS não casa "\n", "\r", U+2028 nem U+2029, e um arquivo
+      // com um deles no nome (ou num diretório do caminho) ficava fora de todo padrão com `**`
+      // — fora do applyTo de um standard e fora de um `deny` de permissões. `*` e `?` usam
+      // `[^/]`, que já casa esses caracteres.
+      re += "[\\s\\S]*";
       i += 2;
       // Skip optional trailing /
       if (pattern[i] === "/") i++;

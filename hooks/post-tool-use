@@ -57,30 +57,47 @@ print(ti.get('status', ''))
 
 reminder="$MSG_HANDOFF_REMINDER"
 
-# --- Standards linter integration (Task 1.3, SI-4 sandboxed) ---
-# Run applicable standards' linters when an Edit/Write event occurred.
-# Linters are validated and executed via scripts/lib/run-linter.mjs (SI-4 enforced).
-# Per SI-1, do NOT use 'node -e' with interpolated paths — use execFile-style.
+# --- Standards linter integration (SI-4 sandboxed, ADR-015 D5/D9) ---
+# D9: os std que podem chegar a block rodam no hooks/post-tool-use-lint síncrono;
+# aqui ficam os warn/review, pelo mesmo engine (D5). R1 preservado: sem .context o
+# CLI usa o cwd do evento como raiz e os defaults do plugin continuam valendo.
+# SI-1: evento via stdin para um arquivo .mjs, nunca 'node -e' com interpolação.
 
 if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
-  EDITED_PATH=$(printf '%s' "$INPUT" | python3 -c "
+  LINTER_OUTPUT=$(printf '%s' "$INPUT" | node "${PLUGIN_ROOT}/scripts/lib/standards-hook-cli.mjs" --mode=async 2>/dev/null || echo "")
+  if [ -n "$LINTER_OUTPUT" ]; then
+    reminder="${reminder}\n\n${LINTER_OUTPUT}"
+  fi
+fi
+
+# --- PREVC handoff bypass guard (T20, ADR-006) ---
+# When a plan file is written/edited without an active PREVC workflow, emit
+# a non-blocking reminder nudging the developer to register the dotcontext
+# handoff or enter via /devflow. Fires on the artifact (plan file path) so it
+# catches bypass regardless of entry path.
+# Per SI-1: invoked as a separate file with argv args, never via node -e.
+# Calculado ANTES do nudge e anexado DEPOIS dele (a ordem do texto não muda): o nudge
+# precisa saber quanto do campo este aviso ocupa.
+
+BYPASS_OUTPUT=""
+if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+  BYPASS_FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
 ti = d.get('tool_input', {})
 print(ti.get('file_path') or ti.get('path') or '')
 " 2>/dev/null || echo "")
 
-  # R1: do NOT gate on .context/standards — plugin DEFAULT linters apply even to
-  # projects without any project std. The trusted pluginRoot (S3, derived from
-  # this hook's BASH_SOURCE) is passed as --plugin; the runner verifies its marker
-  # and degrades to project-only if unverified.
-  if [ -n "$EDITED_PATH" ]; then
-    # Pass event as JSON via stdin; node script reads + runs linters.
-    LINTER_OUTPUT=$(printf '{"tool":"%s","path":%s}' "$TOOL_NAME" "$(printf '%s' "$EDITED_PATH" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')" \
-      | node "${PLUGIN_ROOT}/scripts/lib/run-linter-cli.mjs" --plugin="${PLUGIN_ROOT}" 2>/dev/null || echo "")
-    if [ -n "$LINTER_OUTPUT" ]; then
-      reminder="${reminder}\n\n${LINTER_OUTPUT}"
-    fi
+  # Use cwd from event input (same pattern as TaskUpdate block); fall back to $PWD
+  BYPASS_PROJECT_ROOT=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('cwd', ''))
+" 2>/dev/null || echo "")
+  [ -z "$BYPASS_PROJECT_ROOT" ] && BYPASS_PROJECT_ROOT="${PWD}"
+
+  if [ -n "$BYPASS_FILE_PATH" ]; then
+    BYPASS_OUTPUT=$(node "${PLUGIN_ROOT}/scripts/lib/check-prevc-bypass.mjs" "${BYPASS_PROJECT_ROOT}" "${BYPASS_FILE_PATH}" 2>/dev/null || true)
   fi
 fi
 
@@ -102,43 +119,25 @@ print(ti.get('file_path') or ti.get('path') or '')
   # SI-1: plugin path como argumento de subcomando, nunca interpolado em node -e.
   STD_DIRS=$(node "${PLUGIN_ROOT}/scripts/lib/context-paths.mjs" resolve-read standards "${PWD}" 2>/dev/null || true)
   if [ -n "$NUDGE_PATH" ] && [ -n "$STD_DIRS" ]; then
+    # Teto do campo: 9000 caracteres (unidades UTF-16, como o Claude Code mede; acima de
+    # 10.000 o modelo recebe só uma prévia). O nudge fica com o que sobra depois do que já
+    # está no lembrete e do aviso de bypass, que entram no MESMO additionalContext; os 8 são
+    # os dois separadores. Falha na conta → 0: o nudge não sai nesta edição.
+    NUDGE_ROOM=$(printf '%s' "${reminder}${BYPASS_OUTPUT}" | python3 -c '
+import sys
+s = sys.stdin.buffer.read().decode("utf-8", "replace")
+print(9000 - len(s.encode("utf-16-le", "surrogatepass")) // 2 - 8)
+' 2>/dev/null || echo 0)
     NUDGE_OUTPUT=$(printf '{"tool":"%s","path":%s}' "$TOOL_NAME" "$(printf '%s' "$NUDGE_PATH" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')" \
-      | node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --record 2>/dev/null || echo "")
+      | node "${PLUGIN_ROOT}/scripts/lib/edit-nudge-cli.mjs" --record "--max-chars=${NUDGE_ROOM}" 2>/dev/null || echo "")
     if [ -n "$NUDGE_OUTPUT" ]; then
       reminder="${reminder}\n\n${NUDGE_OUTPUT}"
     fi
   fi
 fi
 
-# --- PREVC handoff bypass guard (T20, ADR-006) ---
-# When a plan file is written/edited without an active PREVC workflow, emit
-# a non-blocking reminder nudging the developer to register the dotcontext
-# handoff or enter via /devflow. Fires on the artifact (plan file path) so it
-# catches bypass regardless of entry path.
-# Per SI-1: invoked as a separate file with argv args, never via node -e.
-
-if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
-  BYPASS_FILE_PATH=$(printf '%s' "$INPUT" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-ti = d.get('tool_input', {})
-print(ti.get('file_path') or ti.get('path') or '')
-" 2>/dev/null || echo "")
-
-  # Use cwd from event input (same pattern as TaskUpdate block); fall back to $PWD
-  BYPASS_PROJECT_ROOT=$(printf '%s' "$INPUT" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('cwd', ''))
-" 2>/dev/null || echo "")
-  [ -z "$BYPASS_PROJECT_ROOT" ] && BYPASS_PROJECT_ROOT="${PWD}"
-
-  if [ -n "$BYPASS_FILE_PATH" ]; then
-    BYPASS_OUTPUT=$(node "${PLUGIN_ROOT}/scripts/lib/check-prevc-bypass.mjs" "${BYPASS_PROJECT_ROOT}" "${BYPASS_FILE_PATH}" 2>/dev/null || true)
-    if [ -n "$BYPASS_OUTPUT" ]; then
-      reminder="${reminder}\n\n${BYPASS_OUTPUT}"
-    fi
-  fi
+if [ -n "$BYPASS_OUTPUT" ]; then
+  reminder="${reminder}\n\n${BYPASS_OUTPUT}"
 fi
 
 # --- Check if Bash tool is running a merge command ---

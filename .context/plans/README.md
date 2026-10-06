@@ -34,6 +34,7 @@ This directory contains plans for coordinating work across documentation and pla
 29. [Verify Signal Pipeline](./verify-signal-pipeline.md)
 30. [Version Scoped Stacks Standards](./version-scoped-stacks-standards.md)
 31. [Workflow Resume Session](./workflow-resume-session.md)
+32. [Standards Enforcement Context Delivery](./standards-enforcement-context-delivery.md)
 
 ## How To Create Or Update Plans
 - Run "dotcontext plan <name>" to scaffold a new plan template.

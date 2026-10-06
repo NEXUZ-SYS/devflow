@@ -427,3 +427,16 @@ test("E3: YAML parse error → distinct __denyReason (parse, not legacy)", () =>
   assert.match(cfg.__denyReason, /YAML|parse|sintaxe|ler/i);
   assert.ok(!/legado/i.test(cfg.__denyReason), "parse error must not claim legacy format");
 });
+
+// T18, rodada 2: efeito PRETENDIDO do alargamento do `**` em glob.mjs. Um `deny` com `**`
+// passa a pegar também nome com quebra de linha (antes o arquivo escapava do deny).
+test("deny com ** pega caminho com terminador de linha no nome", async () => {
+  const cfg = withDeny(["**/.env*", "secrets/**"]);
+  for (const path of ["conf\n/.env.production", "secrets/chave\n.pem", "secrets/dir\u2028/x", "secrets/a\rb"]) {
+    const r = await evaluatePermissions({ tool: "Read", path }, cfg);
+    assert.equal(r.decision, "deny", JSON.stringify(path));
+  }
+  const ok = await evaluatePermissions({ tool: "Read", path: "src/a\nb.ts" }, cfg);
+  assert.notEqual(ok.decision, "deny", "fora do padrão continua fora");
+});
+

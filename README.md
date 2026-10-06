@@ -86,8 +86,21 @@ Para instruções detalhadas de instalação, configuração e uso completo, vej
 |-----------|----------|
 | **[Manual do Usuário](docs/tutorial-setup.md)** | Instalação, configuração, fluxo completo, exemplos por escala, troubleshooting |
 | **[Guia ADR/Standards/Linter](docs/guia-rapido-adr-standards-linter.md)** | Referência de uso da camada de contexto: quando criar cada artefato, encaixe no PREVC, troubleshooting |
+| **[Enforcement de standards](docs/guia-enforcement-standards.md)** | Standards como gate: níveis, baseline, `gate` no CI, override, limites e migração |
 | **[/devflow help](commands/devflow.md)** | Referência completa de comandos (também acessível via `/devflow help` no Claude Code) |
 | **[Skills Map](references/skills-map.md)** | Mapa completo de skills nos 3 sistemas (DevFlow, superpowers, dotcontext) |
+
+---
+
+## Enforcement de standards
+
+Os standards deixam de ser lembrete e viram **gate**: um motor único aplica os linters, classifica cada achado em `block`, `warn` ou `review` e compara com um **baseline** versionado que só encolhe. Só a violação **nova** de nível `block` bloqueia, na edição (hook síncrono), no commit (pre-commit), no CI e na fase V. Aumentar o baseline ou rebaixar um nível é decisão do humano, no terminal dele.
+
+- **Opt-in e com consentimento:** o `/devflow init` e o `/devflow:devflow-sync` oferecem, um item por vez, o shim e o pre-commit, o job de CI (GitHub Actions ou GitLab), `verify.standards` e o `CODEOWNERS`. Sem baseline (`baseline init`, no terminal do operador) o hook não bloqueia.
+- **A garantia é o CI:** o job faz checkout do plugin público na versão fixada em `.context/bin/devflow-plugin.ref` (lida da branch de destino) e roda `gate --base-ref=refs/remotes/origin/<alvo> --ci`. Um enfraquecimento deliberado no GitHub é liberado pelo rótulo `standards-ratchet-approved` **e** por um review `APPROVED` no último commit, de quem é dono dos arquivos da catraca (o sinal rodado pelo executor repassa o override com `DEVFLOW_PR_NUMBER` e `DEVFLOW_REPO`). Configurar o job como *required check* e "Require review from Code Owners" é do operador.
+- **Limites declarados:** o pre-commit e os guards locais são atrito; projeto em subdiretório do repositório e GitHub Enterprise ficam fora; nada foi verificado num GitHub ou GitLab reais.
+
+Guia completo: **[docs/guia-enforcement-standards.md](docs/guia-enforcement-standards.md)** · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md).
 
 ---
 

@@ -70,16 +70,23 @@ describe("TG3 — CLI repassa pluginRoot (B)", () => {
 describe("TG3 — hook wiring (C: R1 gate + S8 argv)", () => {
   const hook = readFileSync(HOOK, "utf-8");
 
-  it("R1: o gate do LINTER (EDITED_PATH) não exige mais .context/standards", () => {
-    // O gate do linter combinava EDITED_PATH + .context/standards — essa
-    // combinação deve ter sumido. (O bloco nudge/NUDGE_PATH mantém o gate — R17 deferido.)
+  // T14 (D5/D9): o bloco do linter do post-tool-use passou a chamar standards-hook-cli
+  // --mode=async (mesmo engine do hook síncrono). As duas garantias continuam: sem gate de
+  // .context/standards (R1) e raiz do plugin que não vem do ambiente (S8 → D5).
+  const linterBlock = (hook.match(/LINTER_OUTPUT=[\s\S]*?\nfi\n/) || [""])[0];
+
+  it("R1: o gate do LINTER não exige .context/standards", () => {
+    assert.ok(linterBlock, "bloco do LINTER_OUTPUT não encontrado no hook");
     assert.doesNotMatch(hook, /EDITED_PATH"\s*\]\s*&&\s*\[\s*-d\s*"\$\{PWD\}\/\.context\/standards"/,
-      "o gate do linter [ -n EDITED_PATH ] && [ -d .context/standards ] deve ter sido relaxado");
-    assert.match(hook, /if \[ -n "\$EDITED_PATH" \]; then/, "o linter deve rodar só com EDITED_PATH não-vazio");
+      "o gate do linter [ -n EDITED_PATH ] && [ -d .context/standards ] não pode voltar");
+    assert.doesNotMatch(linterBlock, /\.context\/standards/, "o bloco do linter não pode depender de .context/standards");
+    assert.match(hook, /if \[ "\$TOOL_NAME" = "Edit" \] \|\| \[ "\$TOOL_NAME" = "Write" \]; then\n(?:\s*#.*\n)*\s*LINTER_OUTPUT=/,
+      "o linter roda para todo Edit/Write, sem gate adicional");
   });
 
-  it("S8: o hook passa --plugin=\"${PLUGIN_ROOT}\" como token argv ao CLI", () => {
-    assert.match(hook, /run-linter-cli\.mjs"\s+--plugin="\$\{PLUGIN_ROOT\}"/,
-      "o hook deve passar --plugin como token argv distinto");
+  it("S8/D5: o hook chama o CLI do engine por argv, com a raiz do próprio hook e sem env", () => {
+    assert.match(linterBlock, /node "\$\{PLUGIN_ROOT\}\/scripts\/lib\/standards-hook-cli\.mjs" --mode=async/,
+      "o hook deve chamar standards-hook-cli.mjs pelo PLUGIN_ROOT derivado do próprio caminho, modo async");
+    assert.doesNotMatch(linterBlock, /CLAUDE_PLUGIN_ROOT/, "a raiz do plugin não pode vir do env (D5)");
   });
 });

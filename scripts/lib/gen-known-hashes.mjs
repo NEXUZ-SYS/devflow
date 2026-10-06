@@ -49,9 +49,15 @@ export function distributableFiles(pluginRoot) {
 // Walk SEPARADO, com seu próprio conjunto de extensões. Ampliar o filtro de
 // distributableFiles() para .yml/.mjs arrastaria os scripts de skills/** (hoje
 // 13 arquivos .mjs) para dentro do registry compartilhado.
+//
+// Os gates de standards (ADR-015) seguem a mesma regra: o shim (assets/standards/bin/**) e os
+// arquivos de CI (assets/standards/ci/**) são copiados verbatim para o projeto, e é por este
+// registro que uma cópia intocada de outra versão é distinguida de uma edição local.
 export function scaffoldFiles(pluginRoot) {
   const out = [];
   walk(pluginRoot, join("assets", "release-scaffold"), out);
+  walk(pluginRoot, join("assets", "standards", "bin"), out);
+  walk(pluginRoot, join("assets", "standards", "ci"), out);
   return out.filter((f) => f.endsWith(".yml") || f.endsWith(".sh") || f.endsWith(".mjs"));
 }
 

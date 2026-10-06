@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# hooks/session-start-norms — normas do projeto (standards block/review, guardrails de ADR
+# aprovadas, knowledge always) num campo próprio do SessionStart, ≤ 9000 caracteres. O
+# additionalContext principal do session-start já passa de 22k; acima de 10k o Claude Code
+# só injeta uma prévia de 2k (hooks.md:939-942, :1025). Toda a lógica vive em
+# scripts/lib/session-norms.mjs — este script só encaminha cwd e devolve o stdout dele.
+#
+# Saída: um único JSON válido (o contrato SessionStart) ou nada — nunca texto solto.
+# Falha aberta: qualquer erro aqui vira silêncio, nunca trava nem quebra a sessão.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+INPUT=$(cat)
+CWD=$(printf '%s' "$INPUT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cwd",""))' 2>/dev/null || echo "")
+node "${PLUGIN_ROOT}/scripts/lib/session-norms.mjs" "${CWD:-$PWD}" --json 2>/dev/null || true
+exit 0

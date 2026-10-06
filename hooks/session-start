@@ -197,6 +197,15 @@ fi
 # If only a legacy path contributes ADRs, emit a LEGACY warning to stderr (N6).
 
 adr_context=""
+
+# fm_field <arquivo> <chave>: le "chave: valor" do frontmatter YAML, ou "" se a
+# chave nao existir. NUNCA falha: sob `set -euo pipefail` (linha 5), um `grep`
+# sem match sai 1 e derrubaria o hook INTEIRO na atribuicao (Task 13b — bastava
+# uma ADR sem `stack:`/`name:`/`status:` para o SessionStart nao entregar nada).
+fm_field() {
+  { grep -m1 "^$2:" "$1" 2>/dev/null || true; } | sed "s/^$2:[[:space:]]*//" | tr -d '"' | tr -d "'"
+}
+
 # Resolve os dirs de ADR: canonical engineering/adrs primeiro, depois fallbacks
 # legados existentes (.context/adrs, .context/docs/adrs). SI-1: plugin path como
 # argumento de subcomando, nunca interpolado em `node -e`.
@@ -222,11 +231,13 @@ if [ "${#adr_dirs[@]}" -gt 0 ]; then
       [ -n "${seen_files[$fn]:-}" ] && continue
       seen_files[$fn]=1
 
-      adr_status=$(grep -m1 '^status:' "$adr_file" 2>/dev/null | sed 's/^status:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_status=$(fm_field "$adr_file" status)
       [ "$adr_status" = "Aprovado" ] || continue
 
-      adr_name=$(grep -m1 '^name:' "$adr_file" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
-      adr_stack=$(grep -m1 '^stack:' "$adr_file" 2>/dev/null | sed 's/^stack:[[:space:]]*//' | tr -d '"' | tr -d "'")
+      adr_name=$(fm_field "$adr_file" name)
+      [ -n "$adr_name" ] || adr_name="$fn"
+      adr_stack=$(fm_field "$adr_file" stack)
+      [ -n "$adr_stack" ] || adr_stack="-"
 
       guardrails=$(awk '/^## Guardrails[[:space:]]*$/{flag=1; next} /^## /{flag=0} flag' "$adr_file")
 

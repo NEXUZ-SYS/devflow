@@ -15,6 +15,8 @@ export function parseHookOutput(stdout) {
   if (!text) return { contextToInject: null, block: false, reason: null };
   const { obj, leading } = extractEnvelope(text);
   if (!obj) return { contextToInject: leading || null, block: false, reason: null };
+  // PostToolUse (post-tool-use-lint): bloqueio de standard vem como `decision` de nível superior.
+  if (obj.decision === "block") return { contextToInject: null, block: true, reason: obj.reason ?? "bloqueado pelo hook" };
   const hso = obj.hookSpecificOutput ?? obj;
   const decision = hso.permissionDecision;
   if (decision === "deny" || decision === "ask") {

@@ -1,13 +1,13 @@
 ---
 type: adr
 name: verifiable-signal-pipeline
-description: A fase V do PREVC observa um sinal binário externo produzido por código (contrato verify: + executor + ledger + CI árbitro), em vez de afirmar que os testes passam.
+description: "A fase V do PREVC observa um sinal binário externo produzido por código (contrato verify: + executor + ledger + CI árbitro), em vez de afirmar que os testes passam."
 scope: organizational
 source: local
 stack: universal
 category: arquitetura
-status: Proposto
-version: 1.0.0
+status: Aprovado
+version: 1.1.0
 created: 2026-07-14
 supersedes: []
 refines: [011-devflow-config-single-parser-v1.0.0]
@@ -19,7 +19,7 @@ summary: "O estágio Test (fase V) deixa de afirmar e passa a observar: um contr
 # ADR — Pipeline de sinal verificável (a fase V observa, não afirma)
 
 - **Data:** 2026-07-14
-- **Status:** Proposto
+- **Status:** Aprovado
 - **Escopo:** Organizacional
 - **Stack:** universal (Node `node:test` + runners bash + GitHub Actions)
 - **Categoria:** Arquitetura
@@ -35,7 +35,7 @@ Os cinco estágios do PREVC (P=Plan, E=Code, R=Review, V=Test, C=Deploy) existem
 
 Introduzir um **pipeline de sinal verificável** com três peças de responsabilidade única:
 
-1. **Contrato** — `verify:` no `.context/.devflow.yaml`, lido pelo **parser único** (`devflow-config.mjs`, ADR-011, que delega o parse a `frontmatter.mjs`). Cada sinal (`unit|integration|e2e|lint`) é um **array argv**; `onTaskComplete` diz o que roda no loop rápido.
+1. **Contrato** — `verify:` no `.context/.devflow.yaml`, lido pelo **parser único** (`devflow-config.mjs`, ADR-011, que delega o parse a `frontmatter.mjs`). Cada sinal (`unit|integration|e2e|lint|standards`) é um **array argv**; `onTaskComplete` diz o que roda no loop rápido. **(v1.1.0, ADR-015)** O sinal `standards` tem argv **reservado** `["devflow-standards", "gate"]`, resolvido pelo `verify-run` para `node <plugin>/scripts/devflow-standards.mjs gate --base-ref=<BASE_REF> [--ci]` a partir da própria raiz do plugin (comando do projeto não é aceito: um stub não forja o verde). É distinto de `lint`: `lint` é o linter do projeto, `standards` são os linters dos std-* mais a catraca contra o merge-base.
 2. **Executor** — `scripts/lib/verify-run.mjs` valida o contrato, roda o sinal com `execFile` (sem `sh -c`) e faz append num **ledger** JSONL (`.context/runtime/verify-ledger.jsonl`) com um `treeDigest` (HEAD + status, excluindo estado efêmero de workflow). Nunca decide o gate.
 3. **Gate** — `verify-gate.mjs` (invocado pela skill `prevc-validation`) **só lê** o ledger: exige, por `requiredSignal`, uma entrada `exit 0` cujo `treeDigest` bate com a árvore atual.
 
@@ -61,6 +61,7 @@ Um **CI árbitro** (`.github/workflows/test.yml`) re-roda os mesmos sinais, pelo
 - O loop rápido no hook fica fora do v1 (o `PostToolUse` async descarta o `additionalContext`); o executor é rodado explicitamente na fase E/V.
 
 **Riscos aceitos**
+- (v1.1.0) Neste repositório o sinal `standards` roda o `gate` do próprio PR (o plugin é o PR). O que protege o juiz é o CODEOWNERS em `scripts/` e `assets/standards/` inteiros + "Require review from Code Owners" (ação humana). Não há override aqui: o `test.yml` não passa as variáveis de PR, e enfraquecer a catraca deixa o sinal vermelho
 - Contagem de asserts por regex é aproximada (speed-bump, não muro) — o trailer `Weakens-Tests:` cobre o falso positivo.
 - Repointar um sinal para alvo trivial ainda válido escapa dos guards mecânicos — resíduo humano (inspeção do diff de `verify.*` na fase R).
 - O gate local é forjável — mitigado pelo CI required check (D7b).
@@ -75,7 +76,7 @@ O plugin é distribuído para outros projetos; nem tudo tem o mesmo alcance. Exp
 | Executor + ledger + `treeDigest` + gate de V | **Qualquer** projeto — agnósticos de linguagem, rodam via `${CLAUDE_PLUGIN_ROOT}` | plugin |
 | Guard **do contrato** (`verify-contract-guard`) | **Qualquer** projeto — opera sobre o `verify:`, agnóstico de linguagem | plugin |
 | Guard **anti-enfraquecimento de testes** (`test-weakening-guard`) | **Só JS/`.mjs`** (`node:assert`, `test(`/`it(`) — **inerte** em Python/Odoo | plugin |
-| CI árbitro (required check → garantia gerador ≠ verificador) | **Dogfoodado no repo devflow**; em clientes, ligar um CI que re-rode os sinais é responsabilidade do time | `test.yml` (só devflow) |
+| CI árbitro (required check → garantia gerador ≠ verificador) | **Dogfoodado no repo devflow**; em clientes, ligar um CI que re-rode os sinais é responsabilidade do time. O sinal `standards` tem scaffold próprio (ADR-012 v1.2.0, ADR-015) | `test.yml` (só devflow) |
 
 **Consequência honesta:** um projeto-cliente que declara `verify:` ganha o loop local + gate de V + guard do contrato. Ele **não** ganha, no v1, o guard de enfraquecimento (se não for JS) nem a independência via CI (a menos que configure o próprio CI). Sem CI árbitro, o gate do cliente é **auto-atestação disciplinada (D7a)**, não a garantia mecânica (D7b) — que no v1 só o repo devflow tem. Generalizar o guard por linguagem e oferecer um scaffold de CI ao cliente são **follow-ups** (fora do escopo v1, coerente com "dar **ao repo** um CI" e "validar **no repo devflow primeiro**" da spec §2).
 
@@ -85,23 +86,27 @@ O plugin é distribuído para outros projetos; nem tudo tem o mesmo alcance. Exp
 - SEMPRE declarar comandos como **array argv**; `argv[0]` ∈ `{node, npm, pnpm, python, python3, pytest, make, bash, sh}`.
 - NUNCA permitir código inline no argv (`-c`/`-e`/`--eval`/`-p`/`--print`/`-pe`/`-lc`/…) em qualquer posição.
 - NUNCA a fase V afirmar "testes passam" sem observar o ledger (`verify-gate.mjs`).
+- QUANDO o projeto tiver ao menos um standard que pode chegar a `block` (`maxLevel`), ENTÃO `standards` entra em `requiredSignals` e o gate exige exit 0 com `treeDigest` atual; sem `verify.standards` declarado (ou sem `verify:`), o gate BLOCKa em vez de cair em warn-only (v1.1.0, ADR-015).
+- NUNCA aceitar para `verify.standards` outro argv que não o reservado.
+- NUNCA confundir `lint` com `standards`: exit 3 do `standards` (erro de execução) é BLOCK, não warn.
 - NUNCA rodar sinais em `session-start`; só após o operador invocar um comando DevFlow.
 - QUANDO houver `verify:` presente mas inválido/inseguro, ENTÃO fail-closed (BLOCK), nunca warn-only silencioso.
 - SEMPRE rodar os guards (`test-weakening-guard`, `verify-contract-guard`) no sinal `lint`, fail-closed no CI quando o merge-base não resolve.
-- A independência gerador ≠ verificador é o **CI required check** (D7b); o gate local é auxiliar (D7a).
+- SEMPRE tratar o **CI required check** como a independência gerador ≠ verificador (D7b); o gate local é auxiliar (D7a).
 
 ## Enforcement
 
+- [ ] Teste (v1.1.0): `readVerify` aceita só o argv reservado de `standards`; `verify-run` o resolve pelo plugin num projeto sem `CLAUDE_PLUGIN_ROOT`; gate BLOCK com std `block` sem `verify:`, sem `verify.standards` ou sem entrada verde; exit 3 é BLOCK.
 - [x] Teste: unit de `readVerify` (argv arrays, allowlist, código inline em qualquer posição, vocabulário fechado, `onTaskComplete ⊆`, fail-closed em parse).
 - [x] Teste: unit do ledger (ordem, cauda, REDs consecutivos, malformado tolerado).
 - [x] Teste: unit do `treeDigest` (estável, muda com código, ignora `.context/workflow`).
 - [x] Teste: e2e do executor (verde/vermelho propagado, sinal não declarado lança).
 - [x] Teste: unit dos guards (deleção/skip/queda de asserts; remoção/inline de sinal; fail-closed em CI).
 - [x] Teste: unit do gate de V (warn-only sem verify:, BLOCK em vazio/vencido/vermelho/inválido).
-- [x] Teste: estrutural do CI (`test.yml`: matriz 4 sinais, fetch-depth 0, executor, contents:read).
+- [x] Teste: estrutural do CI (`test.yml`: matriz de 5 sinais com `standards`, fetch-depth 0, executor, contents:read).
 - [x] Guards num **job dedicado** no CI (`guards`), invocados hardcoded e independentes de `verify.lint` — repontar o sinal `lint` não silencia o árbitro (achado V4 da validação).
 - [x] `assertNoInlineCode` fecha `node --import/--loader/--experimental-loader` (código ESM externo via `data:`) e `python -c` colado/cluster (`-cCODE`/`-Ic`) — achados V1/V2 da validação.
-- [ ] Config: `test.yml` como **required status check** na branch protegida (fase C — exige admin).
+- [ ] Config: os **seis** checks do `test.yml`, com os nomes exatos `sinal: unit`, `sinal: integration`, `sinal: e2e`, `sinal: lint`, `sinal: standards` e `guards (anti-tamper, independentes de verify.lint)`, como **required status checks** na branch protegida (fase C — exige admin).
 
 ## Evidências / Anexos
 

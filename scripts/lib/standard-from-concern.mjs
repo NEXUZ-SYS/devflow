@@ -71,6 +71,7 @@ export function generateStandardFromConcern({ concern, enrichment, applyTo }) {
 id: ${stdId}
 description: ${concern.summary}
 version: 1.0.0
+source: local
 applyTo:
 ${renderApplyTo(apply)}
 ${renderRelatedAdrs(adrSlugs)}

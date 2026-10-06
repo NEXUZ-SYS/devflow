@@ -35,13 +35,15 @@ Se o projeto declara `verify:` no `.context/.devflow.yaml`, a fase V **observa**
 um sinal externo em vez de afirmar que os testes passam.
 
 1. Para cada `s` em `plano.requiredSignals`, garanta que o sinal foi rodado nesta
-   árvore: `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-run.mjs <s> "$PWD" V`
+   árvore: `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-run.mjs" <s> "$PWD" V`
    (gera/atualiza a entrada do ledger com o `treeDigest` atual).
 2. Rode o gate determinístico:
    `node ${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-gate.mjs "$PWD" "<requiredSignals separados por vírgula>"`
    - exit 0 + "✓" → gate passa.
    - exit 0 + "⚠" → **warn-only** (projeto sem `verify:`): registre "validação auto-reportada; nenhum sinal declarado" e siga (D9).
    - exit 1 → **BLOCK**: apresente cada motivo (sem observação / prova vencida / sinal vermelho / contrato inválido) e retorne à fase E.
+
+- Se o projeto tem algum standard que pode chegar a `block`, o `verify-gate` exige o sinal `standards` (ADR-013 v1.1.0); sem `verify.standards: ["devflow-standards", "gate"]` no `.devflow.yaml`, o gate bloqueia. Rode `node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/verify-run.mjs" standards` antes do gate; exit ≠ 0 é BLOCK (violação nova = 1; erro de execução, ex. baseline inválido = 3).
 
 **Honestidade sobre a independência.** O gate local é um **auxílio de honestidade**,
 não uma garantia: o mesmo agente roda o executor e lê o ledger, e o ledger é
@@ -83,11 +85,13 @@ Read `.context/agents/code-reviewer.md` and apply its checklist against the spec
 Check if the implementation complies with active ADR guardrails.
 
 ### When to run
-Only if `.context/adrs/README.md` exists (canonical since v1.0) OR `.context/docs/adrs/README.md` exists (legacy, dual-read until v1.2). Both have active ADRs.
+Se existir algum diretório de ADRs resolvido por:
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/lib/context-paths.mjs" resolve-read adrs "$PWD"`
+(canônico `.context/engineering/adrs/README.md`; fallbacks legados `.context/adrs/` e `.context/docs/adrs/`).
 
 ### Process
 
-1. Read `.context/adrs/README.md` (or fallback to `.context/docs/adrs/README.md` legacy) — get list of active ADRs
+1. Ler o `README.md` do primeiro diretório retornado por `resolve-read adrs` (canônico `.context/engineering/adrs/README.md` primeiro) — lista das ADRs ativas
 2. For each ADR with status `Aprovado`:
    a. Read the **Guardrails** section
    b. For each guardrail rule (SEMPRE/NUNCA/QUANDO):
@@ -184,6 +188,12 @@ echo "Step 2.6: all touched ADRs passed gate"
 
 Both run independently; both must pass.
 
+## Step 2.7: Standards de nível review
+
+Para cada standard com `enforcement.level: review` que se aplica aos arquivos alterados (`node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" explain $(git diff --name-only $(git merge-base HEAD main)...HEAD)`), despache o code-reviewer com o checklist de Princípios e Anti-patterns daquele standard. Achado confirmado bloqueia a fase V como qualquer falha de teste.
+
+Se nenhum standard `review` se aplica aos arquivos alterados, este passo é pulado.
+
 ## Step 3: Test Coverage Review
 
 ### Full Mode
@@ -271,6 +281,7 @@ The Validation phase gate requires:
 - TDD ordering verified (test commits precede implementation commits)
 - Spec compliance verified
 - ADR compliance verified (if ADRs active)
+- Sinal `standards` observado verde quando exigido pelo `verify-gate` (Step 1.5); standards `review` aplicáveis checados (Step 2.7)
 - Security checklist cleared (if applicable)
 - No blocking issues identified
 

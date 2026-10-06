@@ -99,7 +99,16 @@ export default function ext(pi) {
   pi.on("tool_result", (event, ctx) => {
     const cc = translateToolEvent(event, { cwd: ctx.cwd });
     if (!cc) return;
-    const cwd = resolveProjectCwd(cc.tool_input.file_path, ctx.cwd);
-    enqueue(parseHookOutput(runBashHook("post-tool-use", { stdin: JSON.stringify({ ...cc, cwd }), cwd }).stdout).contextToInject);
+    // A raiz dos dois hooks de lint é o diretório da SESSÃO, nunca o ancestral do arquivo
+    // editado (mesmo ruling da T14 no standards-hook-cli): senão editar um arquivo de outro
+    // repositório carregaria os standards e executaria o machine/ de lá.
+    const cwd = ctx.cwd;
+    const stdin = JSON.stringify({ ...cc, cwd });
+    enqueue(parseHookOutput(runBashHook("post-tool-use", { stdin, cwd }).stdout).contextToInject);
+    // Linter síncrono de standards (T14): o omp não desfaz a edição, então o bloqueio
+    // vira mensagem na fila. A razão já vem sanitizada do standards-hook-cli.
+    const lint = parseHookOutput(runBashHook("post-tool-use-lint", { stdin, cwd }).stdout);
+    if (lint.block) enqueue(`BLOQUEIO DE STANDARD (corrija antes de seguir): ${lint.reason}`);
+    else enqueue(lint.contextToInject);
   });
 }

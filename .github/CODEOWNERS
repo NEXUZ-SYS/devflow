@@ -1,0 +1,40 @@
+# CODEOWNERS do DevFlow — o dono das normas (standards) e de tudo o que as julga.
+#
+# Neste repositório o plugin é o próprio PR: o gate de standards roda o código que o PR
+# traz. Quem controla esse código controla o juiz. Por isso `scripts/` inteiro tem dono (o
+# gate importa dezenas de módulos de scripts/lib/, entre eles o que define os caminhos da
+# catraca e o que lê o verify:) e `assets/standards/` inteiro também (os .md dos standards
+# default carregam o nível que o gate aplica; os linters e o shim moram ali).
+#
+# ATENÇÃO — AÇÃO HUMANA PENDENTE: este arquivo só vale como garantia com "Require review from
+# Code Owners" ligado na proteção da `main` (Settings > Branches). O operador liga isso depois
+# do merge desta branch. Sem isso, o CODEOWNERS é só um pedido de review automático.
+#
+# DONO ÚNICO = O PRÓPRIO AUTOR DOS PRs. Com "Require review from Code Owners" ligado, o GitHub
+# não conta a aprovação do autor do PR: um PR do @walterfrey em caminho com dono precisa da
+# aprovação de OUTRO dono ou de bypass de admin. O override por rótulo do gate também recusa o
+# autor do PR (isso é do nosso código). Acrescente um segundo dono (pessoa) se isso atrapalhar.
+#
+# Dono como PESSOA, não como time (@org/time exigiria a permissão read:org no gate).
+#
+# Vale a ÚLTIMA regra que casa. Por isso as regras da catraca vêm por último e usam /pasta/:
+# o leitor do gate trata `dir/*` sobre arquivo aninhado como dúvida (ninguém aprova).
+
+# --- executor do gate (o juiz) -------------------------------------------------------------
+/scripts/                             @walterfrey
+/assets/standards/                    @walterfrey
+/scripts/lib/standards-*.mjs          @walterfrey
+/assets/standards/bin/                @walterfrey
+/assets/standards/ci/                 @walterfrey
+/.github/workflows/test.yml           @walterfrey
+/.github/CODEOWNERS                   @walterfrey
+
+# --- catraca: o que o gate compara contra a base (compareRatchet, em scripts/lib/standards-ratchet.mjs) ---
+/assets/standards/machine/            @walterfrey
+/.context/standards.local.yaml        @walterfrey
+# O verify.standards mora no .devflow.yaml, e o gate o compara com a base.
+/.context/.devflow.yaml               @walterfrey
+/.context/standards/                  @walterfrey
+/.context/bin/                        @walterfrey
+/.context/**/node_modules/            @walterfrey
+/.context/engineering/standards/      @walterfrey

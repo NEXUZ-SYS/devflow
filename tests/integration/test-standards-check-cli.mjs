@@ -1,0 +1,631 @@
+// Integração do CLI de standards: check|baseline|enforce|explain (ADR-015, T7).
+import { test, after } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync, execFileSync } from "node:child_process";
+import { writeFileSync, readFileSync, existsSync, rmSync, mkdtempSync, symlinkSync, readdirSync, renameSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runStandardsCommand, pluginCmd } from "../../scripts/lib/standards-check-cli.mjs";
+import { demoProject as rawDemoProject, LINT_BAD } from "../helpers/standards-fixture.mjs";
+import { resolveBaseline } from "../../scripts/lib/standards-engine.mjs";
+
+const CLI = join(process.cwd(), "scripts/devflow-standards.mjs");
+const TEMPS = [];
+const tmp = (prefix) => { const d = mkdtempSync(join(tmpdir(), prefix)); TEMPS.push(d); return d; };
+after(() => { for (const d of TEMPS) rmSync(d, { recursive: true, force: true }); });
+const demoProject = (o) => { const r = rawDemoProject(o); TEMPS.push(r); return r; };
+
+const run = (root, ...a) => spawnSync("node", [CLI, ...a, `--project=${root}`], { encoding: "utf8", env: { ...process.env, CI: "" } });
+const runEnv = (root, env, ...a) => spawnSync("node", [CLI, ...a, `--project=${root}`], { encoding: "utf8", env: { ...process.env, CI: "", ...env } });
+const human = (root, sub, ...args) => runStandardsCommand(sub, args, root, { isInteractive: () => true });
+const git = (root, ...a) => execFileSync("git", ["-C", root, ...a], { encoding: "utf8" });
+const BL = (root) => join(root, ".context/engineering/standards/baseline.json");
+const FP0 = "a".repeat(40);
+const LINTER = (root) => join(root, ".context/engineering/standards/machine/std-demo.js");
+
+// Captura o console.error durante uma chamada in-process.
+async function captureErr(fn) {
+  const lines = [];
+  const orig = console.error;
+  console.error = (...m) => lines.push(m.map(String).join(" "));
+  try { return { code: await fn(), err: lines.join("\n") }; } finally { console.error = orig; }
+}
+
+function repo() {
+  const root = demoProject();
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.email", "t@t"); git(root, "config", "user.name", "t");
+  writeFileSync(join(root, "src/old.js"), "BAD\n");
+  git(root, "add", "-A");
+  return root;
+}
+
+test("check --all sem baseline → exit 1 e sugere baseline init", () => {
+  const r = run(repo(), "check", "--all");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout + r.stderr, /baseline init/);
+});
+
+test("mensagens citam o comando real do plugin, nunca um binário 'devflow standards'", () => {
+  assert.match(pluginCmd(), /^node ".*\/scripts\/devflow-standards\.mjs"$/);
+  const r = run(repo(), "check", "--all");
+  assert.ok((r.stdout + r.stderr).includes(pluginCmd()));
+  assert.doesNotMatch(r.stdout + r.stderr, /devflow standards /);
+});
+
+test("check sem seleção de arquivos → uso incorreto (exit 2)", () => {
+  const r = run(repo(), "check");
+  assert.equal(r.status, 2);
+});
+
+// Minor 4 da revisão final: saía 0 com "✓" sem ter olhado nada.
+test("check <caminho inexistente> → uso incorreto (exit 2), dizendo qual caminho", () => {
+  const root = repo();
+  // Fora do applyTo de qualquer standard: nenhum linter roda, e o "✓" saía sem nada ter sido visto.
+  const none = run(root, "check", "docs/nao-existe.md");
+  assert.equal(none.status, 2, none.stdout + none.stderr);
+  assert.match(none.stderr, /caminho não encontrado: "docs\/nao-existe\.md"/);
+  assert.doesNotMatch(none.stdout + none.stderr, /✓/);
+  // Coberto por um standard: também é uso incorreto, não erro de linter.
+  const r = run(root, "check", "src/nao-existe.js");
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /caminho não encontrado: "src\/nao-existe\.js"/);
+  assert.doesNotMatch(r.stdout + r.stderr, /✓/);
+  // Um que existe e um que não: recusa do mesmo jeito, apontando o que falta.
+  const m = run(root, "check", "src/old.js", "src/sumiu.js");
+  assert.equal(m.status, 2, m.stdout + m.stderr);
+  assert.match(m.stderr, /"src\/sumiu\.js"/);
+  assert.doesNotMatch(m.stderr, /"src\/old\.js"/);
+  // Absoluto inexistente e componente que não é diretório.
+  assert.equal(run(root, "check", join(root, "src/nada.js")).status, 2);
+  assert.equal(run(root, "check", "src/old.js/x.js").status, 2);
+  // Nome com caractere de controle não chega cru ao terminal.
+  const c = run(root, "check", "src/a\x1b[31m.js");
+  assert.equal(c.status, 2);
+  assert.doesNotMatch(c.stderr, /\x1b/);
+  // Caminho que existe segue como antes (aqui: violação sem baseline → 1).
+  assert.equal(run(root, "check", "src/old.js").status, 1);
+});
+
+test("arquivo apagado que aparece em --all ou --staged não é uso incorreto", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  rmSync(join(root, "src/old.js")); // rastreado, apagado da árvore
+  const all = run(root, "check", "--all");
+  assert.equal(all.status, 0, all.stdout + all.stderr);
+  git(root, "add", "-A"); // a remoção vai para o índice
+  const staged = run(root, "check", "--staged");
+  assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+});
+
+test("baseline init sem terminal interativo → recusado (exit 2)", () => {
+  const r = run(repo(), "baseline", "init");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /terminal interativo/);
+});
+
+test("baseline init pelo operador → check --all verde; segundo init recusado", async () => {
+  const root = repo();
+  assert.equal(await human(root, "baseline", "init"), 0);
+  assert.ok(existsSync(BL(root)));
+  assert.equal(run(root, "check", "--all").status, 0);
+  assert.equal(await human(root, "baseline", "init"), 2);
+});
+
+test("C15: baseline removido da árvore mas versionado no HEAD → init recusado (exit 2)", async () => {
+  const root = repo();
+  assert.equal(await human(root, "baseline", "init"), 0);
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  rmSync(BL(root));
+  const { code, err } = await captureErr(() => human(root, "baseline", "init"));
+  assert.equal(code, 2);
+  assert.match(err, /HEAD/);
+  assert.ok(!existsSync(BL(root)), "não pode regravar o baseline");
+});
+
+test("violação nova após o baseline → exit 1 com arquivo:linha e regra", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/new.js"), "ok\nBAD\n");
+  git(root, "add", "-A");
+  const r = run(root, "check", "--staged");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /src\/new\.js:2/);
+  assert.match(r.stdout, /no-bad/);
+});
+
+test("--staged lê o índice, não a árvore de trabalho", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", BL(root)); // --staged compara com o baseline do índice
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  git(root, "add", "src/new.js");
+  writeFileSync(join(root, "src/new.js"), "ok\n");
+  assert.equal(run(root, "check", "--staged").status, 1);
+  git(root, "add", "src/new.js");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  assert.equal(run(root, "check", "--staged").status, 0);
+});
+
+test("--staged: symlink no índice apontando para fora não é materializado nem seguido", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", BL(root)); // --staged compara com o baseline do índice
+  const outside = tmp("fora-");
+  writeFileSync(join(outside, "segredo.js"), "BAD\n");
+  symlinkSync(join(outside, "segredo.js"), join(root, "src/link.js"));
+  git(root, "add", "src/link.js");
+  // Na árvore vira arquivo comum limpo: só o índice (modo 120000) aponta para fora.
+  rmSync(join(root, "src/link.js"));
+  writeFileSync(join(root, "src/link.js"), "ok\n");
+  assert.match(git(root, "ls-files", "-s", "src/link.js"), /^120000 /);
+  const r = run(root, "check", "--staged");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /link\.js:/);
+});
+
+test("--staged apaga o tmp do índice, inclusive quando o linter falha", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  git(root, "add", "-A");
+  const td = tmp("tmpdir-");
+  assert.equal(runEnv(root, { TMPDIR: td }, "check", "--staged").status, 1);
+  assert.deepEqual(readdirSync(td), []);
+  writeFileSync(LINTER(root), 'throw new Error("boom")');
+  assert.equal(runEnv(root, { TMPDIR: td }, "check", "--staged").status, 3);
+  assert.deepEqual(readdirSync(td), []);
+});
+
+test("--all inclui arquivo não rastreado", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/untracked.js"), "BAD\n");
+  assert.equal(run(root, "check", "--all").status, 1);
+});
+
+test("--all ignora arquivo rastreado apagado da árvore e symlink para fora", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/gone.js"), "ok\n");
+  git(root, "add", "src/gone.js");
+  rmSync(join(root, "src/gone.js"));
+  const outside = tmp("fora-");
+  writeFileSync(join(outside, "x.js"), "BAD\n");
+  symlinkSync(join(outside, "x.js"), join(root, "src/link.js"));
+  const r = run(root, "check", "--all");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test("segunda ocorrência no arquivo do baseline → exit 1 com uma violação", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/old.js"), "BAD\nBAD\n");
+  const r = run(root, "check", "--all");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /1 violação/);
+});
+
+test("prune encolhe sem exigir terminal", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/old.js"), "ok\n");
+  assert.equal(run(root, "baseline", "prune").status, 0);
+  assert.equal(JSON.parse(readFileSync(BL(root), "utf8")).entries.length, 0);
+});
+
+test("accept: sem terminal recusa; sem --reason explica o uso", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  const r = run(root, "baseline", "accept", FP0, "--reason", "x");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /terminal interativo/);
+  const a = await captureErr(() => human(root, "baseline", "accept", FP0));
+  assert.equal(a.code, 2);
+  assert.match(a.err, /uso: .*baseline accept <fp> --reason/);
+  const b = await captureErr(() => human(root, "baseline", "accept", FP0, "--reason", "   "));
+  assert.equal(b.code, 2);
+  assert.match(b.err, /uso: .*baseline accept <fp> --reason/);
+});
+
+test("accept: fp desconhecido → exit 2; fp real → aceito com justificativa", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  const u = await captureErr(() => human(root, "baseline", "accept", "f".repeat(40), "--reason", "legado"));
+  assert.equal(u.code, 2);
+  assert.match(u.err, /não encontrado/);
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  const j = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]);
+  const fp = j.blocking.find(f => f.path === "src/new.js").fp;
+  assert.equal(await human(root, "baseline", "accept", fp, "--reason", "migração pendente"), 0);
+  const e = JSON.parse(readFileSync(BL(root), "utf8")).entries.find(x => x.fp === fp);
+  assert.equal(e.reason, "migração pendente");
+  assert.equal(run(root, "check", "--all").status, 0);
+});
+
+test("accept de mais uma ocorrência de impressão digital já aceita registra a justificativa (I-8)", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  const antes = JSON.parse(readFileSync(BL(root), "utf8")).entries;
+  assert.equal(antes.length, 1);
+  assert.equal("reason" in antes[0], false);
+  writeFileSync(join(root, "src/old.js"), "BAD\nBAD\n"); // mesma regra, mesmo arquivo: mesma impressão digital
+  const j = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]);
+  assert.equal(j.blocking.length, 1);
+  assert.equal(j.blocking[0].fp, antes[0].fp);
+  assert.equal(await human(root, "baseline", "accept", antes[0].fp, "--reason", "segunda ocorrência, migração pendente"), 0);
+  const doc = JSON.parse(readFileSync(BL(root), "utf8"));
+  assert.equal(doc.version, 1);
+  assert.equal(doc.entries.length, 1);
+  assert.equal(doc.entries[0].count, 2);
+  assert.equal(doc.entries[0].reason, "segunda ocorrência, migração pendente");
+  assert.ok(doc.entries[0].acceptedBy);
+  assert.equal(run(root, "check", "--all").status, 0);
+});
+
+// I-1: linter no formato dos defaults anteriores ao protocolo v2 — UMA linha por arquivo, com a
+// contagem na mensagem. A contagem some na normalização da impressão digital, então 1 e 40
+// ocorrências no mesmo arquivo têm a mesma impressão digital, com count 1.
+const LINT_LEGACY = `const fs=require("fs");const c=fs.readFileSync(process.argv[2],"utf8");
+const n=(c.match(/console\\.log/g)||[]).length;
+if(n){console.log("VIOLATION: "+n+" uso(s) de console.log em "+process.argv[2]);process.exitCode=1;}`;
+const legacyWarnings = (text) => text.split("\n").filter(l => /protocolo legado/.test(l));
+
+function legacyRepo(opts = {}) {
+  const root = demoProject({ linterBody: LINT_LEGACY, ...opts });
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.email", "t@t"); git(root, "config", "user.name", "t");
+  writeFileSync(join(root, "src/old.js"), "console.log(1);\n");
+  writeFileSync(join(root, "src/other.js"), "console.log(1);\n");
+  git(root, "add", "-A");
+  return root;
+}
+
+test("linter em protocolo legado: a catraca conta por arquivo, e o baseline init e o check avisam uma vez por standard", async () => {
+  const root = legacyRepo();
+  const init = await captureErr(() => human(root, "baseline", "init"));
+  assert.equal(init.code, 0, init.err);
+  assert.equal(legacyWarnings(init.err).length, 1, init.err);
+  assert.match(legacyWarnings(init.err)[0], /std-demo/);
+  assert.match(legacyWarnings(init.err)[0], /por arquivo/);
+  const entries = JSON.parse(readFileSync(BL(root), "utf8")).entries;
+  assert.deepEqual(entries.map(e => [e.path, e.count]).sort(), [["src/old.js", 1], ["src/other.js", 1]]);
+
+  // Comportamento atual, fixado: 1 ocorrência aceita, o arquivo passa a ter 4, nenhuma bloqueia.
+  writeFileSync(join(root, "src/old.js"), "console.log(1);\n".repeat(4));
+  const r = run(root, "check", "--all", "--json");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const j = JSON.parse(r.stdout.split("\n")[0]);
+  assert.equal(j.blocking.length, 0);
+  assert.equal(j.baselined.length, 2);
+  assert.ok(j.baselined.every(f => f.line === null));
+  // Aviso no stderr, uma vez por standard (dois arquivos, um aviso); o exit code não muda.
+  assert.equal(legacyWarnings(r.stderr).length, 1, r.stderr);
+  assert.match(legacyWarnings(r.stderr)[0], /std-demo/);
+  assert.match(legacyWarnings(r.stderr)[0], /por arquivo/);
+  assert.equal(legacyWarnings(r.stdout).length, 0);
+});
+
+test("sem aviso de protocolo legado: linter v2, ou standard que não chega a block", async () => {
+  const v2 = repo(); // LINT_BAD emite <arquivo>:<linha>
+  const i = await captureErr(() => human(v2, "baseline", "init"));
+  assert.equal(i.code, 0, i.err);
+  assert.equal(legacyWarnings(i.err).length, 0, i.err);
+  assert.equal(legacyWarnings(run(v2, "check", "--all").stderr).length, 0);
+
+  const warn = legacyRepo({ level: "warn" });
+  const r = run(warn, "check", "--all");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /warn .*console\.log/);
+  assert.equal(legacyWarnings(r.stderr).length, 0, r.stderr);
+});
+
+test("accept com baseline inválido → exit 3", async () => {
+  const root = repo();
+  writeFileSync(BL(root), "x");
+  assert.equal(await human(root, "baseline", "accept", FP0, "--reason", "r"), 3);
+});
+
+test("enforce: subir é livre; baixar exige terminal; operador baixa", async () => {
+  const root = demoProject({ level: "warn" });
+  assert.equal(run(root, "enforce", "std-demo", "--level", "block").status, 0);
+  const md = join(root, ".context/engineering/standards/std-demo.md");
+  assert.match(readFileSync(md, "utf8"), /^  level: block$/m);
+  const r = run(root, "enforce", "std-demo", "--level", "warn");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /terminal interativo/);
+  assert.equal(await human(root, "enforce", "std-demo", "--level", "warn"), 0);
+  assert.match(readFileSync(md, "utf8"), /^  level: warn$/m);
+});
+
+test("enforce: diretório de standards que é symlink para fora → recusa escrever (exit 3)", () => {
+  const root = demoProject({ level: "warn" });
+  const outside = tmp("fora-");
+  const dir = join(root, ".context/engineering/standards");
+  execFileSync("cp", ["-r", dir, join(outside, "standards")]);
+  rmSync(dir, { recursive: true });
+  symlinkSync(join(outside, "standards"), dir);
+  const before = readFileSync(join(outside, "standards/std-demo.md"), "utf8");
+  const r = run(root, "enforce", "std-demo", "--level", "block");
+  assert.equal(r.status, 3, r.stdout + r.stderr);
+  assert.equal(readFileSync(join(outside, "standards/std-demo.md"), "utf8"), before);
+});
+
+test("enforce: nível inválido → exit 2", () => {
+  const root = demoProject();
+  assert.equal(run(root, "enforce", "std-demo", "--level", "hard").status, 2);
+});
+
+test("enforce em default do plugin pede eject com --with-linter", () => {
+  const root = demoProject({ isolate: false });
+  const r = run(root, "enforce", "std-data-modeling", "--level", "block");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /eject data-modeling --with-linter/);
+});
+
+// I-3: o eject simples zera o campo `linter`; quem seguia a mensagem terminava com um standard
+// block que nada executa. O teste segue a instrução impressa, argumento por argumento.
+test("seguir o comando que o enforce imprime leva a um standard block com linter", () => {
+  const root = demoProject({ isolate: false });
+  const r = run(root, "enforce", "std-data-modeling", "--level", "block");
+  const m = r.stderr.match(/devflow-standards\.mjs" (eject [^\n]+)/);
+  assert.ok(m, r.stderr);
+  const e = runEnv(root, { CLAUDE_PLUGIN_ROOT: process.cwd() }, ...m[1].trim().split(/\s+/));
+  assert.equal(e.status, 0, e.stdout + e.stderr);
+  assert.equal(run(root, "enforce", "std-data-modeling", "--level", "block").status, 0);
+  const md = readFileSync(join(root, ".context/engineering/standards/std-data-modeling.md"), "utf8");
+  assert.match(md, /^\s*linter: engineering\/standards\/machine\/std-data-modeling\.js$/m);
+  assert.match(md, /^\s*level: block$/m);
+  assert.ok(existsSync(join(root, ".context/engineering/standards/machine/std-data-modeling.js")), "o linter não foi trazido para o projeto");
+});
+
+test("explain lista normas e nível do arquivo", () => {
+  const r = run(repo(), "explain", "src/old.js");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /std-demo — nível block/);
+});
+
+test("linter que lança exceção → exit 3", () => {
+  const root = repo();
+  writeFileSync(LINTER(root), 'throw new Error("boom")');
+  assert.equal(run(root, "check", "--all").status, 3);
+});
+
+test("linter travado → exit 3", () => {
+  const root = repo();
+  writeFileSync(LINTER(root), "setTimeout(()=>{},60000)");
+  const r = spawnSync("node", [CLI, "check", "--all", `--project=${root}`], { encoding: "utf8", env: { ...process.env, DEVFLOW_LINTER_TIMEOUT_MS: "300" } });
+  assert.equal(r.status, 3);
+});
+
+test("baseline inválido → exit 3", () => {
+  const root = repo();
+  writeFileSync(BL(root), "x");
+  assert.equal(run(root, "check", "--all").status, 3);
+});
+
+test("subcomando desconhecido → exit 2", async () => {
+  assert.equal(await human(repo(), "nada"), 2);
+});
+
+test("--base-ref usa o baseline do merge-base: aumentar o baseline na branch não passa", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  git(root, "checkout", "-q", "-b", "feat");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  // O agente regrava o baseline à mão incluindo a violação nova (o init é recusado — C15).
+  const nova = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]).blocking[0];
+  const bl = JSON.parse(readFileSync(BL(root), "utf8"));
+  bl.entries.push({ fp: nova.fp, stdId: nova.stdId, ruleId: nova.ruleId, path: nova.path, message: nova.message, count: 1 });
+  writeFileSync(BL(root), JSON.stringify(bl));
+  git(root, "add", "-A"); git(root, "commit", "-qm", "agente");
+  assert.equal(run(root, "check", "--all").status, 0, "contra o baseline da branch passa…");
+  assert.equal(run(root, "check", "--all", "--base-ref=main").status, 1, "…contra o merge-base não");
+});
+
+test("--base-ref sem merge-base: --ci falha fechado (3); local usa o baseline atual com nota", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  assert.equal(run(root, "check", "--all", "--base-ref=nao-existe", "--ci").status, 3);
+  const r = run(root, "check", "--all", "--base-ref=nao-existe");
+  assert.equal(r.status, 0);
+  assert.match(r.stderr, /merge-base/);
+});
+
+test("mesma impressão digital em --staged, --all e num clone em outro diretório", () => {
+  const root = repo();
+  writeFileSync(LINTER(root),
+    'const p=require("path").resolve(process.argv[2]);if(require("fs").readFileSync(p,"utf8").includes("BAD")){console.log("VIOLATION: 1 problema em "+p+".");process.exit(1)}');
+  writeFileSync(join(root, "src/n.js"), "BAD\n");
+  git(root, "add", "-A");
+  const fpOf = (r) => JSON.parse(r.stdout.split("\n")[0]).blocking.find(f => f.path === "src/n.js").fp;
+  const staged = fpOf(run(root, "check", "--staged", "--json"));
+  git(root, "commit", "-qm", "c");
+  const all = fpOf(run(root, "check", "--all", "--json"));
+  const clone = tmp("clone-");
+  execFileSync("git", ["clone", "-q", root, clone]);
+  const cloned = fpOf(run(clone, "check", "--all", "--json"));
+  assert.equal(staged, all);
+  assert.equal(all, cloned);
+});
+
+test("concorrência limitada no check --all", () => {
+  const root = repo();
+  const log = join(root, "conc.log");
+  writeFileSync(LINTER(root),
+    `const fs=require("fs");fs.appendFileSync(${JSON.stringify(log)},"S "+Date.now()+"\\n");const t=Date.now();while(Date.now()-t<150){};fs.appendFileSync(${JSON.stringify(log)},"E "+Date.now()+"\\n");process.exit(0);`);
+  for (let i = 0; i < 24; i++) writeFileSync(join(root, `src/f${i}.js`), "ok\n");
+  git(root, "add", "-A");
+  assert.equal(run(root, "check", "--all").status, 0);
+  const ev = readFileSync(log, "utf8").trim().split("\n").map(l => { const [k, t] = l.split(" "); return [Number(t), k === "S" ? 1 : -1]; })
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let cur = 0, max = 0;
+  for (const [, d] of ev) { cur += d; max = Math.max(max, cur); }
+  assert.ok(max <= 8, `pico de ${max} linters simultâneos`);
+  assert.ok(max >= 2, "sem paralelismo algum");
+});
+
+// ── Correção — rodada 1 ─────────────────────────────────────────────────────────────
+
+// Std no layout legado (.context/standards/): o linter fica FORA do diretório canônico do
+// baseline, então mover/symlinkar o canônico não quebra o sandbox do linter.
+function toLegacyLayout(root) {
+  const eng = join(root, ".context/engineering/standards");
+  const leg = join(root, ".context/standards");
+  mkdirSync(join(leg, "machine"), { recursive: true });
+  writeFileSync(join(leg, "std-demo.md"), `---\nid: std-demo\nsource: local\ndescription: demo\napplyTo: ["src/**"]\nenforcement:\n  linter: standards/machine/std-demo.js\n  level: block\n---\n## P\n- sem BAD\n`);
+  writeFileSync(join(leg, "machine/std-demo.js"), LINT_BAD);
+  rmSync(eng, { recursive: true }); mkdirSync(eng, { recursive: true });
+}
+
+// Branch "feat" cuja violação nova (src/new.js) foi somada ao baseline por um caminho
+// físico diferente do lógico: `.context/engineering/standards` vira symlink para `x`.
+async function branchComBaselineViaSymlink({ legacy = false } = {}) {
+  const root = demoProject();
+  const eng = join(root, ".context/engineering/standards");
+  if (legacy) toLegacyLayout(root);
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.email", "t@t"); git(root, "config", "user.name", "t");
+  writeFileSync(join(root, "src/old.js"), "BAD\n");
+  git(root, "add", "-A");
+  assert.equal(await human(root, "baseline", "init"), 0);
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  git(root, "checkout", "-q", "-b", "feat");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  const nova = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]).blocking[0];
+  assert.ok(nova, "a violação nova precisa existir antes do truque");
+  renameSync(eng, join(root, ".context/engineering/x"));
+  symlinkSync("x", eng);
+  const blp = join(root, ".context/engineering/x/baseline.json");
+  const bl = JSON.parse(readFileSync(blp, "utf8"));
+  bl.entries.push({ fp: nova.fp, stdId: nova.stdId, ruleId: nova.ruleId, path: nova.path, message: nova.message, count: 1 });
+  writeFileSync(blp, JSON.stringify(bl));
+  git(root, "add", "-A"); git(root, "commit", "-qm", "agente");
+  return root;
+}
+
+test("R1-C1: --base-ref --ci com symlink de diretório (layout canônico) não passa", async () => {
+  const root = await branchComBaselineViaSymlink();
+  const r = run(root, "check", "--all", "--base-ref=main", "--ci");
+  assert.equal(r.status, 3, r.stdout + r.stderr);
+  // O motivo tem de ser o symlink no caminho do baseline, não o sandbox do linter.
+  assert.match(r.stderr, /link simbólico no caminho do baseline/);
+});
+
+test("R1-C1: --base-ref --ci com symlink de diretório (standards no layout legado) não passa", async () => {
+  const root = await branchComBaselineViaSymlink({ legacy: true });
+  const r = runEnv(root, { CI: "true" }, "check", "--all", "--base-ref=main", "--ci");
+  assert.equal(r.status, 3, r.stdout + r.stderr);
+  assert.match(r.stderr, /link simbólico no caminho do baseline/);
+});
+
+test("R1-C1: --base-ref local com symlink de diretório lê o baseline do merge-base pelo caminho lógico", async () => {
+  const root = await branchComBaselineViaSymlink({ legacy: true });
+  const r = run(root, "check", "--all", "--base-ref=main");
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stderr, /adoção/);
+});
+
+test("R1-C1: fallback do HEAD em resolveBaseline usa o caminho lógico, não o físico", async () => {
+  const root = repo();
+  toLegacyLayout(root);
+  git(root, "add", "-A");
+  assert.equal(await human(root, "baseline", "init"), 0);
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  // Na árvore, o diretório vira symlink para uma cópia SEM baseline.json.
+  const eng = join(root, ".context/engineering/standards");
+  renameSync(eng, join(root, ".context/engineering/x"));
+  rmSync(join(root, ".context/engineering/x/baseline.json"));
+  symlinkSync("x", eng);
+  const r = resolveBaseline(root);
+  assert.ok(r.baseline, `esperado o baseline do HEAD, veio fonte '${r.source}'`);
+  assert.match(r.source, /HEAD/);
+  assert.equal(run(root, "check", "--all").status, 0);
+});
+
+test("R1-I2: --base-ref começando com '-' → uso incorreto (exit 2)", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  for (const ref of ["--independent", "-h"]) {
+    assert.equal(run(root, "check", "--all", `--base-ref=${ref}`, "--ci").status, 2, ref);
+  }
+});
+
+test("R1-I2: --base-ref que não é commit → exit 3 em CI", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  const tree = git(root, "rev-parse", "HEAD^{tree}").trim();
+  assert.equal(run(root, "check", "--all", `--base-ref=${tree}`, "--ci").status, 3);
+});
+
+test("R1-I3: accept com fp malformado não ecoa o valor (nem C0/ANSI)", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  for (const bad of ['abc"; curl x|sh; echo "', "\x1b[31mvermelho\x1b[0m", "a\nb", "A".repeat(40)]) {
+    const r = run(root, "baseline", "accept", bad, "--reason", "x");
+    assert.equal(r.status, 2, JSON.stringify(bad));
+    const out = r.stdout + r.stderr;
+    assert.ok(!out.includes(bad), `ecoou ${JSON.stringify(bad)}`);
+    assert.doesNotMatch(out, /curl|\x1b|vermelho/);
+    const h = await captureErr(() => human(root, "baseline", "accept", bad, "--reason", "x"));
+    assert.equal(h.code, 2);
+    assert.ok(!h.err.includes(bad));
+  }
+});
+
+test("R1-4: --staged compara com o baseline do ÍNDICE, não com o da árvore", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  const nova = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]).blocking[0];
+  git(root, "add", "src/new.js");
+  const bl = JSON.parse(readFileSync(BL(root), "utf8"));
+  bl.entries.push({ fp: nova.fp, stdId: nova.stdId, ruleId: nova.ruleId, path: nova.path, message: nova.message, count: 1 });
+  writeFileSync(BL(root), JSON.stringify(bl)); // aumentado na árvore, NÃO staged
+  assert.equal(run(root, "check", "--all").status, 0, "a árvore passa…");
+  assert.equal(run(root, "check", "--staged").status, 1, "…o índice não");
+  git(root, "add", BL(root));
+  assert.equal(run(root, "check", "--staged").status, 0, "staged, o baseline do índice vale");
+});
+
+test("R1: CI=1 conta como CI (sem merge-base → 3) e desliga o modo interativo", () => {
+  const root = repo();
+  git(root, "commit", "-qm", "base");
+  assert.equal(runEnv(root, { CI: "1" }, "check", "--all", "--base-ref=nao-existe").status, 3);
+  assert.notEqual(runEnv(root, { CI: "false" }, "check", "--all", "--base-ref=nao-existe").status, 3);
+  assert.notEqual(runEnv(root, { CI: "0" }, "check", "--all", "--base-ref=nao-existe").status, 3);
+});
+
+test("R1: seleção ambígua → exit 2", () => {
+  const root = repo();
+  assert.equal(run(root, "check", "--staged", "--all").status, 2);
+  assert.equal(run(root, "check", "--staged", "src/old.js").status, 2);
+  assert.equal(run(root, "check", "--all", "src/old.js").status, 2);
+});
+
+test("R1: prune não aumenta — count 1 com 2 ocorrências atuais continua 1", async () => {
+  const root = repo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/old.js"), "BAD\nBAD\n");
+  assert.equal(run(root, "baseline", "prune").status, 0);
+  const entries = JSON.parse(readFileSync(BL(root), "utf8")).entries;
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].count, 1);
+});
+
+test("R1: enforce em frontmatter CRLF grava o nível e preserva o EOL", () => {
+  const root = demoProject({ level: "warn" });
+  const md = join(root, ".context/engineering/standards/std-demo.md");
+  writeFileSync(md, readFileSync(md, "utf8").replace(/\n/g, "\r\n"));
+  assert.equal(run(root, "enforce", "std-demo", "--level", "block").status, 0);
+  const txt = readFileSync(md, "utf8");
+  assert.match(txt, /\r\n  level: block\r\n/);
+  assert.doesNotMatch(txt.replace(/\r\n/g, ""), /\n/, "nenhuma quebra LF solta");
+  assert.match(run(root, "explain", "src/x.js").stdout, /std-demo — nível block/);
+});

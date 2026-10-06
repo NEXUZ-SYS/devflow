@@ -15,9 +15,13 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { defaultIds } from "../helpers/standards-fixture.mjs";
 
 const REPO_ROOT = process.cwd();
 const FIXTURE = join(REPO_ROOT, "tests", "2026-05-11");
+// T10/C16 (ADR-015 D5): ver comentário equivalente em test-e2e-2026-05-08.mjs — o índice
+// agora sempre inclui os defaults REAIS do plugin (loadEffectiveStandards).
+const DEFAULT_STDS_COUNT = defaultIds().length;
 const INDEX_CLI = join(REPO_ROOT, "scripts", "lib", "context-index-cli.mjs");
 const NUDGE_CLI = join(REPO_ROOT, "scripts", "lib", "edit-nudge-cli.mjs");
 
@@ -75,11 +79,12 @@ test("manifest: todas as 14 entries têm mcpIndexed:true (paradigma novo)", () =
 
 // ─── Camada 1: índice com mcp-indexed status ───────────────────────────────
 
-test("Camada 1: 20 stds + 14 refs mcp-indexed", () => {
+test("Camada 1: 20 stds próprios (+ defaults do plugin) + 14 refs mcp-indexed", () => {
   const r = spawnSync("node", [INDEX_CLI, `--project=${FIXTURE}`, "--format=json"], { encoding: "utf-8" });
   assert.equal(r.status, 0, `stderr: ${r.stderr}`);
   const idx = JSON.parse(r.stdout);
-  assert.equal(idx.totals.standards, 20);
+  assert.equal(idx.standards.filter(s => s.origin !== "default").length, 20, "20 stds próprios da fixture");
+  assert.equal(idx.totals.standards, 20 + DEFAULT_STDS_COUNT);
   assert.equal(idx.totals.refs, 14);
   assert.equal(idx.totals.refsScraped, 14, "mcp-indexed count = todos os refs");
   for (const ref of idx.refs) {

@@ -2,15 +2,31 @@
 // assets/standards/machine/std-schemas.js — linter default bundlado (TCB do plugin).
 // Regra conservadora: sinaliza z.any() (desliga validação) e .passthrough()
 // (aceita campos arbitrários não validados) em schemas.
-// Contrato SI-4: filePath em argv[2]; violação → 'VIOLATION: ...' + exit 1.
+// Protocolo v2 (ADR-007 v3.1.0): uma linha por ocorrência → VIOLATION <ruleId> <arquivo>:<linha> <msg>
+//
+// Varredura sobre o CONTEÚDO INTEIRO com matchAll — uniformizado com os outros 16
+// (ver std-api-conventions.js), embora esta regra não tenha `\s` que cruze linha.
+// Linha via contador incremental O(n+k). lineFinder/norm DUPLICADOS.
 import { readFileSync } from "node:fs";
 const fp = process.argv[2];
 if (!fp) process.exit(0);
 let c = "";
 try { c = readFileSync(fp, "utf-8"); } catch { process.exit(0); }
-const hits = c.match(/z\.any\(\)|\.passthrough\(\)/g) || [];
-if (hits.length > 0) {
-  console.log(`VIOLATION: ${hits.length} uso(s) de z.any()/passthrough em schema em ${fp}. z.any() desliga a validação (use z.unknown() + .refine()); .passthrough() aceita campos arbitrários (declare o shape explícito). Ver std-schemas › Anti-patterns.`);
-  process.exit(1);
+
+function lineFinder(content) {
+  let pos = 0, line = 1;
+  return (index) => { while (pos < index) { if (content.charCodeAt(pos) === 10) line++; pos++; } return line; };
 }
-process.exit(0);
+function norm(s) { return s.replace(/\s+/g, " ").trim(); }
+
+// process.exitCode, não process.exit(): em pipe, console.log é assíncrono e
+// exit() força saída antes da fila de escrita drenar, truncando achados — ver
+// std-api-conventions.js.
+const lineOf = lineFinder(c);
+const re = /z\.any\(\)|\.passthrough\(\)/g;
+let hits = 0;
+for (const m of c.matchAll(re)) {
+  hits++;
+  console.log(`VIOLATION schemas ${fp}:${lineOf(m.index)} validação desligada (${norm(m[0])})`);
+}
+process.exitCode = hits > 0 ? 1 : 0;

@@ -8,8 +8,9 @@
 //   node scripts/lib/devflow-config.mjs read-versioning <path>  → local | pipeline | none
 // Qualquer erro de leitura/parse/arquivo-grande imprime o fallback seguro.
 
-import { readFileSync, statSync, existsSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { parseYaml } from "./frontmatter.mjs";
+import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
 
 const MAX_BYTES = 256 * 1024; // cap anti-ReDoS / arquivo absurdo → fallback
 
@@ -149,7 +150,9 @@ function readTextOrNull(path) {
 // em readAutoFinish/readVersioning (paridade bit-exata com o fallback do hook).
 
 export const VERIFY_ALLOWLIST = new Set(["node","npm","pnpm","python","python3","pytest","make","bash","sh"]);
-const VERIFY_SIGNALS = new Set(["unit","integration","e2e","lint"]);
+const VERIFY_SIGNALS = new Set(["unit","integration","e2e","lint","standards"]);
+// ADR-013 v1.1.0 / ADR-015: o sinal standards é resolvido pelo plugin; o projeto não escolhe o comando.
+export const RESERVED_STANDARDS_ARGV = Object.freeze(["devflow-standards", "gate"]);
 
 // R-C1: rejeita execução de código inline varrendo TODOS os tokens do argv (não só argv[1]),
 // sensível ao interpretador. Fecha os vetores provados pela revisão: node -e/--eval/-p/--print/-pe
@@ -175,7 +178,7 @@ export function assertNoInlineCode(name, argv) {
   }
 }
 
-// Lê e valida o bloco verify:. Vocabulário fechado unit|integration|e2e|lint.
+// Lê e valida o bloco verify:. Vocabulário fechado unit|integration|e2e|lint|standards.
 // Comandos são argv arrays; argv[0] em allowlist; nenhum token é código inline.
 // Sem bloco → { signals:{}, onTaskComplete:[] } (D9: ausência não lança).
 // R-C6: distingue "sem verify:" (ausência legítima) de "verify: presente mas parse falhou"
@@ -201,7 +204,17 @@ export function readVerify(src) {
   const signals = {};
   for (const [key, val] of Object.entries(v)) {
     if (key === "onTaskComplete") continue;
-    if (!VERIFY_SIGNALS.has(key)) throw new Error(`sinal desconhecido '${key}' (vocabulário: unit, integration, e2e, lint)`);
+    if (!VERIFY_SIGNALS.has(key)) throw new Error(`sinal desconhecido '${key}' (vocabulário: unit, integration, e2e, lint, standards)`);
+    if (key === "standards") {
+      // Token reservado: o verify-run o expande pela própria raiz do plugin. Qualquer outro
+      // argv é recusado — um stub `exit 0` do projeto não pode forjar o verde.
+      if (!Array.isArray(val) || val.length !== RESERVED_STANDARDS_ARGV.length
+          || val.some((x, i) => x !== RESERVED_STANDARDS_ARGV[i])) {
+        throw new Error('verify.standards: use exatamente ["devflow-standards", "gate"] (resolvido pelo plugin; comando do projeto não é aceito)');
+      }
+      signals[key] = [...RESERVED_STANDARDS_ARGV];
+      continue;
+    }
     if (!Array.isArray(val)) throw new Error(`verify.${key}: deve ser um array argv (string não é permitida)`);
     if (val.length === 0) throw new Error(`verify.${key}: comando vazio`);
     if (val.some(x => typeof x !== "string")) throw new Error(`verify.${key}: todos os itens do argv devem ser strings`);
@@ -304,8 +317,13 @@ export function readFrameworkVersions(src) {
  * Nunca lanca.
  */
 export function readFrameworkVersionsFromPath(path) {
-  if (!path || !existsSync(path)) return new Map();
-  try { return readFrameworkVersions(readFileSync(path, "utf-8")); }
+  if (!path) return new Map();
+  // Leitura segura (T9): o hook síncrono lê este arquivo a cada edição. FIFO, symlink (ex.:
+  // para /dev/zero, que é versionável), dispositivo ou > 1 MiB → versões "ausentes" (Map
+  // vazio) em vez de travar o hook ou estourar a memória.
+  const text = readRegularFileSafe(path, SAFE_READ_MAX_BYTES);
+  if (text === null) return new Map();
+  try { return readFrameworkVersions(text); }
   catch { return new Map(); }
 }
 

@@ -2,8 +2,18 @@ name: Testes (sinal verificável)
 
 # Árbitro independente: re-roda os MESMOS sinais, pelo MESMO executor, lendo o
 # MESMO .devflow.yaml. Nasce verde (Task Group 0 zerou a suíte). Para vincular o
-# merge, configure estes 4 jobs como required status checks na branch protegida
+# merge, configure estes SEIS checks como required status checks na branch protegida, com os
+# nomes exatos: `sinal: unit`, `sinal: integration`, `sinal: e2e`, `sinal: lint`,
+# `sinal: standards` e `guards (anti-tamper, independentes de verify.lint)`
 # (ver docs/superpowers/plans/2026-07-14-verify-signal-pipeline.md, TG7 Step 6).
+#
+# O sinal `standards` (gate de standards, ADR-015) roda o código do gate do PRÓPRIO checkout:
+# neste repositório o plugin é o próprio PR (dogfooding). Por isso o CODEOWNERS dá dono a
+# `/scripts/` e a `/assets/standards/` inteiros (o gate importa módulos de scripts/lib/ e lê os
+# .md, os linters e o shim de assets/standards/), além deste workflow e do próprio CODEOWNERS;
+# "Require review from Code Owners" na `main` é o que protege o juiz.
+# Sem override aqui: este workflow não passa ao gate as variáveis de PR do override nem escuta
+# rótulo ou review, então enfraquecer a catraca deste repositório deixa o sinal vermelho.
 
 on:
   pull_request:
@@ -20,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        signal: [unit, integration, e2e, lint]
+        signal: [unit, integration, e2e, lint, standards]
     steps:
       - uses: actions/checkout@v4
         with:

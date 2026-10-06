@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# hooks/post-tool-use-lint — linters dos standards que podem bloquear, síncrono (ADR-015 D9).
+# Saída: UM JSON (decision:block ou additionalContext) ou nada. Falha aberto: sempre exit 0.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Captura antes de emitir: se o node morrer no meio, nada parcial chega ao stdout.
+OUT=$(node "${PLUGIN_ROOT}/scripts/lib/standards-hook-cli.mjs" --mode=sync 2>/dev/null) || OUT=""
+if [ -n "$OUT" ]; then printf '%s' "$OUT"; fi
+exit 0

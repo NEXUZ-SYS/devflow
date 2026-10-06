@@ -5,8 +5,12 @@
  * Conjunto curado conservador (baixo falso-positivo, alto sinal). Para cada um:
  *   - existe assets/standards/machine/std-<id>.js
  *   - enforcement.linter no .md aponta para machine/std-<id>.js
- *   - um snippet VIOLADOR dispara (VIOLATION + exit 1)
+ *   - um snippet VIOLADOR dispara no protocolo v2 (VIOLATION <ruleId> <path>:<linha> <msg> + exit 1)
  *   - um snippet CONFORME NÃO dispara (FP bar — exit 0, sem VIOLATION)
+ *
+ * Todos os ids desta lista são linters de REGRA ÚNICA (protocolo v2, ADR-007 v3.1.0);
+ * os 3 multi-regra (std-design-antipatterns, std-visual-quality, std-accessibility)
+ * ficam no formato legado estruturado e não entram aqui.
  */
 
 import { describe, it } from "node:test";
@@ -62,6 +66,8 @@ const CURATED = [
     good: 'app.post("/v1/orders", handler);\n' },
 ];
 
+const V2_RE_TPL = ruleId => new RegExp(`^VIOLATION ${ruleId} .+:\\d+ .+$`, "m");
+
 function runLinter(linterPath, content) {
   const tmp = mkdtempSync(join(tmpdir(), "tg4-"));
   const f = join(tmp, "sample.tsx");
@@ -102,10 +108,11 @@ describe("TG4 — linters default curados + FP bar", () => {
         `${id}.md enforcement.linter deve apontar para machine/${id}.js`);
     });
 
-    it(`${id}: snippet violador dispara VIOLATION`, () => {
+    it(`${id}: snippet violador dispara VIOLATION no protocolo v2 (ruleId + path:linha)`, () => {
       const r = runLinter(linterPath, bad);
       assert.equal(r.status, 1, `esperava exit 1 no violador: ${r.stdout}`);
-      assert.match(r.stdout, /^VIOLATION:/m, `esperava VIOLATION: ${r.stdout}`);
+      const ruleId = id.replace(/^std-/, "");
+      assert.match(r.stdout, V2_RE_TPL(ruleId), `esperava protocolo v2 (VIOLATION ${ruleId} <path>:<linha> <msg>): ${r.stdout}`);
     });
 
     it(`${id}: snippet conforme NÃO dispara (FP bar)`, () => {

@@ -105,6 +105,18 @@ After loading knowledge, check for relevant stacks:
 
 **Fallback:** If `devflow:stack-filter` is unavailable or the project declares no deps, proceed without stack context — opt-in, like the ADR/knowledge filters.
 
+### All Modes — Standards Layer Loading (por caminho do plano)
+
+Depois das stacks, carregue as normas que o plano vai tocar:
+
+1. Liste os caminhos (arquivos ou globs) que o design pretende criar ou alterar.
+2. Rode `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" explain <caminhos…>`.
+3. Para cada standard `block` ou `review` listado, leia Princípios e Anti-patterns do arquivo e trate-os como **restrições duras** do design, como os guardrails de ADR.
+4. No plano, cada grupo de tarefas declara `**Standards:** <ids>`; a fase R confere essa declaração.
+5. Fase E: no Step 4.5 (geração do `stories.yaml`), a `description` de cada story inclui a linha `Standards: <ids>` do grupo de tarefas de origem, para o implementador saber quais normas o hook vai cobrar.
+
+Anuncie: "Loaded N standards (B block, R review) for the planned paths."
+
 ## Step 2: Brainstorming
 
 **REQUIRED SUB-SKILL:** Invoke `superpowers:brainstorming`
@@ -275,7 +287,7 @@ When `--from-prd` is set or prevc-flow detected an active PRD:
 2. For each task group in the plan, create a story entry:
    - `id`: Sequential (S1, S2, S3, ...)
    - `title`: Task group title
-   - `description`: Combine the task group's steps into a concise description that fits in 1 context window
+   - `description`: Combine the task group's steps into a concise description that fits in 1 context window; inclua a linha `Standards: <ids>` declarada no grupo de tarefas
    - `agent`: Use the agent annotation from the plan (e.g., `backend-specialist`)
    - `priority`: Sequential based on plan order
    - `blocked_by`: Derive from task dependencies (if Task 3 depends on Task 1, S3 blocked_by [S1])
@@ -343,12 +355,16 @@ requiredSignals: [unit, e2e]
 ```
 
 Regras:
-- Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`.
+- Vocabulário fechado: `unit`, `integration`, `e2e`, `lint`, `standards`.
 - A derivação é humana (você escolhe consultando a tabela de tipos de teste); a
   verificação é mecânica (uma vez declarado `e2e`, a fase V exige `exit 0` observado).
 - Declare `e2e` quando a task toca auth, pagamentos, fluxos de usuário, CLI/hooks
   (mesma regra do "E2E is mandatory when…" da prevc-validation).
 - Declare `lint` sempre (gate determinístico não é opcional por task — D6).
+- Declare `standards` quando o projeto tiver algum standard que pode chegar a
+  `block` (a Standards Layer Loading acima já informa isso). Nesse caso o
+  próprio `verify-gate` já torna o sinal obrigatório (ADR-013 v1.1.0) — declarar
+  aqui só torna explícito o que a fase V vai exigir de qualquer forma.
 - **Não** infira sinais dos paths tocados (heurística frágil, rejeitada em D2). A
   fase R revisa a escolha.
 

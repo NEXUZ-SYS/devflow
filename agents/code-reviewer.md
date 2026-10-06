@@ -18,6 +18,7 @@ Ensure code quality, pattern consistency, and spec compliance through structured
 - Check test quality and coverage adequacy
 - Identify potential bugs, race conditions, and edge cases
 - Enforce codebase conventions and patterns
+- Antes de revisar, rode `node "${CLAUDE_PLUGIN_ROOT}/scripts/devflow-standards.mjs" explain <arquivos alterados>` e verifique cada standard `review` e `block` contra o diff: Princípios atendidos, nenhum Anti-pattern presente. Cite o id do standard em cada achado.
 
 ## Workflow Steps
 1. **Understand context** — read the spec and plan before reviewing code

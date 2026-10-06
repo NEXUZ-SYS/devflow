@@ -7,8 +7,8 @@
 //
 // Per SI-1: invoked as a file via stdin, never node -e.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readRegularFileDetailed, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
 import { evaluateConfigChange, parseGitSection } from "./devflow-config-guard.mjs";
 import { resolveBranch } from "./git-op-guard.mjs";
 
@@ -16,6 +16,13 @@ const CONFIG_REL = ".context/.devflow.yaml";
 const allow = (reason) => { console.log(JSON.stringify({ decision: "allow", reason })); process.exit(0); };
 
 const MAX = 1024 * 1024;
+// O .devflow.yaml do disco: segue symlink (como sempre), mas FIFO/dispositivo ou > 1 MiB viram
+// "ausente" em vez de travar o hook (achado da T16: o ask pendente da catraca deixa o hook
+// chegar até aqui com o arquivo da catraca ainda não regular).
+const readDisk = (p) => {
+  const r = readRegularFileDetailed(p, SAFE_READ_MAX_BYTES, { nofollow: false });
+  return r.ok ? r.text : null;
+};
 let raw = "";
 process.stdin.setEncoding("utf-8");
 process.stdin.on("data", c => { if (raw.length + c.length > MAX) process.exit(0); raw += c; });
@@ -34,7 +41,7 @@ process.stdin.on("end", () => {
         encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"],
       });
     } catch {
-      if (existsSync(diskPath)) currentText = readFileSync(diskPath, "utf-8");
+      currentText = readDisk(diskPath) ?? "";
     }
     if (!currentText) allow("sem config atual — nada a proteger");
 
@@ -43,7 +50,7 @@ process.stdin.on("end", () => {
     if (typeof ti.content === "string") {
       proposedText = ti.content;
     } else if (typeof ti.new_string === "string") {
-      const onDisk = existsSync(diskPath) ? readFileSync(diskPath, "utf-8") : currentText;
+      const onDisk = readDisk(diskPath) ?? currentText;
       proposedText = ti.old_string ? onDisk.replace(ti.old_string, ti.new_string) : onDisk;
     } else {
       allow("evento sem conteúdo proposto");
