@@ -1,5 +1,5 @@
 // scripts/lib/instinct-store.mjs
-import { open, unlink, readFile, writeFile, mkdir, readdir, rename } from 'node:fs/promises';
+import { open, unlink, readFile, writeFile, mkdir, readdir, rename, stat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { statusFor } from './instinct-confidence.mjs';
 import { redact } from './instinct-redact.mjs';
@@ -41,7 +41,12 @@ async function isLockStale(lockFile) {
     const { pid, ts } = JSON.parse(await readFile(lockFile, 'utf-8'));
     if (Date.now() - ts > LOCK_EXPIRY_MS) return true;
     try { process.kill(pid, 0); return false; } catch { return true; }
-  } catch { return true; }
+  } catch {
+    // Ilegível não prova abandono: o 'wx' cria o lock vazio e o pid/ts só chega na escrita
+    // seguinte. Sem conteúdo, decide a idade do arquivo; se ele sumiu, o dono já liberou.
+    try { return Date.now() - (await stat(lockFile)).mtimeMs > LOCK_EXPIRY_MS; }
+    catch { return false; }
+  }
 }
 
 const ser = (i) => `---
