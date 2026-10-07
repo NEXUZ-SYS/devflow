@@ -1,7 +1,7 @@
 // scripts/lib/instinct-store.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as store from './instinct-store.mjs';
@@ -43,6 +43,27 @@ test('withLock serializa escrita concorrente', async () => {
     cur--;
   })));
   assert.equal(max, 1);
+});
+
+test('withLock não toma lock recém-criado e ainda sem conteúdo', async () => {
+  const d = await sandbox();
+  const lock = join(d, '.lock');
+  await writeFile(lock, ''); // o dono já criou o arquivo ('wx') e ainda não gravou pid/ts
+  let ran = false;
+  await assert.rejects(store.withLock(d, async () => { ran = true; }, 2), /could not acquire lock/);
+  assert.equal(ran, false);
+  assert.equal(await readFile(lock, 'utf-8'), '');
+});
+
+test('withLock recupera lock sem conteúdo quando o arquivo é antigo', async () => {
+  const d = await sandbox();
+  const lock = join(d, '.lock');
+  await writeFile(lock, '');
+  const old = new Date(Date.now() - 60_000);
+  await utimes(lock, old, old);
+  let ran = false;
+  await store.withLock(d, async () => { ran = true; });
+  assert.equal(ran, true);
 });
 
 test('upsert global grava em global/ e indexa em scope global (C2)', async () => {

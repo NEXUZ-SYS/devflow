@@ -88,11 +88,16 @@ apontou; corrigi-los é o que tira as exceções da ADR.
   caracteres (`hooks/session-start`). A ADR-015 manda emoldurar todo corpo de ADR injetado e não
   passar de 9000 caracteres por campo; o que esta entrega emoldura e limita são os canais que
   ela criou.
-- **Teste instável na suíte unit.** "withLock serializa escrita concorrente", em
-  `scripts/lib/instinct-store.test.mjs`, falha em cerca de uma de cinco rodadas do
-  `tests/run-unit.sh`: um processo lê o arquivo de lock ainda vazio, trata-o como abandonado e o
-  apaga. O check `sinal: unit` pode sair vermelho ao acaso, e
-  `tests/scripts/test-verify-runners.sh`, que roda a suíte unit inteira, herda a falha.
+- **Resíduos do lock de arquivo.** O teste instável "withLock serializa escrita concorrente" foi
+  corrigido (lock recém-criado, ainda vazio, era dado como abandonado), e com ele o lock do
+  `adr-update-index`, que nunca segurava. Ficaram três pontos no `withLock` das duas cópias
+  (`scripts/lib/instinct-store.mjs` e `scripts/adr-update-index.mjs`), apontados por leitura do
+  código e não reproduzidos: a remoção de um lock abandonado não é atômica (dois concorrentes
+  que encontram o mesmo lock de dono morto podem ambos removê-lo, e o segundo apaga o lock que o
+  primeiro acabou de criar); um erro `EEXIST` lançado pela função protegida é tratado como
+  disputa pelo lock e a função roda de novo; e a liberação apaga o `.lock` sem conferir se ainda
+  é o próprio, o que atinge o dono que passou do prazo de 30 s. O código do lock segue duplicado
+  nos dois arquivos.
 - **Standard com faixa de versão de framework nunca se aplica.** O loader
   (`scripts/lib/standards-loader.mjs`) não lê o campo `framework`, então a checagem de versão
   sempre falha fechada (ADR-008).

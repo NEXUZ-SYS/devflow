@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — O lock de arquivo tomava um lock vivo (`instinct-store`) e nunca segurava (`adr-update-index`)
+
+Dois defeitos no mesmo padrão de lock (`open(…, 'wx')` e depois `pid`/`ts` gravados no arquivo), cada um com teste que falhava antes da correção.
+
+- **`scripts/lib/instinct-store.mjs`: lock recém-criado era dado como abandonado.** O `'wx'` cria o arquivo vazio e o `pid`/`ts` só chega na escrita seguinte. O concorrente que lia nesse intervalo não conseguia interpretar o conteúdo, concluía "abandonado" e apagava um lock vivo, e dois chamadores entravam juntos na seção crítica. Era a causa do teste instável "withLock serializa escrita concorrente": 28 falhas em 40 rodadas do arquivo isolado antes, nenhuma em 200 depois. Agora, sem conteúdo legível, só a idade do arquivo prova abandono (mais de 30 s).
+- **`scripts/adr-update-index.mjs`: o lock nunca segurou.** A constante do prazo era declarada depois do bloco de topo que já usa o lock; a leitura lançava `ReferenceError`, e o `catch` genérico tratava o erro como "abandonado". Todo lock existente era removido, com dono vivo ou não. A constante sobe para antes do uso e o script ganha o mesmo critério de idade.
+
+O que muda para quem usa: duas execuções simultâneas do `adr-update-index` agora se revezam, e a que não conseguir o lock em cinco tentativas sai com código 2 e `could not acquire lock`. Um lock vazio deixado por um processo que morreu entre criar o arquivo e gravar nele passa a segurar por até 30 s, em vez de ser removido na hora.
+
 ## [3.5.0] — 2026-10-07
 
 ### Added — Enforcement determinístico de standards e entrega de contexto (ADR-015)
