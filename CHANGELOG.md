@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.5.0] — 2026-10-07
+
 ### Added — Enforcement determinístico de standards e entrega de contexto (ADR-015)
 
 Os standards deixam de ser lembrete e viram gate: o linter rodava num hook assíncrono que nunca bloqueava, e nenhum pre-commit, CI ou fase V o executava. Entrega em três releases lógicas. Desenho: [spec](docs/superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md) · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md) · uso: [guia](docs/guia-enforcement-standards.md).
