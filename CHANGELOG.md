@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.5.1] — 2026-10-07
+
 ### Fixed — O lock de arquivo tomava um lock vivo (`instinct-store`) e nunca segurava (`adr-update-index`)
 
 Dois defeitos no mesmo padrão de lock (`open(…, 'wx')` e depois `pid`/`ts` gravados no arquivo), cada um com teste que falhava antes da correção.
