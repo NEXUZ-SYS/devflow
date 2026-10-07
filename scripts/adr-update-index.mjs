@@ -3,12 +3,16 @@
 // Subcommands: --next-number | --resolve=<query> | (default: regenerate)
 // Security: S4 (advisory lock with pid/ts liveness), S6 (path traversal mitigation).
 
-import { readdir, readFile, writeFile, open, unlink, mkdir } from 'node:fs/promises';
+import { readdir, readFile, writeFile, open, unlink, mkdir, stat } from 'node:fs/promises';
 import { resolve, join, basename, extname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { parse } from './lib/adr-frontmatter.mjs';
 import { compareSemver } from './lib/adr-semver.mjs';
 import { resolveAdrPath } from './lib/path-resolver.mjs';
+
+// Antes do bloco de topo que já chama withLock: declarada depois dele, a constante ficava
+// na zona morta e todo lock existente era dado como abandonado.
+const LOCK_EXPIRY_MS = 30000;
 
 const args = process.argv.slice(2);
 const rawProject = args.find((a) => a.startsWith('--project='))?.slice(10) || '.';
@@ -70,8 +74,6 @@ try {
 
 // ─── Lock with S4 liveness recovery ───────────────────────────────────────
 
-const LOCK_EXPIRY_MS = 30000;
-
 async function withLock(dir, fn, retries = 5) {
   const lockFile = join(dir, '.lock');
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -114,7 +116,13 @@ async function isLockStale(lockFile) {
       return true;
     }
   } catch {
-    return true;
+    // Ilegível não prova abandono: o 'wx' cria o lock vazio e o pid/ts só chega na escrita
+    // seguinte. Sem conteúdo, decide a idade do arquivo; se ele sumiu, o dono já liberou.
+    try {
+      return Date.now() - (await stat(lockFile)).mtimeMs > LOCK_EXPIRY_MS;
+    } catch {
+      return false;
+    }
   }
 }
 
