@@ -25,8 +25,8 @@ phases:
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
-    status: pending
-    summary: "Revisão por architect e security-auditor. A peça é de garantia (aumenta o baseline): a revisão de segurança tenta derrubar, com prova de conceito sobre o código existente, o que a tabela da seção 7 da spec diz que segura cada ameaça."
+    status: completed
+    summary: "Arquiteto: aprovado com ressalvas (plano aplicado numa cópia, sem achado crítico). Segurança: o desenho se sustenta com correções; o gate do CI não foi derrubado, mas o relato não mostrava o que o operador aceita (1 alto, 1 médio, 9 baixos, com prova de conceito). Incorporado na spec e no plano: entrada inalterada fica intacta, caminho novo exige --allow-new-paths (decisão do operador), opção desconhecida é uso, recusa quando nenhum linter rodou, releitura antes de gravar. O teto do log do gate e os demais achados em código antigo foram para as pendências. Re-revisão de segurança na fase V, com as provas de conceito reexecutadas (decisão do operador)."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
@@ -38,7 +38,7 @@ phases:
       - e2e
     required_artifacts:
       - handoff-summary
-    summary: "Task 1: função pura reinitStandard com 5 testes unit. Task 2: ramo reinit em cmdBaseline com 13 testes pelo CLI real e a asserção do guard de Bash. Task 3: guia, CHANGELOG, pendências e item de enforcement da ADR-015."
+    summary: "Task 1: função pura reinitStandard com 9 testes unit. Task 2: campo linterRuns no resultado do checkFiles. Task 3: ramo reinit em cmdBaseline com 18 testes pelo CLI real e a asserção do guard de Bash. Task 4: guia, CHANGELOG, pendências e ADR-015 v1.1.0."
   - id: "phase-3"
     name: "Validation"
     prevc: "V"
@@ -50,13 +50,13 @@ phases:
       - e2e
     required_artifacts:
       - validation-summary
-    summary: "Sinais unit, integration, e2e, lint e standards observados no ledger pelo verify-run, com o verify-gate em exit 0. Auditoria da ADR tocada. Revisão de segurança da implementação com prova de conceito."
-lastUpdated: "2026-10-08T00:00:00.000Z"
+    summary: "Sinais unit, integration, e2e, lint e standards observados no ledger pelo verify-run, com o verify-gate em exit 0. Auditoria da ADR tocada. Revisão de segurança da implementação, reexecutando contra o código real as provas de conceito da fase R."
+lastUpdated: "2026-10-08T15:01:15.225Z"
 ---
 
 # `baseline reinit` — Plano (dotcontext tracking)
 
-> Este arquivo é o **tracking** dotcontext. O plano executável canônico (3 tasks, teste antes do código) está em [`docs/superpowers/plans/2026-10-08-baseline-reinit-standard.md`](../../docs/superpowers/plans/2026-10-08-baseline-reinit-standard.md). O desenho aprovado está em [`docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md`](../../docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
+> Este arquivo é o **tracking** dotcontext. O plano executável canônico (4 tasks, teste antes do código) está em [`docs/superpowers/plans/2026-10-08-baseline-reinit-standard.md`](../../docs/superpowers/plans/2026-10-08-baseline-reinit-standard.md). O desenho aprovado está em [`docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md`](../../docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
 
 ## Objetivo
 
@@ -69,14 +69,17 @@ Dar ao operador um caminho para refazer o baseline de **um** standard quando o l
 3. Dois subprojetos e dois PRs; o comando vem antes da migração dos 21 linters.
 4. A ADR-015 registra o segundo caminho do operador (v1.1.0).
 5. Execução inline, pelo próprio agente da sessão.
+6. Depois da revisão de segurança: caminho novo é recusado por padrão e só entra com `--allow-new-paths`.
+7. Os achados da revisão entram neste PR; a re-revisão de segurança é na fase V, com as provas de conceito reexecutadas.
 
 ## Tasks
 
 | # | Entrega | Testes |
 |---|---|---|
-| 1 | `reinitStandard` em `scripts/lib/standards-baseline.mjs` | 5 unit (um de propriedade) |
-| 2 | Ramo `reinit` em `cmdBaseline`, uso e ajuda | 13 pelo CLI real + 1 do guard de Bash |
-| 3 | Guia, CHANGELOG, pendências, ADR-015 | sinais existentes |
+| 1 | `reinitStandard` em `scripts/lib/standards-baseline.mjs` | 9 unit (um de propriedade) |
+| 2 | `linterRuns` no resultado de `checkFiles` | 1 unit |
+| 3 | Ramo `reinit` em `cmdBaseline`, uso e ajuda | 18 pelo CLI real + 1 do guard de Bash |
+| 4 | Guia, CHANGELOG, pendências, ADR-015 | sinais existentes |
 
 ## Evidências
 
@@ -84,3 +87,7 @@ Dar ao operador um caminho para refazer o baseline de **um** standard quando o l
 - ADR-015 v1.1.0: commit `8c9b15a`
 - Plano: commit `eb72e18`
 - Branch: `feature/baseline-reinit-standard`
+
+## Execution History
+
+> Last updated: 2026-10-08T15:01:15.225Z | Progress: 0%

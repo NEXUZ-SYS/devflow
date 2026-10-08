@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-08
 **Workflow PREVC:** `baseline-reinit-standard` · **Escala:** MEDIUM · **Autonomia:** supervised
-**Status:** desenho aprovado em conversa pelo operador; aguardando a revisão desta spec
+**Status:** aprovada pelo operador; revisada na fase R em 2026-10-08 (arquiteto: aprovado com ressalvas; segurança: o desenho se sustenta com correções), com os achados incorporados e as decisões 4 e 5 do operador
 **Origem:** `docs/superpowers/2026-10-06-standards-enforcement-pendencias.md` §2 (migração dos
 linters legados)
 
@@ -34,6 +34,11 @@ mensagem de todos eles de uma vez. Qualquer projeto que tenha promovido um desse
 2. A transição ganha um **comando próprio**, em vez de só uma receita manual documentada.
 3. O comando se chama **`reinit`** e vale para **qualquer standard**, não só para os que tiveram
    o linter migrado.
+4. **Caminho novo é recusado por padrão.** Violação em arquivo que não tinha nenhuma entrada
+   daquele standard só é aceita com a flag `--allow-new-paths` (decisão tomada depois da
+   revisão de segurança).
+5. Os achados da revisão entram neste PR; a re-revisão de segurança acontece na fase V, com as
+   provas de conceito do auditor reexecutadas contra o código real.
 
 A migração dos linters tem spec própria, a escrever depois desta entrega. Já está decidido para
 ela: um `ruleId` por verificação nos 18 linters de perfil.
@@ -41,14 +46,14 @@ ela: um `ruleId` por verificação nos 18 linters de perfil.
 ## 3. Interface
 
 ```
-devflow-standards baseline reinit <std-id> --reason "<justificativa>"
+devflow-standards baseline reinit <std-id> --reason "<justificativa>" [--allow-new-paths]
 ```
 
 | Exit | Quando |
 |---|---|
 | 0 | Gravou o baseline novo, ou não havia diferença a gravar |
 | 2 | Uso incorreto ou ação recusada |
-| 3 | Erro de execução (linter fora do contrato, baseline inválido) |
+| 3 | Erro de execução (linter fora do contrato, baseline inválido, baseline alterado durante a execução) |
 
 São os mesmos códigos dos outros subcomandos de `baseline`.
 
@@ -56,43 +61,74 @@ São os mesmos códigos dos outros subcomandos de `baseline`.
 
 ### 4.1 Pré-condições, nesta ordem
 
-1. **Argumentos válidos.** `<std-id>` casa `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` e `--reason` não
-   é vazio. Senão: mensagem de uso, exit 2, **sem ecoar** o valor recebido. A validação vem antes
-   de qualquer mensagem que repita o id, pelo mesmo motivo do `accept`: o valor pode vir do
-   agente e vai parar num comando que o humano cola no terminal.
+1. **Argumentos válidos.** Exatamente um `<std-id>`, que casa
+   `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`; `--reason` não vazio e com até 500 caracteres; nenhuma
+   opção além de `--reason` e `--allow-new-paths`. Senão: mensagem de uso, exit 2, **sem ecoar**
+   nenhum valor recebido. A validação vem antes de qualquer mensagem que repita o id, pelo
+   mesmo motivo do `accept`: o valor pode vir do agente e vai parar num comando que o humano
+   cola no terminal. Opção desconhecida é uso incorreto, nunca ignorada: `--dry-run` não pode
+   gravar.
 2. **Terminal interativo e fora de CI.** Senão: recusa pelo caminho existente
    (`refuseNonInteractive`), exit 2.
 3. **Baseline existe** (no arquivo ou, removido da árvore, na versão do HEAD). Senão: exit 2,
    apontando o `baseline init`.
 4. **`<std-id>` é um standard efetivo do projeto**, isto é, está no mesmo conjunto que o `check`
-   avalia (defaults do plugin, perfis e os do projeto, já descontados os desligados). Senão:
-   exit 2. Um standard removido ou desligado que ainda tenha entradas sai pelo `prune`.
+   avalia (defaults do plugin, perfis e os do projeto, já descontados os desligados). A
+   comparação é estrita: o id do standard tem de ser a mesma string. Senão: exit 2. Um standard
+   removido ou desligado que ainda tenha entradas sai pelo `prune`.
+
+Um standard real cujo id não casa o formato do item 1 não pode ser refeito por este comando; a
+mensagem de uso diz qual é o formato aceito.
 
 ### 4.2 Execução
 
-Roda **só o linter do standard alvo** sobre todos os arquivos do projeto, sem baseline. Se o
-linter falhar em qualquer arquivo, sai com 3 e **não grava nada**.
+Roda **só o linter do standard alvo** sobre todos os arquivos do projeto, sem baseline.
 
-Isto refina o que foi apresentado em conversa ("roda os linters no projeto inteiro"): os outros
-standards não são reavaliados, porque as entradas deles não mudam. Um linter quebrado de outro
-standard não impede a operação.
+- Se o linter sair do contrato em qualquer arquivo, o comando sai com 3 e **não grava nada**.
+- Se **nenhum linter chegou a rodar** para o standard (sem linter declarado, ou o `applyTo` não
+  casa nenhum arquivo), o comando recusa com exit 2 e aponta o `prune`. Ausência de execução
+  não é o mesmo que "sem achados", e não pode zerar as entradas.
+
+Os outros standards não são reavaliados, porque as entradas deles não mudam. Um linter quebrado
+de outro standard não impede a operação.
 
 ### 4.3 Resultado
 
-- As entradas dos **outros** standards ficam exatamente como estavam: mesmos campos, mesma ordem.
-- As entradas do standard alvo saem todas, inclusive as órfãs.
-- Entram os achados atuais do standard alvo, de qualquer nível, uma entrada por impressão
-  digital com a contagem de ocorrências. Cada entrada nova registra a justificativa, quem rodou
-  e a data. Ficam depois das preservadas, na ordem em que o engine devolve os achados.
-- **Sem diferença, não grava.** Se o conjunto de impressões digitais e contagens do standard já
-  é o atual, o comando informa isso e sai com 0 sem tocar no arquivo. Evita um diff só de datas
-  num arquivo que tem dono no `CODEOWNERS`.
+Cada impressão digital do standard alvo cai num de quatro casos:
 
-### 4.4 Relato
+| Caso | Condição | O que acontece com a entrada |
+|---|---|---|
+| Mantida | Mesma impressão digital, mesma contagem | Fica **intacta**: mesma justificativa, mesmo autor, mesma data |
+| Alterada | Mesma impressão digital, contagem diferente | Regravada com a contagem atual e a justificativa desta execução |
+| Nova | Impressão digital que não existia | Criada com a contagem atual e a justificativa desta execução |
+| Removida | Impressão digital sem achado atual | Sai |
 
-Uma linha com o que saiu e o que entrou, em entradas e em ocorrências, e a contagem do que
-entrou por regra. Se o linter do standard ainda está no protocolo antigo, o aviso que o `init` e
-o `check` já emitem.
+- As entradas dos **outros** standards não são tocadas: mesmos campos, mesmos valores.
+- **Sem diferença, não grava.** Se todas as entradas do standard são mantidas, o comando informa
+  isso e sai com 0 sem tocar no arquivo.
+- **Releitura antes de gravar.** Se o baseline mudou entre a leitura inicial e o momento de
+  gravar (outro comando gravou no meio), o comando sai com 3 sem gravar.
+- No arquivo, quem define a ordem é o `saveBaseline`, que já grava as entradas ordenadas por
+  impressão digital. Este comando não muda isso.
+
+### 4.4 Caminho novo
+
+Um **caminho novo** é um arquivo com achado atual que não tinha nenhuma entrada daquele standard
+no baseline. Migração de mensagem ou de regra não cria caminho novo: os arquivos são os mesmos.
+
+- Sem `--allow-new-paths`: o comando lista os caminhos novos, **não grava** e sai com 2,
+  dizendo como repetir com a flag.
+- Com `--allow-new-paths`: grava, e os caminhos novos aparecem no relato.
+
+A lista sai inteira, sem teto de linhas.
+
+### 4.5 Relato
+
+- Uma linha com mantidas, novas, alteradas e removidas, em entradas e em ocorrências.
+- Quantas execuções de linter houve.
+- A contagem por regra das ocorrências que entraram (novas e alteradas).
+- Os caminhos novos e os **caminhos que ganharam ocorrências** (antes → depois), sem teto.
+- O aviso de protocolo legado que o `init` e o `check` já emitem, quando for o caso.
 
 ## 5. O que não muda
 
@@ -106,14 +142,19 @@ o `check` já emitem.
   `baseline.json`.
 - **O formato do baseline** (versão 1).
 
+O engine ganha um campo aditivo no resultado do `checkFiles`: quantas execuções de linter foram
+despachadas. É o que permite distinguir "rodou e não achou nada" de "não rodou".
+
 ## 6. Estrutura
 
 - **`reinitStandard(baseline, findings, stdId, { reason, by })`**, função pura em
-  `scripts/lib/standards-baseline.mjs`. Devolve o baseline novo e um resumo (o que saiu, o que
-  entrou, e se houve diferença). Não lê disco nem roda linter.
+  `scripts/lib/standards-baseline.mjs`. Devolve o baseline novo e um resumo: mantidas, novas,
+  alteradas, removidas, contagem por regra, caminhos novos e caminhos que cresceram. Não lê
+  disco nem roda linter.
+- **Campo `linterRuns`** no resultado de `checkFiles`, em `scripts/lib/standards-engine.mjs`.
 - **Ramo `reinit` em `cmdBaseline`**, em `scripts/lib/standards-check-cli.mjs`: valida, coleta os
-  achados com o `stdFilter` do engine, chama a função pura, grava com o `saveBaseline` existente
-  e imprime o relato.
+  achados com o `stdFilter` do engine, chama a função pura, aplica a recusa de caminho novo,
+  relê o baseline, grava com o `saveBaseline` existente e imprime o relato.
 
 Nenhum módulo novo. A escrita reaproveita o `saveBaseline`, com a contenção por caminho real
 que ele já faz.
@@ -121,60 +162,82 @@ que ele já faz.
 ## 7. Segurança
 
 O comando aumenta o baseline, então é da mesma classe do `init` e do `accept` (ADR-015, D6: só o
-humano aumenta o baseline). A tabela diz o que segura cada ameaça; é o que a revisão da fase R
-deve tentar derrubar com prova de conceito.
+humano aumenta o baseline). A revisão da fase R atacou cada linha com prova de conceito; a
+tabela já traz o que resultou.
 
-| Ameaça | O que segura |
-|---|---|
-| O agente roda o comando | Recusa fora de terminal interativo e em CI; guard de Bash pede confirmação |
-| Texto do agente chega ao terminal do operador pela mensagem de recusa | Id validado por formato antes de qualquer eco; a justificativa nunca é ecoada |
-| O comando mexe em entradas de outro standard | Função pura com teste de propriedade: as outras entradas saem idênticas |
-| Linter quebrado conta como "sem achados" e zera as entradas | Erro de linter sai com 3 antes de gravar |
-| Escrita fora do projeto por link simbólico | `saveBaseline` existente (contenção por caminho real) |
-| Baseline refeito passa no CI sem aprovação | Gate inalterado: aumento de entradas exige o override do dono |
+| Ameaça | O que segura | Resultado da revisão |
+|---|---|---|
+| O agente roda o comando | Recusa fora de terminal interativo e em CI; guard de Bash pede confirmação | Igual ao `init` e ao `accept`. Terminal falso (`script(1)`) contorna os três: resíduo já declarado na ADR-015 |
+| Texto do agente chega ao terminal do operador pela mensagem de recusa | Id validado por formato antes de qualquer eco; justificativa e opção desconhecida nunca ecoadas | Não derrubado com 14 ids hostis |
+| O comando mexe em entradas de outro standard | Função pura com teste de propriedade; releitura antes de gravar | Não derrubado na função; a corrida entre ler e gravar foi demonstrada e é o que a releitura fecha |
+| Linter quebrado ou que não rodou conta como "sem achados" | Erro de linter sai com 3; nenhuma execução sai com 2 | Erro: não derrubado. Sem execução: demonstrado, e por isso a recusa |
+| Escrita fora do projeto por link simbólico | `saveBaseline` existente (contenção por caminho real) | Não derrubado |
+| Baseline refeito passa no CI sem aprovação | Gate inalterado: aumento de entradas exige o override do dono | Não derrubado em sete cenários |
+| O operador aceita violação plantada sem perceber | Recusa de caminho novo sem a flag; relato com caminhos novos e caminhos que cresceram; entradas mantidas ficam intactas | Demonstrado contra o desenho anterior (relato só com totais); é o que motivou a decisão 4 |
 
-**Risco aceito.** O comando registra **todos** os achados atuais do standard, inclusive
-violações novas que tenham entrado desde o último baseline. É o mesmo poder do `init`. Os
-controles são o operador no terminal e o override no CI. O relato por regra existe para o
-operador ver o que está aceitando.
+**Limites que ficam.**
+
+- **Violação plantada em arquivo que já tinha entrada.** Na migração do protocolo antigo para o
+  v2, as ocorrências por arquivo crescem legitimamente (o antigo registrava uma por arquivo).
+  Uma violação plantada num arquivo que já tinha entrada aparece só como crescimento, igual ao
+  crescimento legítimo. O comando mostra o caminho e os números; não tem como distinguir.
+- **Linter que falha depois de imprimir parte dos achados.** Se ele sai com 1 e já imprimiu
+  linhas `VIOLATION`, o contrato de saída do linter o trata como execução válida, e o comando
+  grava o que foi impresso. É o contrato do engine, não deste comando.
+- **O log do gate tem teto de 200 linhas de baseline.** Num PR que regrava um standard grande, a
+  entrada plantada pode ficar fora do log mesmo com o override aprovado; quem aprova vê o diff
+  do PR, não só o log. O teto é anterior a este comando e fica nas pendências, com a prova de
+  conceito.
 
 ## 8. Testes
 
-Todos escritos antes do código.
+Todos escritos antes do código. A asserção do guard de Bash é a exceção: ela fixa um
+comportamento que já existe e passa de primeira.
 
 **Unit, em `tests/lib/test-standards-baseline.mjs`:**
 
-- as entradas dos outros standards saem idênticas e na mesma ordem (teste de propriedade com
-  baselines gerados);
-- as entradas do alvo são substituídas, com contagem por impressão digital e com justificativa,
-  autor e data;
+- as entradas dos outros standards saem idênticas (teste de propriedade com baselines gerados);
+- entrada com mesma impressão digital e contagem fica intacta, com a justificativa antiga;
+- entrada nova e entrada com contagem alterada recebem a justificativa, o autor e a data;
 - standard sem achados atuais fica sem entradas;
-- sem diferença, o resumo diz que não há o que gravar.
+- sem diferença, o resumo diz que não há o que gravar e devolve o mesmo baseline;
+- caminhos novos e caminhos que cresceram são calculados por caminho, não por mensagem;
+- regra chamada `constructor` ou `__proto__` é contada como qualquer outra.
+
+**Unit, em `tests/lib/test-standards-engine.mjs`:** `checkFiles` devolve `linterRuns`.
 
 **Integração, pelo CLI real, em `tests/integration/test-standards-check-cli.mjs`:**
 
 - recusa sem terminal interativo e com `CI=1`;
-- recusa sem baseline, sem `--reason` e com `<std-id>` desconhecido;
+- recusa sem baseline, sem `--reason`, com justificativa acima do teto, com dois ids, com
+  `<std-id>` desconhecido e com opção desconhecida (`--dry-run` não grava);
 - `<std-id>` malformado (caracteres de controle, sequência ANSI) não é ecoado;
 - erro de linter sai com 3 e o arquivo do baseline fica byte a byte igual;
+- nenhum linter rodou: exit 2 e arquivo intocado;
 - caso feliz: depois de trocar a mensagem do linter, o `check --all` volta a acusar o legado; o
   `reinit` do operador deixa o `check --all` verde e as entradas do outro standard intactas;
+- migração com arquivo plantado: a saída difere da migração legítima, o comando recusa sem a
+  flag e aceita com ela;
+- linter intacto e uma violação nova: as entradas mantidas conservam a justificativa antiga;
+- baseline alterado durante a execução: exit 3 e nada gravado por cima;
 - sem diferença: exit 0 e arquivo intocado.
 
 **Guard de Bash:** uma asserção de que `devflow-standards baseline reinit …` pede confirmação.
 
 **Sinais exigidos na fase V:** `unit`, `integration`, `e2e`, `lint` e `standards`.
 
+**Fase V, segurança:** as provas de conceito do auditor são reexecutadas contra o código real.
+
 ## 9. Documentação e decisão
 
 - **Guia** (`docs/guia-enforcement-standards.md`): linha na tabela de comandos; o trecho que
   chama o `accept` de único caminho para aumentar o baseline; o parágrafo sobre baseline criado
   com linters antigos, que passa a indicar o `reinit`; a nota de migração.
-- **ADR-015**: evolução menor, registrando o `reinit` como segundo caminho do operador para
-  aumentar o baseline. Oferecida ao operador no passo de ADR do planejamento.
+- **ADR-015 v1.1.0**: a guardrail e o risco aceito do `reinit` acompanham as decisões 4 e 5.
 - **CHANGELOG**, em `[Unreleased]`.
 - **Pendências** (`docs/superpowers/2026-10-06-standards-enforcement-pendencias.md`): o item da
-  migração dos linters passa a citar o comando.
+  migração dos linters passa a citar o comando, e entram os achados da revisão que ficaram
+  fora deste PR.
 
 ## 10. Fora do escopo
 
@@ -184,13 +247,21 @@ Todos escritos antes do código.
 - Refazer por arquivo ou por regra. O alcance é o standard inteiro.
 - Tradução automática de entradas antigas em novas. Descartada: depende de adivinhar pela
   mensagem, na peça de garantia.
+- Achados da revisão em código anterior, que vão para as pendências: o teto do log do gate; o
+  `enforce`, que ecoa o id sem validar; `init`, `prune`, `accept` e `enforce`, que ignoram opção
+  desconhecida; arquivo não rastreado que entra no baseline e trava o PR no gate; e o baseline
+  "do HEAD" lido de outro repositório quando `GIT_DIR` vem do ambiente.
 
 ## 11. Critérios de aceitação
 
 1. `baseline reinit <std-id> --reason "…"`, rodado pelo operador num projeto com baseline,
-   troca só as entradas daquele standard pelos achados atuais.
-2. Fora de terminal interativo, em CI, sem baseline, sem justificativa ou com standard
-   desconhecido, o comando recusa com exit 2 e não grava.
-3. Com erro de linter, sai com 3 e não grava.
-4. Os testes da §8 passam, e cada um foi visto falhar antes do código.
-5. A revisão de segurança da fase R não deixa achado crítico ou alto em aberto.
+   refaz só as entradas daquele standard, e mantém intactas as que não mudaram.
+2. Fora de terminal interativo, em CI, sem baseline, com argumento inválido, com standard
+   desconhecido ou sem nenhuma execução de linter, o comando recusa com exit 2 e não grava.
+3. Com caminho novo e sem `--allow-new-paths`, o comando lista os caminhos, sai com 2 e não
+   grava.
+4. Com erro de linter ou com o baseline alterado durante a execução, sai com 3 e não grava.
+5. Os testes da §8 passam, e cada um foi visto falhar antes do código, exceto a asserção do
+   guard de Bash.
+6. Na fase V, as provas de conceito do auditor reexecutadas não deixam achado crítico ou alto em
+   aberto.
