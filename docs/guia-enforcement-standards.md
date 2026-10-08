@@ -2,7 +2,7 @@
 
 Este guia é para quem **usa** o DevFlow num projeto: como as normas (standards) passaram de lembrete
 para gate, como ligar cada camada, o que fazer quando algo bloqueia e onde a proteção termina.
-Decisão de arquitetura: [ADR-015](../.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md).
+Decisão de arquitetura: [ADR-015](../.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md).
 Desenho completo: [spec](superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md).
 
 Sumário: [O que mudou](#o-que-mudou) · [Níveis](#níveis-e-defaults) · [Comandos](#comandos) ·

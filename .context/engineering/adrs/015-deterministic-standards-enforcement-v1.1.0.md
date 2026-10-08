@@ -6,8 +6,8 @@ scope: organizational
 source: local
 stack: universal
 category: agent-harness
-status: Aprovado
-version: 1.0.0
+status: Proposto
+version: 1.1.0
 created: 2026-09-26
 supersedes: []
 refines: [002-adopt-standards-triple-layer-v1.0.0]
@@ -19,7 +19,7 @@ summary: "Os linters dos standards deixam de ser nudge async e viram gate: um st
 # ADR — Enforcement determinístico de standards
 
 - **Data:** 2026-09-26
-- **Status:** Aprovado
+- **Status:** Proposto
 - **Escopo:** Organizacional
 - **Stack:** universal (hooks bash + Node; Claude Code e omp)
 - **Categoria:** Agent Harness
@@ -58,8 +58,9 @@ nível e compara com o baseline. Consumidores: hooks, CLI `devflow standards` e
   `enforcement.level`, a menos que `enforcement.rules[ruleId]` o eleve.
 - **Baseline com catraca:** `.context/engineering/standards/baseline.json`
   (`version: 1`); impressão digital sem número de linha; **multiconjunto** — cada entrada
-  tem `count` e o excedente é violação nova; `prune` só encolhe; aumentar exige
-  `baseline accept --reason` no terminal do operador.
+  tem `count` e o excedente é violação nova; `prune` só encolhe; aumentar exige o operador
+  no terminal dele, por `baseline accept --reason` (uma ocorrência) ou `baseline reinit <std>
+  --reason` (troca as entradas de um standard pelos achados atuais; as dos outros não mudam).
 - **`machine/` fora do check:** o engine não analisa o que está sob `machine/` dos standards
   do projeto (canônico e legado): são os linters do projeto, e a saída do protocolo
   (`console.log`) já os faria violar outro standard. A exclusão mora no engine, e por isso
@@ -146,6 +147,7 @@ nível e compara com o baseline. Consumidores: hooks, CLI `devflow standards` e
 - Impressão digital sem linha: com a contagem, qual das ocorrências iguais é a "nova" é arbitrário (a última por linha); o total é exato
 - Guards locais (Edit/Write, Bash, CLI) são contornáveis por quem insiste (script intermediário, ofuscação, `script -qc`); a garantia é o `gate` no CI
 - O override (rótulo + review preso ao commit) pressupõe que o agente não tem credencial de code owner dos caminhos da catraca
+- O `baseline reinit` registra todos os achados atuais do standard, inclusive violação nova que tenha entrado desde o último baseline: é o mesmo poder do `init`. Os controles são o operador no terminal e, no CI, o override do dono, que o aumento de entradas continua exigindo
 - Crédito limitado pela base, consequências: (1) a árvore da base é reconstruída só com o que está no git, então linter de projeto com dependência não versionada faz o `gate --ci` sair 3 em todo PR enquanto o baseline da base tiver entradas — o linter tem de ser autocontido (só `node:*` e imports relativos para dentro de `machine/`; dependência versionada, só em `node_modules` dentro de um dos dois diretórios de standards, onde o trecho de CODEOWNERS gerado lhe dá dono e o PR que a acrescenta pede override — em `.context/node_modules/`, fora deles, o override não tem aprovador e o gate fecha); (2) linter da base que falha num arquivo com entrada no baseline só se conserta na branch base, com bypass de admin; (3) reaceitar uma violação por cima de crédito sem lastro pede dois PRs — podar a base, depois aceitar; (4) a fase V local, sem `--ci`, não analisa a base e pode passar onde o CI reprova; (5) o gate custa mais: analisa também os arquivos da base com entrada no baseline
 - Zona cega de `machine/`: código colocado ali não é analisado por nenhum standard, nos dois layouts e em qualquer projeto. O que a fecha é a comparação com a base no `gate` — arquivo novo, alterado ou removido é violação —, mais o `ask` do guard e o CODEOWNERS, cujo trecho gerado dá dono aos dois layouts. No GitLab não há override nem aplicação de dono: a violação deixa o job vermelho e o merge é decisão de quem mantém
 - Adoção dos standards (a base não tem nada em nenhum dos dois diretórios de standards): os arquivos novos de `machine/` são só nota e não são analisados. Não há standard anterior a contornar, e o PR de adoção é revisado por inteiro
@@ -170,6 +172,7 @@ nível e compara com o baseline. Consumidores: hooks, CLI `devflow standards` e
 - SEMPRE emitir a decisão do `pre-tool-use` por `emit_decision` (um objeto, `json.dumps`); NUNCA texto ou `printf '{'` fora dela.
 - NUNCA bloquear por ocorrência coberta pela contagem do baseline; SEMPRE bloquear o excedente.
 - NUNCA permitir que o agente edite `baseline.json`; `pre-tool-use` nega a escrita em qualquer grafia do caminho.
+- SEMPRE exigir terminal interativo e justificativa no `baseline reinit`; NUNCA deixá-lo alterar entrada de outro standard nem gravar quando o linter do standard alvo falhou.
 - QUANDO uma edição (pelo caminho ou pelo `realpath`) enfraquecer o enforcement efetivo (nível, regra, `source`, `deprecated`, `disable:`, `applyTo`, `linter`, faixa de versão) ou tocar `machine/**`, ENTÃO o hook devolve `ask` ao humano.
 - SEMPRE comparar a catraca no CI (`gate --ci`) contra a base — `refs/…` completo ou SHA, ancestral do HEAD (o gate roda sobre o merge do PR) —, lintando os blobs do HEAD sem atributos; NUNCA usar o baseline da própria branch fora de dois casos — override aprovado, ou adoção com cada entrada conferida contra a árvore da base —, NUNCA aceitar entrada com mais ocorrências do que a árvore tem (crédito pré-pago) e NUNCA deixar uma entrada valer além do que os linters da base produzem na árvore da base (crédito sem lastro), salvo o aumento aprovado pelo override.
 - QUANDO um PR criar arquivo sob `machine/` dos standards do projeto (layout canônico ou legado, inclusive o que a base não usa), ENTÃO o `gate` o trata como violação da catraca; NUNCA como nota, salvo no PR de adoção dos standards — a base sem nada em nenhum dos dois diretórios de standards, decidido só pela árvore da base.
@@ -190,6 +193,7 @@ nível e compara com o baseline. Consumidores: hooks, CLI `devflow standards` e
 - [ ] Teste: `gate` falha com baseline regravado, removido, nível rebaixado, `disable:`, linter alterado e `verify.standards` removido.
 - [x] Teste: arquivo novo em `machine/` (canônico e legado) é violação; o override só vale com dono no CODEOWNERS da base; a adoção, decidida pela base, mantém a nota (`tests/integration/test-standards-gate-new-linter.mjs`).
 - [x] Teste: `gate --ci` sai 1 com a violação reintroduzida sobre crédito sem lastro, 0 no PR que corrige sem `prune` e 3 com linter da base que falha (`tests/integration/test-standards-gate-base-credit.mjs`).
+- [ ] Teste: `baseline reinit` — propriedade (entradas dos outros standards idênticas) e CLI (recusa sem terminal, em CI, sem baseline, sem justificativa e com standard desconhecido; erro de linter não grava) em `tests/lib/test-standards-baseline.mjs` e `tests/integration/test-standards-check-cli.mjs`.
 - [ ] Teste: e2e com fixture (baseline → edição bloqueada → correção → `check --staged` → gate V verde) e agente adversário.
 - [ ] Gate PREVC: sinal `standards` no `verify-gate` (ADR-013) obrigatório quando há std que pode chegar a `block`.
 - [x] CI: sinal `standards` (`gate --ci`) na matriz do repo devflow; CODEOWNERS nos caminhos da catraca e em `scripts/` e `assets/standards/` inteiros.
@@ -208,6 +212,7 @@ precisa conferir.
 **Fontes oficiais:** [Claude Code — Hooks reference](https://code.claude.com/docs/en/hooks) · [Claude Code — Hooks guide](https://code.claude.com/docs/en/hooks-guide)
 
 Design: `docs/superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md`
+Design do `baseline reinit` (v1.1.0): `docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md`
 
 ```yaml
 # .context/engineering/standards/std-data-modeling.md (frontmatter)
