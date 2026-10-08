@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-08
 **Workflow PREVC:** `baseline-reinit-standard` · **Escala:** MEDIUM · **Autonomia:** supervised
-**Status:** aprovada pelo operador; revisada na fase R em 2026-10-08 (arquiteto: aprovado com ressalvas; segurança: o desenho se sustenta com correções), com os achados incorporados e as decisões 4 e 5 do operador
+**Status:** aprovada pelo operador; revisada na fase R em 2026-10-08 (arquiteto: aprovado com ressalvas; segurança: o desenho se sustenta com correções), com os achados incorporados e as decisões 4 e 5 do operador; ajustada na fase V (revisão final e re-revisão de segurança), com a decisão 6 do operador
 **Origem:** `docs/superpowers/2026-10-06-standards-enforcement-pendencias.md` §2 (migração dos
 linters legados)
 
@@ -39,6 +39,9 @@ mensagem de todos eles de uma vez. Qualquer projeto que tenha promovido um desse
    revisão de segurança).
 5. Os achados da revisão entram neste PR; a re-revisão de segurança acontece na fase V, com as
    provas de conceito do auditor reexecutadas contra o código real.
+6. **Caminho novo se mede contra o baseline da base** (decisão da fase V). A re-revisão de
+   segurança mostrou que, medida contra o baseline da árvore, a recusa de caminho novo caía
+   com uma entrada forjada pelo agente, e o `reinit` ainda apagava o rastro da forja.
 
 A migração dos linters tem spec própria, a escrever depois desta entrega. Já está decidido para
 ela: um `ruleId` por verificação nos 18 linters de perfil.
@@ -67,7 +70,9 @@ São os mesmos códigos dos outros subcomandos de `baseline`.
    nenhum valor recebido. A validação vem antes de qualquer mensagem que repita o id, pelo
    mesmo motivo do `accept`: o valor pode vir do agente e vai parar num comando que o humano
    cola no terminal. Opção desconhecida é uso incorreto, nunca ignorada: `--dry-run` não pode
-   gravar.
+   gravar. Vale também para as opções que o wrapper `devflow-standards.mjs` consome para outros
+   subcomandos (`--force`, `--yes`, `--keep-old`…): ele repassa ao CLI os argumentos como
+   vieram, menos o `--project=`, e com isso `check` e `gate` também passam a recusá-las.
 2. **Terminal interativo e fora de CI.** Senão: recusa pelo caminho existente
    (`refuseNonInteractive`), exit 2.
 3. **Baseline existe** (no arquivo ou, removido da árvore, na versão do HEAD). Senão: exit 2,
@@ -94,12 +99,13 @@ de outro standard não impede a operação.
 
 ### 4.3 Resultado
 
-Cada impressão digital do standard alvo cai num de quatro casos:
+Cada impressão digital do standard alvo cai num de cinco casos:
 
 | Caso | Condição | O que acontece com a entrada |
 |---|---|---|
 | Mantida | Mesma impressão digital, mesma contagem | Fica **intacta**: mesma justificativa, mesmo autor, mesma data |
-| Alterada | Mesma impressão digital, contagem diferente | Regravada com a contagem atual e a justificativa desta execução |
+| Alterada | Mesma impressão digital, contagem maior | Regravada com a contagem atual e a justificativa desta execução |
+| Reduzida | Mesma impressão digital, contagem menor | Fica com a justificativa, o autor e a data que tinha, e a contagem atual (como no `prune`): nada entrou |
 | Nova | Impressão digital que não existia | Criada com a contagem atual e a justificativa desta execução |
 | Removida | Impressão digital sem achado atual | Sai |
 
@@ -114,7 +120,20 @@ Cada impressão digital do standard alvo cai num de quatro casos:
 ### 4.4 Caminho novo
 
 Um **caminho novo** é um arquivo com achado atual que não tinha nenhuma entrada daquele standard
-no baseline. Migração de mensagem ou de regra não cria caminho novo: os arquivos são os mesmos.
+no **baseline de referência**. Migração de mensagem ou de regra não cria caminho novo: os
+arquivos são os mesmos. O mesmo baseline de referência decide os caminhos que ganharam
+ocorrências.
+
+O baseline de referência é o da base, que o agente não altera no PR (decisão 6):
+
+1. o do merge-base do HEAD com `refs/remotes/origin/main`, a mesma base padrão do `gate`;
+2. sem merge-base, o do HEAD;
+3. sem nenhum dos dois legível (repositório sem commit, ou fora de git), o da árvore, com um
+   aviso de que ele pode ter sido editado.
+
+Base sem baseline é adoção: todo caminho conta como novo. Uma entrada que o próprio operador
+aceitou antes, na mesma branch, também conta como caminho novo e pede a flag; é o custo de não
+confiar no baseline da branch.
 
 - Sem `--allow-new-paths`: o comando lista os caminhos novos, **não grava** e sai com 2,
   dizendo como repetir com a flag.
@@ -124,9 +143,9 @@ A lista sai inteira, sem teto de linhas.
 
 ### 4.5 Relato
 
-- Uma linha com mantidas, novas, alteradas e removidas, em entradas e em ocorrências.
-- Quantas execuções de linter houve.
-- A contagem por regra das ocorrências que entraram (novas e alteradas).
+- Uma linha com mantidas, novas, alteradas, removidas e reduzidas, em entradas e em ocorrências.
+- Quantas execuções de linter houve, e contra qual baseline os caminhos foram comparados.
+- A contagem por regra das ocorrências que entraram além do que já estava aceito.
 - Os caminhos novos e os **caminhos que ganharam ocorrências** (antes → depois), sem teto.
 - O aviso de protocolo legado que o `init` e o `check` já emitem, quando for o caso.
 
@@ -147,14 +166,16 @@ despachadas. É o que permite distinguir "rodou e não achou nada" de "não rodo
 
 ## 6. Estrutura
 
-- **`reinitStandard(baseline, findings, stdId, { reason, by })`**, função pura em
+- **`reinitStandard(baseline, findings, stdId, { reason, by, reference })`**, função pura em
   `scripts/lib/standards-baseline.mjs`. Devolve o baseline novo e um resumo: mantidas, novas,
-  alteradas, removidas, contagem por regra, caminhos novos e caminhos que cresceram. Não lê
-  disco nem roda linter.
+  alteradas, reduzidas, removidas, contagem por regra, caminhos novos e caminhos que cresceram,
+  estes medidos contra `reference`. Não lê disco nem roda linter.
 - **Campo `linterRuns`** no resultado de `checkFiles`, em `scripts/lib/standards-engine.mjs`.
 - **Ramo `reinit` em `cmdBaseline`**, em `scripts/lib/standards-check-cli.mjs`: valida, coleta os
-  achados com o `stdFilter` do engine, chama a função pura, aplica a recusa de caminho novo,
-  relê o baseline, grava com o `saveBaseline` existente e imprime o relato.
+  achados com o `stdFilter` do engine, resolve o baseline de referência, chama a função pura,
+  aplica a recusa de caminho novo, relê o baseline, grava com o `saveBaseline` existente e
+  imprime o relato.
+- **Repasse dos argumentos** em `scripts/devflow-standards.mjs`, para o CLI de standards.
 
 Nenhum módulo novo. A escrita reaproveita o `saveBaseline`, com a contenção por caminho real
 que ele já faz.
@@ -173,7 +194,7 @@ tabela já traz o que resultou.
 | Linter quebrado ou que não rodou conta como "sem achados" | Erro de linter sai com 3; nenhuma execução sai com 2 | Erro: não derrubado. Sem execução: demonstrado, e por isso a recusa |
 | Escrita fora do projeto por link simbólico | `saveBaseline` existente (contenção por caminho real) | Não derrubado |
 | Baseline refeito passa no CI sem aprovação | Gate inalterado: aumento de entradas exige o override do dono | Não derrubado em sete cenários |
-| O operador aceita violação plantada sem perceber | Recusa de caminho novo sem a flag; relato com caminhos novos e caminhos que cresceram; entradas mantidas ficam intactas | Demonstrado contra o desenho anterior (relato só com totais); é o que motivou a decisão 4 |
+| O operador aceita violação plantada sem perceber | Recusa de caminho novo sem a flag, medida contra o baseline da base; relato com caminhos novos e caminhos que cresceram; entradas mantidas e reduzidas conservam a justificativa | Fase R: demonstrado contra o relato só com totais (decisão 4). Fase V: demonstrado o contorno por entrada forjada no baseline da árvore (decisão 6); com a referência da base, recusado |
 
 **Limites que ficam.**
 
@@ -184,6 +205,13 @@ tabela já traz o que resultou.
 - **Linter que falha depois de imprimir parte dos achados.** Se ele sai com 1 e já imprimiu
   linhas `VIOLATION`, o contrato de saída do linter o trata como execução válida, e o comando
   grava o que foi impresso. É o contrato do engine, não deste comando.
+- **Sem commit, a referência é a árvore.** Num repositório sem commit legível, os caminhos são
+  medidos contra o baseline da árvore, que o agente consegue editar; o comando avisa.
+- **Janela entre a releitura e a gravação.** Outro comando que grave entre a releitura e o
+  `rename` do `saveBaseline` é sobrescrito. Exige coincidência de milissegundos e falha para o
+  lado seguro: a violação aceita no meio volta como nova. Fica nas pendências.
+- **Linter que roda e mente** (sai 0 sem analisar) faz as entradas do standard sumirem. Só
+  encolhe, com o mesmo poder do `prune`, que o agente roda sem terminal. Fica nas pendências.
 - **O log do gate tem teto de 200 linhas de baseline.** Num PR que regrava um standard grande, a
   entrada plantada pode ficar fora do log mesmo com o override aprovado; quem aprova vê o diff
   do PR, não só o log. O teto é anterior a este comando e fica nas pendências, com a prova de
@@ -223,6 +251,15 @@ comportamento que já existe e passa de primeira.
 - sem diferença: exit 0 e arquivo intocado.
 
 **Guard de Bash:** uma asserção de que `devflow-standards baseline reinit …` pede confirmação.
+
+**Acrescentados na fase V:**
+
+- pelo binário real, as opções que o wrapper consumia são uso incorreto no `reinit` e
+  desconhecidas no `check`;
+- contagem que diminui conserva a entrada e a justificativa, e não entra na contagem por regra
+  (unit e CLI);
+- caminho novo medido contra a referência: na função pura, e pelo CLI com entrada forjada na
+  árvore (referência HEAD) e com forja commitada na branch (referência merge-base).
 
 **Sinais exigidos na fase V:** `unit`, `integration`, `e2e`, `lint` e `standards`.
 

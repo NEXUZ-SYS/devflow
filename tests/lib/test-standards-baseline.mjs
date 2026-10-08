@@ -507,7 +507,7 @@ test("reinit: contagem que mudou regrava a entrada e aparece como caminho que cr
   assert.deepEqual([e.count, e.reason, e.acceptedBy], [3, "mais duas", "bia"]);
   assert.deepEqual([out.kept, out.added, out.altered, out.removed], [T0, T0, { entries: 1, count: 3 }, T0]);
   assert.deepEqual([out.newPaths, out.grownPaths], [[], [["src/a.ts", 1, 3]]]);
-  assert.deepEqual(out.byRule, [["r", 3]]);
+  assert.deepEqual(out.byRule, [["r", 2]]); // só o que entrou além do que já estava aceito
 });
 
 test("reinit: caminho novo e caminho que cresceu saem do caminho, não da mensagem", () => {
@@ -569,4 +569,26 @@ test("reinit exige justificativa", () => {
   const bl = initBaseline([f()]);
   assert.throws(() => reinitStandard(bl, [f()], "std-a", { by: "bia" }), /justificativa/);
   assert.throws(() => reinitStandard(bl, [f()], "std-a", { reason: "   ", by: "bia" }), /justificativa/);
+});
+
+test("reinit: contagem que diminuiu conserva a entrada e a justificativa, como o prune", () => {
+  const a = f({ stdId: "std-b", path: "src/a.ts" });
+  const bl = acceptFinding(initBaseline([a, a], { by: "ana" }), a, { reason: "legado do fornecedor, chamado 123", by: "ana" });
+  const prev = bl.entries[0];
+  const out = reinitStandard(bl, [a, a], "std-b", { reason: "conferência", by: "bia" });
+  assert.equal(out.changed, true);
+  assert.deepEqual(out.baseline.entries, [{ ...prev, count: 2 }]);
+  assert.deepEqual([out.kept, out.added, out.altered, out.reduced, out.removed], [T0, T0, T0, { entries: 1, count: 2 }, T0]);
+  assert.deepEqual([out.byRule, out.newPaths, out.grownPaths], [[], [], []]);
+});
+
+test("reinit: caminho novo e caminho que cresceu se medem contra a referência, não contra o baseline recebido", () => {
+  const b = (path) => f({ stdId: "std-b", path });
+  const reference = initBaseline([b("src/a.ts")]);
+  const forjado = initBaseline([b("src/a.ts"), b("src/plantado.ts")]); // entrada que a referência não tem
+  const out = reinitStandard(forjado, [b("src/a.ts"), b("src/a.ts"), b("src/plantado.ts")], "std-b", { reason: "x", by: "bia", reference });
+  assert.deepEqual(out.newPaths, ["src/plantado.ts"]);
+  assert.deepEqual(out.grownPaths, [["src/a.ts", 1, 2]]);
+  // Sem referência, vale o baseline recebido (comportamento de antes).
+  assert.deepEqual(reinitStandard(forjado, [b("src/plantado.ts")], "std-b", { reason: "x", by: "bia" }).newPaths, []);
 });

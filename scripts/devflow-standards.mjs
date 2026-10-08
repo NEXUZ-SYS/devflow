@@ -735,7 +735,12 @@ async function main() {
       return;
     }
     // exitCode + return (e não process.exit): não corta a saída pendente num pipe.
-    process.exitCode = await runStandardsCommand(sub, args.slice(1), projectRoot);
+    // Os argumentos vão como vieram, menos o --project=: o laço acima consome opções de `new`,
+    // `eject` e `search` (--force, --yes, --keep-old…), e o CLI precisa vê-las para recusar a
+    // opção desconhecida — sem isto, `baseline reinit … --keep-old` gravava.
+    const cliArgs = rawArgs.filter(a => !a.startsWith("--project="));
+    cliArgs.splice(cliArgs.indexOf(sub), 1);
+    process.exitCode = await runStandardsCommand(sub, cliArgs, projectRoot);
     return;
   }
 

@@ -380,11 +380,13 @@ export function acceptFinding(baseline, finding, { reason, by } = {}) {
 const byFirst = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
 
 // Refaz as entradas de UM standard com os achados atuais (operador, D6). Entrada cuja impressão
-// digital e contagem não mudaram fica como está — mesmo objeto, mesma justificativa; as dos
-// outros standards nem são olhadas. Os caminhos novos e os que cresceram saem do CAMINHO, que
-// uma migração de mensagem ou de regra não muda, e não da impressão digital, que ela muda toda.
+// digital e contagem não mudaram fica como está — mesmo objeto, mesma justificativa; a que só
+// diminuiu também fica, com a contagem atual (como no prune); as dos outros standards nem são
+// olhadas. Os caminhos novos e os que cresceram saem do CAMINHO, que uma migração de mensagem
+// ou de regra não muda, e não da impressão digital, que ela muda toda — medidos contra
+// `reference` (o baseline da base, que o agente não altera no PR; sem ela, o próprio baseline).
 // Sem diferença, devolve o próprio baseline recebido: o chamador não grava.
-export function reinitStandard(baseline, findings, stdId, { reason, by } = {}) {
+export function reinitStandard(baseline, findings, stdId, { reason, by, reference = baseline } = {}) {
   if (!reason || !String(reason).trim()) throw new Error("baseline reinit exige justificativa (--reason)");
   const mine = findings.filter(x => x.stdId === stdId);
   const old = baseline.entries.filter(e => e.stdId === stdId);
@@ -394,30 +396,33 @@ export function reinitStandard(baseline, findings, stdId, { reason, by } = {}) {
   for (const x of mine) if (!first.has(x.fp)) first.set(x.fp, x);
 
   const tally = () => ({ entries: 0, count: 0 });
-  const kept = tally(), added = tally(), altered = tally(), removed = tally();
+  const kept = tally(), added = tally(), altered = tally(), reduced = tally(), removed = tally();
   const byRule = new Map(); // Map, não objeto: "constructor" e "__proto__" são nomes de regra válidos
   const keepFp = new Set();
   const fresh = [];
   for (const [fp, count] of now) {
     const prev = before.get(fp);
     if (prev && prev.count === count) { keepFp.add(fp); kept.entries++; kept.count += count; continue; }
+    // Só diminuiu: nada entrou, então a entrada não ganha justificativa nova (o prune faz igual).
+    if (prev && count < prev.count) { reduced.entries++; reduced.count += count; fresh.push({ ...prev, count }); continue; }
     const x = first.get(fp);
     const t = prev ? altered : added;
     t.entries++; t.count += count;
-    byRule.set(x.ruleId, (byRule.get(x.ruleId) || 0) + count);
+    // Por regra, só o que entra além do que já estava aceito.
+    byRule.set(x.ruleId, (byRule.get(x.ruleId) || 0) + count - (prev ? prev.count : 0));
     fresh.push(toEntry(x, { count, reason, ...(by ? { acceptedBy: by } : {}) }));
   }
   for (const e of old) if (!now.has(e.fp)) { removed.entries++; removed.count += e.count; }
 
   const perPath = (pairs) => { const m = new Map(); for (const [p, c] of pairs) m.set(p, (m.get(p) || 0) + c); return m; };
-  const pathBefore = perPath(old.map(e => [e.path, e.count]));
+  const pathBefore = perPath(reference.entries.filter(e => e.stdId === stdId).map(e => [e.path, e.count]));
   const pathNow = perPath(mine.map(x => [x.path, 1]));
   const newPaths = [...pathNow.keys()].filter(p => !pathBefore.has(p)).sort();
   const grownPaths = [...pathNow].filter(([p, c]) => pathBefore.has(p) && c > pathBefore.get(p))
     .map(([p, c]) => [p, pathBefore.get(p), c]).sort(byFirst);
 
-  const changed = added.entries + altered.entries + removed.entries > 0;
-  const summary = { changed, kept, added, altered, removed, byRule: [...byRule].sort(byFirst), newPaths, grownPaths };
+  const changed = added.entries + altered.entries + reduced.entries + removed.entries > 0;
+  const summary = { changed, kept, added, altered, reduced, removed, byRule: [...byRule].sort(byFirst), newPaths, grownPaths };
   if (!changed) return { baseline, ...summary };
   return {
     baseline: {

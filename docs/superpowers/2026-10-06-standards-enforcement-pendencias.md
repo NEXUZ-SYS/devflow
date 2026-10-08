@@ -173,9 +173,9 @@ A medição está em `docs/research/2026-09-standards-baseline-projeto-real.md`.
 - A chave de sessão tem dois formatos (`hooks/pre-tool-use` e `standards-hook-cli.mjs`) e o
   campo do caminho no evento é lido de três jeitos.
 - `scripts/lib/run-linter-cli.mjs` e `runLintersFor` só são usados por testes.
-- No CLI, flags globais (`--force`, `--yes`, `--with-linter`, `--keep-old`) nunca chegam a
-  "opção desconhecida", e os subcomandos antigos saem com 1 em erro, o mesmo código de
-  "violação".
+- No CLI, os subcomandos antigos saem com 1 em erro, o mesmo código de "violação". (As flags
+  globais, `--force`, `--yes`, `--with-linter` e `--keep-old`, passaram a chegar ao CLI de
+  standards com o `baseline reinit`: `check` e `gate` as recusam como opção desconhecida.)
 - Com bloqueio, os erros de linter e os avisos da mesma execução somem da saída do hook
   síncrono; o span de telemetria conta achados, não linters.
 - As guardrails de ADR são lidas de forma diferente pelo bash e pelo JavaScript em dois casos
@@ -240,7 +240,8 @@ Todos demonstrados por execução numa cópia do repositório.
   "standard … não encontrado" repete ESC e quebra de linha no stderr. O `reinit` valida o
   formato antes de qualquer eco; o `enforce` pode usar a mesma expressão.
 - **`baseline init`, `prune`, `accept` e `enforce` ignoram opção desconhecida.**
-  `baseline init --dry-run` cria o baseline. `check`, `gate` e `reinit` recusam.
+  `baseline init --dry-run` cria o baseline. `check`, `gate` e `reinit` recusam, inclusive as
+  opções que o wrapper `devflow-standards.mjs` consumia antes.
 - **Arquivo não rastreado entra no baseline e trava o PR.** `init` e `reinit` analisam também os
   arquivos não rastreados; um rascunho local com violação ganha entrada, e o gate reprova o PR
   por crédito pré-pago ("aceita 1, a árvore tem 0"), mesmo com o override. Sugestão: avisar os
@@ -248,6 +249,16 @@ Todos demonstrados por execução numa cópia do repositório.
 - **Linter que falha depois de imprimir parte dos achados é execução válida.** Se ele sai com 1
   e já imprimiu linhas `VIOLATION`, o contrato de saída o aceita, e `init`, `accept` e `reinit`
   registram só o que foi impresso.
+- **Janela entre a releitura e a gravação do `reinit`.** O `reinit` relê o baseline antes de
+  gravar, mas outro comando que grave entre a releitura e o `rename` do `saveBaseline` é
+  sobrescrito sem aviso (demonstrado interceptando o `rename`). Falha para o lado seguro: a
+  violação aceita no meio volta como nova. Correção possível: um lockfile `wx` comum a `init`,
+  `accept`, `prune` e `reinit`.
+- **Linter que roda e mente faz o `reinit` encolher as entradas.** Um linter que sai 0 sem
+  analisar, ou um `applyTo` reduzido a poucos arquivos, conta como execução e faz as entradas
+  dos outros arquivos sumirem. Só encolhe, com o mesmo poder do `prune`, que o agente roda sem
+  terminal. Correção possível: recusar quando um caminho que tinha entrada do alvo ainda existe
+  e não esteve entre as execuções (pega o `applyTo`; o linter que mente, não).
 - **Baseline "do HEAD" lido de outro repositório.** Com `GIT_DIR` apontando para outro
   repositório no ambiente do operador e o baseline ausente da árvore, a versão "do HEAD" vem de
   lá. Exige controlar o ambiente de quem roda o comando.

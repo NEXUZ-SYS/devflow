@@ -13,11 +13,13 @@ Quando o linter de um standard muda de regra ou de mensagem, todas as impressõe
 
 `devflow-standards baseline reinit <std-id> --reason "<justificativa>" [--allow-new-paths]` refaz as entradas daquele standard com os achados atuais. As entradas que não mudaram ficam intactas, com a justificativa que tinham, e as dos outros standards não são tocadas. Só roda no terminal interativo do operador, fora de CI, e exige justificativa, registrada nas entradas novas e alteradas.
 
-- **Caminho novo é recusado por padrão.** Violação em arquivo que não tinha nenhuma entrada do standard só entra com `--allow-new-paths`; sem a flag o comando lista os arquivos e não grava. Migração de mensagem ou de regra não cria caminho novo.
-- **O relato mostra o que está sendo aceito:** entradas mantidas, novas, alteradas e removidas, a contagem por regra, os caminhos novos e os que ganharam ocorrências (antes → depois).
+- **Caminho novo é recusado por padrão.** Violação em arquivo que não tinha nenhuma entrada do standard só entra com `--allow-new-paths`; sem a flag o comando lista os arquivos e não grava. Migração de mensagem ou de regra não cria caminho novo. A comparação é com o baseline da branch de destino (o do merge-base com `origin/main`; sem ele, o do HEAD), não com o da árvore, que o agente consegue editar.
+- **O relato mostra o que está sendo aceito:** entradas mantidas, novas, alteradas, removidas e reduzidas, a contagem por regra do que entrou além do já aceito, os caminhos novos e os que ganharam ocorrências (antes → depois). Entrada que só diminuiu fica com a justificativa que tinha, como no `prune`.
 - **Falha fechado:** linter do standard fora do contrato ou baseline alterado durante a execução saem com 3; standard cujo linter não rodou em nenhum arquivo sai com 2, apontando o `prune`. Opção desconhecida é uso incorreto. Em nenhum desses casos o arquivo é gravado.
 
 No CI nada muda: o PR com o baseline refeito aumenta entradas e continua precisando do override do dono no GitHub; no GitLab o job segue vermelho. O `checkFiles` do engine passa a informar quantas execuções de linter despachou (`linterRuns`), campo novo também no `check --json`.
+
+O wrapper `devflow-standards.mjs` passa a repassar ao CLI de standards os argumentos como vieram, menos o `--project=`. Antes ele consumia `--force`, `--yes`, `--keep-old`, `--with-linter` e as opções de `new`, `eject` e `search` para qualquer subcomando: `check` e `gate` as ignoravam em vez de recusar. Agora `check`, `gate` e `baseline reinit` recusam essas opções como desconhecidas.
 
 Limite conhecido: na troca de um linter do protocolo antigo para o v2, as ocorrências por arquivo crescem legitimamente, e uma violação nova num arquivo que já tinha entrada aparece só como crescimento.
 

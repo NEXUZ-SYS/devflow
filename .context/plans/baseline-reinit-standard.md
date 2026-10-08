@@ -51,7 +51,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e, lint e standards observados no ledger pelo verify-run, com o verify-gate em exit 0. Auditoria da ADR tocada. Revisão de segurança da implementação, reexecutando contra o código real as provas de conceito da fase R."
-lastUpdated: "2026-10-08T15:01:15.225Z"
+lastUpdated: "2026-10-08T15:34:49.957Z"
 ---
 
 # `baseline reinit` — Plano (dotcontext tracking)
@@ -90,4 +90,4 @@ Dar ao operador um caminho para refazer o baseline de **um** standard quando o l
 
 ## Execution History
 
-> Last updated: 2026-10-08T15:01:15.225Z | Progress: 0%
+> Last updated: 2026-10-08T15:34:49.957Z | Progress: 0%

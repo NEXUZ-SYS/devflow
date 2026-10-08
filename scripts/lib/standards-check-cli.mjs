@@ -296,6 +296,23 @@ async function cmdCheck(root, args, { stdFilter, quietOk = false, snapshot = nul
   return 0;
 }
 
+// Referência do `reinit` para "caminho novo" e "cresceu": o baseline da base, que o agente não
+// altera no PR. Sem merge-base com a base padrão, o do HEAD; sem nenhum dos dois legível (sem
+// commit, fora de git), o da árvore — que o agente consegue editar, e por isso vem com aviso.
+// Base sem baseline é adoção: todo caminho conta como novo.
+function reinitReference(root, tree) {
+  const { mb } = resolveMergeBase(root, DEFAULT_BASE_REF);
+  const tries = [...(mb ? [[mb, `o baseline do merge-base ${mb.slice(0, 8)} com ${DEFAULT_BASE_REF}`]] : []),
+    ["HEAD", `o baseline do HEAD (sem merge-base com ${DEFAULT_BASE_REF})`]];
+  for (const [rev, label] of tries) {
+    let b;
+    try { b = baselineAtBase(root, rev); } catch { continue; }
+    if (b.state === "present") return { baseline: parseBaseline(b.text, b.where), note: label };
+    if (b.state === "absent") return { baseline: { version: BASELINE_VERSION, entries: [] }, note: `${label}, que não tem baseline` };
+  }
+  return { baseline: tree, note: "o baseline da árvore (sem commit legível)", unprotected: true };
+}
+
 async function cmdBaseline(root, args, isInteractive) {
   const action = args[0];
   if (action === "init") {
@@ -395,7 +412,9 @@ async function cmdBaseline(root, args, isInteractive) {
     }
     const all = [...r.blocking, ...r.warnings, ...r.review];
     warnLegacyLinters(root, all);
-    const out = reinitStandard(bl, all, id, { reason, by: who() });
+    const ref = reinitReference(root, bl);
+    if (ref.unprotected) console.error("aviso: sem commit para comparar, os caminhos novos são medidos contra o baseline da árvore, que pode ter sido editado; confira o diff do baseline antes de commitar.");
+    const out = reinitStandard(bl, all, id, { reason, by: who(), reference: ref.baseline });
     if (!out.changed) {
       console.log(`✓ ${id}: nada a refazer (${out.kept.entries} entrada(s) mantida(s); ${r.linterRuns} execução(ões) de linter)`);
       return 0;
@@ -403,7 +422,7 @@ async function cmdBaseline(root, args, isInteractive) {
     // Migração de mensagem ou de regra não cria caminho novo; arquivo que não tinha entrada
     // do standard só entra com a flag, depois de o operador ver a lista. Sem teto de linhas.
     if (out.newPaths.length && !rest.includes("--allow-new-paths")) {
-      console.error(`recusado: ${out.newPaths.length} caminho(s) com achado de ${id} não tinham nenhuma entrada deste standard no baseline:`);
+      console.error(`recusado: ${out.newPaths.length} caminho(s) com achado de ${id} não tinham nenhuma entrada deste standard em ${ref.note}:`);
       for (const p of out.newPaths) console.error(`  ${logPath(p)}`);
       console.error("Migração de mensagem ou de regra não cria caminho novo. Confira os arquivos; para aceitá-los, repita o comando com --allow-new-paths. Nada foi gravado.");
       return 2;
@@ -416,8 +435,9 @@ async function cmdBaseline(root, args, isInteractive) {
     }
     saveBaseline(root, out.baseline);
     const n = (t) => `${t.entries} entrada(s) (${t.count} ocorrência(s))`;
-    console.log(`✓ ${id}: baseline refeito — mantidas ${n(out.kept)}; novas ${n(out.added)}; alteradas ${n(out.altered)}; removidas ${n(out.removed)}`);
+    console.log(`✓ ${id}: baseline refeito — mantidas ${n(out.kept)}; novas ${n(out.added)}; alteradas ${n(out.altered)}; removidas ${n(out.removed)}; reduzidas ${n(out.reduced)}`);
     console.log(`  ${r.linterRuns} execução(ões) de linter`);
+    console.log(`  comparado com: ${ref.note}`);
     for (const [rule, c] of out.byRule) console.log(`  regra ${oneLine(rule)}: ${c}`);
     for (const p of out.newPaths) console.log(`  caminho novo: ${logPath(p)}`);
     for (const [p, a, b] of out.grownPaths) console.log(`  cresceu: ${logPath(p)} (${a} → ${b})`);

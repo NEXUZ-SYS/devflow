@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { runStandardsCommand, pluginCmd } from "../../scripts/lib/standards-check-cli.mjs";
 import { demoProject as rawDemoProject, LINT_BAD } from "../helpers/standards-fixture.mjs";
 import { resolveBaseline } from "../../scripts/lib/standards-engine.mjs";
+import { fingerprint } from "../../scripts/lib/standards-baseline.mjs";
 
 const CLI = join(process.cwd(), "scripts/devflow-standards.mjs");
 const TEMPS = [];
@@ -907,4 +908,83 @@ test("reinit: linter do alvo em protocolo legado → funciona e avisa", async ()
   assert.equal(r.code, 0, r.err);
   assert.equal(legacyWarnings(r.err).length, 1, r.err);
   assert.equal(entriesOf(root, "std-demo").length, 3);
+});
+
+// ── baseline reinit: rodada de correção da fase V ───────────────────────────────────────
+const writeBL = (root, j) => writeFileSync(BL(root), JSON.stringify(j, null, 2) + "\n");
+// O agente, sem terminal, acrescenta ao baseline da árvore uma entrada de std-demo para o arquivo
+// que vai plantar (a forma de N1: assim o caminho não parece novo).
+function forjaEntrada(root, path) {
+  const j = JSON.parse(readFileSync(BL(root), "utf8"));
+  const e = { ...j.entries.find(x => x.stdId === "std-demo"), path, count: 1, reason: "TICKET-7" };
+  e.fp = fingerprint(e);
+  j.entries.push(e);
+  writeBL(root, j);
+}
+
+test("reinit pelo binário: opção que o wrapper consome em outros subcomandos é uso incorreto", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  const before = readFileSync(BL(root), "utf8");
+  for (const flag of ["--force", "--yes", "--keep-old", "--with-linter", "--taxonomy=/x", "--concern=x"]) {
+    const r = run(root, "baseline", "reinit", "std-demo", "--reason", "x", flag);
+    assert.equal(r.status, 2, flag);
+    assert.match(r.stderr, REINIT_USO, flag); // uso, e não a recusa por falta de terminal
+  }
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("check pelo binário recusa opção que o wrapper consumia", () => {
+  const r = run(repo(), "check", "--all", "--force");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /opção desconhecida "--force"/);
+});
+
+test("reinit: contagem menor conserva a entrada, e o relato não diz que entrou", async () => {
+  const root = twoStdRepo();
+  writeFileSync(join(root, "src/old.js"), "BAD\nBAD\nBAD\nWORSE\nWORSE\n");
+  await human(root, "baseline", "init");
+  const before = entriesOf(root, "std-demo")[0];
+  writeFileSync(join(root, "src/old.js"), "BAD\nWORSE\nWORSE\n");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "conferência"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /reduzidas 1 entrada\(s\) \(1 ocorrência\(s\)\)/);
+  assert.doesNotMatch(r.out, /regra no-bad/);
+  assert.deepEqual(entriesOf(root, "std-demo"), [{ ...before, count: 1 }]);
+});
+
+test("reinit: entrada forjada no baseline da árvore não esconde o caminho novo (referência: HEAD)", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  forjaEntrada(root, "src/auth.js");
+  writeFileSync(join(root, "src/auth.js"), "BAD\n");
+  const before = readFileSync(BL(root), "utf8");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado"));
+  assert.equal(r.code, 2, r.out + r.err);
+  assert.match(r.err, /^  src\/auth\.js$/m);
+  assert.match(r.err, /HEAD/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: com merge-base, forja commitada na branch também não esconde o caminho novo", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+  git(root, "checkout", "-qb", "feat");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  forjaEntrada(root, "src/auth.js");
+  writeFileSync(join(root, "src/auth.js"), "BAD\n");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "forja commitada");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado"));
+  assert.equal(r.code, 2, r.out + r.err);
+  assert.match(r.err, /^  src\/auth\.js$/m);
+  assert.match(r.err, /merge-base/);
+  const ok = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado", "--allow-new-paths"));
+  assert.equal(ok.code, 0, ok.err);
+  assert.match(ok.out, /caminho novo: src\/auth\.js/);
+  assert.match(ok.out, /comparado com: o baseline do merge-base/);
 });
