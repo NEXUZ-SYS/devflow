@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.6.0] — 2026-10-08
+
 ### Added — `baseline reinit`: refazer o baseline de um standard
 
 Quando o linter de um standard muda de regra ou de mensagem, todas as impressões digitais dele mudam: o que estava aceito volta como violação nova e as entradas antigas ficam órfãs. Não havia caminho razoável para isso, porque o `baseline init` recusa quando já existe baseline e o `baseline accept` sobe uma ocorrência por chamada.
