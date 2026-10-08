@@ -155,7 +155,7 @@ export async function checkFiles({
   const ctx = versionCtx(projectRoot);
   const result = {
     blocking: [], warnings: [], review: [], baselined: [], errors: [],
-    hasBaseline: false, baselineSource: "nenhum", baselineError: null,
+    hasBaseline: false, baselineSource: "nenhum", baselineError: null, linterRuns: 0,
   };
 
   let bl = baseline;
@@ -198,6 +198,8 @@ export async function checkFiles({
       jobs.push({ std, rel });
     }
   }
+  // Quantas execuções foram despachadas: "rodou e não achou nada" não é "não rodou".
+  result.linterRuns = jobs.length;
 
   const trustedPlugin = trustedPluginRoot();
   const controller = new AbortController();
