@@ -34,7 +34,8 @@ administrador faz:
   (`assets/standards/profiles/*/machine/`). No protocolo antigo o linter devolve um achado por
   arquivo, sem linha, e a catraca desses standards conta por arquivo: uma violação nova num
   arquivo que já tem uma aceita não bloqueia. O `check` e o `baseline init` avisam quando isso
-  acontece.
+  acontece. A migração troca regra e mensagem desses linters; o projeto que já tem baseline
+  refaz o aceite de cada standard com `baseline reinit <std> --reason "…"`.
 - **Rodada em ambiente real.** Nada rodou em GitHub nem em GitLab de verdade. Falta conferir:
   se o checkout da merge ref com histórico completo traz a branch base; os campos da API de
   reviews que a aprovação do override usa (`commit_id`, `submitted_at`,
@@ -221,3 +222,32 @@ A medição está em `docs/research/2026-09-standards-baseline-projeto-real.md`.
   (`tests/integration/test-standards-gates-ci.mjs`). Convém o estático afirmar também a linha
   da conferência de 40 dígitos, a linha que tira a base do `FETCH_HEAD` e o conjunto de linhas
   que usam o nome da branch.
+
+## 8. Apontado na revisão do `baseline reinit`
+
+Achados da revisão de segurança do `baseline reinit` (outubro de 2026) em código anterior a ele.
+Todos demonstrados por execução numa cópia do repositório.
+
+- **O log do gate esconde entradas além da 200ª linha.** O `gate` lista no máximo 200 linhas de
+  baseline, na ordem da impressão digital, que depende do caminho. Num PR que regrava um
+  standard com mais de 200 entradas, quem escolhe o nome do arquivo consegue deixar a entrada
+  plantada fora do log, e com o override do dono aprovado o gate sai 0 sem citá-la
+  (`scripts/lib/standards-check-cli.mjs`, `GATE_MAX_BASELINE_LINES`). Quem aprova ainda vê o
+  arquivo no diff do PR. Correção sugerida: listar primeiro, e sem teto, os caminhos que não
+  tinham entrada daquele standard na base.
+- **O `enforce` ecoa o id sem validar.** Com um standard cujo id traga texto de comando, a
+  recusa por falta de terminal imprime esse texto na linha que o humano é convidado a colar; e
+  "standard … não encontrado" repete ESC e quebra de linha no stderr. O `reinit` valida o
+  formato antes de qualquer eco; o `enforce` pode usar a mesma expressão.
+- **`baseline init`, `prune`, `accept` e `enforce` ignoram opção desconhecida.**
+  `baseline init --dry-run` cria o baseline. `check`, `gate` e `reinit` recusam.
+- **Arquivo não rastreado entra no baseline e trava o PR.** `init` e `reinit` analisam também os
+  arquivos não rastreados; um rascunho local com violação ganha entrada, e o gate reprova o PR
+  por crédito pré-pago ("aceita 1, a árvore tem 0"), mesmo com o override. Sugestão: avisar os
+  caminhos não rastreados que ganharam entrada.
+- **Linter que falha depois de imprimir parte dos achados é execução válida.** Se ele sai com 1
+  e já imprimiu linhas `VIOLATION`, o contrato de saída o aceita, e `init`, `accept` e `reinit`
+  registram só o que foi impresso.
+- **Baseline "do HEAD" lido de outro repositório.** Com `GIT_DIR` apontando para outro
+  repositório no ambiente do operador e o baseline ausente da árvore, a versão "do HEAD" vem de
+  lá. Exige controlar o ambiente de quem roda o comando.

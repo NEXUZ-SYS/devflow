@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `baseline reinit`: refazer o baseline de um standard
+
+Quando o linter de um standard muda de regra ou de mensagem, todas as impressões digitais dele mudam: o que estava aceito volta como violação nova e as entradas antigas ficam órfãs. Não havia caminho razoável para isso, porque o `baseline init` recusa quando já existe baseline e o `baseline accept` sobe uma ocorrência por chamada.
+
+`devflow-standards baseline reinit <std-id> --reason "<justificativa>" [--allow-new-paths]` refaz as entradas daquele standard com os achados atuais. As entradas que não mudaram ficam intactas, com a justificativa que tinham, e as dos outros standards não são tocadas. Só roda no terminal interativo do operador, fora de CI, e exige justificativa, registrada nas entradas novas e alteradas.
+
+- **Caminho novo é recusado por padrão.** Violação em arquivo que não tinha nenhuma entrada do standard só entra com `--allow-new-paths`; sem a flag o comando lista os arquivos e não grava. Migração de mensagem ou de regra não cria caminho novo.
+- **O relato mostra o que está sendo aceito:** entradas mantidas, novas, alteradas e removidas, a contagem por regra, os caminhos novos e os que ganharam ocorrências (antes → depois).
+- **Falha fechado:** linter do standard fora do contrato ou baseline alterado durante a execução saem com 3; standard cujo linter não rodou em nenhum arquivo sai com 2, apontando o `prune`. Opção desconhecida é uso incorreto. Em nenhum desses casos o arquivo é gravado.
+
+No CI nada muda: o PR com o baseline refeito aumenta entradas e continua precisando do override do dono no GitHub; no GitLab o job segue vermelho. O `checkFiles` do engine passa a informar quantas execuções de linter despachou (`linterRuns`), campo novo também no `check --json`.
+
+Limite conhecido: na troca de um linter do protocolo antigo para o v2, as ocorrências por arquivo crescem legitimamente, e uma violação nova num arquivo que já tinha entrada aparece só como crescimento.
+
+Decisão: [ADR-015 v1.1.0](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md) (voltou a `Proposto` com a evolução; reaprovação do dono do projeto pendente) · desenho: [spec](docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
+
 ## [3.5.1] — 2026-10-07
 
 ### Fixed — O lock de arquivo tomava um lock vivo (`instinct-store`) e nunca segurava (`adr-update-index`)
