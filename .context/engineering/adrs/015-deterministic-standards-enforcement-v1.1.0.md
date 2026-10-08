@@ -6,7 +6,7 @@ scope: organizational
 source: local
 stack: universal
 category: agent-harness
-status: Proposto
+status: Aprovado
 version: 1.1.0
 created: 2026-09-26
 supersedes: []
@@ -19,7 +19,7 @@ summary: "Os linters dos standards deixam de ser nudge async e viram gate: um st
 # ADR — Enforcement determinístico de standards
 
 - **Data:** 2026-09-26
-- **Status:** Proposto
+- **Status:** Aprovado
 - **Escopo:** Organizacional
 - **Stack:** universal (hooks bash + Node; Claude Code e omp)
 - **Categoria:** Agent Harness

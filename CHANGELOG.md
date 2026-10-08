@@ -23,7 +23,7 @@ O wrapper `devflow-standards.mjs` passa a repassar ao CLI de standards os argume
 
 Limite conhecido: na troca de um linter do protocolo antigo para o v2, as ocorrências por arquivo crescem legitimamente, e uma violação nova num arquivo que já tinha entrada aparece só como crescimento.
 
-Decisão: [ADR-015 v1.1.0](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md) (voltou a `Proposto` com a evolução; reaprovação do dono do projeto pendente) · desenho: [spec](docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
+Decisão: [ADR-015 v1.1.0](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md) (aprovada pelo dono do projeto em 2026-10-08) · desenho: [spec](docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
 
 ## [3.5.1] — 2026-10-07
 
