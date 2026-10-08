@@ -377,6 +377,57 @@ export function acceptFinding(baseline, finding, { reason, by } = {}) {
   return { version: BASELINE_VERSION, entries };
 }
 
+const byFirst = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+
+// Refaz as entradas de UM standard com os achados atuais (operador, D6). Entrada cuja impressão
+// digital e contagem não mudaram fica como está — mesmo objeto, mesma justificativa; as dos
+// outros standards nem são olhadas. Os caminhos novos e os que cresceram saem do CAMINHO, que
+// uma migração de mensagem ou de regra não muda, e não da impressão digital, que ela muda toda.
+// Sem diferença, devolve o próprio baseline recebido: o chamador não grava.
+export function reinitStandard(baseline, findings, stdId, { reason, by } = {}) {
+  if (!reason || !String(reason).trim()) throw new Error("baseline reinit exige justificativa (--reason)");
+  const mine = findings.filter(x => x.stdId === stdId);
+  const old = baseline.entries.filter(e => e.stdId === stdId);
+  const before = new Map(old.map(e => [e.fp, e]));
+  const now = countBy(mine);
+  const first = new Map();
+  for (const x of mine) if (!first.has(x.fp)) first.set(x.fp, x);
+
+  const tally = () => ({ entries: 0, count: 0 });
+  const kept = tally(), added = tally(), altered = tally(), removed = tally();
+  const byRule = new Map(); // Map, não objeto: "constructor" e "__proto__" são nomes de regra válidos
+  const keepFp = new Set();
+  const fresh = [];
+  for (const [fp, count] of now) {
+    const prev = before.get(fp);
+    if (prev && prev.count === count) { keepFp.add(fp); kept.entries++; kept.count += count; continue; }
+    const x = first.get(fp);
+    const t = prev ? altered : added;
+    t.entries++; t.count += count;
+    byRule.set(x.ruleId, (byRule.get(x.ruleId) || 0) + count);
+    fresh.push(toEntry(x, { count, reason, ...(by ? { acceptedBy: by } : {}) }));
+  }
+  for (const e of old) if (!now.has(e.fp)) { removed.entries++; removed.count += e.count; }
+
+  const perPath = (pairs) => { const m = new Map(); for (const [p, c] of pairs) m.set(p, (m.get(p) || 0) + c); return m; };
+  const pathBefore = perPath(old.map(e => [e.path, e.count]));
+  const pathNow = perPath(mine.map(x => [x.path, 1]));
+  const newPaths = [...pathNow.keys()].filter(p => !pathBefore.has(p)).sort();
+  const grownPaths = [...pathNow].filter(([p, c]) => pathBefore.has(p) && c > pathBefore.get(p))
+    .map(([p, c]) => [p, pathBefore.get(p), c]).sort(byFirst);
+
+  const changed = added.entries + altered.entries + removed.entries > 0;
+  const summary = { changed, kept, added, altered, removed, byRule: [...byRule].sort(byFirst), newPaths, grownPaths };
+  if (!changed) return { baseline, ...summary };
+  return {
+    baseline: {
+      version: BASELINE_VERSION,
+      entries: [...baseline.entries.filter(e => e.stdId !== stdId || keepFp.has(e.fp)), ...fresh],
+    },
+    ...summary,
+  };
+}
+
 export function compareCounts(head, base) {
   const allowed = new Map((base?.entries || []).map(e => [e.fp, e.count]));
   return (head?.entries || [])

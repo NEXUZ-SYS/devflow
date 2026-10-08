@@ -6,7 +6,7 @@ import { join } from "node:path";
 import {
   fingerprint, normalizeMessage, toRelPosix, loadBaseline, saveBaseline, parseBaseline, BaselineError,
   initBaseline, splitByBaseline, pruneBaseline, acceptFinding, compareCounts, baselinePath, stripRoots,
-  realPathOr, RealPathLoopError,
+  realPathOr, RealPathLoopError, reinitStandard,
 } from "../../scripts/lib/standards-baseline.mjs";
 
 const f = (o = {}) => { const x = { stdId: "std-a", ruleId: "r", path: "src/x.ts", line: 1, message: "m", ...o }; x.fp = fingerprint(x); return x; };
@@ -463,4 +463,110 @@ test("saveBaseline acima do teto não sobrescreve o baseline existente", () => {
   assert.throws(() => saveBaseline(root, more, { maxBytes: before.length }), BaselineError);
   assert.equal(readFileSync(baselinePath(root), "utf8"), before);
   assert.deepEqual(readdirSync(join(root, ".context/engineering/standards")), ["baseline.json"]);
+});
+
+const T0 = { entries: 0, count: 0 };
+
+test("reinit: entrada nova recebe justificativa e autor; a de outro standard fica como estava", () => {
+  const keepA = f({ stdId: "std-a", message: "a1" });
+  const oldB = f({ stdId: "std-b", message: "antiga" });
+  const bl = initBaseline([keepA, oldB, oldB], { by: "ana" });
+  const n1 = f({ stdId: "std-b", message: "nova", line: 3 });
+  const n2 = f({ stdId: "std-b", message: "nova", line: 9 });
+  const n3 = f({ stdId: "std-b", ruleId: "s", message: "outra" });
+  const out = reinitStandard(bl, [keepA, n1, n2, n3], "std-b", { reason: "linter migrado", by: "bia" });
+  assert.equal(out.changed, true);
+  assert.equal(out.baseline.entries[0], bl.entries[0]);
+  const b = out.baseline.entries.filter(e => e.stdId === "std-b");
+  assert.deepEqual(b.map(e => [e.fp, e.count]), [[n1.fp, 2], [n3.fp, 1]]);
+  assert.ok(b.every(e => e.reason === "linter migrado" && e.acceptedBy === "bia" && e.acceptedAt));
+  assert.ok(!out.baseline.entries.some(e => e.fp === oldB.fp));
+  assert.deepEqual([out.kept, out.added, out.altered, out.removed], [T0, { entries: 2, count: 3 }, T0, { entries: 1, count: 2 }]);
+  assert.deepEqual(out.byRule, [["r", 2], ["s", 1]]);
+  assert.doesNotThrow(() => parseBaseline(JSON.stringify(out.baseline)));
+});
+
+test("reinit: entrada com mesma impressão digital e contagem fica intacta, com a justificativa antiga", () => {
+  const a = f({ stdId: "std-b", path: "src/a.ts" });
+  const b = f({ stdId: "std-b", path: "src/b.ts" });
+  const bl = acceptFinding(initBaseline([a], { by: "ana" }), b, { reason: "legado do fornecedor, chamado 123", by: "ana" });
+  const novo = f({ stdId: "std-b", path: "src/c.ts" });
+  const out = reinitStandard(bl, [a, b, novo], "std-b", { reason: "aceite em lote", by: "bia" });
+  assert.equal(out.changed, true);
+  for (const e of bl.entries) assert.ok(out.baseline.entries.includes(e), `a entrada de ${e.path} foi regravada`);
+  assert.equal(out.baseline.entries.find(e => e.fp === b.fp).reason, "legado do fornecedor, chamado 123");
+  assert.equal(out.baseline.entries.find(e => e.fp === novo.fp).reason, "aceite em lote");
+  assert.deepEqual([out.kept, out.added, out.altered, out.removed], [{ entries: 2, count: 2 }, { entries: 1, count: 1 }, T0, T0]);
+  assert.deepEqual([out.newPaths, out.grownPaths], [["src/c.ts"], []]);
+});
+
+test("reinit: contagem que mudou regrava a entrada e aparece como caminho que cresceu", () => {
+  const a = f({ stdId: "std-b", path: "src/a.ts" });
+  const out = reinitStandard(initBaseline([a], { by: "ana" }), [a, a, a], "std-b", { reason: "mais duas", by: "bia" });
+  const e = out.baseline.entries.find(x => x.fp === a.fp);
+  assert.deepEqual([e.count, e.reason, e.acceptedBy], [3, "mais duas", "bia"]);
+  assert.deepEqual([out.kept, out.added, out.altered, out.removed], [T0, T0, { entries: 1, count: 3 }, T0]);
+  assert.deepEqual([out.newPaths, out.grownPaths], [[], [["src/a.ts", 1, 3]]]);
+  assert.deepEqual(out.byRule, [["r", 3]]);
+});
+
+test("reinit: caminho novo e caminho que cresceu saem do caminho, não da mensagem", () => {
+  // Migração: todas as mensagens mudam (impressões digitais novas) e os arquivos são os mesmos.
+  const b = (path, message) => f({ stdId: "std-b", path, message });
+  const bl = initBaseline([b("src/a.ts", "antiga"), b("src/b.ts", "antiga")]);
+  const migrado = [b("src/a.ts", "nova"), b("src/b.ts", "nova")];
+  const legit = reinitStandard(bl, migrado, "std-b", { reason: "x", by: "bia" });
+  assert.deepEqual([legit.newPaths, legit.grownPaths], [[], []]);
+  const comPlanta = [...migrado, b("src/b.ts", "nova"), b("src/plantado.ts", "nova")];
+  const out = reinitStandard(bl, comPlanta, "std-b", { reason: "x", by: "bia" });
+  assert.deepEqual(out.newPaths, ["src/plantado.ts"]);
+  assert.deepEqual(out.grownPaths, [["src/b.ts", 1, 2]]);
+});
+
+test("reinit: as entradas dos outros standards saem idênticas (propriedade)", () => {
+  let seed = 42;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const mk = () => f({ stdId: `std-${"abc"[rnd(3)]}`, ruleId: `r${rnd(3)}`, path: `src/f${rnd(4)}.ts`, message: `m${rnd(5)}` });
+  for (let round = 0; round < 200; round++) {
+    const bl = initBaseline(Array.from({ length: rnd(12) }, mk), { by: "ana" });
+    const now = Array.from({ length: rnd(12) }, mk);
+    const target = `std-${"abc"[rnd(3)]}`;
+    const out = reinitStandard(bl, now, target, { reason: "x", by: "bia" });
+    const others = (x) => x.entries.filter(e => e.stdId !== target);
+    assert.deepEqual(others(out.baseline), others(bl), `rodada ${round}`);
+    assert.ok(others(bl).every(e => out.baseline.entries.includes(e)), `rodada ${round}: entrada de outro standard foi copiada`);
+    const want = new Map();
+    for (const x of now) if (x.stdId === target) want.set(x.fp, (want.get(x.fp) || 0) + 1);
+    const got = new Map(out.baseline.entries.filter(e => e.stdId === target).map(e => [e.fp, e.count]));
+    assert.deepEqual(got, want, `rodada ${round}`);
+  }
+});
+
+test("reinit: standard sem achados atuais fica sem entradas", () => {
+  const a = f({ stdId: "std-a" }), b = f({ stdId: "std-b" });
+  const out = reinitStandard(initBaseline([a, b]), [a], "std-b", { reason: "regra retirada", by: "bia" });
+  assert.equal(out.changed, true);
+  assert.deepEqual(out.baseline.entries.map(e => e.stdId), ["std-a"]);
+  assert.deepEqual([out.kept, out.added, out.altered, out.removed], [T0, T0, T0, { entries: 1, count: 1 }]);
+});
+
+test("reinit: sem diferença devolve o mesmo baseline e changed false", () => {
+  const a = f({ stdId: "std-a" }), b = f({ stdId: "std-b" });
+  const bl = initBaseline([a, b, b], { by: "ana" });
+  const out = reinitStandard(bl, [b, a, b], "std-b", { reason: "x", by: "bia" });
+  assert.equal(out.changed, false);
+  assert.equal(out.baseline, bl);
+  assert.deepEqual([out.kept, out.added, out.altered, out.removed], [{ entries: 1, count: 2 }, T0, T0, T0]);
+});
+
+test("reinit: regra chamada constructor ou __proto__ é contada como qualquer outra", () => {
+  const b = (ruleId, path = "src/x.ts") => f({ stdId: "std-b", ruleId, path });
+  const out = reinitStandard(initBaseline([f({ stdId: "std-a" })]), [b("constructor"), b("__proto__"), b("__proto__", "src/y.ts")], "std-b", { reason: "x", by: "bia" });
+  assert.deepEqual(out.byRule, [["__proto__", 2], ["constructor", 1]]);
+});
+
+test("reinit exige justificativa", () => {
+  const bl = initBaseline([f()]);
+  assert.throws(() => reinitStandard(bl, [f()], "std-a", { by: "bia" }), /justificativa/);
+  assert.throws(() => reinitStandard(bl, [f()], "std-a", { reason: "   ", by: "bia" }), /justificativa/);
 });
