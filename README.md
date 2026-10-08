@@ -100,7 +100,7 @@ Os standards deixam de ser lembrete e viram **gate**: um motor único aplica os 
 - **A garantia é o CI:** o job faz checkout do plugin público na versão fixada em `.context/bin/devflow-plugin.ref` (lida da branch de destino) e roda `gate --base-ref=refs/remotes/origin/<alvo> --ci`. Um enfraquecimento deliberado no GitHub é liberado pelo rótulo `standards-ratchet-approved` **e** por um review `APPROVED` no último commit, de quem é dono dos arquivos da catraca (o sinal rodado pelo executor repassa o override com `DEVFLOW_PR_NUMBER` e `DEVFLOW_REPO`). Configurar o job como *required check* e "Require review from Code Owners" é do operador.
 - **Limites declarados:** o pre-commit e os guards locais são atrito; projeto em subdiretório do repositório e GitHub Enterprise ficam fora; nada foi verificado num GitHub ou GitLab reais.
 
-Guia completo: **[docs/guia-enforcement-standards.md](docs/guia-enforcement-standards.md)** · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md).
+Guia completo: **[docs/guia-enforcement-standards.md](docs/guia-enforcement-standards.md)** · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md).
 
 ---
 

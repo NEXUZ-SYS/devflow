@@ -411,3 +411,13 @@ test("checkFiles: com contentRoot, a árvore de trabalho não decide o caminho d
   assert.deepEqual([out.blocking.length, out.errors.length], [0, 0]);
 });
 
+
+test("linterRuns conta as execuções de linter despachadas", async () => {
+  const root = demoProject();
+  writeFileSync(join(root, "src/a.js"), "ok\n");
+  writeFileSync(join(root, "src/b.js"), "BAD\n");
+  assert.equal((await checkFiles({ projectRoot: root, files: ["src/a.js", "src/b.js"], baseline: null })).linterRuns, 2);
+  // Fora do applyTo, ou barrado pelo filtro: nada roda — e isso não é o mesmo que "sem achados".
+  assert.equal((await checkFiles({ projectRoot: root, files: ["README.md"], baseline: null })).linterRuns, 0);
+  assert.equal((await checkFiles({ projectRoot: root, files: ["src/b.js"], baseline: null, stdFilter: () => false })).linterRuns, 0);
+});

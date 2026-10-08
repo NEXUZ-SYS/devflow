@@ -2,7 +2,7 @@
 
 Este guia é para quem **usa** o DevFlow num projeto: como as normas (standards) passaram de lembrete
 para gate, como ligar cada camada, o que fazer quando algo bloqueia e onde a proteção termina.
-Decisão de arquitetura: [ADR-015](../.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md).
+Decisão de arquitetura: [ADR-015](../.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md).
 Desenho completo: [spec](superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md).
 
 Sumário: [O que mudou](#o-que-mudou) · [Níveis](#níveis-e-defaults) · [Comandos](#comandos) ·
@@ -98,12 +98,13 @@ plugin instalado.
 | `check [--staged \| --all \| <caminhos>] [--base-ref=<ref>] [--json]` | Roda os linters e compara com o baseline. `--staged` lê o índice do git (é o que o pre-commit usa); `--all` inclui arquivos não rastreados. Sozinho, mesmo com `--base-ref` e `--ci`, **não** compara a catraca nem limita o crédito do baseline ao que a branch de destino ainda produz: quem monta o próprio job de CI usa o `gate` |
 | `baseline init` | Cria o baseline com **todos** os achados de hoje. Recusa se já existir |
 | `baseline prune` | Reduz as contagens ao que ainda existe e remove o que zerou. Só encolhe; qualquer um pode rodar |
-| `baseline accept <fp> --reason "…"` | Único caminho para **aumentar** o baseline. Exige justificativa (fica registrada). `<fp>` é a impressão digital que aparece no `check --json` |
+| `baseline accept <fp> --reason "…"` | **Aumenta** o baseline em uma ocorrência. Exige justificativa (fica registrada). `<fp>` é a impressão digital que aparece no `check --json` |
+| `baseline reinit <std> --reason "…" [--allow-new-paths]` | Refaz as entradas de **um** standard com os achados atuais. As que não mudaram e as que só diminuíram ficam com a justificativa que tinham, e as dos outros standards não são tocadas. É o caminho quando o linter do standard mudou de regra ou de mensagem. Arquivo que não tinha nenhuma entrada do standard **no baseline da branch de destino** (o do merge-base com `origin/main`; sem ele, o do HEAD) só entra com `--allow-new-paths`; sem a flag o comando lista esses arquivos e não grava. Uma entrada que você aceitou antes, na mesma branch, também conta como caminho novo. Confira no relato os caminhos novos e os que ganharam ocorrências: é ali que aparece o que você está aceitando |
 | `enforce <std> --level block\|warn\|review` | Promove (livre) ou rebaixa um standard do projeto. Standard default exige `eject` antes |
 | `explain <arquivo…>` | Lista as normas aplicáveis a cada arquivo, com o nível e o nível máximo. Serve para planejar |
 | `gate --base-ref=<ref> [--ci]` | Compara a catraca com a branch de destino e roda o `check --all`, com o crédito do baseline limitado ao que a branch de destino ainda produz (só o `gate` faz isso). É o que o CI executa |
 
-**`baseline init`, `baseline accept` e o rebaixamento de nível só rodam num terminal interativo**
+**`baseline init`, `baseline accept`, `baseline reinit` e o rebaixamento de nível só rodam num terminal interativo**
 do operador (entrada padrão ligada a um terminal e fora de CI). Num script, num agente ou em CI o
 CLI recusa com exit 2 e imprime o comando para o humano colar no terminal dele.
 
@@ -505,6 +506,11 @@ Nada abaixo é segredo; é o que cada camada garante e o que não garante.
   impressões digitais desse standard mudam junto**: o que estava aceito volta como violação
   nova, as entradas antigas ficam órfãs e o gate acusa "linter alterado" no PR da troca. Esse PR
   só passa refazendo o aceite e com o override do dono (GitHub); no GitLab o job fica vermelho.
+  Para refazer o aceite de uma vez, o operador roda `baseline reinit <std> --reason "…"` no
+  terminal dele. Nessa troca específica, do protocolo antigo para o v2, as ocorrências por
+  arquivo crescem (o antigo registrava uma por arquivo): o comando mostra cada caminho com o
+  antes e o depois, mas não tem como separar esse crescimento de uma violação nova no mesmo
+  arquivo. Quem aprova o override confere pelo diff do PR.
 
 **O crédito do baseline e a branch de destino**
 
@@ -828,7 +834,9 @@ Para quem já usa o DevFlow e está atualizando o plugin:
    aparece no aviso: confira também o formato da linha `VIOLATION` no próprio arquivo. **A ordem
    importa:** trocar o linter depois do `baseline init` muda todas as impressões digitais do
    standard, tudo o que estava aceito volta como violação nova e o gate acusa "linter
-   alterado".
+   alterado". Se o baseline já existe, refaça o aceite daquele standard com
+   `baseline reinit <std> --reason "…"` no seu terminal e leve o baseline no mesmo PR da troca
+   do linter; o PR continua precisando do override do dono.
 5. **Registre o legado:** `baseline init` no seu terminal, revise o diff e commite. A partir
    daí só a violação nova bloqueia.
 6. **Ligue as camadas** na ordem de "Como ligar" (pre-commit, CI, `verify:`, CODEOWNERS) e peça ao

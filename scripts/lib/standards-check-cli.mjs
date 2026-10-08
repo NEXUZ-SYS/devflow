@@ -4,7 +4,7 @@
 // que falham FECHADOS: 0 ok · 1 violação block nova ou catraca enfraquecida · 2 uso incorreto
 // ou ação recusada · 3 erro de execução (inclui baseline inválido e qualquer exceção não prevista).
 //
-// Catraca sob o operador (D6): `baseline init`, `baseline accept` e `enforce` para baixo
+// Catraca sob o operador (D6): `baseline init`, `baseline accept`, `baseline reinit` e `enforce` para baixo
 // exigem terminal interativo. `baseline prune` (só encolhe) e `enforce` para cima são livres.
 // A garantia (D8) é o `gate --ci`, que compara a catraca com o merge-base.
 import { execFileSync } from "node:child_process";
@@ -17,7 +17,7 @@ import {
 import { standardFromText } from "./standards-loader.mjs";
 import { resolveLevel, maxLevel, LEVELS, RANK } from "./standards-level.mjs";
 import {
-  saveBaseline, initBaseline, pruneBaseline, acceptFinding, capCredit, toRelPosix, parseBaseline,
+  saveBaseline, initBaseline, pruneBaseline, acceptFinding, reinitStandard, capCredit, toRelPosix, parseBaseline,
   baselineLogicalRel, baselineSymlinkComponent, BaselineError, BASELINE_VERSION,
 } from "./standards-baseline.mjs";
 import { compareRatchet, baselineAtBase, VIOLATION_KINDS } from "./standards-ratchet.mjs";
@@ -53,6 +53,9 @@ const opt = (args, k) => {
 };
 
 const FP_RE = /^[0-9a-f]{40}$/;
+const STD_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const REASON_MAX = 500;
+const REINIT_USAGE = `uso: baseline reinit <std-id> --reason "<justificativa>" [--allow-new-paths] (um standard por vez; <std-id> só com letras, dígitos, ponto, hífen e sublinhado; justificativa obrigatória, até ${REASON_MAX} caracteres)`;
 
 function refuseNonInteractive(what) {
   console.error(`recusado: ${what} afrouxa a catraca e exige o terminal interativo do operador (ADR-015 D6).`);
@@ -293,6 +296,23 @@ async function cmdCheck(root, args, { stdFilter, quietOk = false, snapshot = nul
   return 0;
 }
 
+// Referência do `reinit` para "caminho novo" e "cresceu": o baseline da base, que o agente não
+// altera no PR. Sem merge-base com a base padrão, o do HEAD; sem nenhum dos dois legível (sem
+// commit, fora de git), o da árvore — que o agente consegue editar, e por isso vem com aviso.
+// Base sem baseline é adoção: todo caminho conta como novo.
+function reinitReference(root, tree) {
+  const { mb } = resolveMergeBase(root, DEFAULT_BASE_REF);
+  const tries = [...(mb ? [[mb, `o baseline do merge-base ${mb.slice(0, 8)} com ${DEFAULT_BASE_REF}`]] : []),
+    ["HEAD", `o baseline do HEAD (sem merge-base com ${DEFAULT_BASE_REF})`]];
+  for (const [rev, label] of tries) {
+    let b;
+    try { b = baselineAtBase(root, rev); } catch { continue; }
+    if (b.state === "present") return { baseline: parseBaseline(b.text, b.where), note: label };
+    if (b.state === "absent") return { baseline: { version: BASELINE_VERSION, entries: [] }, note: `${label}, que não tem baseline` };
+  }
+  return { baseline: tree, note: "o baseline da árvore (sem commit legível)", unprotected: true };
+}
+
 async function cmdBaseline(root, args, isInteractive) {
   const action = args[0];
   if (action === "init") {
@@ -354,7 +374,76 @@ async function cmdBaseline(root, args, isInteractive) {
     console.log(`✓ aceito: ${fmt(finding)}`);
     return 0;
   }
-  console.error("uso: baseline init | prune | accept <fp> --reason \"<justificativa>\"");
+  if (action === "reinit") {
+    const rest = args.slice(1);
+    const ids = positional(rest);
+    const id = ids[0];
+    const reason = opt(rest, "--reason");
+    const unknown = rest.some(a => a.startsWith("--") && a !== "--reason" && !a.startsWith("--reason=") && a !== "--allow-new-paths");
+    // Validado ANTES de recusar ou imprimir, como o fp do accept: id, justificativa e opções
+    // vêm do agente e iriam parar num comando que o humano cola no terminal. Qualquer coisa
+    // fora do esperado → exit 2 sem ecoar o valor. Opção desconhecida não é ignorada:
+    // `--dry-run` gravaria.
+    if (unknown || ids.length !== 1 || !STD_ID_RE.test(id) || !reason || !reason.trim() || reason.length > REASON_MAX) {
+      console.error(REINIT_USAGE);
+      return 2;
+    }
+    if (!isInteractive()) return refuseNonInteractive(`baseline reinit ${id} --reason "…"`);
+    const { baseline: bl } = resolveBaseline(root); // BaselineError → 3 (runStandardsCommand)
+    if (!bl) {
+      console.error(`sem baseline para refazer: o operador registra o legado com ${pluginCmd()} baseline init`);
+      return 2;
+    }
+    // Igualdade estrita: um std com `id: [std-x]` não pode casar o alvo por coerção.
+    const isTarget = (s) => typeof s.id === "string" && s.id === id;
+    if (!loadEffectiveStandards(root).some(isTarget)) {
+      console.error(`standard ${id} não encontrado`);
+      return 2;
+    }
+    // Só o linter do alvo roda: as entradas dos outros standards não mudam, e um linter
+    // quebrado de outro standard não impede a operação. Erro no do alvo fecha antes de gravar.
+    const r = await checkFiles({ projectRoot: root, files: allFiles(root), baseline: null, stdFilter: isTarget });
+    if (r.errors.length) { reportErrors(r.errors); return 3; }
+    // "Não rodou" não é "sem achados": sem linter, ou com applyTo que não casa nada, refazer
+    // zeraria as entradas do standard.
+    if (r.linterRuns === 0) {
+      console.error(`recusado: nenhum linter rodou para ${id} (standard sem linter, ou o applyTo não casa nenhum arquivo). Sem execução não há o que refazer; para tirar entradas que sobraram, use ${pluginCmd()} baseline prune`);
+      return 2;
+    }
+    const all = [...r.blocking, ...r.warnings, ...r.review];
+    warnLegacyLinters(root, all);
+    const ref = reinitReference(root, bl);
+    if (ref.unprotected) console.error("aviso: sem commit para comparar, os caminhos novos são medidos contra o baseline da árvore, que pode ter sido editado; confira o diff do baseline antes de commitar.");
+    const out = reinitStandard(bl, all, id, { reason, by: who(), reference: ref.baseline });
+    if (!out.changed) {
+      console.log(`✓ ${id}: nada a refazer (${out.kept.entries} entrada(s) mantida(s); ${r.linterRuns} execução(ões) de linter)`);
+      return 0;
+    }
+    // Migração de mensagem ou de regra não cria caminho novo; arquivo que não tinha entrada
+    // do standard só entra com a flag, depois de o operador ver a lista. Sem teto de linhas.
+    if (out.newPaths.length && !rest.includes("--allow-new-paths")) {
+      console.error(`recusado: ${out.newPaths.length} caminho(s) com achado de ${id} não tinham nenhuma entrada deste standard em ${ref.note}:`);
+      for (const p of out.newPaths) console.error(`  ${logPath(p)}`);
+      console.error("Migração de mensagem ou de regra não cria caminho novo. Confira os arquivos; para aceitá-los, repita o comando com --allow-new-paths. Nada foi gravado.");
+      return 2;
+    }
+    // Outro comando pode ter gravado enquanto os linters rodavam: gravar por cima apagaria o
+    // que ele aceitou.
+    if (JSON.stringify(resolveBaseline(root).baseline) !== JSON.stringify(bl)) {
+      console.error("erro: o baseline mudou durante a execução (outro comando gravou); nada foi gravado. Rode de novo.");
+      return 3;
+    }
+    saveBaseline(root, out.baseline);
+    const n = (t) => `${t.entries} entrada(s) (${t.count} ocorrência(s))`;
+    console.log(`✓ ${id}: baseline refeito — mantidas ${n(out.kept)}; novas ${n(out.added)}; alteradas ${n(out.altered)}; removidas ${n(out.removed)}; reduzidas ${n(out.reduced)}`);
+    console.log(`  ${r.linterRuns} execução(ões) de linter`);
+    console.log(`  comparado com: ${ref.note}`);
+    for (const [rule, c] of out.byRule) console.log(`  regra ${oneLine(rule)}: ${c}`);
+    for (const p of out.newPaths) console.log(`  caminho novo: ${logPath(p)}`);
+    for (const [p, a, b] of out.grownPaths) console.log(`  cresceu: ${logPath(p)} (${a} → ${b})`);
+    return 0;
+  }
+  console.error("uso: baseline init | prune | accept <fp> --reason \"<justificativa>\" | reinit <std-id> --reason \"<justificativa>\"");
   return 2;
 }
 

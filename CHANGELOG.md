@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `baseline reinit`: refazer o baseline de um standard
+
+Quando o linter de um standard muda de regra ou de mensagem, todas as impressões digitais dele mudam: o que estava aceito volta como violação nova e as entradas antigas ficam órfãs. Não havia caminho razoável para isso, porque o `baseline init` recusa quando já existe baseline e o `baseline accept` sobe uma ocorrência por chamada.
+
+`devflow-standards baseline reinit <std-id> --reason "<justificativa>" [--allow-new-paths]` refaz as entradas daquele standard com os achados atuais. As entradas que não mudaram ficam intactas, com a justificativa que tinham, e as dos outros standards não são tocadas. Só roda no terminal interativo do operador, fora de CI, e exige justificativa, registrada nas entradas novas e alteradas.
+
+- **Caminho novo é recusado por padrão.** Violação em arquivo que não tinha nenhuma entrada do standard só entra com `--allow-new-paths`; sem a flag o comando lista os arquivos e não grava. Migração de mensagem ou de regra não cria caminho novo. A comparação é com o baseline da branch de destino (o do merge-base com `origin/main`; sem ele, o do HEAD), não com o da árvore, que o agente consegue editar.
+- **O relato mostra o que está sendo aceito:** entradas mantidas, novas, alteradas, removidas e reduzidas, a contagem por regra do que entrou além do já aceito, os caminhos novos e os que ganharam ocorrências (antes → depois). Entrada que só diminuiu fica com a justificativa que tinha, como no `prune`.
+- **Falha fechado:** linter do standard fora do contrato ou baseline alterado durante a execução saem com 3; standard cujo linter não rodou em nenhum arquivo sai com 2, apontando o `prune`. Opção desconhecida é uso incorreto. Em nenhum desses casos o arquivo é gravado.
+
+No CI nada muda: o PR com o baseline refeito aumenta entradas e continua precisando do override do dono no GitHub; no GitLab o job segue vermelho. O `checkFiles` do engine passa a informar quantas execuções de linter despachou (`linterRuns`), campo novo também no `check --json`.
+
+O wrapper `devflow-standards.mjs` passa a repassar ao CLI de standards os argumentos como vieram, menos o `--project=`. Antes ele consumia `--force`, `--yes`, `--keep-old`, `--with-linter` e as opções de `new`, `eject` e `search` para qualquer subcomando: `check` e `gate` as ignoravam em vez de recusar. Agora `check`, `gate` e `baseline reinit` recusam essas opções como desconhecidas.
+
+Limite conhecido: na troca de um linter do protocolo antigo para o v2, as ocorrências por arquivo crescem legitimamente, e uma violação nova num arquivo que já tinha entrada aparece só como crescimento.
+
+Decisão: [ADR-015 v1.1.0](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md) (aprovada pelo dono do projeto em 2026-10-08) · desenho: [spec](docs/superpowers/specs/2026-10-08-baseline-reinit-standard-design.md).
+
 ## [3.5.1] — 2026-10-07
 
 ### Fixed — O lock de arquivo tomava um lock vivo (`instinct-store`) e nunca segurava (`adr-update-index`)
@@ -22,7 +40,7 @@ O que muda para quem usa: duas execuções simultâneas do `adr-update-index` ag
 
 ### Added — Enforcement determinístico de standards e entrega de contexto (ADR-015)
 
-Os standards deixam de ser lembrete e viram gate: o linter rodava num hook assíncrono que nunca bloqueava, e nenhum pre-commit, CI ou fase V o executava. Entrega em três releases lógicas. Desenho: [spec](docs/superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md) · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.0.0.md) · uso: [guia](docs/guia-enforcement-standards.md).
+Os standards deixam de ser lembrete e viram gate: o linter rodava num hook assíncrono que nunca bloqueava, e nenhum pre-commit, CI ou fase V o executava. Entrega em três releases lógicas. Desenho: [spec](docs/superpowers/specs/2026-09-26-standards-enforcement-context-delivery-design.md) · decisão: [ADR-015](.context/engineering/adrs/015-deterministic-standards-enforcement-v1.1.0.md) · uso: [guia](docs/guia-enforcement-standards.md).
 
 - **Release 1 — correções e fundação.** Corrige o P0 do `pre-tool-use` (texto puro no stdout antes do JSON descartava o deny da branch protection, do config-guard e o `ask`; toda decisão sai agora por `emit_decision`) e o P1 da fase V (ADRs só no caminho legado). Protocolo de linter v2 (`VIOLATION <ruleId> <arquivo>:<linha> <mensagem>`), `standards-engine` único, nível `block|warn|review` por standard e por regra (ADR-007 v3.1.0), baseline com catraca (multiconjunto; só encolhe) e a CLI `check`, `baseline init|prune|accept`, `enforce`, `explain` e `gate`.
 - **Release 2 — entrega de contexto.** Resumo das normas aplicáveis na edição, `session-start-norms` e `subagent-start` (campo próprio, até 9000 caracteres, emoldurado como dado do projeto), passos de standards nas fases P e V e o sinal reservado `standards` no `verify:` (ADR-013 v1.1.0).

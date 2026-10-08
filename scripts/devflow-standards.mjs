@@ -735,7 +735,12 @@ async function main() {
       return;
     }
     // exitCode + return (e não process.exit): não corta a saída pendente num pipe.
-    process.exitCode = await runStandardsCommand(sub, args.slice(1), projectRoot);
+    // Os argumentos vão como vieram, menos o --project=: o laço acima consome opções de `new`,
+    // `eject` e `search` (--force, --yes, --keep-old…), e o CLI precisa vê-las para recusar a
+    // opção desconhecida — sem isto, `baseline reinit … --keep-old` gravava.
+    const cliArgs = rawArgs.filter(a => !a.startsWith("--project="));
+    cliArgs.splice(cliArgs.indexOf(sub), 1);
+    process.exitCode = await runStandardsCommand(sub, cliArgs, projectRoot);
     return;
   }
 
@@ -753,6 +758,7 @@ async function main() {
   console.error("  eject <id> --with-linter [--force]    Eject + traz/cria o linter no machine/ do projeto e religa enforcement");
   console.error("  check [--staged|--all|<paths>] [--json] [--base-ref=<ref>] [--ci]  Gate determinístico (0 ok · 1 violação · 2 uso · 3 erro)");
   console.error("  baseline init|prune|accept <fp> --reason \"<texto>\"   Catraca (init/accept: só no terminal do operador)");
+  console.error("  baseline reinit <id> --reason \"<texto>\" [--allow-new-paths]  Refaz as entradas de UM standard (só no terminal do operador)");
   console.error("  enforce <id> --level block|warn|review         Promove (livre) ou rebaixa (operador) um standard");
   console.error("  explain <paths>                                Normas aplicáveis e nível");
   console.error("  gate [--base-ref=<ref>] [--ci]                 Catraca vs a base + check --all (CI e fase V); base padrão refs/remotes/origin/main");
