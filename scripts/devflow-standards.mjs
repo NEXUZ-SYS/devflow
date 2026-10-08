@@ -753,6 +753,7 @@ async function main() {
   console.error("  eject <id> --with-linter [--force]    Eject + traz/cria o linter no machine/ do projeto e religa enforcement");
   console.error("  check [--staged|--all|<paths>] [--json] [--base-ref=<ref>] [--ci]  Gate determinístico (0 ok · 1 violação · 2 uso · 3 erro)");
   console.error("  baseline init|prune|accept <fp> --reason \"<texto>\"   Catraca (init/accept: só no terminal do operador)");
+  console.error("  baseline reinit <id> --reason \"<texto>\" [--allow-new-paths]  Refaz as entradas de UM standard (só no terminal do operador)");
   console.error("  enforce <id> --level block|warn|review         Promove (livre) ou rebaixa (operador) um standard");
   console.error("  explain <paths>                                Normas aplicáveis e nível");
   console.error("  gate [--base-ref=<ref>] [--ci]                 Catraca vs a base + check --all (CI e fase V); base padrão refs/remotes/origin/main");

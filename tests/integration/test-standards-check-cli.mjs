@@ -629,3 +629,282 @@ test("R1: enforce em frontmatter CRLF grava o nível e preserva o EOL", () => {
   assert.doesNotMatch(txt.replace(/\r\n/g, ""), /\n/, "nenhuma quebra LF solta");
   assert.match(run(root, "explain", "src/x.js").stdout, /std-demo — nível block/);
 });
+
+// ── baseline reinit ──────────────────────────────────────────────────────────────────────
+const LINT_WORSE = LINT_BAD.replaceAll("BAD", "WORSE").replace("no-bad", "no-worse");
+const LINT_MIGRADO = LINT_BAD.replace("remova BAD", "tire o BAD"); // o linter muda a mensagem
+const REINIT_USO = /uso: .*baseline reinit <std-id> --reason/;
+const STD_DIR = (root) => join(root, ".context/engineering/standards");
+
+// Dois standards do projeto: std-demo (no-bad) e std-other (no-worse), os dois em block.
+function twoStdRepo() {
+  const root = repo();
+  writeFileSync(join(STD_DIR(root), "std-other.md"),
+    `---\nid: std-other\nsource: local\ndescription: outro\napplyTo: ["src/**"]\nenforcement:\n  linter: engineering/standards/machine/std-other.js\n  level: block\n---\n## Princípios\n- sem WORSE\n`);
+  writeFileSync(join(STD_DIR(root), "machine/std-other.js"), LINT_WORSE);
+  writeFileSync(join(root, "src/old.js"), "BAD\nWORSE\nWORSE\n");
+  git(root, "add", "-A");
+  return root;
+}
+
+// Captura console.log e console.error durante uma chamada in-process.
+async function captureAll(fn) {
+  const out = [], err = [];
+  const o = console.log, e = console.error;
+  console.log = (...m) => out.push(m.map(String).join(" "));
+  console.error = (...m) => err.push(m.map(String).join(" "));
+  try { return { code: await fn(), out: out.join("\n"), err: err.join("\n") }; } finally { console.log = o; console.error = e; }
+}
+
+const entriesOf = (root, id) => JSON.parse(readFileSync(BL(root), "utf8")).entries.filter(e => e.stdId === id);
+const reinit = (root, ...a) => human(root, "baseline", "reinit", ...a);
+
+test("reinit: caso feliz — refaz só o standard alvo e o check volta a ficar verde", async () => {
+  const root = twoStdRepo();
+  assert.equal(await human(root, "baseline", "init"), 0);
+  const otherBefore = entriesOf(root, "std-other");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  assert.equal(run(root, "check", "--all").status, 1, "o aceito volta como violação nova");
+
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /std-demo: baseline refeito — mantidas 0 entrada\(s\) \(0 ocorrência\(s\)\); novas 1 entrada\(s\) \(1 ocorrência\(s\)\); alteradas 0 entrada\(s\) \(0 ocorrência\(s\)\); removidas 1 entrada\(s\) \(1 ocorrência\(s\)\)/);
+  assert.match(r.out, /1 execução\(ões\) de linter/);
+  assert.match(r.out, /regra no-bad: 1/);
+  assert.doesNotMatch(r.out, /caminho novo|cresceu/);
+  assert.equal(run(root, "check", "--all").status, 0);
+  assert.deepEqual(entriesOf(root, "std-other"), otherBefore);
+  const demo = entriesOf(root, "std-demo");
+  assert.equal(demo.length, 1);
+  assert.equal(demo[0].reason, "linter migrado");
+  assert.match(demo[0].message, /tire o BAD/);
+  assert.ok(demo[0].acceptedBy && demo[0].acceptedAt);
+});
+
+test("reinit: migração com arquivo plantado — recusa sem a flag, lista o caminho e aceita com ela", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  writeFileSync(join(root, "src/auth.js"), "BAD\n"); // plantado junto com a migração
+  const before = readFileSync(BL(root), "utf8");
+
+  const no = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado"));
+  assert.equal(no.code, 2);
+  assert.match(no.err, /1 caminho\(s\) com achado de std-demo não tinham nenhuma entrada/);
+  assert.match(no.err, /^  src\/auth\.js$/m);
+  assert.match(no.err, /--allow-new-paths/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+
+  const yes = await captureAll(() => reinit(root, "std-demo", "--reason", "linter migrado", "--allow-new-paths"));
+  assert.equal(yes.code, 0, yes.err);
+  assert.match(yes.out, /caminho novo: src\/auth\.js/);
+  assert.equal(entriesOf(root, "std-demo").length, 2);
+});
+
+test("reinit: linter intacto e uma violação nova — as entradas mantidas conservam a justificativa antiga", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/new.js"), "BAD\n");
+  const fp = JSON.parse(run(root, "check", "--all", "--json").stdout.split("\n")[0]).blocking.find(x => x.path === "src/new.js").fp;
+  assert.equal(await human(root, "baseline", "accept", fp, "--reason", "legado do fornecedor, chamado 123"), 0);
+  const before = entriesOf(root, "std-demo");
+  writeFileSync(join(root, "src/third.js"), "BAD\n");
+
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "aceite em lote", "--allow-new-paths"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /mantidas 2 entrada\(s\) \(2 ocorrência\(s\)\); novas 1 entrada\(s\)/);
+  const after = entriesOf(root, "std-demo");
+  for (const e of before) assert.deepEqual(after.find(x => x.fp === e.fp), e);
+  assert.equal(after.find(x => x.path === "src/third.js").reason, "aceite em lote");
+  assert.equal(after.find(x => x.fp === fp).reason, "legado do fornecedor, chamado 123");
+});
+
+test("reinit: mais ocorrências num arquivo que já tinha entrada aparecem como crescimento", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/old.js"), "BAD\nBAD\nBAD\nWORSE\nWORSE\n");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "mais duas"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /alteradas 1 entrada\(s\) \(3 ocorrência\(s\)\)/);
+  assert.match(r.out, /cresceu: src\/old\.js \(1 → 3\)/);
+  assert.equal(entriesOf(root, "std-demo")[0].count, 3);
+});
+
+test("reinit: sem diferença sai 0 e não toca no arquivo", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  const before = readFileSync(BL(root), "utf8");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "conferência"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /std-demo: nada a refazer/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: sem terminal interativo recusa", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  const before = readFileSync(BL(root), "utf8");
+  const r = run(root, "baseline", "reinit", "std-demo", "--reason", "x");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /terminal interativo/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: CI=1 recusa mesmo com a entrada padrão num terminal", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  const before = readFileSync(BL(root), "utf8");
+  const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const ci = process.env.CI;
+  Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+  process.env.CI = "1";
+  try {
+    const r = await captureErr(() => runStandardsCommand("baseline", ["reinit", "std-demo", "--reason", "x"], root));
+    assert.equal(r.code, 2);
+    assert.match(r.err, /terminal interativo/);
+  } finally {
+    if (tty) Object.defineProperty(process.stdin, "isTTY", tty); else delete process.stdin.isTTY;
+    if (ci === undefined) delete process.env.CI; else process.env.CI = ci;
+  }
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: argumentos — id, justificativa e opções inválidos → uso (exit 2), nada gravado", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO); // haveria o que gravar: opção ignorada gravaria
+  const before = readFileSync(BL(root), "utf8");
+  const casos = [
+    [], ["std-demo"], ["std-demo", "--reason", "   "], ["--reason", "x"],
+    ["std-demo", "std-other", "--reason", "x"],
+    ["std-demo", "--reason", "x".repeat(501)],
+    ["std-demo", "--reason", "x", "--dry-run"],
+    ["std-demo", "--rule=no-bad", "--reason", "x"],
+    ["std-demo", "--reason", "x", "--allow-new-path"],
+  ];
+  for (const args of casos) {
+    const r = await captureAll(() => reinit(root, ...args));
+    assert.equal(r.code, 2, JSON.stringify(args).slice(0, 80));
+    assert.match(r.err, REINIT_USO, JSON.stringify(args).slice(0, 80));
+    assert.doesNotMatch(r.out + r.err, /dry-run|no-bad|allow-new-path\b(?!s)/);
+  }
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: id malformado não é ecoado (nem C0/ANSI)", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  for (const bad of ['std"; curl x|sh; echo "', "\x1b[31mvermelho\x1b[0m", "std\ndemo", "std demo", ".std", "a".repeat(129)]) {
+    const r = run(root, "baseline", "reinit", bad, "--reason", "x");
+    assert.equal(r.status, 2, JSON.stringify(bad));
+    const out = r.stdout + r.stderr;
+    assert.match(out, REINIT_USO, JSON.stringify(bad)); // uso, e não a recusa por falta de terminal
+    assert.ok(!out.includes(bad), `ecoou ${JSON.stringify(bad)}`);
+    assert.doesNotMatch(out, /curl|\x1b|vermelho/);
+    const h = await captureErr(() => reinit(root, bad, "--reason", "x"));
+    assert.equal(h.code, 2);
+    assert.match(h.err, REINIT_USO, JSON.stringify(bad));
+    assert.ok(!h.err.includes(bad));
+  }
+});
+
+test("reinit: sem baseline → exit 2 apontando o init, e nada é criado", async () => {
+  const root = twoStdRepo();
+  const r = await captureErr(() => reinit(root, "std-demo", "--reason", "x"));
+  assert.equal(r.code, 2);
+  assert.match(r.err, /sem baseline para refazer/);
+  assert.match(r.err, /baseline init/);
+  assert.ok(!existsSync(BL(root)));
+});
+
+test("reinit: standard desconhecido → exit 2 e o arquivo fica igual", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  const before = readFileSync(BL(root), "utf8");
+  const r = await captureErr(() => reinit(root, "std-nao-existe", "--reason", "x"));
+  assert.equal(r.code, 2);
+  assert.match(r.err, /std-nao-existe não encontrado/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: erro do linter do alvo → exit 3 e o arquivo fica byte a byte igual", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  const before = readFileSync(BL(root), "utf8");
+  writeFileSync(LINTER(root), "process.exit(7)");
+  const r = await captureErr(() => reinit(root, "std-demo", "--reason", "x"));
+  assert.equal(r.code, 3);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: nenhum linter rodou para o standard → exit 2 apontando o prune, sem zerar as entradas", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  const before = readFileSync(BL(root), "utf8");
+  const md = join(STD_DIR(root), "std-demo.md");
+  writeFileSync(md, readFileSync(md, "utf8").replace('applyTo: ["src/**"]', 'applyTo: ["nada/**"]'));
+  const r = await captureErr(() => reinit(root, "std-demo", "--reason", "x"));
+  assert.equal(r.code, 2);
+  assert.match(r.err, /nenhum linter rodou para std-demo/);
+  assert.match(r.err, /baseline prune/);
+  assert.equal(readFileSync(BL(root), "utf8"), before);
+});
+
+test("reinit: linter quebrado de OUTRO standard não impede a operação", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  writeFileSync(join(STD_DIR(root), "machine/std-other.js"), "process.exit(7)");
+  const otherBefore = entriesOf(root, "std-other");
+  assert.equal(await reinit(root, "std-demo", "--reason", "linter migrado"), 0);
+  assert.deepEqual(entriesOf(root, "std-other"), otherBefore);
+  assert.match(entriesOf(root, "std-demo")[0].message, /tire o BAD/);
+});
+
+test("reinit: baseline alterado durante a execução → exit 3, e o que o outro comando gravou fica", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  // O linter do alvo, enquanto roda, faz o papel de um `accept` concorrente no outro standard.
+  const outro = `const p=".context/engineering/standards/baseline.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.entries.find(e=>e.stdId==="std-other").count=99;fs.writeFileSync(p,JSON.stringify(j));`;
+  writeFileSync(LINTER(root), LINT_MIGRADO.replace("process.exit(h?1:0);", `${outro}process.exit(h?1:0);`));
+  const r = await captureErr(() => reinit(root, "std-demo", "--reason", "linter migrado"));
+  assert.equal(r.code, 3);
+  assert.match(r.err, /baseline mudou durante a execução/);
+  assert.equal(entriesOf(root, "std-other")[0].count, 99);
+  assert.match(entriesOf(root, "std-demo")[0].message, /remova BAD/);
+});
+
+test("reinit: justificativa fica gravada como veio e não aparece na saída", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  const reason = "linha1\nlinha2 \x1b[31mvermelho";
+  const r = await captureAll(() => reinit(root, "std-demo", `--reason=${reason}`));
+  assert.equal(r.code, 0, r.err);
+  assert.equal(entriesOf(root, "std-demo")[0].reason, reason);
+  assert.doesNotMatch(r.out + r.err, /linha2|\x1b|vermelho/);
+});
+
+test("reinit: baseline só no HEAD (arquivo removido da árvore) é a base, e o arquivo é recriado", async () => {
+  const root = twoStdRepo();
+  await human(root, "baseline", "init");
+  git(root, "add", "-A"); git(root, "commit", "-qm", "base");
+  const otherBefore = entriesOf(root, "std-other");
+  rmSync(BL(root));
+  writeFileSync(LINTER(root), LINT_MIGRADO);
+  assert.equal(await reinit(root, "std-demo", "--reason", "linter migrado"), 0);
+  assert.ok(existsSync(BL(root)));
+  assert.deepEqual(entriesOf(root, "std-other"), otherBefore);
+  assert.equal(run(root, "check", "--all").status, 0);
+});
+
+test("reinit: linter do alvo em protocolo legado → funciona e avisa", async () => {
+  const root = legacyRepo();
+  await human(root, "baseline", "init");
+  writeFileSync(join(root, "src/third.js"), "console.log(1);\n");
+  const r = await captureAll(() => reinit(root, "std-demo", "--reason", "arquivo novo aceito", "--allow-new-paths"));
+  assert.equal(r.code, 0, r.err);
+  assert.equal(legacyWarnings(r.err).length, 1, r.err);
+  assert.equal(entriesOf(root, "std-demo").length, 3);
+});

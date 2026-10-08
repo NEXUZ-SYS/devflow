@@ -124,6 +124,8 @@ test("a razão diz o que casou e não carrega texto do comando", () => {
   assert.match(cli, /Casou: devflow-standards enforce\.$/);
   const eject = decideRatchet({ tool_name: "Bash", cwd: "/p", tool_input: { command: "node x/devflow-standards.mjs eject security" } });
   assert.match(eject, /Casou: devflow-standards eject\.$/);
+  const reinit = decideRatchet({ tool_name: "Bash", cwd: "/p", tool_input: { command: 'node x/devflow-standards.mjs baseline reinit std-a --reason "x"' } });
+  assert.match(reinit, /Casou: devflow-standards baseline\.$/);
   // separadores sem fim no caminho não estouram a razão
   const long = ratchetOutput(Buffer.from(JSON.stringify({ tool_name: "Bash", cwd: "/p", tool_input: { command: `rm .context/engineering${"/".repeat(5000)}standards/x` } })));
   assert.equal(decisionOf(long), "ask");
