@@ -102,3 +102,15 @@ test("report --transcripts soma o usage dos subagentes sem ler conteúdo", () =>
 test("uso inválido → exit 2", () => {
   assert.equal(spawnSync("node", [CLI, "voar"], { encoding: "utf8" }).status, 2);
 });
+
+test("report não falha com caminho de transcripts inválido (exit 0 sempre, exceto uso inválido)", () => {
+  const f = fixture();
+  const file = join(mkdtempSync(join(tmpdir(), "notdir-")), "arquivo.txt");
+  writeFileSync(file, "x");
+  const missing = join(mkdtempSync(join(tmpdir(), "missing-")), "nao-existe");
+  for (const t of [file, missing]) {
+    const r = spawnSync("node", [CLI, "report", "--transcripts", t, "--cwd", f.dir], { encoding: "utf8", env: f.env, timeout: 10000 });
+    assert.equal(r.status, 0, `status ${r.status} para ${t}: ${r.stderr}`);
+    assert.match(r.stdout, /Subagentes/);
+  }
+});

@@ -38,6 +38,8 @@ const phaseOf = (cwd) => {
 };
 const ledgerDir = (cwd) => ledgerDirFrom({ xdgDataHome: process.env.XDG_DATA_HOME, home: process.env.HOME || homedir(), cwd });
 const str = (v) => (typeof v === "string" ? v : null);
+// Diretório ausente, não-diretório ou sem permissão vira lista vazia (o CLI sai com 0).
+const listDir = (p) => { try { return readdirSync(p); } catch { return []; } };
 
 function writeLedger(cwd, cfg, entry) {
   if (!cfg.enabled || !cfg.ledger) return;
@@ -83,11 +85,10 @@ function cmdEscalate(o, cwd) {
 // Caminho do clássico/omp (spec §8): só agentType do meta.json e campos NUMÉRICOS de usage.
 function transcriptEntries(projectsDir) {
   const out = [];
-  if (!existsSync(projectsDir)) return out;
-  for (const sess of readdirSync(projectsDir)) {
+  for (const sess of listDir(projectsDir)) {
     const sub = join(projectsDir, sess, "subagents");
     if (!existsSync(sub)) continue;
-    for (const meta of readdirSync(sub).filter((n) => n.endsWith(".meta.json"))) {
+    for (const meta of listDir(sub).filter((n) => n.endsWith(".meta.json"))) {
       let agentType;
       try { agentType = String(JSON.parse(safe(join(sub, meta))).agentType ?? "?"); } catch { continue; }
       const byModel = new Map();
@@ -109,14 +110,12 @@ function cmdReport(o, cwd) {
   const dir = ledgerDir(cwd);
   const since = typeof o.since === "string" ? Date.parse(o.since) : 0;
   const entries = typeof o.transcripts === "string" ? transcriptEntries(o.transcripts) : [];
-  if (existsSync(dir)) {
-    for (const f of readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
-      for (const line of safe(join(dir, f), TRANSCRIPT_MAX).split("\n")) {
-        try {
-          const e = JSON.parse(line);
-          if (!since || Date.parse(e.ts) >= since) entries.push(e);
-        } catch { /* linha inválida ignorada */ }
-      }
+  for (const f of listDir(dir).filter((n) => n.endsWith(".jsonl"))) {
+    for (const line of safe(join(dir, f), TRANSCRIPT_MAX).split("\n")) {
+      try {
+        const e = JSON.parse(line);
+        if (!since || Date.parse(e.ts) >= since) entries.push(e);
+      } catch { /* linha inválida ignorada */ }
     }
   }
   process.stdout.write(renderMarkdown(aggregate(entries)) + "\n");
