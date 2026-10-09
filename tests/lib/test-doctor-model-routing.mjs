@@ -29,11 +29,15 @@ test("repo pede roteamento sem a confirmação do usuário → WARN (D18)", () =
   assert.match(r.repair, /DEVFLOW_MODEL_ROUTING/);
 });
 
-test("ligado sem function hooks → WARN explicando o fallback", () => {
-  const r = check.run({ cwd: cwdWith(ON), env: { DEVFLOW_MODEL_ROUTING: "1" }, claudeVersion: "2.1.294" });
-  assert.equal(r.status, "WARN");
-  assert.match(r.diagnosis, /fallback clássico/);
-  assert.match(r.repair, /CLAUDE_CODE_ENABLE_FUNCTION_HOOKS/);
+// Mudança deliberada (verificação real da fase V): o Claude Code 2.1.293-2.1.295 carrega o mod SEM
+// CLAUDE_CODE_ENABLE_FUNCTION_HOOKS, e até com =0. O antigo WARN "só o fallback clássico" era falso.
+test("ligado sem function hooks na versão testada → OK (mod + fallback clássico), sem WARN falso", () => {
+  for (const hooks of [undefined, "0"]) {
+    const env = { DEVFLOW_MODEL_ROUTING: "1", ...(hooks === undefined ? {} : { CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: hooks }) };
+    const r = check.run({ cwd: cwdWith(ON), env, claudeVersion: "2.1.294" });
+    assert.equal(r.status, "OK");
+    assert.equal(r.diagnosis, "Roteamento de modelos ativo (mod + fallback clássico).");
+  }
 });
 
 test("Claude Code abaixo da versão testada → WARN", () => {

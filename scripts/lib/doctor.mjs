@@ -19,7 +19,6 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { readModels } from "./models-config.mjs";
 import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
-import { functionHooksOn } from "./model-routing.mjs";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
@@ -653,14 +652,7 @@ const modelRouting = {
     if (belowMin(version)) {
       return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.294): o mod pode não carregar.`, repair: "Atualize o Claude Code." };
     }
-    if (!functionHooksOn(env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS)) {
-      return {
-        status: "WARN",
-        diagnosis: "Roteamento ligado sem function hooks: só o fallback clássico (subagentes, escalada entre tentativas) está ativo.",
-        repair: 'Para sessão por fase, esforço por passo e escalada no meio: adicione "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" ao bloco env do ~/.claude/settings.json e reinicie.',
-      };
-    }
-    return { status: "OK", diagnosis: "Roteamento de modelos ativo pelo mod.", repair: "" };
+    return { status: "OK", diagnosis: "Roteamento de modelos ativo (mod + fallback clássico).", repair: "" };
   },
 };
 
