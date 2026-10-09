@@ -67,6 +67,11 @@ function cmdEscalate(o, cwd) {
   }
   const cfg = config(cwd);
   const current = TIERS.includes(o.tier) ? o.tier : null;
+  // D18/D5: sem opt-in efetivo (env + models.enabled) nada é decidido nem gravado.
+  if (!cfg.enabled) {
+    process.stdout.write(JSON.stringify({ action: "keep", tier: current, model: null, role: null, reason: "roteamento desligado" }) + "\n");
+    return;
+  }
   const d = current
     ? combine(parseAnswers(str(o.answers) ?? ""), {
         current, ceiling: tierOf(str(o.ceiling) ?? "top") ?? "top", maxTier: cfg.maxTier,

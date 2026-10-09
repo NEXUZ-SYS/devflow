@@ -114,3 +114,21 @@ test("report não falha com caminho de transcripts inválido (exit 0 sempre, exc
     assert.match(r.stdout, /Subagentes/);
   }
 });
+
+test("escalate respeita o opt-in (D18/D5): sem a env ou sem models.enabled → keep, sem ledger; ligado → decisão", () => {
+  const answers = JSON.stringify({ failure_is_capability: 0.9, claims_done_with_evidence: 0.1, is_stuck: 0.9, needed_tier: "capable" });
+  const esc = (f) => JSON.parse(run(["escalate", "--agent", "general-purpose", "--tier", "standard", "--answers", answers], f));
+  const semEnv = fixture({ optIn: null });
+  const off = esc(semEnv);
+  assert.deepEqual([off.action, off.tier, off.model, off.role, off.reason], ["keep", "standard", null, null, "roteamento desligado"]);
+  assert.deepEqual(readdirSync(semEnv.xdg), [], "desligado não grava no ledger");
+  const semYaml = esc(fixture({ models: "git:\n  strategy: x\n" }));
+  assert.deepEqual([semYaml.action, semYaml.model], ["keep", null]);
+  const on = esc(fixture());
+  assert.ok(["escalate", "human", "keep"].includes(on.action));
+  assert.deepEqual([on.action, on.model], ["escalate", "opus"]);
+  // a rubrica (--report) continua disponível com o roteamento desligado
+  const rep = join(mkdtempSync(join(tmpdir(), "rep-")), "r.txt");
+  writeFileSync(rep, "x");
+  assert.match(run(["escalate", "--agent", "general-purpose", "--tier", "cheap", "--report", rep], fixture({ optIn: null })), /needed_tier/);
+});
