@@ -32,7 +32,9 @@ test("só importa de node:fs e do parser interno frontmatter.mjs (zero-dep, sem 
   // (as regras FORBIDDEN acima cobrem o resto). frontmatter.mjs é o parser YAML
   // interno, puro e zero-dep, reusado por readVerify (ADR-013 refina ADR-011).
   // safe-read.mjs (T14 rodada 1): leitura segura da T9; só importa node:fs (travado abaixo).
-  const ALLOWED = new Set(["node:fs", "./frontmatter.mjs", "./safe-read.mjs"]);
+  // yaml-block.mjs e models-config.mjs (roteamento de modelos): puros, sem node:* — travados por
+  // tests/lib/models-config.test.mjs ("yaml-block e models-config são puros").
+  const ALLOWED = new Set(["node:fs", "./frontmatter.mjs", "./safe-read.mjs", "./yaml-block.mjs", "./models-config.mjs"]);
   const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
   for (const imp of imports) {
     assert.ok(ALLOWED.has(imp), `import inesperado: ${imp}`);
