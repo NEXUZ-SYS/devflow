@@ -41,9 +41,9 @@ test("só importa de node:fs e do parser interno frontmatter.mjs (zero-dep, sem 
   }
 });
 
-test("safe-read.mjs (importado pelo parser) só importa node:fs e não tem eval/exec/rede/env", () => {
+test("safe-read.mjs (importado pelo parser) só importa node:fs e node:path (puro, para o containment) e não tem eval/exec/rede/env", () => {
   const sr = readFileSync(fileURLToPath(new URL("../../scripts/lib/safe-read.mjs", import.meta.url)), "utf8");
   const imports = [...sr.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(imports, ["node:fs"]);
+  assert.deepEqual(imports, ["node:fs", "node:path"]); // node:path: join/sep do readInRoot (containment §9), sem I/O
   for (const re of FORBIDDEN) assert.ok(!re.test(sr), `padrão proibido em safe-read.mjs: ${re}`);
 });
