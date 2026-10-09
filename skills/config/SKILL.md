@@ -649,7 +649,7 @@ Após gerar o arquivo, mostrar ao usuário:
 Para reconfigurar: /devflow config
 ```
 
-Em seguida, verifique o monitor ao vivo do roteamento (sempre ligado; nada a configurar) e mostre o resultado:
+Em seguida, verifique o monitor ao vivo do roteamento (sempre ligado; nada a configurar; o check só confere se a versão do seu Claude Code é uma das que carregam o mod, testado a partir de 2.1.293) e mostre o resultado:
 
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor

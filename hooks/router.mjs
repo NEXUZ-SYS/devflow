@@ -221,9 +221,10 @@ async function* routerTurnStep($, e, next) {
           if (patch?.switched) S.pendingSwitch = true;
           if (patch) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
         }
-        if (e.agentId && patch && S.pub[e.agentId]) {
+        if (e.agentId && S.pub[e.agentId]) {
+          // republica a cada passo: sem patch o valor enviado pode ter mudado (escalada por streak) e o publicado ficaria velho
           const cur = S.pub[e.agentId];
-          pubLoop(e.agentId, { ...cur, model: patch.model ?? cur.model, effort: patch.effort ?? cur.effort });
+          pubLoop(e.agentId, { ...cur, model: patch?.model ?? e.model ?? cur.model, effort: patch?.effort ?? e.effort ?? cur.effort });
         } else if (!e.agentId) {
           pubLoop("main", { model: patch?.model ?? e.model ?? null, effort: patch?.effort ?? e.effort ?? null, origin: patch?.model || patch?.effort ? "roteado" : "teto" });
         }

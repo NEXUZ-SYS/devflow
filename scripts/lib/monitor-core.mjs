@@ -73,9 +73,10 @@ export function closeMain(state) {
 export function onTool(state, { loopId, isError, now }) {
   const row = state.rows.find((r) => r.id === loopId);
   if (!row) return false;
+  const antes = row.streak;
   row.streak = isError ? row.streak + 1 : 0;
   row.lastEventAt = now;
-  return true;
+  return row.streak !== antes; // só a sequência de erros pede gravação; lastEventAt fica em memória
 }
 
 export function onStep(state, { loopId, model, effort, now }) {

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { stepEffort } from "../../scripts/lib/model-routing.mjs";
 import { aggregate, renderMarkdown } from "../../scripts/lib/routing-report.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -337,4 +338,20 @@ test("monitor: $.state.set lançando não muda o que o router devolve, e a publi
   H.flags.stateThrows = false;
   await H.call("command.run", { command: "devflow-route", args: "status" });
   assert.equal(H.log.state.routing.active, true);
+});
+
+test("I1: o esforço publicado do subagente acompanha o enviado a cada passo (com e sem patch)", async () => {
+  const H = await load({ root: mkRepo(YAML_MIDRUN) });
+  await H.turn();
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, "claude-haiku-5-5");
+  // com patch: o motor manda xhigh e o roteador reescreve
+  const withPatch = await H.step({ turnId: "t1", index: 1, model: OPUS, effort: "xhigh", messageCount: 2, agentId: "a1" });
+  assert.equal(H.log.state.routing.loops.a1.effort, withPatch.effort);
+  // a escalada por falhas muda o esforço desejado; o evento já traz exatamente esse valor (sem patch)
+  for (let i = 0; i < 3; i++) await H.call("tool.call", { tool: "Bash", tool_use_id: `u${i}`, agentId: "a1" }, async () => ({ isError: true, text: "x" }));
+  const escalado = stepEffort("low", 3, "xhigh");
+  assert.notEqual(escalado, withPatch.effort, "a escalada precisa mudar o esforço desejado");
+  const noPatch = await H.step({ turnId: "t1", index: 2, model: OPUS, effort: escalado, messageCount: 3, agentId: "a1" });
+  assert.equal(noPatch.effort, escalado);
+  assert.equal(H.log.state.routing.loops.a1.effort, noPatch.effort);
 });

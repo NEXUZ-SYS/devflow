@@ -109,7 +109,8 @@ Valores JSON, nunca `undefined`. O router escreve `routing`; o monitor escreve `
 5. **`turn.step`**: anota `e.model`/`e.effort` na linha (o desenho prefere o valor publicado; §3.4).
 6. **`turn.complete`** sem `agentId`: fecha a linha `main`.
 7. **Tick** (1 s): sem linha viva, não faz nada; com linha viva, consulta `$.agent.list()`, remove
-   subagentes `completed`/`failed`/`killed` ou ausentes e grava `monitorRows` (a escrita redesenha a
+   subagentes `completed`/`failed`/`killed` (sempre saem) ou ausentes da lista (só saem depois de
+   `GRACE_MS` = 3000 ms de vida, para não perder o agente recém-despachado) e grava `monitorRows` (a escrita redesenha a
    faixa e anda o cronômetro). Trava `inTick` impede ticks sobrepostos.
 
 ### 3.4 O que o router publica
@@ -171,7 +172,7 @@ sessão                                    Modelo: opus-5-5·high (teto)        
   do `next` sobe como antes (mesmo `.catch`).
 - **Independência.** O monitor funciona com o router desligado (`router off`).
 - **Recarga a quente.** Linhas e retentativas vivem em `$.state`; o `session.start` da recarga reabre o cronômetro.
-- **Limites.** 50 linhas; 500 chaves de retentativa (sai a mais antiga); 100 loops publicados; id da task
+- **Limites.** 50 linhas; 500 chaves de retentativa (sai a menos usada recentemente; recontar renova a chave); 100 loops publicados; id da task
   só nos primeiros 2048 caracteres do prompt, regex ancorada.
 - **Linha fantasma.** Se `$.agent.list()` falhar, um subagente sem evento há 30 s sai da faixa.
 - **Background.** Subagentes em background seguem na faixa após o fim do turno, até encerrarem na lista.

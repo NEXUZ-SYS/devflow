@@ -77,6 +77,16 @@ test("onTool: erro soma, sucesso zera; loop sem linha → false", () => {
   assert.equal(mc.onTool(st, { loopId: "fork-interno", isError: true, now: 8 }), false);
 });
 
+test("onTool: só devolve true quando a sequência de erros muda (sucesso com streak 0 só renova lastEventAt)", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "a1", subagentType: "t", now: 0 });
+  assert.equal(mc.onTool(st, { loopId: "a1", isError: false, now: 3 }), false);
+  assert.equal(st.rows[0].lastEventAt, 3);
+  assert.equal(mc.onTool(st, { loopId: "a1", isError: true, now: 4 }), true);
+  assert.equal(mc.onTool(st, { loopId: "a1", isError: false, now: 5 }), true);
+  assert.equal(st.rows[0].streak, 0);
+});
+
 test("onStep: atualiza modelo/esforço e diz se mudou", () => {
   const st = mc.createMonitorState();
   mc.openMain(st, { now: 0 });

@@ -165,7 +165,7 @@ DESIGN_FE=$(node "$CLAUDE_PLUGIN_ROOT/scripts/design/detect-frontend.mjs" . 2>/d
 
 ## Step 0.8: Monitor ao vivo do roteamento (verificação)
 
-O DevFlow mostra, acima do prompt, uma linha por agente em execução (modelo·esforço e origem, tempo, falhas, retentativas). É **sempre ligado** e não grava nada no projeto; aqui só se verifica que o Claude Code carrega o mod:
+O DevFlow mostra, acima do prompt, uma linha por agente em execução (modelo·esforço e origem, tempo, falhas, retentativas). É **sempre ligado** e não grava nada no projeto; aqui só se verifica se a versão do seu Claude Code é uma das que carregam o mod (testado a partir de 2.1.293):
 
 ```bash
 node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor
