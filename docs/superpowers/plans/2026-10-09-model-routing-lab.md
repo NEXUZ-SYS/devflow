@@ -2963,6 +2963,19 @@ Expected: tudo PASS (achados L1 marcados como `todo` não reprovam)
 
 ---
 
+## Emendas da fase E
+
+Desvios do código transcrito acima, decididos durante a execução (o código no repo do laboratório prevalece):
+
+- **Task 7 (`lib/invariants.mjs`, commit `15b5f51`)** — a revisão crítica do implementador (tier capable) achou 5 falsos HELD e 3 falsos MISS, corrigidos com 13 testes novos (59/59 na suíte):
+  - INV-CEIL: modelo sem família conhecida ou esforço fora da escala viram violação.
+  - INV-PHASE-SYNC: spawn sem `phase` no ledger com fase real conhecida conta como divergência (`nulo→<fase>`).
+  - INV-SUB: tier desconhecido é sempre MISS; `project` (override do braço) entra em `JUSTIFIED`; subagente sem fase real fica fora.
+  - INV-EFF: mensagem sem fase real e passo com esforço nulo ficam fora.
+  - INV-SESS: evidência traz as trocas esperadas por invocação (`expectedSessionSwitches`).
+  - INV-OFF e "opt-in duplo": qualquer rastro de ledger (linhas, violações ou arquivos) reprova.
+  - Cobertura pelo sinal do GABARITO §5: "sessão por fase" exige o tier esperado numa fase cujo tier ≠ teto; "subagente por agente" exige subagente com mensagens; "tier da task do plano" exige mensagens e tier ∈ `planTiers`; "esforço por passo" exige braço roteado e tipo roteável; "ledger" exige zero violações.
+
 ## Fase V deste workflow (não é task de E)
 
 1. Contrato completo do laboratório verde (Step 6 da Task 12).
