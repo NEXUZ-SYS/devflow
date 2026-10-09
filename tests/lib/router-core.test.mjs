@@ -124,6 +124,32 @@ test("applyMidRun: uma troca, nunca para baixo, nunca acima do teto, só com ID 
   assert.equal(C.applyMidRun(s2, "b", { action: "escalate", tier: "capable" }), false, "acima do teto");
 });
 
+test("applyMidRun: /model depois da escalada rebaixa o teto no passo seguinte", () => {
+  const s = C.createRouterState();
+  C.observeSession(s, { model: "claude-opus-5-5", effort: "xhigh" });
+  C.learnId(s, "claude-sonnet-5-5");
+  C.learnId(s, "claude-opus-5-5");
+  C.onSpawned(s, "a", C.onSpawn(s, { subagentType: "devflow:documentation-writer", parentModel: "claude-opus-5-5" }, { ...ctx, phase: "E" }), "claude-haiku-5-5");
+  assert.equal(C.applyMidRun(s, "a", { action: "escalate", tier: "capable" }), true);
+  assert.equal(C.onSubagentStep(s, { agentId: "a", model: "claude-haiku-5-5", effort: "low" }).model, "claude-opus-5-5");
+  C.observeSession(s, { model: "claude-sonnet-5-5", effort: "high" });
+  const rw = C.onSubagentStep(s, { agentId: "a", model: "claude-opus-5-5", effort: "low" });
+  assert.equal(rw?.model, "claude-sonnet-5-5", "nunca acima do novo teto");
+});
+
+test("applyMidRun: respeita maxTier", () => {
+  const mk = () => {
+    const s = C.createRouterState();
+    C.observeSession(s, { model: "claude-opus-5-5", effort: "xhigh" });
+    C.learnId(s, "claude-sonnet-5-5");
+    C.learnId(s, "claude-opus-5-5");
+    C.onSpawned(s, "a", C.onSpawn(s, { subagentType: "devflow:documentation-writer", parentModel: "claude-opus-5-5" }, { ...ctx, phase: "E" }), "claude-haiku-5-5");
+    return s;
+  };
+  assert.equal(C.applyMidRun(mk(), "a", { action: "escalate", tier: "capable" }, "standard"), false);
+  assert.equal(C.applyMidRun(mk(), "a", { action: "escalate", tier: "standard" }, "standard"), true);
+});
+
 test("router-core é puro", () => {
   const src = readFileSync(new URL("../../scripts/lib/router-core.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /from\s+["']node:/);

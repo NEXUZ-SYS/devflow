@@ -1,6 +1,6 @@
 // scripts/lib/router-core.mjs — máquina de estado do mod de roteamento (spec §4.2/§4.3). PURO.
 // O adaptador (hooks/router.mjs) só traduz eventos do engine para estas funções.
-import { resolveSessionRoute, resolveSubagentRoute, stepEffort, tierOf, TIERS, capAtCeiling } from "./model-routing.mjs";
+import { resolveSessionRoute, resolveSubagentRoute, stepEffort, tierOf, TIERS, capAtCeiling, minTier } from "./model-routing.mjs";
 
 const MAX_ERRORS = 6;
 const MAX_SUMMARY = 300;
@@ -82,7 +82,8 @@ export function onSubagentStep(state, { agentId, model, effort }) {
   if (!a) return null;
   const rw = {};
   if (a.escalatedTo) {
-    const id = state.ids[a.escalatedTo];
+    const cap = capAtCeiling(a.escalatedTo, tierOf(state.userModel) ?? a.ceiling);
+    const id = cap ? state.ids[cap] : null;
     if (id && id !== model) rw.model = id;
   }
   const eff = stepEffort(a.effortBase, a.streak, state.userEffort);
@@ -95,10 +96,11 @@ export function midRunReport(state, agentId) {
   return a ? `Falhas recentes de ferramenta (${a.streak} seguidas):\n- ${a.errors.join("\n- ")}` : "";
 }
 
-export function applyMidRun(state, agentId, decision) {
+export function applyMidRun(state, agentId, decision, maxTier = null) {
   const a = state.agents[agentId];
   if (!a || a.escalatedTo || decision?.action !== "escalate") return false;
-  const to = capAtCeiling(decision.tier, a.ceiling);
+  const teto = minTier(a.ceiling, tierOf(state.userModel) ?? a.ceiling);
+  const to = capAtCeiling(decision.tier, teto, maxTier);
   if (!to || to !== decision.tier || rank(to) <= rank(a.tier) || !state.ids[to]) return false;
   a.escalatedTo = to;
   return true;
