@@ -9,6 +9,8 @@ import { buildEntry, ledgerDirFrom } from "../scripts/lib/routing-ledger.mjs";
 
 const MAX_FILE = 256 * 1024;
 const MAX_LEDGER_LINES = 2000;
+const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo monitor ao vivo (seção abaixo)
+const MAX_PUB_LOOPS = 100;
 const S = {
   core: core.createRouterState(),
   table: null,
@@ -21,10 +23,31 @@ const S = {
   ledgerPath: null,
   lines: [],
   dirty: false,
+  pub: {},
+  pubLast: "",
   sessionKey: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
 };
 
 const active = () => !S.disabled && S.config.enabled && !!S.table;
+
+function pubLoop(id, entry) {
+  if (JSON.stringify(S.pub[id]) === JSON.stringify(entry)) return;
+  delete S.pub[id];
+  S.pub[id] = entry;
+  const ks = Object.keys(S.pub);
+  for (let i = 0; i < ks.length - MAX_PUB_LOOPS; i++) delete S.pub[ks[i]];
+}
+
+// Monitor (spec 2026-10-09-router-monitor-toolbar §3.4): só publica; nunca muda o que o router decide.
+async function publish($) {
+  try {
+    const value = { active: active(), failureStreak: S.config.midRun?.failureStreak ?? 3, loops: S.pub };
+    const json = JSON.stringify(value);
+    if (json === S.pubLast) return;
+    await $.state.set(ROUTING, value);
+    S.pubLast = json; // só depois do set: falha é tentada de novo na próxima publicação
+  } catch {}
+}
 
 // Leitura de arquivo do repositório com a contenção da ADR-014: sem link, só arquivo regular,
 // tamanho limitado, caminho real sob a raiz do projeto. Qualquer dúvida → null.
@@ -61,6 +84,7 @@ async function ensure($) {
     }
   } catch { S.config = effectiveConfig(readModels(""), undefined); S.ledgerPath = null; } // falha ao ler o ambiente → roteamento desligado
   if (S.config.enabled) await detectOtherRouter($);
+  await publish($);
 }
 
 // D17: outro roteador de sessão habilitado → a camada de sessão do DevFlow se desliga.
@@ -117,6 +141,7 @@ async function onCommand($, e, next) {
   if (a === "off") S.disabled = true;
   else if (a === "on") S.disabled = false;
   else if (a === "session off") S.sessionOff = true;
+  await publish($);
   const c = S.core;
   return {
     text: [
@@ -142,6 +167,11 @@ async function onAgentSpawn($, e, next) {
   if (res && "agentId" in res) {
     core.onSpawned(S.core, res.agentId, route, res.model, e.subagentType);
     if (route) ledger({ scope: "subagent", agentId: res.agentId, agentType: e.subagentType, phase: S.core.phase, tier: route.tier, model: res.model, effort: route.effort, source: route.source, ceiling: route.ceiling });
+    if (route) {
+      const effortRouted = S.core.userEffort != null && route.effort != null && route.effort !== S.core.userEffort;
+      pubLoop(res.agentId, { model: res.model ?? null, effort: route.effort ?? null, origin: route.tier !== route.ceiling || effortRouted ? "roteado" : "teto" });
+      await publish($);
+    }
   }
   return res;
 }
@@ -197,6 +227,13 @@ export const register = (on) => {
           if (patch?.switched) S.pendingSwitch = true;
           if (patch) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
         }
+        if (e.agentId && patch && S.pub[e.agentId]) {
+          const cur = S.pub[e.agentId];
+          pubLoop(e.agentId, { ...cur, model: patch.model ?? cur.model, effort: patch.effort ?? cur.effort });
+        } else if (!e.agentId) {
+          pubLoop("main", { model: patch?.model ?? e.model ?? null, effort: patch?.effort ?? e.effort ?? null, origin: patch?.model || patch?.effort ? "roteado" : "teto" });
+        }
+        await publish($);
       }
     } catch { patch = null; }
     const rw = {};
