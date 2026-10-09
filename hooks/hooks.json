@@ -74,6 +74,17 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" pre-tool-use-agent",
+            "async": false,
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
