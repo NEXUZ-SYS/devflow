@@ -33,6 +33,12 @@ test("sem model → updatedInput com o alias da rota e TODOS os campos originais
   assert.equal(out.hookSpecificOutput.permissionDecision, undefined);
 });
 
+test("sem prevc.json (fase nula): general-purpose sem model é roteado pelo default do agente", () => {
+  const out = run(fx({ phase: null }), { subagent_type: "general-purpose", prompt: "p" });
+  assert.equal(out.hookSpecificOutput.updatedInput.model, "sonnet");
+  assert.equal(out.hookSpecificOutput.permissionDecision, undefined);
+});
+
 test("model explícito dentro do teto → intocado", () => {
   assert.equal(run(fx(), { subagent_type: "general-purpose", prompt: "p", model: "sonnet" }), null);
 });

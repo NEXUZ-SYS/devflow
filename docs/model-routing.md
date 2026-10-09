@@ -22,7 +22,7 @@ Os tiers são abstratos (`cheap`, `standard`, `capable`, `top`); cada adaptador 
 | Clássico (`PreToolUse` na ferramenta Agent) | Claude Code sem function hooks | não | não | não | sim, só escolha inicial | último modelo do transcript |
 | omp | oh-my-pi | não | não | não | sim, tier para model role | o role que o agente teria sem roteamento |
 
-Versão testada do Claude Code: 2.1.294. Abaixo dela o `doctor` avisa e o mod não faz nada.
+Versão testada do Claude Code: 2.1.294. O check `model-routing` do `doctor` avisa quando o roteamento está pedido e confirmado e a versão do Claude Code é anterior à testada; nesse caso o mod pode não carregar.
 
 ## Como ligar
 
@@ -50,9 +50,9 @@ models:
 - `/devflow-route` (registrado pelo mod): `status`, `on`, `off` e `session off`. Se outro roteador de sessão estiver habilitado, a camada de sessão do DevFlow se desliga e avisa.
 - `node scripts/model-route.mjs resolve|escalate|report`:
   - `resolve --agent <tipo> [--phase P] [--skill S] [--task-tier T] [--runtime claude|omp]` mostra a rota;
-  - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`;
-  - `report [--since ISO]` soma tokens por modelo e por agente/fase, antes e depois, taxa de escalada e o custo das trocas de fase.
-- `doctor`: o check `model-routing` avisa quando o repositório pede roteamento sem a sua confirmação ou quando a versão do Claude Code é anterior à testada.
+  - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--mid-run` (só no ramo da rubrica) a rubrica é a da escalada no meio da execução; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`;
+  - `report [--since ISO] [--transcripts DIR]` (`--transcripts` é o caminho do clássico e do omp, que leem os transcripts em vez do ledger do mod) soma tokens por modelo e por agente/fase, antes e depois, taxa de escalada e o custo das trocas de fase.
+- `doctor`: o check `model-routing` avisa quando o repositório pede roteamento sem a sua confirmação ou, com o roteamento pedido e confirmado, quando a versão do Claude Code é anterior à testada.
 
 ## Custo de cache
 

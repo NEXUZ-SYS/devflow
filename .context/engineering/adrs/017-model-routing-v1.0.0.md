@@ -40,7 +40,18 @@ Uma lib pura (`scripts/lib/model-routing.mjs`, sem `node:*`) resolve um **tier a
 
 Precedência no subagente: tier da task → skill → fase → agente → `inherit`. Teto = modelo/esforço do usuário. Liga com `models.enabled` no repo **e** `DEVFLOW_MODEL_ROUTING=1` do usuário. Escalada entre tentativas por rubrica; no meio da execução, desligada por padrão.
 
-Fatos verificados (2.1.294): `hooks` e `modules` coexistem no `hooks.json`; o mod exige `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` (`1|true|yes|on`); `e.model`/`e.effort` e `parentModel` chegam com os valores do usuário; `turn.step` só aceita ID completo; `updatedInput` funciona sem `permissionDecision`; trocar só o esforço não invalida o cache (R-10).
+Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
+
+- R-1: `hooks` clássicos e `modules` no mesmo `hooks.json` — aceito pelo `claude plugin validate`; os dois rodam na mesma sessão.
+- R-2: o mod só carrega com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` (`1|true|yes|on`); o hook clássico usa a variável como exclusão mútua.
+- R-3: o `model` do `turn.step` da sessão só é reescrito com ID completo (alias falha); `e.model`/`e.effort` e `parentModel` chegam sempre com os valores do usuário.
+- R-4: `skill.prompt` dispara para skill de plugin, com nome qualificado.
+- R-5: `updatedInput` funciona sem `permissionDecision` (ferramenta `Agent`).
+- R-6: `$.fs.write` fora do plugin e `$.model.complete` com alias funcionam; `$.fs.stat` expõe `isLink`, `kind`, `size`, `realPath`; não há append.
+- R-7: não existe `$.plugin.list`; outro roteador de sessão é detectado por `$.settings.read().enabledPlugins`.
+- R-8: versão mínima = 2.1.294 (a testada); abaixo, o `doctor` avisa.
+- R-10: trocar só o esforço não invalida o cache.
+- Restrição do `claude plugin validate`: a função que recebe `$` fica no topo do módulo; hooks que decidem pedem `.catch`.
 
 ## Alternativas Consideradas
 
