@@ -119,3 +119,95 @@ test("reap: sem lista (falhou), sai só quem está sem evento há mais de 30 s",
   mc.reap(st, { list: null, now: 20_000 + mc.STALE_MS + 1 });
   assert.equal(mc.isLive(st), false);
 });
+
+test("fmtDuration: mm:ss e h:mm:ss; negativo vira 00:00", () => {
+  assert.equal(mc.fmtDuration(72_000), "01:12");
+  assert.equal(mc.fmtDuration(3_600_000 + 61_000), "1:01:01");
+  assert.equal(mc.fmtDuration(-5), "00:00");
+});
+
+test("shortModel: tira claude-; alias como veio; vazio → ?", () => {
+  assert.equal(mc.shortModel("claude-sonnet-5-5"), "sonnet-5-5");
+  assert.equal(mc.shortModel("haiku"), "haiku");
+  assert.equal(mc.shortModel(null), "?");
+});
+
+test("originOf: roteado/teto com router ativo; router off sem valor ou desligado", () => {
+  const routing = { active: true, failureStreak: 3, loops: { a1: { model: "haiku", effort: "low", origin: "roteado" } } };
+  assert.equal(mc.originOf(routing, "a1"), "roteado");
+  assert.equal(mc.originOf(routing, "a2"), "teto");
+  assert.equal(mc.originOf(undefined, "a1"), "router off");
+  assert.equal(mc.originOf({ ...routing, active: false }, "a1"), "router off");
+});
+
+test("visibleFor: min(6, maxRows − 1); maxRows inválido → 6; nunca menos de 1", () => {
+  assert.equal(mc.visibleFor(20), 6);
+  assert.equal(mc.visibleFor(5), 4);
+  assert.equal(mc.visibleFor(1), 1);
+  assert.equal(mc.visibleFor(undefined), 6);
+});
+
+test("view: sessão primeiro, subagentes por início, modelo publicado vence o observado", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "b", subagentType: "devflow:test-writer", description: "Implement Task 3: x", model: "sonnet", now: 2000 });
+  mc.onSpawned(st, { agentId: "a", subagentType: "Explore", now: 1000 });
+  mc.openMain(st, { now: 0 });
+  mc.onStep(st, { loopId: "main", model: "claude-opus-5-5", effort: "high", now: 0 });
+  const routing = { active: true, failureStreak: 3, loops: { b: { model: "claude-sonnet-5-5", effort: "medium", origin: "roteado" } } };
+  const v = mc.view(st, { routing, now: 74_000 });
+  assert.deepEqual(v.rows.map((r) => r.id), ["main", "a", "b"]);
+  const b = v.rows[2];
+  assert.equal(b.model, "sonnet-5-5·medium");
+  assert.equal(b.origin, "roteado");
+  assert.equal(b.originColor, "success");
+  assert.equal(b.time, "01:12");
+  assert.equal(mc.lineText(b), "devflow:test-writer · Task 3 · implement Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 0");
+  assert.equal(v.rows[0].model, "opus-5-5·high");
+  assert.equal(v.rows[0].origin, "teto");
+  assert.equal(v.rows[1].model, "?·-");
+  assert.equal(v.rows[1].retries, "—");
+});
+
+test("view: router desligado ignora o publicado (velho) e marca router off", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "a1", subagentType: "t", model: "claude-opus-5-5", now: 0 });
+  const routing = { active: false, failureStreak: 3, loops: { a1: { model: "haiku", effort: "low", origin: "roteado" } } };
+  const r = mc.view(st, { routing, now: 0 }).rows[0];
+  assert.equal(r.model, "opus-5-5·-");
+  assert.equal(r.origin, "router off");
+  assert.equal(r.originColor, "inactive");
+});
+
+test("view: cores de Falhas pelo failureStreak e de Retentativas ≥ 1", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "a1", subagentType: "t", description: "Task 1", now: 0 });
+  mc.onSpawned(st, { agentId: "a2", subagentType: "t", description: "Task 1", now: 1 });
+  const routing = { active: true, failureStreak: 2, loops: {} };
+  const color = () => mc.view(st, { routing, now: 0 }).rows.find((r) => r.id === "a1").streakColor;
+  assert.equal(color(), undefined);
+  mc.onTool(st, { loopId: "a1", isError: true, now: 1 });
+  assert.equal(color(), "warning");
+  mc.onTool(st, { loopId: "a1", isError: true, now: 2 });
+  assert.equal(color(), "error");
+  const a2 = mc.view(st, { routing, now: 0 }).rows.find((r) => r.id === "a2");
+  assert.equal(a2.retries, "1");
+  assert.equal(a2.retriesColor, "warning");
+});
+
+test("view: failureStreak inválido cai no padrão 3", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "a1", subagentType: "t", now: 0 });
+  for (let i = 0; i < 2; i++) mc.onTool(st, { loopId: "a1", isError: true, now: i });
+  assert.equal(mc.view(st, { routing: { active: true, failureStreak: "x", loops: {} }, now: 0 }).rows[0].streakColor, "warning");
+});
+
+test("view: visible + more; rótulo cortado em 40 colunas com reticências", () => {
+  const st = mc.createMonitorState();
+  for (let i = 0; i < 9; i++) mc.onSpawned(st, { agentId: `a${i}`, subagentType: "devflow:um-tipo-de-agente-com-nome-enorme", now: i });
+  const v = mc.view(st, { routing: undefined, now: 10 });
+  assert.equal(v.rows.length, mc.VISIBLE);
+  assert.equal(v.more, 3);
+  assert.equal(v.rows[0].label.length, mc.LABEL_COLS);
+  assert.ok(v.rows[0].label.endsWith("…"));
+  assert.equal(mc.view(st, { routing: undefined, now: 10, visible: 2 }).more, 7);
+});

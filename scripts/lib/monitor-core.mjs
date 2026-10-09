@@ -99,3 +99,57 @@ export function reap(state, { list, now }) {
 }
 
 export const isLive = (state) => state.rows.length > 0;
+
+export const VISIBLE = 6;
+export const LABEL_COLS = 40;
+export const DEFAULT_FAILURE_STREAK = 3;
+const ORIGIN_COLOR = { roteado: "success", teto: "subtle", "router off": "inactive" };
+
+export function fmtDuration(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const p = (n) => String(n).padStart(2, "0");
+  const mmss = `${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+  return h ? `${h}:${mmss}` : mmss;
+}
+
+export function shortModel(model) {
+  return typeof model === "string" && model ? model.replace(/^claude-/, "") : "?";
+}
+
+export function originOf(routing, loopId) {
+  if (routing?.active !== true) return "router off";
+  return routing.loops?.[loopId]?.origin === "roteado" ? "roteado" : "teto";
+}
+
+// Linhas que cabem na faixa: o prop maxRows da AbovePrompt menos a linha "+N agentes".
+export function visibleFor(maxRows) {
+  return Number.isInteger(maxRows) && maxRows > 0 ? Math.max(1, Math.min(VISIBLE, maxRows - 1)) : VISIBLE;
+}
+
+const cut = (s, n) => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
+
+export function view(state, { routing, now, visible = VISIBLE }) {
+  const fs = routing?.failureStreak;
+  const limit = Number.isInteger(fs) && fs > 0 ? fs : DEFAULT_FAILURE_STREAK;
+  const subs = state.rows.filter((r) => r.id !== "main").sort((a, b) => a.startedAt - b.startedAt);
+  const ordered = [...state.rows.filter((r) => r.id === "main"), ...subs];
+  const rows = ordered.slice(0, visible).map((r) => {
+    const pub = routing?.active === true ? routing.loops?.[r.id] : undefined; // desligado: o publicado é velho
+    const origin = originOf(routing, r.id);
+    return {
+      id: r.id,
+      label: cut(r.label, LABEL_COLS),
+      model: `${shortModel(pub?.model ?? r.model)}·${pub?.effort ?? r.effort ?? "-"}`,
+      origin, originColor: ORIGIN_COLOR[origin],
+      time: fmtDuration(now - r.startedAt),
+      streak: r.streak, streakColor: r.streak <= 0 ? undefined : r.streak >= limit ? "error" : "warning",
+      retries: r.retries === null ? "—" : String(r.retries), retriesColor: r.retries > 0 ? "warning" : undefined,
+    };
+  });
+  return { rows, more: Math.max(0, ordered.length - visible) };
+}
+
+export function lineText(v) {
+  return `${v.label.padEnd(LABEL_COLS)} Modelo: ${v.model} (${v.origin}) | Tempo: ${v.time} | Falhas: ${v.streak} | Retentativas: ${v.retries}`;
+}
