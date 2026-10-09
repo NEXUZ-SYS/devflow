@@ -128,7 +128,7 @@ Refinamento (§9) acrescenta braços `B2…` com overrides de projeto.
 - CLI `node src/cli.mjs add|get|stats|rm` contra a API.
 - Testes com `node --test`; README.
 
-**Suíte oculta (`acceptance/`):** testes caixa-preta via HTTP e CLI (≈25 casos) cobrindo rotas,
+**Suíte oculta (`acceptance/`):** testes caixa-preta via HTTP e CLI (13 testes, dezenas de asserções) cobrindo rotas,
 auth, validação, limite de taxa nas bordas e persistência após reinício. O resultado é o número de
 casos que passaram. **Q3 = HELD** quando B passa em pelo menos tantos casos quanto A e o PREVC de B
 chega à fase C concluída.

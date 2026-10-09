@@ -1,0 +1,100 @@
+---
+type: plan
+name: "Laboratório de validação autônoma do roteamento de modelos"
+description: Tracking dotcontext. Plano executável canônico em docs/superpowers/plans/2026-10-09-model-routing-lab.md. Spec em docs/superpowers/specs/2026-10-09-model-routing-lab-design.md. Stories em .context/workflow/stories.yaml.
+planSlug: model-routing-lab
+scope: LARGE
+autonomy: autonomous
+status: filled
+progress: 10
+generated: "2026-10-09"
+scaffoldVersion: "2.0.0"
+summary: "Repo irmão devflow-routing-lab que roda o PREVC inteiro de forma autônoma (claude -p + /devflow auto, com retomadas) sobre um software-alvo pequeno (encurtador shortlink), em braços com e sem roteamento, e gera um scorecard: vereditos HELD/MISS/N/A contra um oráculo independente, matriz de cobertura das funcionalidades da v3.7, tokens por modelo (B ÷ A) e suíte de aceitação oculta. Plugin sob teste = clone da tag v3.7.0 via --plugin-dir. Capturar, não resolver."
+requiredSignals: [unit, integration, e2e, lint]
+sources:
+  spec: docs/superpowers/specs/2026-10-09-model-routing-lab-design.md
+  plan: docs/superpowers/plans/2026-10-09-model-routing-lab.md
+  stories: .context/workflow/stories.yaml
+  adrs:
+    - .context/engineering/adrs/017-model-routing-v1.0.0.md
+phases:
+  - id: "phase-1"
+    name: "Planning"
+    prevc: "P"
+    status: completed
+    summary: "Autonomia autonomous por escolha do operador: spec e plano gerados sem diálogo, com decisões L1–L11 e premissas registradas para a R. Contexto aterrado na spec/ADR-017, routes.json, model-route.mjs, router.mjs e formatos reais (stream-json com modelUsage e subagent_stats; transcript com effort; meta.json com agentType/model; prevc.json status.phases). Achados de contexto: DevFlow só em escopo de projeto e marketplace local em 3.4.0 → plugin via --plugin-dir da tag. Sem oferta de ADR (gatilho 3/4 não disparou). Plano de 12 tasks com TDD, Agent e Tier por task."
+  - id: "phase-1r"
+    name: "Review"
+    prevc: "R"
+    status: pending
+    summary: "Architect + security-auditor revisam spec e plano; sondas das premissas §13 (claude -p com --plugin-dir carrega o mod; /devflow auto em -p; XDG por rodada)."
+  - id: "phase-2"
+    name: "Execution"
+    prevc: "E"
+    status: pending
+    required_sensors:
+      - lint
+    summary: "12 tasks no repo irmão ../devflow-routing-lab (contrato verify próprio: tests/run-{unit,integration,e2e,lint}.sh). Revisão leve por task; pesada (security-auditor) na Task 11 (driver com bypassPermissions)."
+    steps:
+      - order: 1
+        description: "Task 1 — bootstrap do repo e braços como dados (lib/arm.mjs, arms/*.json)"
+        assignee: "backend-specialist"
+      - order: 2
+        description: "Task 2 — oráculo independente e gabarito (oracle.json, lib/tiers.mjs, GABARITO.md)"
+        assignee: "test-writer"
+      - order: 3
+        description: "Task 3 — cache da tag e camada L1 da CLI/hook clássico/omp"
+        assignee: "test-writer"
+      - order: 4
+        description: "Task 4 — leitura do stream-json"
+        assignee: "backend-specialist"
+      - order: 5
+        description: "Task 5 — leitura segura e transcripts"
+        assignee: "backend-specialist"
+      - order: 6
+        description: "Task 6 — ledger (allowlist própria) e prevc.json"
+        assignee: "backend-specialist"
+      - order: 7
+        description: "Task 7 — invariantes e matriz de cobertura"
+        assignee: "backend-specialist"
+      - order: 8
+        description: "Task 8 — scorecard"
+        assignee: "backend-specialist"
+      - order: 9
+        description: "Task 9 — brief do shortlink, seed e materialização do workspace"
+        assignee: "backend-specialist"
+      - order: 10
+        description: "Task 10 — suíte de aceitação oculta com referência e controle quebrado"
+        assignee: "test-writer"
+      - order: 11
+        description: "Task 11 — driver da rodada com retomada e coleta (revisão pesada)"
+        assignee: "security-auditor"
+      - order: 12
+        description: "Task 12 — campanha, runbooks e README"
+        assignee: "documentation-writer"
+  - id: "phase-3"
+    name: "Validation"
+    prevc: "V"
+    status: pending
+    summary: "Contrato completo do laboratório verde; revisão de segurança de run-arm/collect/safe-read; campanha real A+B ao vivo e scorecard revisado, MISS registrados em findings.md e backlog no repo devflow."
+  - id: "phase-4"
+    name: "Confirmation"
+    prevc: "C"
+    status: pending
+    summary: "Spec, plano e tracking no repo devflow via PR; laboratório fica local (sem remoto). Memória e handoff atualizados."
+---
+
+# Laboratório de validação autônoma do roteamento de modelos
+
+Tracking do workflow `model-routing-e2e-validation`. O conteúdo canônico está na
+[spec](../../docs/superpowers/specs/2026-10-09-model-routing-lab-design.md) e no
+[plano](../../docs/superpowers/plans/2026-10-09-model-routing-lab.md).
+
+## Riscos
+
+| Risco | Mitigação |
+|---|---|
+| `/devflow auto` em `-p` para no meio | driver com `--resume` até `maxResumes`; rodada `incomplete` vira achado |
+| `--plugin-dir` não carrega o mod como a instalação | sonda na fase R antes da E |
+| Custo da campanha na cota da assinatura | braços em sequência; C e D opcionais |
+| Oráculo contaminado pela lib sob teste | `oracle.json` transcrito da spec do roteamento, nunca do `routes.json` |

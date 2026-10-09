@@ -1,0 +1,126 @@
+feature: "model-routing-lab"
+autonomy: autonomous
+created: "2026-10-09T16:30:00Z"
+plan: "docs/superpowers/plans/2026-10-09-model-routing-lab.md"
+workdir: "../devflow-routing-lab"  # repo irmão; todas as tasks rodam lá
+escalation:
+  max_retries_per_story: 2
+  max_consecutive_failures: 3
+  security_immediate: true
+  upgrade_after_streak: 5
+stats:
+  total: 12
+  completed: 0
+  failed: 0
+  escalated: 0
+  consecutive_failures: 0
+  current_autonomy: autonomous
+stories:
+  - id: "S1"
+    title: "Bootstrap do repo e braços como dados"
+    description: "Task 1 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: standard
+    priority: 1
+    status: pending
+    attempts: 0
+    blocked_by: []
+  - id: "S2"
+    title: "Oráculo independente e gabarito"
+    description: "Task 2 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: test-writer
+    tier: capable
+    priority: 2
+    status: pending
+    attempts: 0
+    blocked_by: ["S1"]
+  - id: "S3"
+    title: "Cache da tag e camada L1 determinística"
+    description: "Task 3 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: test-writer
+    tier: standard
+    priority: 3
+    status: pending
+    attempts: 0
+    blocked_by: ["S2"]
+  - id: "S4"
+    title: "Leitura do stream-json"
+    description: "Task 4 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: cheap
+    priority: 4
+    status: pending
+    attempts: 0
+    blocked_by: ["S1"]
+  - id: "S5"
+    title: "Leitura segura e transcripts"
+    description: "Task 5 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: standard
+    priority: 5
+    status: pending
+    attempts: 0
+    blocked_by: ["S1"]
+  - id: "S6"
+    title: "Ledger e prevc.json"
+    description: "Task 6 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: cheap
+    priority: 6
+    status: pending
+    attempts: 0
+    blocked_by: ["S5"]
+  - id: "S7"
+    title: "Invariantes e matriz de cobertura"
+    description: "Task 7 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: capable
+    priority: 7
+    status: pending
+    attempts: 0
+    blocked_by: ["S2", "S6"]
+  - id: "S8"
+    title: "Scorecard"
+    description: "Task 8 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: standard
+    priority: 8
+    status: pending
+    attempts: 0
+    blocked_by: ["S7"]
+  - id: "S9"
+    title: "Software-alvo, seed e materialização do workspace"
+    description: "Task 9 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: standard
+    priority: 9
+    status: pending
+    attempts: 0
+    blocked_by: ["S1"]
+  - id: "S10"
+    title: "Suíte de aceitação oculta e implementação de referência"
+    description: "Task 10 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: test-writer
+    tier: standard
+    priority: 10
+    status: pending
+    attempts: 0
+    blocked_by: ["S9"]
+  - id: "S11"
+    title: "Driver da rodada e coleta"
+    description: "Task 11 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: backend-specialist
+    tier: capable
+    priority: 11
+    status: pending
+    attempts: 0
+    blocked_by: ["S4", "S5", "S6", "S9", "S10"]
+  - id: "S12"
+    title: "Campanha, runbooks e README"
+    description: "Task 12 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
+    agent: documentation-writer
+    tier: standard
+    priority: 12
+    status: pending
+    attempts: 0
+    blocked_by: ["S3", "S8", "S11"]
