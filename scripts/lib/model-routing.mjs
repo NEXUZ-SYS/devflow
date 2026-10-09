@@ -143,6 +143,7 @@ export function resolveSessionRoute({ table, config, phase, skill, userModel, us
   const tier = capAtCeiling(want, ceiling, config.maxTier);
   if (!tier) return null;
   const rawEffort = table.session?.skills?.[skill];
-  const wantEffort = rawEffort === "ceiling" ? userEffort : rawEffort ?? table.effortByTier?.[tier];
+  // Sem esforço mapeado e no próprio teto: nada foi pedido além do que o usuário já escolheu.
+  const wantEffort = rawEffort === "ceiling" ? userEffort : rawEffort ?? (tier === ceiling ? userEffort : table.effortByTier?.[tier]);
   return { tier, effort: capEffort(wantEffort, userEffort), source, ceiling };
 }

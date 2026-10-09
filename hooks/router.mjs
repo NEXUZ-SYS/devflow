@@ -29,10 +29,12 @@ const active = () => !S.disabled && S.config.enabled && !!S.table;
 // tamanho limitado, caminho real sob a raiz do projeto. Qualquer dúvida → null.
 async function safeRead($, rel) {
   try {
-    const st = await $.fs.stat(rel, { resolve: true });
+    if (!S.cwd) return null;
+    const abs = `${S.cwd}/${rel}`; // $.fs resolve relativo contra o cwd da sessão; absoluto não depende disso
+    const st = await $.fs.stat(abs, { resolve: true });
     if (st.isLink || st.kind !== "file" || st.size > MAX_FILE) return null;
-    if (!S.cwd || !st.realPath || !st.realPath.startsWith(S.cwd + "/")) return null;
-    return await $.fs.read(rel);
+    if (!st.realPath || !st.realPath.startsWith(S.cwd + "/")) return null;
+    return await $.fs.read(abs);
   } catch {
     return null;
   }
@@ -42,9 +44,10 @@ async function ensure($) {
   if (S.loaded) return;
   S.loaded = true;
   try {
-    const pwd = await $.env.get("PWD");
-    const st = pwd ? await $.fs.stat(pwd, { resolve: true }) : null;
-    S.cwd = st?.realPath ?? null;
+    // Raiz = cwd da sessão (segue worktree, /cd), não o PWD do ambiente.
+    const cwd = await $.session.cwd();
+    const st = cwd ? await $.fs.stat(cwd, { resolve: true }) : null;
+    S.cwd = st?.kind === "dir" && st.realPath ? st.realPath : null;
   } catch { S.cwd = null; }
   try { S.table = JSON.parse(await $.fs.read(`${$.plugin.root}/assets/model-routing/routes.json`)); } catch { S.table = null; }
   const optIn = await $.env.get("DEVFLOW_MODEL_ROUTING");
@@ -127,11 +130,6 @@ async function onTurnStart($, e, next) {
   return next(e);
 }
 
-async function onSkillPrompt($, e, next) {
-  core.onSkill(S.core, { skill: e.skill, agentId: e.agentId });
-  return next(e);
-}
-
 async function onAgentSpawn($, e, next) {
   await ensure($);
   if (!active()) return next(e);
@@ -147,6 +145,8 @@ async function onAgentSpawn($, e, next) {
 async function onToolCall($, e, next) {
   const res = await next(e);
   try {
+    // skill.prompt dispara também dentro de subagentes e não traz agentId: a skill da SESSÃO vem da ferramenta Skill.
+    if (e.tool === "Skill" && !e.agentId && !res?.isError) core.onSkill(S.core, { skill: e.skill });
     if (active() && e.agentId && S.core.agents[e.agentId]) {
       const isError = !!res?.isError;
       const summary = isError ? `${e.tool}: ${String(res?.text ?? "").slice(0, 200)}` : "";
@@ -174,7 +174,6 @@ export const register = (on) => {
   on("session.start", onSessionStart);
   on("command.run", onCommand).catch(($, e, next) => next(e));
   on("turn.start", onTurnStart);
-  on("skill.prompt", onSkillPrompt);
   on("agent.spawn", onAgentSpawn).catch(($, e, next) => next(e));
   on("tool.call", onToolCall).catch(($, e, next) => next(e));
   on("turn.complete", onTurnComplete);

@@ -98,3 +98,9 @@ test("sessão: override do projeto, camada desligada e opt-in ausente", () => {
   assert.equal(resolveSessionRoute({ table, config: cfgOf("models:\n  enabled: true\n  session: false\n"), phase: "E", userModel: "opus", userEffort: "high" }), null);
   assert.equal(resolveSessionRoute({ table, config: effectiveConfig(readModels("models:\n  enabled: true\n"), "0"), phase: "E", userModel: "opus", userEffort: "high" }), null);
 });
+
+test("sessão: fase que resolve para o teto, sem esforço de skill → esforço do usuário (não effortByTier)", () => {
+  const r = resolveSessionRoute({ table, config: on, phase: "P", skill: null, userModel: "claude-opus-5-5", userEffort: "xhigh" });
+  assert.equal(r.tier, "capable");
+  assert.equal(r.effort, "xhigh");
+});
