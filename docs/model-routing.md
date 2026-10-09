@@ -20,7 +20,9 @@ Os tiers são abstratos (`cheap`, `standard`, `capable`, `top`); cada adaptador 
 |---|---|---|---|---|---|---|
 | Mod (function hooks) | Claude Code com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | sim | sim | opt-in | sim | modelo e esforço originais da sessão |
 | Clássico (`PreToolUse` na ferramenta Agent) | Claude Code sem function hooks | não | não | não | sim, só escolha inicial | último modelo do transcript |
-| omp | oh-my-pi | não | não | não | sim, tier para model role | o role que o agente teria sem roteamento |
+| omp | oh-my-pi | não | não | não | sim, tier para model role | o role que o agente teria sem roteamento (ordem abaixo) |
+
+**Teto do omp.** O adaptador do omp, e a CLI com `--runtime omp`, leem o teto nesta ordem: `agent_role_defaults` de `omp/omp-roles.yaml`; depois o `model:` de `.context/agents/<nome>.md`; depois `activities.execution`. Teto ilegível (por exemplo, o role `commit`) significa não rotear: `resolve` devolve `route: null` e `escalate` devolve `keep`. Sem `--runtime omp`, a CLI resolve contra o teto `top`.
 
 Versão testada do Claude Code: 2.1.294. O check `model-routing` do `doctor` avisa quando o roteamento está pedido e confirmado e a versão do Claude Code é anterior à testada; nesse caso o mod pode não carregar.
 
@@ -50,8 +52,8 @@ models:
 - `/devflow-route` (registrado pelo mod): `status`, `on`, `off` e `session off`. Se outro roteador de sessão estiver habilitado, a camada de sessão do DevFlow se desliga e avisa.
 - `node scripts/model-route.mjs resolve|escalate|report`:
   - `resolve --agent <tipo> [--phase P] [--skill S] [--task-tier T] [--runtime claude|omp]` mostra a rota;
-  - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--mid-run` (só no ramo da rubrica) a rubrica é a da escalada no meio da execução; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`;
-  - `report [--since ISO] [--transcripts DIR]` (`--transcripts` é o caminho do clássico e do omp, que leem os transcripts em vez do ledger do mod) soma tokens por modelo e por agente/fase, antes e depois, taxa de escalada e o custo das trocas de fase.
+  - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--mid-run` (só no ramo da rubrica) a rubrica é a da escalada no meio da execução; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`, aceitando `--signal-red` (há sinal vermelho no ledger do `verify:`) e `--runtime omp` (limita a saída ao teto do agente e devolve também `role`; sob omp, `role` é o campo útil, não `model`);
+  - `report [--since ISO] [--transcripts DIR]` (`--transcripts` é o caminho do clássico e do omp, que leem os transcripts em vez do ledger do mod) soma tokens por modelo e por agente/fase, taxa de escalada e o custo das trocas de fase, e fecha com a seção "Antes × depois" (ver Medição).
 - `doctor`: o check `model-routing` avisa quando o repositório pede roteamento sem a sua confirmação ou, com o roteamento pedido e confirmado, quando a versão do Claude Code é anterior à testada.
 
 ## Custo de cache
@@ -62,11 +64,20 @@ O cache de prompt é por modelo: trocar o modelo faz o passo seguinte reler o co
 
 Com `models.ledger: true`, cada decisão vira uma linha JSONL fora do repositório (diretório de dados do usuário), só com campos numéricos ou de lista fixa: nunca prompt, resposta ou erro em texto. No mod, o `usage` vem do `turn.complete`; no clássico e no omp, dos transcripts.
 
+### Antes × depois
+
+A seção "Antes × depois" do `report` compara tokens por modelo (entrada, saída e % da saída) em duas janelas, para subagentes e para a sessão. O corte é o timestamp da **primeira linha do ledger**; com o ledger vazio não há corte e o relatório diz que não há comparativo. A janela "depois" vem do ledger; a janela "antes" (e a "depois" quando o ledger não traz `usage`) é preenchida a partir dos transcripts de `--transcripts`. Sem `--transcripts`, a janela "antes" fica vazia. Esse é o comparativo que o gate de 2 semanas usa.
+
+## Armadilha no `.devflow.yaml`
+
+Um comentário na mesma linha depois de uma chave de mapa (`overrides:   # …`) apaga o submapa no leitor. Ponha o comentário na linha de cima.
+
 ## Limites declarados
 
 - O peso de cada modelo na cota do Max não é público; o relatório fala em tokens por modelo, nunca em "% da cota".
 - A garantia de teto vale quando o adaptador consegue lê-lo; teto ilegível significa não rotear.
 - O relatório cobre só o diretório atual (worktrees não são somados).
 - Fora do mod não há sessão por fase, esforço por passo nem escalada no meio.
-- Risco aberto: um Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `modules`. Mitigações em avaliação: plugin irmão para o mod ou versão mínima obrigatória.
+- Risco aceito: um Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `modules`. O operador aceitou o risco em 2026-10-10; ele será medido na fase V com um Claude Code antigo, se houver um disponível.
+- No hook clássico, um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript (raro; no Claude Code a CLI resolve contra o teto `top`).
 - A decisão é `gated`: o relatório de 2 semanas precisa confirmar a economia sem regressão de escaladas.

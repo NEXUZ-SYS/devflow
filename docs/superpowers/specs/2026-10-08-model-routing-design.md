@@ -286,7 +286,8 @@ models:
   subagents: true
   maxTier: capable       # teto adicional opcional (o teto principal é a escolha do usuário)
   ledger: true           # opt-in (ADR-005)
-  overrides:             # camada 3 — projeto (tiers abstratos)
+  # camada 3 — projeto (tiers abstratos); comentário na linha de cima, nunca depois de `overrides:`
+  overrides:
     agents:
       documentation-writer:
         tier: standard
@@ -380,13 +381,13 @@ Executadas com `claude -p` e um plugin de sonda descartável (hook clássico + m
 | # | Pergunta | Resultado |
 |---|---|---|
 | R-1 | `hooks` clássicos e `modules` no mesmo `hooks/hooks.json` | **Sim** — `claude plugin validate` aceita e os dois rodam na mesma sessão. O mod fica no próprio plugin. |
-| R-2 | Mod depende de `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | **Sim** — sem a variável o módulo não carrega. O hook clássico usa a variável como sinal de exclusão mútua. |
+| R-2 | Mod depende de `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | **Sim** — sem a variável o módulo não carrega. A verdade é a do Claude Code: `1|true|yes|on`, com trim e sem diferenciar caixa (`functionHooksOn`). O hook clássico usa a variável como sinal de exclusão mútua. |
 | R-3 | Reescrever o `model` no `turn.step` da sessão | **Sim, só com ID completo** (`claude-haiku-4-5-20251001` respondeu; o alias `haiku` fez o turno falhar). `e.model` e `e.effort` que chegam são sempre os do usuário; `parentModel` do `agent.spawn` também. Ver D21. |
 | R-4 | `skill.prompt` para skill de plugin | **Sim**, com nome qualificado (`probe-routing:ping`). |
 | R-5 | `updatedInput` sem `permissionDecision` | **Sim** — o subagente rodou com `model: haiku` (`meta.json`). Ferramenta: `Agent`. |
 | R-6 | `$.fs.write` fora do plugin; `$.model.complete` com alias | **Sim** nos dois. `$.fs.stat` existe (`isLink`, `kind`, `size`, `realPath`). Não há append. |
 | R-7 | Detectar outro roteador de sessão | Não há `$.plugin.list`; `$.settings.read().enabledPlugins` expõe os plugins habilitados. |
-| R-8 | Versão mínima | **2.1.294** (versão testada); abaixo dela o `doctor` avisa e o mod é no-op. |
+| R-8 | Versão mínima | **2.1.294** (versão testada); abaixo dela o `doctor` avisa e o mod pode não carregar (o mod não checa versão; quem avisa é o `doctor`). |
 | R-10 | Trocar só o esforço invalida o cache? | **Não** — esforço alternado `high/low` a cada passo, leitura de cache igual ao controle. |
 
 Restrição do `claude plugin validate` descoberta na sonda: uma função que recebe `$` precisa ser
