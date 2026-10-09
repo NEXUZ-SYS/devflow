@@ -11,15 +11,36 @@ const config = effectiveConfig(readModels("models:\n  enabled: true\n  midRun:\n
 const ctx = { table, config };
 const step = (s, model, effort) => { C.observeSession(s, { model, effort }); return C.onSessionStep(s, { model, effort }, ctx); };
 
-test("sessão: troca de tier só na mudança de fase (1 troca num P→C)", () => {
+test("sessão: a troca é EFETIVA, marcada no passo em que o patch aplica outro modelo (nada de marca na 1a rota)", () => {
   const s = C.createRouterState();
   C.learnId(s, "claude-sonnet-5-5");
-  let switches = 0;
-  for (const phase of ["P", "P", "R", "E", "E", "V", "C"]) {
+  const marks = [];
+  for (const phase of ["P", "R", "E", "V", "C"]) {
     C.onTurnStart(s, { phase });
-    if (step(s, "claude-opus-5-5", "xhigh")?.switched) switches++;
+    const rw = step(s, "claude-opus-5-5", "xhigh");
+    marks.push([phase, !!rw?.switched, rw?.model ?? null]);
   }
-  assert.equal(switches, 1);
+  assert.deepEqual(marks.filter((m) => m[1]).map((m) => m[0]), marks.filter((m) => m[2]).map((m) => m[0]), "switched <=> patch com model");
+  assert.ok(marks.find((m) => m[0] === "E")[1], "E sai de opus para sonnet: troca");
+  assert.equal(marks.find((m) => m[0] === "P")[1], false, "P fica no modelo do usuário: sem troca");
+});
+
+test("sessão: sessão que já começa em E e troca opus → sonnet no 1o passo marca switched", () => {
+  const s = C.createRouterState();
+  C.learnId(s, "claude-sonnet-5-5");
+  C.onTurnStart(s, { phase: "E" });
+  const rw = step(s, "claude-opus-5-5", "xhigh");
+  assert.equal(rw.model, "claude-sonnet-5-5");
+  assert.equal(rw.switched, true);
+});
+
+test("sessão: troca só de esforço (sem model) não conta como switched (não custa cache)", () => {
+  const s = C.createRouterState();
+  C.onTurnStart(s, { phase: "E" }); // sem ID de sonnet aprendido: só esforço
+  const rw = step(s, "claude-opus-5-5", "xhigh");
+  assert.equal(rw.model, undefined);
+  assert.equal(rw.effort, "medium");
+  assert.equal(rw.switched, false);
 });
 
 test("sessão: em E usa o ID completo aprendido, nunca alias (D21)", () => {

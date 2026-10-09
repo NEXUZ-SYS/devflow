@@ -176,6 +176,7 @@ test("contrato ponta a ponta: o ledger REAL do mod fecha com o relatório (agent
     H.call("agent.spawn", { prompt: "p", fork: false, subagentType, parentModel: OPUS }, async () => ({ agentId, model }));
   await spawnAs("a1", "devflow:documentation-writer", "claude-haiku-5-5");
   await spawnAs("a2", "devflow:architect", OPUS);
+  await spawnAs("a3", "devflow:architect", SONNET); // aprende o ID do sonnet: a troca efetiva exige um modelo a aplicar
   await H.call("turn.complete", { agentId: "a1" }, async () => ({ usage: { model: "claude-haiku-5-5", input_tokens: 100, output_tokens: 10 } }));
   await H.call("turn.complete", { agentId: "a2" }, async () => ({ usage: { model: OPUS, input_tokens: 200, output_tokens: 20 } }));
   await H.call("turn.complete", {}, async () => ({ usage: { model: OPUS, input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 9000 } }));
@@ -191,6 +192,20 @@ test("contrato ponta a ponta: o ledger REAL do mod fecha com o relatório (agent
   assert.doesNotMatch(md, /\| \? \|/);
   assert.match(md, /Trocas de fase da sessão: 1 /);
   assert.match(md, /devflow:documentation-writer \| claude-haiku-5-5 \| 1 \|/);
+});
+
+test("sessão que começa no modelo do usuário: o 1o turn.step que aplica outro modelo marca a troca e o report conta 1", async () => {
+  const root = mkRepo(YAML_LEDGER, "E");
+  const H = await load({ root });
+  await H.call("session.start", {});
+  await H.call("agent.spawn", { prompt: "p", fork: false, subagentType: "devflow:code-reviewer", parentModel: OPUS }, async () => ({ agentId: "a0", model: SONNET })); // aprende o ID do sonnet
+  await H.call("turn.start", { text: "x", turnId: "t1" });
+  const sent = await H.step({ turnId: "t1", index: 0, model: OPUS, effort: "xhigh", messageCount: 1 }); // 1o passo já em E: opus -> sonnet
+  assert.equal(sent.model, SONNET);
+  await H.call("turn.complete", {}, async () => ({ usage: { model: SONNET, input_tokens: 10, output_tokens: 5 } }));
+  const entries = H.log.writes.at(-1).text.trim().split("\n").map((l) => JSON.parse(l));
+  assert.equal(entries.filter((e) => e.switched === true).length, 1);
+  assert.match(renderMarkdown(aggregate(entries)), /Trocas de fase da sessão: 1 /);
 });
 
 test("aggregate conta switched mesmo em linha sem usage (defesa)", () => {

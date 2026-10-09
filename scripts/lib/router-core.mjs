@@ -36,15 +36,14 @@ export function onSessionStep(state, { model, effort }, { table, config }) {
   if (!state.userModel) return null;
   const route = resolveSessionRoute({ table, config, phase: state.phase, skill: state.skill, userModel: state.userModel, userEffort: state.userEffort });
   if (!route) return null;
-  const switched = state.sessionTier !== null && state.sessionTier !== route.tier;
   state.sessionTier = route.tier;
-  const rw = { switched };
+  const rw = { switched: false };
   if (route.tier !== route.ceiling) {
     const id = state.ids[route.tier];
-    if (id && id !== model) rw.model = id; // D21: sem ID aprendido, só esforço
+    if (id && id !== model) { rw.model = id; rw.switched = true; } // D21: sem ID aprendido, só esforço. Troca EFETIVA = outro modelo (só esforço não custa cache)
   }
   if (route.effort && route.effort !== effort) rw.effort = route.effort;
-  return rw.model || rw.effort || switched ? rw : null;
+  return rw.model || rw.effort ? rw : null;
 }
 
 export function onSpawn(state, e, { table, config, phase, skill }) {
