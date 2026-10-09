@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Docs — laboratório de validação do roteamento de modelos
+
+- Spec, plano e achados do laboratório que roda o PREVC inteiro de forma autônoma (`claude -p` + `/devflow auto`) sobre um software-alvo pequeno, em braços com e sem roteamento, contra um oráculo independente e a fase real do `prevc.json`. O laboratório vive num repositório à parte; aqui ficam `docs/superpowers/specs/2026-10-09-model-routing-lab-design.md`, `docs/superpowers/plans/2026-10-09-model-routing-lab.md` e `docs/superpowers/2026-10-09-model-routing-lab-findings.md`.
+- Achado candidato a refinamento da v3.7: o mod lê a fase do PREVC só no `turn.start`; numa rodada real em `-p`, um único turno atravessou P→R→E (hipótese H1, confirmação pendente no braço roteado).
+
 ## [3.7.0] — 2026-10-09
 
 ### Added — roteamento de modelos
