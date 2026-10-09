@@ -64,3 +64,23 @@ test("sem opt-in do usuário, sem models ou .devflow.yaml hostil: igual ao compo
     assert.equal(fm(z, "architect"), fm(ref, "architect"));
   });
 });
+
+test("agente fora de agent_role_defaults: teto é o model do próprio arquivo, nunca sobe (D5)", () => {
+  withOptIn("1", () => {
+    const root = project("models:\n  enabled: true\n");
+    writeFileSync(join(root, ".context/agents/bug-fixer.md"), `---\nname: bug-fixer\nmodel: pi/smol\n---\n# bug-fixer\n`);
+    enrichProjectAgents(root);
+    assert.match(fm(root, "bug-fixer"), /model: pi\/smol/, "routes diz standard, mas o teto é cheap: não sobe");
+    assert.doesNotMatch(fm(root, "bug-fixer"), /model: default/);
+  });
+});
+
+test("agente fora de agent_role_defaults sem model: no frontmatter: arquivo intocado byte a byte", () => {
+  withOptIn("1", () => {
+    const root = project("models:\n  enabled: true\n");
+    const original = `---\nname: bug-fixer\n---\n# bug-fixer\n`;
+    writeFileSync(join(root, ".context/agents/bug-fixer.md"), original);
+    enrichProjectAgents(root);
+    assert.equal(fm(root, "bug-fixer"), original);
+  });
+});

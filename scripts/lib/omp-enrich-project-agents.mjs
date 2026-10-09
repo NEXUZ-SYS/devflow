@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseYaml } from "./frontmatter.mjs";
+import { parseYaml, parseFrontmatter } from "./frontmatter.mjs";
 import { enrichAgentFrontmatter } from "./omp-enrich-agents.mjs";
 import { readModels } from "./models-config.mjs";
 import { toRole, tierOf, capAtCeiling, effectiveConfig } from "./model-routing.mjs";
@@ -21,16 +21,20 @@ export function enrichProjectAgents(projectRoot) {
     ? JSON.parse(readFileSync(join(PLUGIN_ROOT, "assets/model-routing/routes.json"), "utf-8"))
     : null;
   // Teto no omp (D5/D20): o role que o agente teria sem roteamento.
-  const routedRole = (name) => {
+  // Agente sem entrada em agent_role_defaults: o teto é o model do próprio arquivo (nunca sobe).
+  const routedRole = (name, content) => {
     if (!routes) return null;
     const want = models.overrides.agents[name] ?? routes.agents?.[name]?.tier;
-    const ceiling = tierOf(defaults[name]?.model ?? "default");
+    const ceilingSrc = defaults[name] ? defaults[name].model : parseFrontmatter(content).data.model;
+    const ceiling = tierOf(ceilingSrc);
     return toRole(capAtCeiling(want, ceiling, models.maxTier));
   };
   const changed = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
     const name = file.replace(/\.md$/, "");
-    const role = routedRole(name);
+    const path = join(dir, file);
+    const content = readFileSync(path, "utf-8");
+    const role = routedRole(name, content);
     const fields = role ? { ...(defaults[name] ?? {}), model: role } : defaults[name];
     if (!fields) continue;
     // enrichAgentFrontmatter espera valores string; o parser pode devolver
@@ -38,8 +42,7 @@ export function enrichProjectAgents(projectRoot) {
     const stringified = Object.fromEntries(
       Object.entries(fields).map(([k, v]) => [k, String(v)]),
     );
-    const path = join(dir, file);
-    writeFileSync(path, enrichAgentFrontmatter(readFileSync(path, "utf-8"), stringified));
+    writeFileSync(path, enrichAgentFrontmatter(content, stringified));
     changed.push(name);
   }
   return changed;
