@@ -6,7 +6,7 @@ planSlug: model-routing-lab
 scope: LARGE
 autonomy: autonomous
 status: filled
-progress: 10
+progress: 0
 generated: "2026-10-09"
 scaffoldVersion: "2.0.0"
 summary: "Repo irmão devflow-routing-lab que roda o PREVC inteiro de forma autônoma (claude -p + /devflow auto, com retomadas) sobre um software-alvo pequeno (encurtador shortlink), em braços com e sem roteamento, e gera um scorecard: vereditos HELD/MISS/N/A contra um oráculo independente, matriz de cobertura das funcionalidades da v3.7, tokens por modelo (B ÷ A) e suíte de aceitação oculta. Plugin sob teste = clone da tag v3.7.0 via --plugin-dir. Capturar, não resolver."
@@ -26,8 +26,8 @@ phases:
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
-    status: pending
-    summary: "Architect + security-auditor revisam spec e plano; sondas das premissas §13 (claude -p com --plugin-dir carrega o mod; /devflow auto em -p; XDG por rodada)."
+    status: completed
+    summary: "Architect e security-auditor APROVADO-COM-RESSALVAS (14 + 10 achados), todos incorporados; spec reescrita (H1/H2 pré-registradas, L12–L16, §7 contra a fase real, §13 sondas) e plano reescrito. Sondas no Claude Code 2.1.295: --plugin-dir carrega o mod 3.7.0 (documentation-writer em E com teto sonnet → haiku); XDG isola o ledger; agentId do ledger = transcript; modelUsage no result. Isolamento L12 validado (env por allowlist + git/gh neutros + --setting-sources project,local + --strict-mcp-config): sem ele a rodada herdava discord, cli-anything, conectores, mempalace e hook rtk. CLAUDE_CONFIG_DIR descartado (com o diretório real grava ~/.claude/.claude.json — criado pela sonda e removido; isolado exigiria copiar credencial). Dry-run do plano: 57 unit + 7 e2e + 18 L1 contra a tag + lint, verdes; achou um teste da suíte oculta que passava com o produto ausente (corrigido). Sem BLOCK; autonomia autonomous → R→E sem gate humano."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
@@ -82,6 +82,7 @@ phases:
     prevc: "C"
     status: pending
     summary: "Spec, plano e tracking no repo devflow via PR; laboratório fica local (sem remoto). Memória e handoff atualizados."
+lastUpdated: "2026-10-09T16:11:51.925Z"
 ---
 
 # Laboratório de validação autônoma do roteamento de modelos
@@ -98,3 +99,7 @@ Tracking do workflow `model-routing-e2e-validation`. O conteúdo canônico está
 | `--plugin-dir` não carrega o mod como a instalação | sonda na fase R antes da E |
 | Custo da campanha na cota da assinatura | braços em sequência; C e D opcionais |
 | Oráculo contaminado pela lib sob teste | `oracle.json` transcrito da spec do roteamento, nunca do `routes.json` |
+
+## Execution History
+
+> Last updated: 2026-10-09T16:11:51.925Z | Progress: 0%

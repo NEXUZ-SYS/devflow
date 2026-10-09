@@ -2,17 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **DevFlow workflow:** model-routing-e2e-validation | **Scale:** LARGE | **Phase:** P→R | **Autonomy:** autonomous
+> **DevFlow workflow:** model-routing-e2e-validation | **Scale:** LARGE | **Phase:** R→E | **Autonomy:** autonomous
+> **Revisão R (2026-10-09):** incorpora os achados do architect (14) e do security-auditor (10) e as sondas da spec §13.
 
-**Goal:** Construir o repo `devflow-routing-lab`, que roda o PREVC inteiro de forma autônoma sobre um software-alvo pequeno, em braços com e sem roteamento, e gera um scorecard que valida o roteamento de modelos da v3.7.0.
+**Goal:** Construir o repo `devflow-routing-lab`, que roda o PREVC inteiro de forma autônoma sobre um software-alvo pequeno, em braços com e sem roteamento, e gera um scorecard que valida o roteamento de modelos da v3.7.0 contra a fase real.
 
-**Architecture:** Libs puras (braço, oráculo, stream-json, transcripts, ledger, invariantes, scorecard) mais scripts finos (`run-arm`, `collect`, `accept`, `score`, `campaign`). O plugin sob teste vem de um clone da tag `v3.7.0` carregado por `--plugin-dir`. A camada L1 testa a CLI da v3.7 de forma determinística; a L3 roda sessões reais.
+**Architecture:** Libs pequenas (braço, oráculo, stream-json, leitura segura, transcripts, ledger, prevc, invariantes, scorecard, coleta, aceitação) e scripts finos (`plugin`, `run-arm`, `collect`, `accept`, `score`, `campaign`). O plugin sob teste vem de um clone da tag `v3.7.0` por `--plugin-dir`; cada rodada roda isolada em `tmpdir` (spec L12/L13). A camada L1 testa a CLI, o hook clássico e o `router-core` da tag de forma determinística; a L3 roda sessões reais.
 
-**Tech Stack:** Node ≥ 22 (só biblioteca padrão), `node --test`, git, Claude Code CLI 2.1.295.
+**Tech Stack:** Node ≥ 22 (só biblioteca padrão), `node --test`, git, Claude Code CLI ≥ 2.1.293.
 
 **Spec:** `docs/superpowers/specs/2026-10-09-model-routing-lab-design.md`
 
-**Agents:** backend-specialist (libs/scripts), test-writer (oráculo, L1, suíte oculta, e2e), security-auditor (revisão de `run-arm`/leitura segura), documentation-writer (README, GABARITO, runbooks), architect (revisão R).
+**Agents:** backend-specialist (libs/scripts), test-writer (oráculo, L1, suíte oculta), security-auditor (revisão pesada das Tasks 10 e 11), documentation-writer (README, GABARITO, runbooks), architect (revisão R).
 
 ```yaml
 requiredSignals: [unit, integration, e2e, lint]
@@ -20,25 +21,33 @@ requiredSignals: [unit, integration, e2e, lint]
 
 ## Global Constraints
 
-- O laboratório é um repo irmão do `devflow`: `../devflow-routing-lab` (git local, **sem remoto**). Todos os caminhos de arquivo abaixo são relativos à raiz dele, salvo indicação.
-- Node ≥ 22, só biblioteca padrão; nenhuma dependência npm.
-- Testes com `node --test`; nada de framework externo.
-- Plugin sob teste: tag `v3.7.0` do repo `devflow`, clonada com `git clone --depth 1 --branch v3.7.0` para `.cache/devflow@v3.7.0` (no `.gitignore`). Nunca `git worktree` no repo `devflow`, nunca `claude plugin install`.
-- O repo do laboratório só recebe escrita em `results/`; rodadas brutas vão para `runs/` (no `.gitignore`).
-- `metrics.json` e tudo em `results/` contêm só números, enums e IDs de modelo/agente. Nunca prompt, resposta, código gerado ou trecho de transcript.
-- Leitura de transcript, ledger e `prevc.json`: só arquivo regular, sem seguir symlink, sem bloquear, até 64 MiB.
-- Veredito: `HELD` | `MISS` | `N/A`.
-- Tiers: `cheap` < `standard` < `capable` < `top`; modelos: `haiku`→cheap, `sonnet`→standard, `opus`→capable, `fable`→top. Esforço: `low` < `medium` < `high` < `xhigh` < `max`.
-- Subagentes deste workflow: **proibido** `gh`, PR, merge, push, `git worktree` no repo `devflow` e qualquer escrita no `devflow-e2e-sandbox`.
+- O laboratório é um repo irmão do `devflow`: `../devflow-routing-lab` (git local, **sem remoto**). Caminhos de arquivo abaixo são relativos à raiz dele, salvo indicação.
+- Node ≥ 22, só biblioteca padrão; nenhuma dependência npm. Testes com `node --test`.
+- Plugin sob teste: tag `v3.7.0`, clonada com `git clone --depth 1 --branch v3.7.0` para `.cache/devflow@v3.7.0` (no `.gitignore`). Superpowers: `--plugin-dir` para a maior versão em `~/.claude/plugins/cache/claude-plugins-official/superpowers/` (ou `SUPERPOWERS_PLUGIN_DIR`).
+- Rodadas em `${TMPDIR:-/tmp}/devflow-routing-lab/runs/` — nunca dentro do laboratório nem de `$HOME`.
+- O repo do laboratório só recebe escrita em `results/`. `metrics.json` e `results/` contêm só números, enums e IDs validados por regex.
+- Leitura de arquivo vindo do agente: só arquivo regular, sem seguir link (nem em diretório intermediário), até 64 MiB.
+- Veredito: `HELD` | `MISS` | `N/A`. Tiers: `cheap` < `standard` < `capable` < `top`; `haiku`→cheap, `sonnet`→standard, `opus`→capable, `fable`→top. Esforço: `low` < `medium` < `high` < `xhigh` < `max`.
+- Variáveis `ROUTING_LAB_FAKE_*` existem só para o `claude` falso dos testes; o driver as repassa e nada mais as lê.
 - Idioma: pt-BR em docs, mensagens e nomes de teste.
+
+**Bloco de proibições — copiar LITERALMENTE em todo prompt de despacho de subagente deste plano:**
+
+```text
+PROIBIDO neste trabalho:
+- gh, criar PR, git merge para main, git push, git remote, git worktree (em qualquer repo).
+- Rodar `claude -p`, scripts/run-arm.mjs ou scripts/campaign.mjs com o claude REAL (só com tests/e2e/fake-claude.mjs).
+- Editar qualquer coisa em ~/.claude/**, no repo devflow (exceto o `git clone --depth 1` da Task 3, que só LÊ o repo) e em devflow-e2e-sandbox.
+- Commits só no repo ../devflow-routing-lab.
+```
 
 ## Review Focus
 
-1. **Retomada (`--resume`) com a mesma sessão** — o driver deve acumular `session_id`s e uso de todas as invocações; perder a 1ª invocação apaga as fases P/R da medição. Teste em `tests/e2e/run-arm.test.mjs` (Task 11).
-2. **Transcript ausente, truncado ou com linha inválida** — a coleta deve seguir com o que leu e marcar a verificação como `N/A`, não quebrar. Testes em `tests/unit/transcripts.test.mjs` (Task 5) e `invariants.test.mjs` (Task 7).
-3. **Symlink/FIFO no lugar de transcript ou ledger** (o workspace roda com `bypassPermissions`) — leitura segura recusa. Teste em `tests/unit/safe-read.test.mjs` (Task 5).
-4. **Subagente de tipo não roteável** (`Explore`, `Plan`, …) — fora do `INV-SUB`; contá-lo como `MISS` invalidaria o scorecard. Teste em `invariants.test.mjs` (Task 7).
-5. **Workspace sem `src/server.mjs`** (rodada incompleta) — `accept.mjs` devolve `{passed: 0, total: N, error}` em vez de travar. Teste em `tests/unit/accept.test.mjs` (Task 10).
+1. **Tokens duplicados entre retomadas** — `modelUsage` pode vir acumulado; a fonte é o transcript deduplicado. Teste em `tests/e2e/run-arm.test.mjs` (Task 11) fixa os totais por modelo.
+2. **Mensagem fora de qualquer intervalo de fase** — fase desconhecida não entra na verificação nem vira MISS. Testes em `prevc.test.mjs` (Task 6) e `invariants.test.mjs` (Task 7).
+3. **Link simbólico em diretório intermediário** plantado pelo agente (`bypassPermissions`) — ignorado. Testes em `safe-read.test.mjs` e `transcripts.test.mjs` (Task 5), `ledger.test.mjs` (Task 6).
+4. **Linha de ledger não-objeto ou com chave arbitrária** — vira código de violação, nunca texto em `results/`. Testes em `ledger.test.mjs` (Task 6) e `scorecard.test.mjs` (Task 8).
+5. **Workspace sem `src/server.mjs` ou servidor que morre cedo** — `accept` devolve resultado sem travar. Testes em `accept.test.mjs` (Task 10).
 
 ---
 
@@ -47,18 +56,18 @@ requiredSignals: [unit, integration, e2e, lint]
 | Arquivo | Responsabilidade |
 |---|---|
 | `package.json`, `.gitignore`, `tests/run-{unit,integration,e2e,lint}.sh` | bootstrap e contrato `verify:` |
-| `lib/arm.mjs`, `arms/*.json` | braço como dados → argv/env/bloco `models:` |
-| `lib/tiers.mjs`, `oracle/oracle.json`, `GABARITO.md` | oráculo independente |
-| `lib/plugin.mjs`, `scripts/plugin.mjs`, `l1/*.test.mjs` | cache da tag + camada L1 |
-| `lib/stream.mjs` | leitura do `stream-json` |
-| `lib/safe-read.mjs`, `lib/transcripts.mjs` | leitura segura + transcripts |
-| `lib/ledger.mjs` | leitura e checagem do ledger |
-| `lib/prevc.mjs` | leitura do `prevc.json` |
-| `lib/invariants.mjs` | vereditos + matriz de cobertura |
+| `lib/arm.mjs`, `arms/*.json` | braço → env por allowlist, argv com isolamento, bloco `models:` |
+| `lib/tiers.mjs`, `oracle/oracle.json`, `GABARITO.md` | oráculo independente (tier e esforço) |
+| `lib/plugin.mjs`, `scripts/plugin.mjs` | clone da tag, superpowers, versões, integridade |
+| `l1/*.test.mjs` | camada L1 (CLI, hook clássico, `router-core`) |
+| `lib/stream.mjs` | `stream-json`: sessões, `init`, resultado, preflight |
+| `lib/safe-read.mjs`, `lib/transcripts.mjs` | leitura segura + mensagens com timestamp |
+| `lib/ledger.mjs`, `lib/prevc.mjs` | ledger normalizado; fases com timestamps |
+| `lib/invariants.mjs` | vereditos + cobertura |
 | `lib/scorecard.mjs`, `scripts/score.mjs` | scorecard |
 | `brief/PRODUCT.md`, `seed/`, `lib/seed.mjs` | software-alvo e workspace |
-| `acceptance/*.test.mjs`, `fixtures/shortlink-ref/`, `fixtures/shortlink-broken/`, `scripts/accept.mjs`, `lib/accept.mjs` | suíte oculta |
-| `scripts/run-arm.mjs`, `scripts/collect.mjs`, `lib/collect.mjs`, `tests/e2e/fake-claude.mjs` | driver e coleta |
+| `acceptance/`, `fixtures/shortlink-{ref,broken}/`, `lib/accept.mjs`, `scripts/accept.mjs` | suíte oculta |
+| `lib/collect.mjs`, `scripts/run-arm.mjs`, `scripts/collect.mjs`, `tests/e2e/fake-claude.mjs` | driver e coleta |
 | `scripts/campaign.mjs`, `runbooks/*.md`, `README.md` | campanha e operação |
 
 ---
@@ -73,12 +82,13 @@ requiredSignals: [unit, integration, e2e, lint]
 - Test: `tests/unit/arm.test.mjs`
 
 **Interfaces:**
-- Produces: `loadArm(obj) → Arm` (lança `Error` com mensagem em pt-BR se inválido); `armEnv(arm, baseEnv, xdgDir) → env`; `armArgs(arm, { pluginDir, prompt, resume }) → string[]`; `modelsYaml(models) → string` (`""` se `models` é `null`). `Arm = { id, description, routing, ceiling: { model, effort }, models }`.
+- Produces: `loadArm(obj) → Arm`; `armEnv(arm, baseEnv, { xdgDir, runDir }) → env`; `armArgs(arm, { pluginDir, superpowersDir, mcpConfig, prompt, resume?, model?, effort? }) → string[]`; `modelsYaml(models) → string`; `DISALLOWED: string[]`. `Arm = { id, description, routing, ceiling: { model, effort }, models }`.
 
 - [ ] **Step 1: Criar o repo e o bootstrap**
 
 ```bash
 mkdir ../devflow-routing-lab && cd ../devflow-routing-lab && git init -b main
+git config user.name "routing-lab" && git config user.email "routing-lab@localhost"
 ```
 
 `package.json`:
@@ -127,7 +137,7 @@ node --test tests/e2e/
 `tests/run-lint.sh`:
 ```bash
 #!/usr/bin/env bash
-# Sintaxe de todo .mjs versionado + guarda: script nenhum grava fora de runs/ e results/.
+# Sintaxe de todo .mjs versionado + guarda: script nenhum grava com caminho literal fora do laboratório.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 fail=0
@@ -150,6 +160,7 @@ import { readFileSync } from "node:fs";
 import { loadArm, armEnv, armArgs, modelsYaml } from "../../lib/arm.mjs";
 
 const arm = (id) => loadArm(JSON.parse(readFileSync(new URL(`../../arms/${id}.json`, import.meta.url), "utf8")));
+const dirs = { xdgDir: "/r/xdg", runDir: "/r" };
 
 test("os quatro braços versionados são válidos", () => {
   for (const id of ["A-baseline", "B-routed", "C-ceiling", "D-stress"]) assert.equal(arm(id).id, id);
@@ -162,23 +173,32 @@ test("braço inválido é recusado com mensagem", () => {
   assert.throws(() => loadArm({ id: "x", routing: true, ceiling: { model: "opus", effort: "high" }, models: null }), /models/);
 });
 
-test("armEnv: A remove o opt-in do usuário; B liga; ambos isolam o XDG", () => {
-  const base = { HOME: "/h", DEVFLOW_MODEL_ROUTING: "1", PATH: "/bin" };
-  const a = armEnv(arm("A-baseline"), base, "/r/xdg");
-  assert.equal(a.DEVFLOW_MODEL_ROUTING, undefined);
-  assert.equal(a.XDG_DATA_HOME, "/r/xdg");
-  assert.equal(a.HOME, "/h");
-  assert.equal(armEnv(arm("B-routed"), base, "/r/xdg").DEVFLOW_MODEL_ROUTING, "1");
+test("armEnv: allowlist; credenciais, modelo e hooks do usuário não passam; git/gh neutros", () => {
+  const base = { HOME: "/h", PATH: "/bin", LANG: "pt_BR.UTF-8", DEVFLOW_MODEL_ROUTING: "1", GH_TOKEN: "x", GITHUB_TOKEN: "x",
+    SSH_AUTH_SOCK: "/s", ANTHROPIC_MODEL: "opus", CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1", ROUTING_LAB_FAKE_REF: "/f" };
+  const a = armEnv(arm("A-baseline"), base, dirs);
+  for (const k of ["DEVFLOW_MODEL_ROUTING", "GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "ANTHROPIC_MODEL", "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"]) assert.equal(a[k], undefined, k);
+  assert.deepEqual(
+    [a.HOME, a.PATH, a.LANG, a.XDG_DATA_HOME, a.GIT_CONFIG_GLOBAL, a.GIT_CONFIG_NOSYSTEM, a.GIT_TERMINAL_PROMPT, a.GH_CONFIG_DIR, a.DISABLE_AUTOUPDATER, a.ROUTING_LAB_FAKE_REF],
+    ["/h", "/bin", "pt_BR.UTF-8", "/r/xdg", "/r/gitconfig", "1", "0", "/r/gh", "1", "/f"]);
+  assert.equal(armEnv(arm("B-routed"), base, dirs).DEVFLOW_MODEL_ROUTING, "1");
 });
 
-test("armArgs: teto, plugin e retomada", () => {
-  const args = armArgs(arm("C-ceiling"), { pluginDir: "/p", prompt: "oi", resume: "sid-1" });
+test("armArgs: isolamento, dois plugins, teto, retomada e override do preflight", () => {
+  const o = { pluginDir: "/p", superpowersDir: "/s", mcpConfig: "/w/.mcp.json", prompt: "oi" };
+  const args = armArgs(arm("C-ceiling"), { ...o, resume: "sid-1" });
+  const val = (f) => args[args.indexOf(f) + 1];
   assert.deepEqual(args.slice(0, 2), ["-p", "oi"]);
-  for (const [flag, v] of [["--plugin-dir", "/p"], ["--model", "sonnet"], ["--effort", "medium"], ["--permission-mode", "bypassPermissions"], ["--output-format", "stream-json"], ["--resume", "sid-1"]]) {
-    assert.equal(args[args.indexOf(flag) + 1], v, flag);
-  }
-  assert.ok(args.includes("--verbose"));
-  assert.ok(!armArgs(arm("B-routed"), { pluginDir: "/p", prompt: "oi" }).includes("--resume"));
+  assert.deepEqual(args.filter((_, i) => args[i - 1] === "--plugin-dir"), ["/p", "/s"]);
+  for (const [f, v] of [["--setting-sources", "project,local"], ["--mcp-config", "/w/.mcp.json"], ["--model", "sonnet"], ["--effort", "medium"],
+    ["--permission-mode", "bypassPermissions"], ["--output-format", "stream-json"], ["--resume", "sid-1"]]) assert.equal(val(f), v, f);
+  assert.ok(args.includes("--strict-mcp-config") && args.includes("--verbose"));
+  const d = args.indexOf("--disallowedTools");
+  assert.deepEqual(args.slice(d + 1, d + 4), ["Bash(gh *)", "Bash(git push*)", "Bash(git remote*)"]);
+  const pre = armArgs(arm("B-routed"), { ...o, model: "haiku", effort: "low" });
+  assert.equal(pre[pre.indexOf("--model") + 1], "haiku");
+  assert.equal(pre[pre.indexOf("--effort") + 1], "low");
+  assert.ok(!pre.includes("--resume"));
 });
 
 test("modelsYaml: bloco em estilo bloco, sem mapa inline; null → vazio", () => {
@@ -199,10 +219,13 @@ Expected: FAIL com `Cannot find module '.../lib/arm.mjs'`
 
 `lib/arm.mjs`:
 ```js
-// lib/arm.mjs — um braço da campanha descrito por dados (spec L5). Puro.
+// lib/arm.mjs — um braço da campanha descrito por dados (spec L5) e o isolamento da rodada (spec L12). Puro.
 const MODELS = ["haiku", "sonnet", "opus", "fable"];
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const ID = /^[A-Za-z0-9-]{1,32}$/;
+const PASS = ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR", "HOME"];
+const FAKE = /^ROUTING_LAB_FAKE_[A-Z_]{1,40}$/; // só o claude falso dos testes lê
+export const DISALLOWED = ["Bash(gh *)", "Bash(git push*)", "Bash(git remote*)"];
 
 export function loadArm(o) {
   if (!o || typeof o !== "object") throw new Error("braço: objeto esperado");
@@ -214,16 +237,24 @@ export function loadArm(o) {
   return { id: o.id, description: String(o.description ?? ""), routing: o.routing, ceiling: { ...o.ceiling }, models: o.models ?? null };
 }
 
-export function armEnv(arm, baseEnv, xdgDir) {
-  const env = { ...baseEnv, XDG_DATA_HOME: xdgDir };
-  delete env.DEVFLOW_MODEL_ROUTING;
+export function armEnv(arm, baseEnv, { xdgDir, runDir }) {
+  const env = {};
+  for (const k of PASS) if (typeof baseEnv[k] === "string") env[k] = baseEnv[k];
+  for (const k of Object.keys(baseEnv)) if (FAKE.test(k)) env[k] = baseEnv[k];
+  Object.assign(env, {
+    XDG_DATA_HOME: xdgDir, DISABLE_AUTOUPDATER: "1",
+    GIT_CONFIG_GLOBAL: `${runDir}/gitconfig`, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0", GH_CONFIG_DIR: `${runDir}/gh`,
+  });
   if (arm.routing) env.DEVFLOW_MODEL_ROUTING = "1";
   return env;
 }
 
-export function armArgs(arm, { pluginDir, prompt, resume }) {
-  const a = ["-p", prompt, "--plugin-dir", pluginDir, "--permission-mode", "bypassPermissions",
-    "--output-format", "stream-json", "--verbose", "--model", arm.ceiling.model, "--effort", arm.ceiling.effort];
+export function armArgs(arm, { pluginDir, superpowersDir, mcpConfig, prompt, resume, model, effort }) {
+  const a = ["-p", prompt, "--plugin-dir", pluginDir, "--plugin-dir", superpowersDir,
+    "--setting-sources", "project,local", "--strict-mcp-config", "--mcp-config", mcpConfig,
+    "--disallowedTools", ...DISALLOWED,
+    "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose",
+    "--model", model ?? arm.ceiling.model, "--effort", effort ?? arm.ceiling.effort];
   if (resume) a.push("--resume", resume);
   return a;
 }
@@ -278,12 +309,12 @@ export function modelsYaml(models) {
 - [ ] **Step 5: Rodar e ver passar**
 
 Run: `node --test tests/unit/arm.test.mjs && bash tests/run-lint.sh`
-Expected: PASS (5 testes), lint sem saída de erro
+Expected: PASS (5 testes); lint sem erro
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A && git commit -m "feat(lab): bootstrap e braços da campanha como dados"
+git add -A && git commit -m "feat(lab): bootstrap, braços como dados e isolamento da rodada"
 ```
 
 ---
@@ -297,7 +328,7 @@ git add -A && git commit -m "feat(lab): bootstrap e braços da campanha como dad
 - Test: `tests/unit/tiers.test.mjs`
 
 **Interfaces:**
-- Produces: `modelTier(id) → "cheap"|"standard"|"capable"|"top"|null`; `tierRank(t) → 0..3 | -1`; `effortRank(e) → 0..4 | -1`; `capTier(tier, ceilingTier) → tier`; `agentKey(agentType) → string` (tira o prefixo `devflow:`); `isRoutable(oracle, agentType) → boolean`; `expectedSubagentTier(oracle, agentType, phase|null, ceilingTier) → tier|null`; `expectedSessionTiers(oracle, ceilingTier) → { P, R, E, V, C }`; `expectedSessionSwitches(oracle, ceilingTier) → number`; `loadOracle() → Oracle`.
+- Produces: `TIERS`, `EFFORTS`, `PHASES`; `loadOracle()`; `modelTier(id)`; `tierRank(t)`; `effortRank(e)`; `capTier(t, ceilingTier)`; `capEffort(e, ceilingEffort)`; `agentKey(type)`; `isRoutable(o, type)`; `expectedSubagentTier(o, type, phase|null, ceilingTier) → tier|null`; `expectedSessionTiers(o, ceilingTier) → {P..C}`; `expectedSessionSwitches(o, ceilingTier) → number`; `expectedSkillEffort(o, skill|null, ceilingEffort) → effort|null`; `expectedAgentEffort(o, type, ceilingEffort) → effort|null`.
 
 - [ ] **Step 1: Escrever o oráculo à mão**
 
@@ -320,11 +351,28 @@ Transcrito da spec do roteamento (`docs/superpowers/specs/2026-10-08-model-routi
     "documentation-writer": "cheap", "memory-specialist": "cheap",
     "general-purpose": "standard"
   },
+  "agentEffort": {
+    "architect": "high", "security-auditor": "high",
+    "bug-fixer": "high", "performance-optimizer": "high", "product-manager": "high",
+    "code-reviewer": "medium", "feature-developer": "medium", "test-writer": "medium",
+    "refactoring-specialist": "medium", "backend-specialist": "medium", "frontend-specialist": "medium",
+    "database-specialist": "medium", "devops-specialist": "medium", "mobile-specialist": "medium",
+    "business-context": "medium", "product-context": "medium", "operations-context": "medium",
+    "engineering-context": "medium",
+    "documentation-writer": "low", "memory-specialist": "low"
+  },
   "phaseOverrides": {
     "R": { "code-reviewer": "capable" },
     "C": { "general-purpose": "cheap", "documentation-writer": "cheap" }
   },
-  "sessionPhases": { "P": "ceiling", "R": "ceiling", "E": "standard", "V": "standard", "C": "standard" }
+  "sessionPhases": { "P": "ceiling", "R": "ceiling", "E": "standard", "V": "standard", "C": "standard" },
+  "sessionSkillEffort": {
+    "superpowers:brainstorming": "ceiling", "superpowers:writing-plans": "ceiling",
+    "devflow:prevc-review": "ceiling", "superpowers:systematic-debugging": "ceiling",
+    "devflow:prevc-execution": "medium", "superpowers:subagent-driven-development": "medium",
+    "devflow:prevc-validation": "medium",
+    "devflow:commit-message": "low", "devflow:documentation": "low", "devflow:prevc-confirmation": "low"
+  }
 }
 ```
 
@@ -347,19 +395,22 @@ test("modelTier reconhece alias e ID completo; desconhecido → null", () => {
   assert.equal(t.modelTier(undefined), null);
 });
 
-test("ranks e teto", () => {
+test("ranks e tetos", () => {
   assert.ok(t.tierRank("cheap") < t.tierRank("top"));
   assert.equal(t.tierRank("x"), -1);
   assert.ok(t.effortRank("medium") < t.effortRank("xhigh"));
   assert.equal(t.capTier("capable", "standard"), "standard");
   assert.equal(t.capTier("cheap", "standard"), "cheap");
+  assert.equal(t.capEffort("high", "medium"), "medium");
+  assert.equal(t.capEffort("low", "xhigh"), "low");
 });
 
-test("roteável: devflow:* e general-purpose; Explore não", () => {
+test("roteável: devflow:* conhecido e general-purpose; Explore não", () => {
   assert.ok(t.isRoutable(o, "devflow:architect"));
   assert.ok(t.isRoutable(o, "general-purpose"));
   assert.ok(!t.isRoutable(o, "Explore"));
   assert.ok(!t.isRoutable(o, "devflow:nao-existe"));
+  assert.ok(!t.isRoutable(o, "devflow:__proto__"));
 });
 
 test("tier esperado do subagente: override de fase > agente; teto aplica; fase nula usa o agente", () => {
@@ -375,6 +426,18 @@ test("sessão: 'ceiling' vira o teto; trocas esperadas = mudanças entre fases",
   assert.deepEqual(t.expectedSessionTiers(o, "capable"), { P: "capable", R: "capable", E: "standard", V: "standard", C: "standard" });
   assert.equal(t.expectedSessionSwitches(o, "capable"), 1);
   assert.equal(t.expectedSessionSwitches(o, "standard"), 0);
+});
+
+test("esforço: skill mapeada ('ceiling' = teto); agente; teto limita; sem mapa → null", () => {
+  assert.equal(t.expectedSkillEffort(o, "superpowers:brainstorming", "xhigh"), "xhigh");
+  assert.equal(t.expectedSkillEffort(o, "devflow:prevc-execution", "xhigh"), "medium");
+  assert.equal(t.expectedSkillEffort(o, "devflow:prevc-execution", "low"), "low");
+  assert.equal(t.expectedSkillEffort(o, "outra", "xhigh"), null);
+  assert.equal(t.expectedSkillEffort(o, null, "xhigh"), null);
+  assert.equal(t.expectedAgentEffort(o, "devflow:architect", "medium"), "medium");
+  assert.equal(t.expectedAgentEffort(o, "devflow:documentation-writer", "xhigh"), "low");
+  assert.equal(t.expectedAgentEffort(o, "general-purpose", "xhigh"), null);
+  assert.equal(t.expectedAgentEffort(o, "Explore", "xhigh"), null);
 });
 ```
 
@@ -394,6 +457,7 @@ export const TIERS = ["cheap", "standard", "capable", "top"];
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 export const PHASES = ["P", "R", "E", "V", "C"];
 const FAMILY = [["haiku", "cheap"], ["sonnet", "standard"], ["opus", "capable"], ["fable", "top"]];
+const own = (obj, k) => obj != null && Object.hasOwn(obj, k);
 
 export const loadOracle = () => JSON.parse(readFileSync(new URL("../oracle/oracle.json", import.meta.url), "utf8"));
 export function modelTier(id) {
@@ -404,15 +468,16 @@ export function modelTier(id) {
 export const tierRank = (t) => TIERS.indexOf(t);
 export const effortRank = (e) => EFFORTS.indexOf(e);
 export const capTier = (tier, ceiling) => (tierRank(tier) > tierRank(ceiling) ? ceiling : tier);
+export const capEffort = (e, ceiling) => (effortRank(e) > effortRank(ceiling) ? ceiling : e);
 export const agentKey = (type) => (typeof type === "string" && type.startsWith("devflow:") ? type.slice(8) : String(type));
 export function isRoutable(o, type) {
   if (o.routable.includes(type)) return true;
-  return typeof type === "string" && type.startsWith(o.routablePrefix) && Object.hasOwn(o.agents, agentKey(type));
+  return typeof type === "string" && type.startsWith(o.routablePrefix) && own(o.agents, agentKey(type));
 }
 export function expectedSubagentTier(o, type, phase, ceiling) {
   if (!isRoutable(o, type)) return null;
   const key = agentKey(type);
-  const byPhase = phase && Object.hasOwn(o.phaseOverrides, phase) && Object.hasOwn(o.phaseOverrides[phase], key) ? o.phaseOverrides[phase][key] : null;
+  const byPhase = phase && own(o.phaseOverrides, phase) && own(o.phaseOverrides[phase], key) ? o.phaseOverrides[phase][key] : null;
   return capTier(byPhase ?? o.agents[key], ceiling);
 }
 export function expectedSessionTiers(o, ceiling) {
@@ -426,42 +491,98 @@ export function expectedSessionSwitches(o, ceiling) {
   for (let i = 1; i < PHASES.length; i++) if (s[PHASES[i]] !== s[PHASES[i - 1]]) n++;
   return n;
 }
+export function expectedSkillEffort(o, skill, ceilingEffort) {
+  if (typeof skill !== "string" || !own(o.sessionSkillEffort, skill)) return null;
+  const v = o.sessionSkillEffort[skill];
+  return v === "ceiling" ? ceilingEffort : capEffort(v, ceilingEffort);
+}
+export function expectedAgentEffort(o, type, ceilingEffort) {
+  if (!isRoutable(o, type)) return null;
+  const key = agentKey(type);
+  return own(o.agentEffort, key) ? capEffort(o.agentEffort[key], ceilingEffort) : null;
+}
 ```
 
 - [ ] **Step 5: Rodar e ver passar**
 
 Run: `node --test tests/unit/tiers.test.mjs`
-Expected: PASS (5 testes)
+Expected: PASS (6 testes)
 
 - [ ] **Step 6: Escrever `GABARITO.md`**
 
-Conteúdo obrigatório (texto em pt-BR):
-1. Tabela de verificações `INV-CEIL`, `INV-SESS`, `INV-SUB`, `INV-EFF`, `INV-LEDGER`, `INV-OFF`, `INV-PREVC` copiada da spec §7, com a regra de veredito de cada uma (a mesma que a Task 7 implementa).
-2. Matriz de cobertura com as 13 funcionalidades da spec §7 e, para cada uma, o sinal observável (campo do ledger ou do transcript) que conta como "exercitada".
-3. Nota de método: o oráculo vem da spec, não do `routes.json`; divergência entre os dois é **achado**, não correção do oráculo.
-4. Nota sobre `INV-SESS` com retomadas: cada invocação do driver é um processo novo do mod; o limite de trocas é `trocas esperadas × invocações`, e o scorecard mostra a sequência de modelos para leitura humana.
+Conteúdo obrigatório (pt-BR):
+1. As hipóteses H1 e H2 da spec §1.1, copiadas, com o veredito esperado para o braço B.
+2. Tabela de verificações `INV-CEIL`, `INV-SESS`, `INV-PHASE-SYNC`, `INV-SUB`, `INV-EFF`, `INV-LEDGER`, `INV-OFF`, `INV-PREVC` copiada da spec §7, com a regra de cada uma (a que a Task 7 implementa).
+3. Definição de **fase real** (intervalos `[started_at, completed_at)` dos instantâneos do `prevc.json`; fora de intervalo → não entra).
+4. Matriz de cobertura com as 13 funcionalidades da spec §7 e o sinal observável de cada uma.
+5. Nota de método: o oráculo vem da spec do roteamento; divergência com o `routes.json` é **achado**, não correção do oráculo. Ledger, `prevc.json` e transcripts são autorreportados.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -A && git commit -m "feat(lab): oráculo independente e gabarito das verificações"
+git add -A && git commit -m "feat(lab): oráculo independente de tier e esforço, e gabarito"
 ```
 
 ---
 
-### Task 3: Cache da tag e camada L1 (determinística)
+### Task 3: Plugin sob teste e camada L1 (determinística)
 
-**Agent:** test-writer · **Tier:** standard · **Tests:** integration
+**Agent:** test-writer · **Tier:** standard · **Tests:** unit + integration
 
 **Files:**
 - Create: `lib/plugin.mjs`, `scripts/plugin.mjs`
-- Test: `l1/resolve.test.mjs`, `l1/escalate-report.test.mjs`, `l1/classic-hook.test.mjs`, `l1/helpers.mjs`
+- Test: `tests/unit/plugin.test.mjs`, `l1/helpers.mjs`, `l1/resolve.test.mjs`, `l1/escalate-report.test.mjs`, `l1/classic-hook.test.mjs`, `l1/router-core.test.mjs`
 
 **Interfaces:**
-- Consumes: `loadOracle`, `expectedSubagentTier`, `TIERS`, `PHASES` (Task 2).
-- Produces: `pluginDirFor(ref) → string` (`<lab>/.cache/devflow@<ref>`); `ensurePlugin({ ref, source }) → string` (clona se faltar; devolve o caminho). CLI: `node scripts/plugin.mjs ensure [--ref v3.7.0] [--source ../devflow]`. Env `DEVFLOW_PLUGIN_DIR` sobrepõe o caminho.
+- Consumes: `loadOracle`, `expectedSubagentTier`, `PHASES` (Task 2).
+- Produces: `pluginDirFor(ref) → string`; `ensurePlugin({ ref, source }) → string`; `superpowersDir(home?) → string`; `pluginVersion(dir) → string|null`; `isPristine(dir) → boolean`. CLI `node scripts/plugin.mjs ensure [--ref v3.7.0] [--source ../devflow]`. `DEVFLOW_PLUGIN_DIR` sobrepõe o caminho do clone; `SUPERPOWERS_PLUGIN_DIR`, o do superpowers.
 
-- [ ] **Step 1: Escrever os testes L1**
+- [ ] **Step 1: Escrever o teste unitário**
+
+`tests/unit/plugin.test.mjs`:
+```js
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { superpowersDir, pluginVersion, isPristine } from "../../lib/plugin.mjs";
+
+const semEnv = (fn) => { const prev = process.env.SUPERPOWERS_PLUGIN_DIR; delete process.env.SUPERPOWERS_PLUGIN_DIR; try { return fn(); } finally { if (prev !== undefined) process.env.SUPERPOWERS_PLUGIN_DIR = prev; } };
+
+test("superpowersDir escolhe a maior versão semver do cache", () => {
+  const home = mkdtempSync(join(tmpdir(), "lab-home-"));
+  const base = join(home, ".claude/plugins/cache/claude-plugins-official/superpowers");
+  for (const v of ["5.0.6", "6.4.1", "6.10.0", "lixo"]) mkdirSync(join(base, v), { recursive: true });
+  semEnv(() => assert.equal(superpowersDir(home), join(base, "6.10.0")));
+});
+
+test("superpowersDir sem cache lança com instrução", () => {
+  semEnv(() => assert.throws(() => superpowersDir(mkdtempSync(join(tmpdir(), "lab-home-"))), /SUPERPOWERS_PLUGIN_DIR/));
+});
+
+test("pluginVersion lê .claude-plugin/plugin.json; ausente ou inválido → null", () => {
+  const d = mkdtempSync(join(tmpdir(), "lab-pv-"));
+  assert.equal(pluginVersion(d), null);
+  mkdirSync(join(d, ".claude-plugin"));
+  writeFileSync(join(d, ".claude-plugin/plugin.json"), JSON.stringify({ version: "3.7.0" }));
+  assert.equal(pluginVersion(d), "3.7.0");
+  writeFileSync(join(d, ".claude-plugin/plugin.json"), JSON.stringify({ version: "<b>x" }));
+  assert.equal(pluginVersion(d), null);
+});
+
+test("isPristine: repo limpo → true; alterado ou inexistente → false", () => {
+  const d = mkdtempSync(join(tmpdir(), "lab-git-"));
+  execFileSync("git", ["-C", d, "init", "-q"]);
+  assert.equal(isPristine(d), true);
+  writeFileSync(join(d, "x"), "1");
+  assert.equal(isPristine(d), false);
+  assert.equal(isPristine(join(d, "nada")), false);
+});
+```
+
+- [ ] **Step 2: Escrever os testes L1**
 
 `l1/helpers.mjs`:
 ```js
@@ -498,6 +619,7 @@ import { loadOracle, expectedSubagentTier, PHASES } from "../lib/tiers.mjs";
 
 const o = loadOracle();
 const types = [...Object.keys(o.agents).filter((k) => k !== "general-purpose").map((k) => `devflow:${k}`), "general-purpose"];
+const resolve = (cwd, ...args) => JSON.parse(cli(["resolve", ...args], { cwd }).out);
 
 for (const phase of PHASES) {
   test(`resolve × oráculo na fase ${phase} (teto top)`, () => {
@@ -515,31 +637,30 @@ for (const phase of PHASES) {
 }
 
 test("tier da task do plano prevalece (fonte plan)", () => {
-  const r = JSON.parse(cli(["resolve", "--agent", "devflow:architect", "--phase", "E", "--task-tier", "cheap"], { cwd: fixture() }).out);
+  const r = resolve(fixture(), "--agent", "devflow:architect", "--phase", "E", "--task-tier", "cheap");
   assert.equal(r.route.tier, "cheap");
   assert.equal(r.route.source, "plan");
 });
 
 test("skill final-review → capable", () => {
-  const r = JSON.parse(cli(["resolve", "--agent", "general-purpose", "--phase", "E", "--skill", "final-review"], { cwd: fixture() }).out);
-  assert.equal(r.route.tier, "capable");
+  assert.equal(resolve(fixture(), "--agent", "general-purpose", "--phase", "E", "--skill", "final-review").route.tier, "capable");
 });
 
 test("opt-in duplo: sem env do usuário ou sem models.enabled → nenhuma rota roteada", () => {
   const off1 = JSON.parse(cli(["resolve", "--agent", "devflow:architect", "--phase", "P"], { cwd: fixture(), env: { DEVFLOW_MODEL_ROUTING: "" } }).out);
-  const off2 = JSON.parse(cli(["resolve", "--agent", "devflow:architect", "--phase", "P"], { cwd: fixture({ models: "" }) }).out);
+  const off2 = resolve(fixture({ models: "" }), "--agent", "devflow:architect", "--phase", "P");
   for (const r of [off1, off2]) assert.ok(r.route === null || r.route.source === "inherit", JSON.stringify(r));
 });
 
 test("maxTier limita", () => {
-  const r = JSON.parse(cli(["resolve", "--agent", "devflow:architect", "--phase", "P"], { cwd: fixture({ models: "models:\n  enabled: true\n  maxTier: standard\n" }) }).out);
-  assert.equal(r.route.tier, "standard");
+  assert.equal(resolve(fixture({ models: "models:\n  enabled: true\n  maxTier: standard\n" }), "--agent", "devflow:architect", "--phase", "P").route.tier, "standard");
 });
 
-test("--runtime omp devolve role e nunca passa do tier do oráculo", () => {
-  const roles = { cheap: "pi/smol", standard: "default", capable: "pi/slow", top: "pi/plan" };
-  const r = JSON.parse(cli(["resolve", "--agent", "devflow:documentation-writer", "--phase", "C", "--runtime", "omp"], { cwd: fixture() }).out);
-  if (r.route) assert.equal(r.route.role, roles[r.route.tier]);
+test("--runtime omp: architect na fase P → capable com role pi/slow", () => {
+  const r = resolve(fixture(), "--agent", "devflow:architect", "--phase", "P", "--runtime", "omp");
+  assert.ok(r.route, "rota nula: teto do omp ilegível para o architect");
+  assert.equal(r.route.tier, "capable");
+  assert.equal(r.route.role, "pi/slow");
 });
 ```
 
@@ -552,6 +673,7 @@ import { join } from "node:path";
 import { fixture, cli, PLUGIN } from "./helpers.mjs";
 
 const answers = (o) => JSON.stringify({ failure_is_capability: 0.9, claims_done_with_evidence: 0.1, is_stuck: 0.8, needed_tier: "capable", ...o });
+const esc = (cwd, ...a) => JSON.parse(cli(["escalate", "--agent", "general-purpose", "--tier", "standard", ...a], { cwd }).out);
 
 test("escalate: --report imprime a rubrica", () => {
   const cwd = fixture();
@@ -562,25 +684,23 @@ test("escalate: --report imprime a rubrica", () => {
 });
 
 test("escalate: falha de capacidade sobe para capable/opus", () => {
-  const d = JSON.parse(cli(["escalate", "--agent", "general-purpose", "--tier", "standard", "--answers", answers()], { cwd: fixture() }).out);
-  assert.equal(d.action, "escalate");
-  assert.equal(d.tier, "capable");
-  assert.equal(d.model, "opus");
+  const d = esc(fixture(), "--answers", answers());
+  assert.deepEqual([d.action, d.tier, d.model], ["escalate", "capable", "opus"]);
 });
 
 test("escalate: falha de ambiente → human; resposta inválida → keep", () => {
-  assert.equal(JSON.parse(cli(["escalate", "--agent", "general-purpose", "--tier", "standard", "--answers", answers({ failure_is_capability: 0.2 })], { cwd: fixture() }).out).action, "human");
-  assert.equal(JSON.parse(cli(["escalate", "--agent", "general-purpose", "--tier", "standard", "--answers", "{}"], { cwd: fixture() }).out).action, "keep");
+  assert.equal(esc(fixture(), "--answers", answers({ failure_is_capability: 0.2 })).action, "human");
+  assert.equal(esc(fixture(), "--answers", "{}").action, "keep");
 });
 
-test("report: ledger sintético vira tabela por agente; linha adulterada é ignorada", async () => {
+test("report: ledger sintético (com usage) vira tabela por agente; chave adulterada é descartada", async () => {
   const cwd = fixture();
   const { ledgerDirFrom } = await import(join(PLUGIN, "scripts/lib/routing-ledger.mjs"));
   const dir = ledgerDirFrom({ xdgDataHome: join(cwd, "xdg"), home: "/nao-usado", cwd });
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "s.jsonl"), [
-    JSON.stringify({ ts: "2026-10-09T10:00:00Z", scope: "subagent", agentType: "devflow:architect", tier: "capable", model: "opus", source: "agent" }),
-    JSON.stringify({ ts: "2026-10-09T10:01:00Z", scope: "subagent", agentType: "__proto__", prompt: "vazado" }),
+    JSON.stringify({ ts: "2026-10-09T10:00:00Z", scope: "subagent", agentType: "devflow:architect", tier: "capable", model: "opus", source: "agent", usage: { input_tokens: 1, output_tokens: 1 } }),
+    JSON.stringify({ ts: "2026-10-09T10:01:00Z", scope: "subagent", agentType: "devflow:architect", prompt: "vazado", usage: { input_tokens: 1, output_tokens: 1 } }),
   ].join("\n") + "\n");
   const r = cli(["report"], { cwd });
   assert.equal(r.status, 0, r.err);
@@ -621,22 +741,60 @@ test("clássico: teto sonnet nunca vira opus", () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+`l1/router-core.test.mjs` (caracterização das hipóteses H1/H2 — descreve o comportamento da v3.7, não o julga):
+```js
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PLUGIN } from "./helpers.mjs";
 
-Run: `node --test l1/`
+const core = await import(join(PLUGIN, "scripts/lib/router-core.mjs"));
+const { readModels } = await import(join(PLUGIN, "scripts/lib/models-config.mjs"));
+const { effectiveConfig } = await import(join(PLUGIN, "scripts/lib/model-routing.mjs"));
+const table = JSON.parse(readFileSync(join(PLUGIN, "assets/model-routing/routes.json"), "utf8"));
+const config = effectiveConfig(readModels("models:\n  enabled: true\n"), "1");
+const user = { model: "claude-opus-5-5", effort: "xhigh" };
+
+test("H1: a fase do roteador só muda no turn.start (o PREVC avançar no meio do turno não troca a sessão)", () => {
+  const s = core.createRouterState();
+  core.observeSession(s, user);
+  core.learnId(s, "claude-sonnet-5-5");
+  core.onTurnStart(s, { phase: "R" });
+  assert.equal(core.onSessionStep(s, user, { table, config })?.model, undefined);
+  // o PREVC entra em E dentro do mesmo turno: sem turn.start, o roteador segue em R
+  assert.equal(core.onSessionStep(s, user, { table, config })?.model, undefined);
+  core.onTurnStart(s, { phase: "E" });
+  assert.equal(core.onSessionStep(s, user, { table, config }).model, "claude-sonnet-5-5");
+});
+
+test("H2: processo novo sem ID aprendido não troca o modelo da sessão (só o esforço)", () => {
+  const s = core.createRouterState();
+  core.observeSession(s, user);
+  core.onTurnStart(s, { phase: "E" });
+  assert.equal(core.onSessionStep(s, user, { table, config })?.model, undefined);
+});
+```
+
+- [ ] **Step 3: Rodar e ver falhar**
+
+Run: `node --test tests/unit/plugin.test.mjs l1/`
 Expected: FAIL com `Cannot find module '.../lib/plugin.mjs'`
 
-- [ ] **Step 3: Implementar o cache da tag**
+- [ ] **Step 4: Implementar**
 
 `lib/plugin.mjs`:
 ```js
-// lib/plugin.mjs — plugin sob teste = clone imutável de uma tag (spec L2).
-import { existsSync, mkdirSync } from "node:fs";
+// lib/plugin.mjs — plugin sob teste = clone imutável de uma tag (spec L2); superpowers do cache do operador.
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 const LAB = resolve(new URL("..", import.meta.url).pathname);
 const REF = /^[A-Za-z0-9._\/-]{1,64}$/;
+const SEMVER = /^\d+\.\d+\.\d+$/;
+const cmp = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 
 export function pluginDirFor(ref) {
   if (process.env.DEVFLOW_PLUGIN_DIR) return resolve(process.env.DEVFLOW_PLUGIN_DIR);
@@ -652,6 +810,27 @@ export function ensurePlugin({ ref = "v3.7.0", source = resolve(LAB, "../devflow
   execFileSync("git", ["clone", "--quiet", "--depth", "1", "--branch", ref, `file://${resolve(source)}`, dir], { stdio: "inherit" });
   return dir;
 }
+
+export function superpowersDir(home = homedir()) {
+  if (process.env.SUPERPOWERS_PLUGIN_DIR) return resolve(process.env.SUPERPOWERS_PLUGIN_DIR);
+  const base = join(home, ".claude/plugins/cache/claude-plugins-official/superpowers");
+  let vs = [];
+  try { vs = readdirSync(base).filter((v) => SEMVER.test(v)).sort(cmp); } catch {}
+  if (!vs.length) throw new Error(`superpowers não encontrado em ${base}; defina SUPERPOWERS_PLUGIN_DIR`);
+  return join(base, vs.at(-1));
+}
+
+// Diretórios confiáveis (clone da tag e cache do operador): leitura simples.
+export function pluginVersion(dir) {
+  try {
+    const v = JSON.parse(readFileSync(join(dir, ".claude-plugin/plugin.json"), "utf8")).version;
+    return typeof v === "string" && SEMVER.test(v) ? v : null;
+  } catch { return null; }
+}
+
+export function isPristine(dir) {
+  try { return execFileSync("git", ["-C", dir, "status", "--porcelain"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }) === ""; } catch { return false; }
+}
 ```
 
 `scripts/plugin.mjs`:
@@ -664,23 +843,20 @@ if (a[0] !== "ensure") { console.error("uso: plugin.mjs ensure [--ref R] [--sour
 process.stdout.write(ensurePlugin({ ref: opt("--ref") ?? "v3.7.0", source: opt("--source") }) + "\n");
 ```
 
-Run: `node scripts/plugin.mjs ensure`
-Expected: imprime `<lab>/.cache/devflow@v3.7.0`; `git -C .cache/devflow@v3.7.0 describe --tags` → `v3.7.0`
+- [ ] **Step 5: Rodar e ver passar**
 
-- [ ] **Step 4: Rodar e ver passar**
+Run: `node --test tests/unit/plugin.test.mjs && bash tests/run-integration.sh`
+Expected: PASS. Confirmar `git -C .cache/devflow@v3.7.0 describe --tags` → `v3.7.0`. **Se algum caso L1 falhar, primeiro confira se o erro não é do próprio teste** (formato de entrada da CLI, nome do agente). Sendo divergência da v3.7: não corrija o oráculo nem a CLI — marque o teste com `{ todo: "achado L1-<n>: <diferença>" }`, registre em `results/l1-findings.md` (agente, fase, CLI, oráculo) e siga ("capturar, não resolver").
 
-Run: `bash tests/run-integration.sh`
-Expected: PASS. **Se algum caso da matriz der `MISS`, não corrija o oráculo nem a CLI**: marque o teste com `{ todo: "achado L1-<n>: <diferença>" }`, registre o achado em `results/l1-findings.md` (agente, fase, cli, oráculo) e siga (princípio "capturar, não resolver").
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add -A && git commit -m "test(lab): camada L1 da CLI e do hook clássico contra o oráculo"
+git add -A && git commit -m "test(lab): plugin sob teste e camada L1 (CLI, hook clássico, router-core)"
 ```
 
 ---
 
-### Task 4: Leitura do stream-json
+### Task 4: Leitura do stream-json e preflight
 
 **Agent:** backend-specialist · **Tier:** cheap · **Tests:** unit
 
@@ -689,7 +865,7 @@ git add -A && git commit -m "test(lab): camada L1 da CLI e do hook clássico con
 - Test: `tests/unit/stream.test.mjs`
 
 **Interfaces:**
-- Produces: `parseStream(text) → { sessionIds: string[], result: null | { subtype, isError, numTurns, terminalReason, modelUsage: { [model]: { input, output, cacheRead, cacheCreate, costUSD } }, subagents: { spawned, completed, failed } } }`; `mergeUsage(a, b) → modelUsage` (soma por modelo).
+- Produces: `parseStream(text) → { sessionIds, init: null | { model, plugins: [{ name, path }], mcp: [{ name, status }] }, result: null | { subtype, isError, numTurns, terminalReason, modelUsage, subagents } }`; `mergeUsage(a, b)`; `preflightProblems(init, pluginDir) → string[]` (códigos).
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -697,65 +873,90 @@ git add -A && git commit -m "test(lab): camada L1 da CLI e do hook clássico con
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseStream, mergeUsage } from "../../lib/stream.mjs";
+import { parseStream, mergeUsage, preflightProblems } from "../../lib/stream.mjs";
 
+const init = { type: "system", subtype: "init", session_id: "s1", model: "claude-opus-5-5",
+  plugins: [{ name: "devflow", path: "/p" }, { name: "superpowers", path: "/s" }], mcp_servers: [{ name: "dotcontext", status: "connected" }] };
 const result = {
   type: "result", subtype: "success", is_error: false, num_turns: 3, terminal_reason: "completed", session_id: "s1", result: "TEXTO QUE NÃO PODE VAZAR",
   modelUsage: { "claude-opus-5-5": { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 100, cacheCreationInputTokens: 50, costUSD: 0.5, contextWindow: 1 } },
   subagent_stats: { spawned: 2, completed: 2, failed: 0 },
 };
-const lines = [JSON.stringify({ type: "system", subtype: "init", session_id: "s1" }), "lixo{", JSON.stringify(result)].join("\n");
+// "__proto__" como chave própria só existe vindo de texto JSON (literal de objeto não a cria)
+const resultLine = JSON.stringify(result).replace('"modelUsage":{', '"modelUsage":{"__proto__":{"inputTokens":1},');
+const text = [JSON.stringify(init), "lixo{", resultLine].join("\n");
 
-test("extrai sessão, uso por modelo e subagentes; descarta texto", () => {
-  const s = parseStream(lines);
+test("extrai sessão, init, uso por modelo e subagentes; descarta texto e chave estranha", () => {
+  const s = parseStream(text);
   assert.deepEqual(s.sessionIds, ["s1"]);
+  assert.deepEqual(s.init.plugins, [{ name: "devflow", path: "/p" }, { name: "superpowers", path: "/s" }]);
+  assert.deepEqual(Object.keys(s.result.modelUsage), ["claude-opus-5-5"]);
   assert.deepEqual(s.result.modelUsage["claude-opus-5-5"], { input: 10, output: 5, cacheRead: 100, cacheCreate: 50, costUSD: 0.5 });
   assert.deepEqual(s.result.subagents, { spawned: 2, completed: 2, failed: 0 });
-  assert.equal(s.result.subtype, "success");
   assert.ok(!JSON.stringify(s).includes("VAZAR"));
 });
 
-test("sem evento result → result null", () => {
-  assert.equal(parseStream(JSON.stringify({ type: "system", subtype: "init", session_id: "s2" })).result, null);
+test("sem evento result → result null; subtype de erro preservado como enum", () => {
+  assert.equal(parseStream(JSON.stringify(init)).result, null);
+  const e = parseStream(JSON.stringify({ ...result, subtype: "error_max_turns", is_error: true }));
+  assert.deepEqual([e.result.subtype, e.result.isError], ["error_max_turns", true]);
 });
 
 test("mergeUsage soma por modelo", () => {
-  const a = { m: { input: 1, output: 1, cacheRead: 1, cacheCreate: 1, costUSD: 1 } };
-  const b = { m: { input: 2, output: 0, cacheRead: 0, cacheCreate: 0, costUSD: 0.5 }, n: { input: 1, output: 1, cacheRead: 0, cacheCreate: 0, costUSD: 0 } };
-  assert.deepEqual(mergeUsage(a, b), { m: { input: 3, output: 1, cacheRead: 1, cacheCreate: 1, costUSD: 1.5 }, n: { input: 1, output: 1, cacheRead: 0, cacheCreate: 0, costUSD: 0 } });
+  const a = { "claude-a": { input: 1, output: 1, cacheRead: 1, cacheCreate: 1, costUSD: 1 } };
+  const b = { "claude-a": { input: 2, output: 0, cacheRead: 0, cacheCreate: 0, costUSD: 0.5 }, "claude-b": { input: 1, output: 1, cacheRead: 0, cacheCreate: 0, costUSD: 0 } };
+  assert.deepEqual(mergeUsage(a, b), { "claude-a": { input: 3, output: 1, cacheRead: 1, cacheCreate: 1, costUSD: 1.5 }, "claude-b": { input: 1, output: 1, cacheRead: 0, cacheCreate: 0, costUSD: 0 } });
+});
+
+test("preflightProblems: exige um devflow do pluginDir, superpowers e dotcontext conectado", () => {
+  const ok = parseStream(JSON.stringify(init)).init;
+  assert.deepEqual(preflightProblems(ok, "/p"), []);
+  assert.deepEqual(preflightProblems(ok, "/outro"), ["devflow-fora-do-plugin-dir"]);
+  assert.deepEqual(preflightProblems({ ...ok, plugins: [...ok.plugins, { name: "devflow", path: "/x" }] }, "/p"), ["devflow-duplicado"]);
+  assert.deepEqual(preflightProblems({ ...ok, plugins: [] }, "/p"), ["devflow-ausente", "superpowers-ausente"]);
+  assert.deepEqual(preflightProblems({ ...ok, mcp: [{ name: "dotcontext", status: "failed" }] }, "/p"), ["dotcontext-desconectado"]);
+  assert.deepEqual(preflightProblems(null, "/p"), ["sem-init"]);
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
-
-Run: `node --test tests/unit/stream.test.mjs` → FAIL (`Cannot find module`)
+- [ ] **Step 2: Rodar e ver falhar** — `node --test tests/unit/stream.test.mjs` → FAIL (`Cannot find module`)
 
 - [ ] **Step 3: Implementar**
 
 `lib/stream.mjs`:
 ```js
-// lib/stream.mjs — lê o stream-json do `claude -p`. Só números, enums e IDs (spec §2.4). Puro.
+// lib/stream.mjs — lê o stream-json do `claude -p`. Só números, enums e IDs (spec §2.5). Puro.
 const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const SID = /^[A-Za-z0-9-]{1,64}$/;
-const ENUM = /^[a-z_]{1,32}$/;
+const ENUM = /^[a-z_]{1,40}$/;
+const MODEL = /^claude-[A-Za-z0-9.\[\]_-]{1,60}$/;
+const NAME = /^[A-Za-z0-9:_.@-]{1,64}$/;
 
 function usageOf(mu) {
   const out = {};
   for (const [model, u] of Object.entries(mu ?? {})) {
-    if (!/^[A-Za-z0-9.\[\]_-]{1,64}$/.test(model)) continue;
-    out[model] = { input: n(u.inputTokens), output: n(u.outputTokens), cacheRead: n(u.cacheReadInputTokens), cacheCreate: n(u.cacheCreationInputTokens), costUSD: n(u.costUSD) };
+    if (!MODEL.test(model)) continue;
+    out[model] = { input: n(u?.inputTokens), output: n(u?.outputTokens), cacheRead: n(u?.cacheReadInputTokens), cacheCreate: n(u?.cacheCreationInputTokens), costUSD: n(u?.costUSD) };
   }
   return out;
 }
 
 export function parseStream(text) {
   const sessionIds = [];
-  let result = null;
+  let init = null, result = null;
   for (const line of String(text).split("\n")) {
     let j;
     try { j = JSON.parse(line); } catch { continue; }
-    if (typeof j?.session_id === "string" && SID.test(j.session_id) && !sessionIds.includes(j.session_id)) sessionIds.push(j.session_id);
-    if (j?.type !== "result") continue;
+    if (!j || typeof j !== "object") continue;
+    if (typeof j.session_id === "string" && SID.test(j.session_id) && !sessionIds.includes(j.session_id)) sessionIds.push(j.session_id);
+    if (j.type === "system" && j.subtype === "init") {
+      init = {
+        model: typeof j.model === "string" && MODEL.test(j.model) ? j.model : null,
+        plugins: (Array.isArray(j.plugins) ? j.plugins : []).filter((p) => NAME.test(p?.name ?? "")).map((p) => ({ name: p.name, path: typeof p.path === "string" ? p.path : null })),
+        mcp: (Array.isArray(j.mcp_servers) ? j.mcp_servers : []).filter((m) => typeof m?.name === "string").map((m) => ({ name: m.name, status: String(m.status) })),
+      };
+    }
+    if (j.type !== "result") continue;
     const st = j.subagent_stats ?? {};
     result = {
       subtype: ENUM.test(j.subtype ?? "") ? j.subtype : "unknown",
@@ -766,22 +967,35 @@ export function parseStream(text) {
       subagents: { spawned: n(st.spawned), completed: n(st.completed), failed: n(st.failed) },
     };
   }
-  return { sessionIds, result };
+  return { sessionIds, init, result };
 }
 
 export function mergeUsage(a, b) {
   const out = structuredClone(a ?? {});
   for (const [m, u] of Object.entries(b ?? {})) {
+    if (!MODEL.test(m)) continue;
     out[m] ??= { input: 0, output: 0, cacheRead: 0, cacheCreate: 0, costUSD: 0 };
     for (const k of Object.keys(out[m])) out[m][k] += n(u[k]);
   }
   return out;
 }
+
+export function preflightProblems(init, pluginDir) {
+  if (!init) return ["sem-init"];
+  const p = [];
+  const dev = init.plugins.filter((x) => x.name === "devflow");
+  if (dev.length === 0) p.push("devflow-ausente");
+  else if (dev.length > 1) p.push("devflow-duplicado");
+  else if (dev[0].path !== pluginDir) p.push("devflow-fora-do-plugin-dir");
+  if (!init.plugins.some((x) => x.name === "superpowers")) p.push("superpowers-ausente");
+  if (!init.mcp.some((m) => m.name === "dotcontext" && m.status === "connected")) p.push("dotcontext-desconectado");
+  return p;
+}
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — `node --test tests/unit/stream.test.mjs` → PASS (3)
+- [ ] **Step 4: Rodar e ver passar** — `node --test tests/unit/stream.test.mjs` → PASS (4)
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): leitura do stream-json"`
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): leitura do stream-json e verificação de preflight"`
 
 ---
 
@@ -794,7 +1008,7 @@ export function mergeUsage(a, b) {
 - Test: `tests/unit/safe-read.test.mjs`, `tests/unit/transcripts.test.mjs`
 
 **Interfaces:**
-- Produces: `readSafe(path, max = 64 * 2**20) → string | null`; `listSafe(dir) → string[]`; `projectSlug(cwd) → string`; `readSession(projectDir, sessionId) → { main: { models: string[], efforts: string[], usage: {[model]: U} }, subagents: Array<{ agentId, agentType, requestedModel, models: string[], efforts: string[], usage: {[model]: U} }> }` com `U = { input, output, cacheRead, cacheCreate }`. `models` da sessão principal = sequência na ordem, sem repetição consecutiva.
+- Produces: `readSafe(path, max = 64 * 2**20) → string|null`; `listSafe(dir, kind = "file"|"dir") → string[]` (sem seguir link, ordenado); `safeDir(root, ...parts) → string|null` (cada componente abaixo de `root` é diretório real); `projectSlug(cwd)`; `readSession(projectsRoot, slug, sessionId) → { main: Msg[], subagents: [{ agentId, agentType, requestedModel, messages: Msg[] }] }` com `Msg = { ts, model, effort, skill, usage: { input, output, cacheRead, cacheCreate } }`, mensagens ordenadas por `ts`.
 
 - [ ] **Step 1: Escrever os testes que falham**
 
@@ -802,11 +1016,11 @@ export function mergeUsage(a, b) {
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readSafe, listSafe } from "../../lib/safe-read.mjs";
+import { readSafe, listSafe, safeDir } from "../../lib/safe-read.mjs";
 
 const d = mkdtempSync(join(tmpdir(), "lab-safe-"));
 
@@ -814,37 +1028,60 @@ test("lê arquivo regular", () => {
   writeFileSync(join(d, "a"), "ok");
   assert.equal(readSafe(join(d, "a")), "ok");
 });
+
 test("recusa symlink, FIFO, diretório, inexistente e acima do limite", () => {
   symlinkSync("/etc/hostname", join(d, "l"));
   execFileSync("mkfifo", [join(d, "f")]);
   writeFileSync(join(d, "big"), "x".repeat(100));
-  assert.equal(readSafe(join(d, "l")), null);
-  assert.equal(readSafe(join(d, "f")), null);
-  assert.equal(readSafe(d), null);
-  assert.equal(readSafe(join(d, "nada")), null);
+  for (const p of [join(d, "l"), join(d, "f"), d, join(d, "nada")]) assert.equal(readSafe(p), null, p);
   assert.equal(readSafe(join(d, "big"), 10), null);
 });
-test("listSafe: diretório ausente → []", () => assert.deepEqual(listSafe(join(d, "nada")), []));
+
+test("listSafe não segue link de diretório nem lista link de arquivo", () => {
+  const r = mkdtempSync(join(tmpdir(), "lab-ls-"));
+  mkdirSync(join(r, "real"));
+  symlinkSync(join(r, "real"), join(r, "link"));
+  writeFileSync(join(r, "a.jsonl"), "");
+  symlinkSync("/etc/hostname", join(r, "b.jsonl"));
+  assert.deepEqual(listSafe(r, "dir"), ["real"]);
+  assert.deepEqual(listSafe(r, "file"), ["a.jsonl"]);
+  assert.deepEqual(listSafe(join(r, "nada")), []);
+});
+
+test("safeDir recusa link em componente intermediário e componente com barra ou ..", () => {
+  const r = mkdtempSync(join(tmpdir(), "lab-sd-"));
+  mkdirSync(join(r, "a/b"), { recursive: true });
+  symlinkSync(join(r, "a"), join(r, "x"));
+  assert.equal(safeDir(r, "a", "b"), join(r, "a/b"));
+  assert.equal(safeDir(r, "x", "b"), null);
+  assert.equal(safeDir(r, ".."), null);
+  assert.equal(safeDir(r, "a/b"), null);
+  assert.equal(safeDir(r, "nada"), null);
+});
 ```
 
 `tests/unit/transcripts.test.mjs`:
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectSlug, readSession } from "../../lib/transcripts.mjs";
 
-const msg = (id, model, effort, u = 10) => JSON.stringify({ type: "assistant", effort, timestamp: "2026-10-09T10:00:00Z", message: { id, model, content: [{ type: "text", text: "SEGREDO" }], usage: { input_tokens: u, output_tokens: 1, cache_read_input_tokens: 2, cache_creation_input_tokens: 3 } } });
+const msg = (id, hm, model, effort, skill, u = 10) => JSON.stringify({ type: "assistant", timestamp: `2026-10-09T${hm}:00.000Z`, effort, attributionSkill: skill,
+  message: { id, model, content: [{ type: "text", text: "SEGREDO" }], usage: { input_tokens: u, output_tokens: 1, cache_read_input_tokens: 2, cache_creation_input_tokens: 3 } } });
 
-function project() {
-  const dir = mkdtempSync(join(tmpdir(), "lab-tr-"));
-  writeFileSync(join(dir, "s1.jsonl"), [msg("m1", "claude-opus-5-5", "xhigh"), msg("m1", "claude-opus-5-5", "xhigh"), "quebrado{", msg("m2", "claude-opus-5-5", "high"), msg("m3", "claude-sonnet-5-5", "medium")].join("\n"));
-  mkdirSync(join(dir, "s1/subagents"), { recursive: true });
-  writeFileSync(join(dir, "s1/subagents/agent-abc.meta.json"), JSON.stringify({ agentType: "devflow:architect", model: "opus", description: "SEGREDO" }));
-  writeFileSync(join(dir, "s1/subagents/agent-abc.jsonl"), [msg("x1", "claude-opus-5-5", "high", 5), msg("x2", "claude-opus-5-5", "medium", 5)].join("\n"));
-  return dir;
+function root() {
+  const r = mkdtempSync(join(tmpdir(), "lab-tr-"));
+  const p = join(r, "-ws");
+  mkdirSync(join(p, "s1/subagents"), { recursive: true });
+  writeFileSync(join(p, "s1.jsonl"), [msg("m2", "10:05", "claude-opus-5-5", "high"), msg("m1", "10:01", "claude-opus-5-5", "xhigh", "superpowers:brainstorming"),
+    msg("m1", "10:01", "claude-opus-5-5", "xhigh"), "quebrado{", msg("m3", "10:21", "claude-sonnet-5-5", "medium", "tem espaço livre"),
+    JSON.stringify({ type: "assistant", message: { id: "m4", model: "claude-opus-5-5", usage: {} } })].join("\n"));
+  writeFileSync(join(p, "s1/subagents/agent-abc.meta.json"), JSON.stringify({ agentType: "devflow:architect", model: "opus", description: "SEGREDO" }));
+  writeFileSync(join(p, "s1/subagents/agent-abc.jsonl"), [msg("x1", "10:12", "claude-opus-5-5", "high", null, 5), msg("x2", "10:13", "claude-opus-5-5", "medium", null, 5)].join("\n"));
+  return { r, p };
 }
 
 test("projectSlug segue a convenção do Claude Code", () => {
@@ -852,23 +1089,30 @@ test("projectSlug segue a convenção do Claude Code", () => {
   assert.equal(projectSlug("/tmp/a.b_c"), "-tmp-a-b-c");
 });
 
-test("sessão principal: sequência de modelos sem repetição, esforços, uso deduplicado por message.id", () => {
-  const s = readSession(project(), "s1");
-  assert.deepEqual(s.main.models, ["claude-opus-5-5", "claude-sonnet-5-5"]);
-  assert.deepEqual(s.main.efforts, ["xhigh", "high", "medium"]);
-  assert.equal(s.main.usage["claude-opus-5-5"].input, 20);
+test("sessão: ordenada por ts, dedup por message.id, skill só se ID válido, sem linha sem timestamp", () => {
+  const s = readSession(root().r, "-ws", "s1");
+  assert.deepEqual(s.main.map((x) => [x.model, x.effort, x.skill]), [
+    ["claude-opus-5-5", "xhigh", "superpowers:brainstorming"], ["claude-opus-5-5", "high", null], ["claude-sonnet-5-5", "medium", null]]);
+  assert.equal(s.main[0].ts, Date.parse("2026-10-09T10:01:00.000Z"));
+  assert.deepEqual(s.main[0].usage, { input: 10, output: 1, cacheRead: 2, cacheCreate: 3 });
 });
 
-test("subagente: tipo e modelo pedidos do meta, uso numérico, sem texto", () => {
-  const s = readSession(project(), "s1");
+test("subagente: tipo e modelo pedidos do meta, mensagens numéricas, sem texto", () => {
+  const s = readSession(root().r, "-ws", "s1");
   assert.equal(s.subagents.length, 1);
-  assert.deepEqual({ ...s.subagents[0], usage: undefined }, { agentId: "abc", agentType: "devflow:architect", requestedModel: "opus", models: ["claude-opus-5-5"], efforts: ["high", "medium"], usage: undefined });
-  assert.equal(s.subagents[0].usage["claude-opus-5-5"].input, 10);
+  const a = s.subagents[0];
+  assert.deepEqual([a.agentId, a.agentType, a.requestedModel, a.messages.map((x) => x.effort)], ["abc", "devflow:architect", "opus", ["high", "medium"]]);
   assert.ok(!JSON.stringify(s).includes("SEGREDO"));
 });
 
-test("sessão inexistente → vazia, sem lançar", () => {
-  assert.deepEqual(readSession(project(), "nada"), { main: { models: [], efforts: [], usage: {} }, subagents: [] });
+test("link no diretório de subagentes é ignorado; sessão ou slug inválidos → vazio", () => {
+  const { r, p } = root();
+  mkdirSync(join(p, "s2"));
+  symlinkSync(join(p, "s1/subagents"), join(p, "s2/subagents"));
+  writeFileSync(join(p, "s2.jsonl"), "");
+  assert.deepEqual(readSession(r, "-ws", "s2").subagents, []);
+  assert.deepEqual(readSession(r, "-ws", "../x"), { main: [], subagents: [] });
+  assert.deepEqual(readSession(r, "../x", "s1"), { main: [], subagents: [] });
 });
 ```
 
@@ -878,8 +1122,9 @@ test("sessão inexistente → vazia, sem lançar", () => {
 
 `lib/safe-read.mjs`:
 ```js
-// lib/safe-read.mjs — só arquivo regular, sem seguir link, sem bloquear, tamanho limitado (spec §10).
-import { openSync, fstatSync, readSync, closeSync, readdirSync, constants as C } from "node:fs";
+// lib/safe-read.mjs — só arquivo regular, sem seguir link (nem em diretório intermediário), tamanho limitado (spec §10).
+import { openSync, fstatSync, readSync, closeSync, readdirSync, lstatSync, statSync, constants as C } from "node:fs";
+import { join } from "node:path";
 
 export function readSafe(path, max = 64 * 2 ** 20) {
   let fd;
@@ -894,77 +1139,103 @@ export function readSafe(path, max = 64 * 2 ** 20) {
   } catch { return null; } finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
 }
 
-export function listSafe(dir) {
-  try { return readdirSync(dir); } catch { return []; }
+export function listSafe(dir, kind = "file") {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => (kind === "dir" ? e.isDirectory() : e.isFile()))
+      .map((e) => e.name).sort();
+  } catch { return []; }
+}
+
+// root é confiável (pode ser link); cada componente abaixo dele precisa ser diretório real.
+export function safeDir(root, ...parts) {
+  try { if (!statSync(root).isDirectory()) return null; } catch { return null; }
+  let p = root;
+  for (const part of parts) {
+    if (typeof part !== "string" || !part || part === "." || part === ".." || part.includes("/")) return null;
+    p = join(p, part);
+    try { if (!lstatSync(p).isDirectory()) return null; } catch { return null; }
+  }
+  return p;
 }
 ```
 
 `lib/transcripts.mjs`:
 ```js
-// lib/transcripts.mjs — só model, agentType, esforço e números de usage (spec §2.4).
+// lib/transcripts.mjs — só ts, modelo, esforço, skill (ID validado) e números de usage (spec L8).
 import { join } from "node:path";
-import { readSafe, listSafe } from "./safe-read.mjs";
+import { readSafe, listSafe, safeDir } from "./safe-read.mjs";
 
 const MODEL = /^claude-[A-Za-z0-9.\[\]_-]{1,60}$/;
 const EFFORT = ["low", "medium", "high", "xhigh", "max"];
-const TYPE = /^[A-Za-z0-9:_.-]{1,64}$/;
+const ID = /^[A-Za-z0-9:_.-]{1,64}$/;
+const SID = /^[A-Za-z0-9-]{1,64}$/;
+const SLUG = /^-[A-Za-z0-9-]{1,254}$/;
+const META = /^agent-([A-Za-z0-9]{1,64})\.meta\.json$/;
 const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
 export const projectSlug = (cwd) => String(cwd).replace(/[^A-Za-z0-9]/g, "-");
 
 function scan(text) {
-  const models = [], efforts = [], usage = {}, seen = new Set();
+  const out = [], seen = new Set();
   for (const line of (text ?? "").split("\n")) {
     let j;
     try { j = JSON.parse(line); } catch { continue; }
     const m = j?.message;
-    if (!m?.usage || !MODEL.test(m.model ?? "")) continue;
+    const ts = typeof j?.timestamp === "string" ? Date.parse(j.timestamp) : NaN;
+    if (!m?.usage || !MODEL.test(m.model ?? "") || !Number.isFinite(ts)) continue;
     if (typeof m.id === "string") { if (seen.has(m.id)) continue; seen.add(m.id); }
-    if (models.at(-1) !== m.model) models.push(m.model);
-    if (EFFORT.includes(j.effort)) efforts.push(j.effort);
-    const u = (usage[m.model] ??= { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 });
-    u.input += n(m.usage.input_tokens); u.output += n(m.usage.output_tokens);
-    u.cacheRead += n(m.usage.cache_read_input_tokens); u.cacheCreate += n(m.usage.cache_creation_input_tokens);
+    out.push({
+      ts, model: m.model,
+      effort: EFFORT.includes(j.effort) ? j.effort : null,
+      skill: typeof j.attributionSkill === "string" && ID.test(j.attributionSkill) ? j.attributionSkill : null,
+      usage: { input: n(m.usage.input_tokens), output: n(m.usage.output_tokens), cacheRead: n(m.usage.cache_read_input_tokens), cacheCreate: n(m.usage.cache_creation_input_tokens) },
+    });
   }
-  return { models, efforts, usage };
+  return out.sort((a, b) => a.ts - b.ts);
 }
 
-export function readSession(projectDir, sessionId) {
-  const main = scan(readSafe(join(projectDir, `${sessionId}.jsonl`)));
-  const subDir = join(projectDir, sessionId, "subagents");
+export function readSession(projectsRoot, slug, sessionId) {
+  const empty = { main: [], subagents: [] };
+  if (!SLUG.test(slug) || !SID.test(sessionId)) return empty;
+  const proj = safeDir(projectsRoot, slug);
+  if (!proj) return empty;
+  const main = scan(readSafe(join(proj, `${sessionId}.jsonl`)));
+  const sub = safeDir(projectsRoot, slug, sessionId, "subagents");
   const subagents = [];
-  for (const f of listSafe(subDir).filter((x) => /^agent-[A-Za-z0-9]{1,64}\.meta\.json$/.test(x)).sort()) {
+  for (const f of sub ? listSafe(sub, "file") : []) {
+    const id = f.match(META)?.[1];
+    if (!id) continue;
     let meta;
-    try { meta = JSON.parse(readSafe(join(subDir, f)) ?? ""); } catch { continue; }
-    const agentId = f.slice(6, -10);
-    const s = scan(readSafe(join(subDir, `agent-${agentId}.jsonl`)));
+    try { meta = JSON.parse(readSafe(join(sub, f), 2 ** 20) ?? ""); } catch { continue; }
     subagents.push({
-      agentId,
-      agentType: TYPE.test(meta?.agentType ?? "") ? meta.agentType : "?",
-      requestedModel: TYPE.test(meta?.model ?? "") ? meta.model : null,
-      models: [...new Set(s.models)], efforts: s.efforts, usage: s.usage,
+      agentId: id,
+      agentType: ID.test(meta?.agentType ?? "") ? meta.agentType : "?",
+      requestedModel: ID.test(meta?.model ?? "") ? meta.model : null,
+      messages: scan(readSafe(join(sub, `agent-${id}.jsonl`))),
     });
   }
   return { main, subagents };
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — os dois arquivos → PASS (7)
+- [ ] **Step 4: Rodar e ver passar** — os dois arquivos → PASS (8)
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): leitura segura e extração numérica dos transcripts"`
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): leitura segura e mensagens com timestamp dos transcripts"`
 
 ---
 
-### Task 6: Ledger e `prevc.json`
+### Task 6: Ledger normalizado e fases do `prevc.json`
 
-**Agent:** backend-specialist · **Tier:** cheap · **Tests:** unit
+**Agent:** backend-specialist · **Tier:** standard · **Tests:** unit
 
 **Files:**
 - Create: `lib/ledger.mjs`, `lib/prevc.mjs`
 - Test: `tests/unit/ledger.test.mjs`, `tests/unit/prevc.test.mjs`
 
 **Interfaces:**
-- Produces: `readLedger(xdgDir) → { entries: object[], violations: string[] }` (lê `<xdg>/devflow-model-routing/*/*.jsonl`); `checkEntry(e) → string[]` (violações). `readPrevc(wsDir) → { name, scale, current, phases: { P..C: status } } | null`.
+- Consumes: `readSafe`, `listSafe`, `safeDir` (Task 5).
+- Produces: `normalize(e) → { entry, violations }`; `readLedger(xdgDir) → { entries, violations, files }` (violações são códigos `[a-z-]+(:[a-zA-Z]+)?`); `readPrevcText(text) → { current, phases: { [P..C]: { status, start, end } } } | null` (`start`/`end` em ms ou `null`); `mergePrevc(snaps) → mesmo formato | null`; `phaseAt(phases, ts) → fase|null`; `isFinished(prevc, branch) → boolean`.
 
 - [ ] **Step 1: Escrever os testes que falham**
 
@@ -972,31 +1243,42 @@ export function readSession(projectDir, sessionId) {
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readLedger, checkEntry } from "../../lib/ledger.mjs";
+import { readLedger, normalize } from "../../lib/ledger.mjs";
 
-test("checkEntry: chave fora da allowlist e valor fora do enum são violações", () => {
-  assert.deepEqual(checkEntry({ ts: "2026-10-09T10:00:00Z", scope: "session", phase: "E", model: "claude-sonnet-5-5", switched: true }), []);
-  assert.deepEqual(checkEntry({ scope: "session", prompt: "x" }), ["chave fora da allowlist: prompt"]);
-  assert.deepEqual(checkEntry({ scope: "batata" }), ["valor inválido em scope"]);
-  assert.deepEqual(checkEntry({ agentType: "tem espaço e texto livre" }), ["valor inválido em agentType"]);
+test("normalize: entrada válida passa inteira", () => {
+  const e = { ts: "2026-10-09T10:00:00.000Z", sessionId: "k1", scope: "subagent", agentId: "a1", agentType: "devflow:architect", model: "claude-opus-5-5",
+    phase: "R", tier: "capable", ceiling: "capable", effort: "high", source: "agent", adapter: "mod", switched: false,
+    usage: { input_tokens: 1, output_tokens: 2 }, cacheReadRatio: 0.5, escalation: { at: "retry", from: "standard", to: "capable", action: "escalate", scores: { is_stuck: 0.7 } } };
+  assert.deepEqual(normalize(e), { entry: e, violations: [] });
 });
 
-test("readLedger junta todos os arquivos do XDG da rodada; linha quebrada vira violação", () => {
+test("normalize: chave arbitrária some sem vazar o nome; valor fora do enum vira '?'", () => {
+  const r = normalize({ "[clique](https://evil) <img>": 1, scope: "batata", agentType: "tem espaço", usage: { input_tokens: "x" }, ts: "ontem" });
+  assert.deepEqual(r.entry, { scope: "?", agentType: "?", ts: "?" });
+  assert.deepEqual(r.violations.sort(), ["chave-fora-da-allowlist", "valor-invalido:agentType", "valor-invalido:scope", "valor-invalido:ts", "valor-invalido:usage"]);
+  assert.ok(!JSON.stringify(r).includes("evil"));
+});
+
+test("readLedger: vários arquivos; linha ilegível e não-objeto viram código; diretório-link é ignorado", () => {
   const xdg = mkdtempSync(join(tmpdir(), "lab-led-"));
   const d = join(xdg, "devflow-model-routing", "abc");
   mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, "s.jsonl"), JSON.stringify({ scope: "session", phase: "P" }) + "\nquebrada{\n");
+  writeFileSync(join(d, "k1.jsonl"), JSON.stringify({ scope: "session", phase: "P" }) + "\nquebrada{\nnull\n42\n");
   writeFileSync(join(d, "cli.jsonl"), JSON.stringify({ scope: "subagent", escalation: { at: "retry", action: "escalate" } }) + "\n");
+  const fora = mkdtempSync(join(tmpdir(), "lab-fora-"));
+  writeFileSync(join(fora, "x.jsonl"), JSON.stringify({ scope: "session" }) + "\n");
+  symlinkSync(fora, join(xdg, "devflow-model-routing", "link"));
   const r = readLedger(xdg);
   assert.equal(r.entries.length, 2);
-  assert.deepEqual(r.violations, ["linha ilegível em s.jsonl"]);
+  assert.equal(r.files, 2);
+  assert.deepEqual(r.violations.sort(), ["linha-ilegivel", "linha-nao-objeto", "linha-nao-objeto"]);
 });
 
 test("readLedger: XDG sem ledger → vazio", () => {
-  assert.deepEqual(readLedger(mkdtempSync(join(tmpdir(), "lab-led-"))), { entries: [], violations: [] });
+  assert.deepEqual(readLedger(mkdtempSync(join(tmpdir(), "lab-led-"))), { entries: [], violations: [], files: 0 });
 });
 ```
 
@@ -1004,19 +1286,44 @@ test("readLedger: XDG sem ledger → vazio", () => {
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { readPrevc } from "../../lib/prevc.mjs";
+import { readPrevcText, mergePrevc, phaseAt, isFinished } from "../../lib/prevc.mjs";
 
-test("lê fases e status do prevc.json do dotcontext", () => {
-  const ws = mkdtempSync(join(tmpdir(), "lab-pv-"));
-  mkdirSync(join(ws, ".context/runtime/workflows"), { recursive: true });
-  writeFileSync(join(ws, ".context/runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { name: "shortlink", scale: 2, current_phase: "V" }, phases: { P: { status: "completed" }, R: { status: "completed" }, E: { status: "completed" }, V: { status: "in_progress" }, C: { status: "skipped" }, X: { status: "lixo" } } } }));
-  assert.deepEqual(readPrevc(ws), { name: "shortlink", scale: 2, current: "V", phases: { P: "completed", R: "completed", E: "completed", V: "in_progress", C: "skipped" } });
+const T = (hm) => `2026-10-09T${hm}:00.000Z`;
+const ms = (hm) => Date.parse(T(hm));
+const doc = (phases, current) => JSON.stringify({ status: { project: { current_phase: current }, phases } });
+const s1 = readPrevcText(doc({ P: { status: "completed", started_at: T("10:00"), completed_at: T("10:10") }, R: { status: "in_progress", started_at: T("10:10") }, X: { status: "lixo" } }, "R"));
+const s2 = readPrevcText(doc({ P: { status: "completed", started_at: T("10:00"), completed_at: T("10:10") }, R: { status: "completed", started_at: T("10:10"), completed_at: T("10:20") },
+  E: { status: "completed", started_at: T("10:20"), completed_at: T("10:40") }, V: { status: "completed", started_at: T("10:40"), completed_at: T("10:50") }, C: { status: "in_progress", started_at: T("10:50") } }, "C"));
+
+test("readPrevcText: fases com status e timestamps; fase desconhecida ignorada; inválido → null", () => {
+  assert.deepEqual(s1, { current: "R", phases: { P: { status: "completed", start: ms("10:00"), end: ms("10:10") }, R: { status: "in_progress", start: ms("10:10"), end: null } } });
+  assert.equal(readPrevcText("lixo"), null);
+  assert.equal(readPrevcText(null), null);
 });
 
-test("sem prevc.json → null", () => assert.equal(readPrevc(mkdtempSync(join(tmpdir(), "lab-pv-"))), null));
+test("mergePrevc: status do último instantâneo, início mais cedo, fim mais tarde", () => {
+  const m = mergePrevc([s1, s2]);
+  assert.equal(m.current, "C");
+  assert.deepEqual(m.phases.R, { status: "completed", start: ms("10:10"), end: ms("10:20") });
+  assert.equal(mergePrevc([]), null);
+});
+
+test("phaseAt: intervalo [início, fim); fase aberta vai até o infinito; fora de tudo → null", () => {
+  const m = mergePrevc([s1, s2]);
+  assert.equal(phaseAt(m.phases, ms("10:05")), "P");
+  assert.equal(phaseAt(m.phases, ms("10:10")), "R");
+  assert.equal(phaseAt(m.phases, ms("11:30")), "C");
+  assert.equal(phaseAt(m.phases, ms("09:00")), null);
+});
+
+test("isFinished: C concluída; ou fase atual C com P–V concluídas na main; ou tudo concluído/pulado", () => {
+  const m = mergePrevc([s2]);
+  assert.equal(isFinished(m, "main"), true);
+  assert.equal(isFinished(m, "feature/x"), false);
+  assert.equal(isFinished({ current: "V", phases: { P: { status: "completed" }, R: { status: "skipped" }, E: { status: "completed" }, V: { status: "completed" } } }, "x"), true);
+  assert.equal(isFinished(mergePrevc([s1]), "main"), false);
+  assert.equal(isFinished(null, "main"), false);
+});
 ```
 
 - [ ] **Step 2: Rodar e ver falhar** → FAIL
@@ -1025,72 +1332,137 @@ test("sem prevc.json → null", () => assert.equal(readPrevc(mkdtempSync(join(tm
 
 `lib/ledger.mjs`:
 ```js
-// lib/ledger.mjs — allowlist copiada da ADR-017/spec §8 (independente da lib sob teste).
+// lib/ledger.mjs — allowlist copiada da ADR-017/spec §8 (independente da lib sob teste). Normaliza; nunca repassa texto livre.
 import { join } from "node:path";
-import { readSafe, listSafe } from "./safe-read.mjs";
+import { readSafe, listSafe, safeDir } from "./safe-read.mjs";
 
 const KEYS = ["ts", "sessionId", "scope", "agentId", "agentType", "phase", "skill", "tier", "model", "effort", "source", "ceiling", "adapter", "usage", "cacheReadRatio", "switched", "escalation"];
 const SAFE = /^[A-Za-z0-9:_./@[\]-]{1,64}$/;
+const TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const TIERS = ["cheap", "standard", "capable", "top"];
 const ENUM = {
   scope: ["session", "subagent"], phase: ["P", "R", "E", "V", "C"], tier: TIERS, ceiling: TIERS,
   effort: ["low", "medium", "high", "xhigh", "max"], source: ["plan", "skill", "project", "phase", "agent", "explicit", "inherit"],
   adapter: ["mod", "classic", "omp", "cli"],
 };
+const SAFE_KEYS = ["sessionId", "agentId", "agentType", "skill", "model"];
+const USAGE = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
+const ESC = { at: ["retry", "midRun"], from: TIERS, to: TIERS, action: ["keep", "human", "escalate"] };
+const SCORES = ["failure_is_capability", "claims_done_with_evidence", "is_stuck"];
+const num = (v) => typeof v === "number" && Number.isFinite(v);
+const plain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
-export function checkEntry(e) {
-  const v = [];
-  for (const k of Object.keys(e ?? {})) if (!KEYS.includes(k)) v.push(`chave fora da allowlist: ${k}`);
-  for (const [k, allowed] of Object.entries(ENUM)) if (k in e && !allowed.includes(e[k])) v.push(`valor inválido em ${k}`);
-  for (const k of ["sessionId", "agentId", "agentType", "skill", "model"]) if (k in e && !(typeof e[k] === "string" && SAFE.test(e[k]))) v.push(`valor inválido em ${k}`);
-  return v;
+export function normalize(e) {
+  const entry = {}, violations = [];
+  const bad = (k) => { entry[k] = "?"; violations.push(`valor-invalido:${k}`); };
+  for (const k of Object.keys(e)) {
+    if (!KEYS.includes(k)) { violations.push("chave-fora-da-allowlist"); continue; }
+    const v = e[k];
+    if (k === "ts") { if (typeof v === "string" && TS.test(v)) entry.ts = v; else bad(k); }
+    else if (SAFE_KEYS.includes(k)) { if (typeof v === "string" && SAFE.test(v)) entry[k] = v; else bad(k); }
+    else if (k in ENUM) { if (ENUM[k].includes(v)) entry[k] = v; else bad(k); }
+    else if (k === "switched") { if (typeof v === "boolean") entry.switched = v; else bad(k); }
+    else if (k === "cacheReadRatio") { if (num(v) && v >= 0 && v <= 1) entry.cacheReadRatio = v; else bad(k); }
+    else if (k === "usage") {
+      if (!plain(v) || Object.entries(v).some(([uk, uv]) => !USAGE.includes(uk) || !num(uv))) { violations.push("valor-invalido:usage"); continue; }
+      entry.usage = { ...v };
+    } else if (k === "escalation") {
+      if (!plain(v)) { violations.push("valor-invalido:escalation"); continue; }
+      const out = {};
+      let ok = true;
+      for (const [ek, ev] of Object.entries(v)) {
+        if (Object.hasOwn(ESC, ek) && ESC[ek].includes(ev)) out[ek] = ev;
+        else if (ek === "scores" && plain(ev) && Object.entries(ev).every(([sk, sv]) => SCORES.includes(sk) && num(sv))) out.scores = { ...ev };
+        else ok = false;
+      }
+      if (!ok) violations.push("valor-invalido:escalation");
+      entry.escalation = out;
+    }
+  }
+  return { entry, violations };
 }
 
 export function readLedger(xdgDir) {
-  const root = join(xdgDir, "devflow-model-routing");
+  const root = safeDir(xdgDir, "devflow-model-routing");
   const entries = [], violations = [];
-  for (const proj of listSafe(root)) {
-    for (const f of listSafe(join(root, proj)).filter((x) => x.endsWith(".jsonl")).sort()) {
-      for (const line of (readSafe(join(root, proj, f)) ?? "").split("\n")) {
+  let files = 0;
+  for (const proj of root ? listSafe(root, "dir") : []) {
+    const dir = safeDir(xdgDir, "devflow-model-routing", proj);
+    if (!dir) continue;
+    for (const f of listSafe(dir, "file").filter((x) => x.endsWith(".jsonl"))) {
+      files++;
+      for (const line of (readSafe(join(dir, f)) ?? "").split("\n")) {
         if (!line.trim()) continue;
         let e;
-        try { e = JSON.parse(line); } catch { violations.push(`linha ilegível em ${f}`); continue; }
-        violations.push(...checkEntry(e));
-        entries.push(e);
+        try { e = JSON.parse(line); } catch { violations.push("linha-ilegivel"); continue; }
+        if (!plain(e)) { violations.push("linha-nao-objeto"); continue; }
+        const r = normalize(e);
+        violations.push(...r.violations);
+        entries.push(r.entry);
       }
     }
   }
-  return { entries, violations };
+  return { entries, violations, files };
 }
 ```
 
 `lib/prevc.mjs`:
 ```js
-// lib/prevc.mjs — estado final do PREVC do workspace (só nomes de fase e status).
-import { join } from "node:path";
-import { readSafe } from "./safe-read.mjs";
-
+// lib/prevc.mjs — fases do PREVC com timestamps (spec §7: fase real). Puro.
 const PH = ["P", "R", "E", "V", "C"];
 const ST = ["pending", "in_progress", "completed", "skipped"];
+const time = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+const min = (a, b) => (a == null ? b : b == null ? a : Math.min(a, b));
+const max = (a, b) => (a == null ? b : b == null ? a : Math.max(a, b));
 
-export function readPrevc(ws) {
+export function readPrevcText(text) {
   let j;
-  try { j = JSON.parse(readSafe(join(ws, ".context/runtime/workflows/prevc.json"), 2 ** 20) ?? ""); } catch { return null; }
-  const p = j?.status?.project ?? {};
+  try { j = JSON.parse(text ?? ""); } catch { return null; }
+  if (!j || typeof j !== "object") return null;
   const phases = {};
-  for (const k of PH) { const s = j?.status?.phases?.[k]?.status; if (ST.includes(s)) phases[k] = s; }
-  return {
-    name: typeof p.name === "string" && /^[A-Za-z0-9 _.-]{1,64}$/.test(p.name) ? p.name : null,
-    scale: typeof p.scale === "number" ? p.scale : null,
-    current: PH.includes(p.current_phase) ? p.current_phase : null,
-    phases,
-  };
+  for (const k of PH) {
+    const p = j?.status?.phases?.[k];
+    if (p && ST.includes(p.status)) phases[k] = { status: p.status, start: time(p.started_at), end: time(p.completed_at) };
+  }
+  const cur = j?.status?.project?.current_phase;
+  return { current: PH.includes(cur) ? cur : null, phases };
+}
+
+export function mergePrevc(snaps) {
+  const list = (snaps ?? []).filter(Boolean);
+  if (!list.length) return null;
+  const phases = {};
+  for (const s of list) for (const [k, p] of Object.entries(s.phases)) {
+    const cur = phases[k];
+    phases[k] = { status: p.status, start: min(cur?.start ?? null, p.start), end: max(cur?.end ?? null, p.end) };
+  }
+  return { current: list.at(-1).current, phases };
+}
+
+export function phaseAt(phases, ts) {
+  let best = null;
+  for (const k of PH) {
+    const p = phases?.[k];
+    if (!p || p.start == null || ts < p.start) continue;
+    if (p.end != null && ts >= p.end) continue;
+    if (!best || p.start >= phases[best].start) best = k;
+  }
+  return best;
+}
+
+export function isFinished(prevc, branch) {
+  if (!prevc) return false;
+  const ps = Object.values(prevc.phases);
+  const done = (k) => !prevc.phases[k] || ["completed", "skipped"].includes(prevc.phases[k].status);
+  if (prevc.phases.C?.status === "completed") return true;
+  if (ps.length && ps.every((p) => ["completed", "skipped"].includes(p.status))) return true;
+  return prevc.current === "C" && ["P", "R", "E", "V"].every(done) && branch === "main";
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar** → PASS (5)
+- [ ] **Step 4: Rodar e ver passar** → PASS (8)
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): leitura do ledger com allowlist própria e do prevc.json"`
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): ledger normalizado e fases reais do prevc.json"`
 
 ---
 
@@ -1103,18 +1475,20 @@ export function readPrevc(ws) {
 - Test: `tests/unit/invariants.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 2 (`modelTier`, `tierRank`, `effortRank`, `isRoutable`, `expectedSubagentTier`, `expectedSessionSwitches`, `capTier`).
-- Consumes `Metrics` (produzido pela Task 11):
+- Consumes: Task 2. Consome `Metrics` (produzido pela Task 11):
   ```
-  Metrics = { armId, routing, ceiling: {model, effort}, invocations: number, complete: boolean,
-    prevc: ReturnType<readPrevc> | null,
-    session: { models: string[], efforts: string[] },
-    subagents: Array<{ agentId, agentType, models: string[], efforts: string[] }>,
-    ledger: { entries: object[], violations: string[] },
-    tokens: { [model]: { input, output, cacheRead, cacheCreate, costUSD } },
-    reportOk: boolean, acceptance: { passed, total, error? } | null }
+  Msg = { ts, phase: "P".."C"|null, model, effort|null, skill|null, usage: { input, output, cacheRead, cacheCreate } }
+  Metrics = { armId, routing, ceiling: { model, effort }, invocations, complete, incompleteReason|null, killed,
+    prevc: { current, phases } | null,
+    session: Msg[],
+    subagents: Array<{ agentId, agentType, requestedModel, phase|null, messages: Msg[] }>,
+    ledger: { entries, violations, files },
+    tokens: { byModel, streamByModel, streamDeltaPct|null },
+    planTiers: string[], reportOk: boolean, acceptance: { passed, total, error? } | null,
+    env: { claudeVersion, pluginVersion, superpowersVersion } }
   ```
-- Produces: `evaluate(oracle, metrics) → Array<{ id, verdict: "HELD"|"MISS"|"N/A", evidence: string }>`; `coverage(metrics) → Array<{ feature, exercised: boolean, evidence: string }>`.
+  `phase` de cada `Msg` e de cada subagente é a **fase real** (calculada pela coleta).
+- Produces: `evaluate(oracle, metrics) → Array<{ id, verdict, evidence }>` (ordem: INV-CEIL, INV-SESS, INV-PHASE-SYNC, INV-SUB, INV-EFF, INV-LEDGER, INV-OFF, INV-PREVC); `coverage(oracle, metrics) → Array<{ feature, exercised, evidence }>`. Evidências só com enums, IDs validados e números.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -1126,90 +1500,114 @@ import { evaluate, coverage } from "../../lib/invariants.mjs";
 import { loadOracle } from "../../lib/tiers.mjs";
 
 const o = loadOracle();
-const done = { name: "x", scale: 2, current: "C", phases: { P: "completed", R: "completed", E: "completed", V: "completed", C: "completed" } };
+const msg = (phase, model, effort, skill = null) => ({ ts: 0, phase, model, effort, skill, usage: { input: 1, output: 1, cacheRead: 0, cacheCreate: 0 } });
+const done = { current: "C", phases: Object.fromEntries(["P", "R", "E", "V", "C"].map((k) => [k, { status: "completed", start: 0, end: 1 }])) };
 const base = (over = {}) => ({
-  armId: "B-routed", routing: true, ceiling: { model: "opus", effort: "xhigh" }, invocations: 1, complete: true, prevc: done,
-  session: { models: ["claude-opus-5-5", "claude-sonnet-5-5"], efforts: ["xhigh", "medium"] },
+  armId: "B-routed", routing: true, ceiling: { model: "opus", effort: "xhigh" }, invocations: 2, complete: true, incompleteReason: null, killed: false, prevc: done,
+  session: [msg("P", "claude-opus-5-5", "xhigh", "superpowers:brainstorming"), msg("R", "claude-opus-5-5", "xhigh"),
+    msg("E", "claude-sonnet-5-5", "medium", "devflow:prevc-execution"), msg("C", "claude-sonnet-5-5", "low", "devflow:prevc-confirmation")],
   subagents: [
-    { agentId: "a1", agentType: "devflow:code-reviewer", models: ["claude-opus-5-5"], efforts: ["high"] },
-    { agentId: "a2", agentType: "devflow:documentation-writer", models: ["claude-haiku-5-5"], efforts: ["low"] },
-    { agentId: "a3", agentType: "Explore", models: ["claude-opus-5-5"], efforts: [] },
+    { agentId: "a1", agentType: "devflow:code-reviewer", requestedModel: "opus", phase: "R", messages: [msg("R", "claude-opus-5-5", "medium"), msg("R", "claude-opus-5-5", "high")] },
+    { agentId: "a2", agentType: "devflow:documentation-writer", requestedModel: "haiku", phase: "C", messages: [msg("C", "claude-haiku-5-5", "low")] },
+    { agentId: "a3", agentType: "Explore", requestedModel: null, phase: "E", messages: [msg("E", "claude-opus-5-5", "xhigh")] },
+    { agentId: "a4", agentType: "general-purpose", requestedModel: "sonnet", phase: "E", messages: [] },
   ],
-  ledger: { violations: [], entries: [
-    { scope: "session", phase: "E", switched: true, effort: "medium", skill: "devflow:prevc-execution" },
-    { scope: "subagent", agentId: "a1", agentType: "devflow:code-reviewer", phase: "R", tier: "capable", source: "phase" },
-    { scope: "subagent", agentId: "a2", agentType: "devflow:documentation-writer", phase: "C", tier: "cheap", source: "agent" },
+  ledger: { files: 2, violations: [], entries: [
+    { scope: "subagent", agentId: "a1", agentType: "devflow:code-reviewer", phase: "R", tier: "capable", source: "phase", model: "claude-opus-5-5" },
+    { scope: "subagent", agentId: "a1", agentType: "devflow:code-reviewer", phase: "R", usage: { input_tokens: 1 } },
+    { scope: "subagent", agentId: "a2", agentType: "devflow:documentation-writer", phase: "C", tier: "cheap", source: "agent", model: "claude-haiku-5-5" },
+    { scope: "session", phase: "E", switched: true },
   ] },
-  tokens: {}, reportOk: true, acceptance: { passed: 20, total: 20 }, ...over,
+  tokens: { byModel: {}, streamByModel: {}, streamDeltaPct: 0 }, planTiers: [], reportOk: true, acceptance: { passed: 13, total: 13 },
+  env: { claudeVersion: "2.1.295", pluginVersion: "3.7.0", superpowersVersion: "6.4.1" }, ...over,
 });
 const v = (m, id) => evaluate(o, m).find((x) => x.id === id);
+const clone = (m) => structuredClone(m);
 
-test("rodada conforme → tudo HELD; Explore fica fora do INV-SUB", () => {
-  for (const id of ["INV-CEIL", "INV-SESS", "INV-SUB", "INV-EFF", "INV-LEDGER", "INV-PREVC"]) assert.equal(v(base(), id).verdict, "HELD", id);
+test("rodada conforme → tudo HELD; Explore e subagente sem mensagem ficam fora", () => {
+  for (const id of ["INV-CEIL", "INV-SESS", "INV-PHASE-SYNC", "INV-SUB", "INV-EFF", "INV-LEDGER", "INV-PREVC"]) assert.equal(v(base(), id).verdict, "HELD", id);
   assert.equal(v(base(), "INV-OFF").verdict, "N/A");
 });
 
-test("INV-CEIL: subagente acima do teto → MISS", () => {
-  const m = base({ ceiling: { model: "sonnet", effort: "medium" }, session: { models: ["claude-sonnet-5-5"], efforts: ["medium"] } });
-  assert.equal(v(m, "INV-CEIL").verdict, "MISS");
-  assert.match(v(m, "INV-CEIL").evidence, /code-reviewer/);
-});
-
-test("INV-CEIL: esforço acima do teto → MISS", () => {
-  const m = base({ session: { models: ["claude-opus-5-5"], efforts: ["max"] } });
-  assert.equal(v(m, "INV-CEIL").verdict, "MISS");
-});
-
-test("INV-SESS: trocas acima de esperadas × invocações → MISS; sem roteamento → N/A", () => {
-  const m = base({ session: { models: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-5-5"], efforts: [] } });
-  assert.equal(v(m, "INV-SESS").verdict, "MISS");
-  assert.equal(v({ ...m, invocations: 2 }, "INV-SESS").verdict, "HELD");
-  assert.equal(v(base({ routing: false }), "INV-SESS").verdict, "N/A");
-});
-
-test("INV-SESS: troca registrada fora da fase esperada → MISS", () => {
-  const m = base();
-  m.ledger.entries[0] = { ...m.ledger.entries[0], phase: "V" };
-  assert.equal(v(m, "INV-SESS").verdict, "MISS");
-});
-
-test("INV-SUB: tier diferente do oráculo sem fonte justificável → MISS; fonte plan → HELD", () => {
-  const m = base();
-  m.subagents[1] = { ...m.subagents[1], models: ["claude-sonnet-5-5"] };
+test("H1 sintético: roteador em P com o subagente na fase real R → PHASE-SYNC e SUB = MISS", () => {
+  const m = clone(base());
+  m.ledger.entries[0] = { ...m.ledger.entries[0], phase: "P", tier: "standard", source: "agent" };
+  m.subagents[0].messages = [msg("R", "claude-sonnet-5-5", "medium")];
+  assert.equal(v(m, "INV-PHASE-SYNC").verdict, "MISS");
+  assert.match(v(m, "INV-PHASE-SYNC").evidence, /P→R×1/);
   assert.equal(v(m, "INV-SUB").verdict, "MISS");
-  m.ledger.entries[2] = { ...m.ledger.entries[2], source: "plan" };
+  assert.match(v(m, "INV-SUB").evidence, /devflow:code-reviewer@R: standard \(oráculo capable, fonte agent\)/);
+});
+
+test("H1 na sessão: mensagem da fase real E no teto → INV-SESS MISS com contagem por fase", () => {
+  const m = clone(base());
+  m.session[2] = msg("E", "claude-opus-5-5", "medium", "devflow:prevc-execution");
+  assert.equal(v(m, "INV-SESS").verdict, "MISS");
+  assert.match(v(m, "INV-SESS").evidence, /1 de 4 .*E:capable×1/);
+});
+
+test("mensagem sem fase real não entra no INV-SESS", () => {
+  const m = clone(base());
+  m.session.push(msg(null, "claude-opus-5-5", "xhigh"));
+  assert.equal(v(m, "INV-SESS").verdict, "HELD");
+});
+
+test("INV-CEIL: braço C com subagente e esforço acima do teto → MISS", () => {
+  const m = base({ ceiling: { model: "sonnet", effort: "medium" } });
+  assert.equal(v(m, "INV-CEIL").verdict, "MISS");
+  assert.match(v(m, "INV-CEIL").evidence, /devflow:code-reviewer claude-opus-5-5/);
+  assert.match(v(m, "INV-CEIL").evidence, /esforço xhigh/);
+});
+
+test("INV-SUB: fonte explicit/plan/skill justifica desvio dentro do teto; fonte agent não", () => {
+  const m = clone(base());
+  m.subagents[1].messages = [msg("C", "claude-sonnet-5-5", "low")];
+  assert.equal(v(m, "INV-SUB").verdict, "MISS");
+  m.ledger.entries[2].source = "explicit";
   assert.equal(v(m, "INV-SUB").verdict, "HELD");
 });
 
-test("INV-SUB: sem subagente roteável → N/A", () => {
-  assert.equal(v(base({ subagents: [] }), "INV-SUB").verdict, "N/A");
+test("INV-EFF: esforço de skill ou do primeiro passo do agente diferente do oráculo → MISS", () => {
+  const m = clone(base());
+  m.session[2] = msg("E", "claude-sonnet-5-5", "high", "devflow:prevc-execution");
+  assert.equal(v(m, "INV-EFF").verdict, "MISS");
+  const n = clone(base());
+  n.subagents[1].messages = [msg("C", "claude-haiku-5-5", "medium")];
+  assert.equal(v(n, "INV-EFF").verdict, "MISS");
 });
 
 test("INV-LEDGER: violação → MISS; roteado sem ledger → MISS; braço A → N/A", () => {
-  assert.equal(v(base({ ledger: { entries: [{}], violations: ["chave fora da allowlist: prompt"] } }), "INV-LEDGER").verdict, "MISS");
-  assert.equal(v(base({ ledger: { entries: [], violations: [] } }), "INV-LEDGER").verdict, "MISS");
+  assert.equal(v(base({ ledger: { entries: [{}], violations: ["chave-fora-da-allowlist"], files: 1 } }), "INV-LEDGER").verdict, "MISS");
+  assert.equal(v(base({ ledger: { entries: [], violations: [], files: 0 } }), "INV-LEDGER").verdict, "MISS");
   assert.equal(v(base({ routing: false }), "INV-LEDGER").verdict, "N/A");
 });
 
 test("INV-OFF (braço A): ledger vazio → HELD; com ledger → MISS", () => {
-  const a = base({ armId: "A-baseline", routing: false, ledger: { entries: [], violations: [] } });
+  const a = base({ armId: "A-baseline", routing: false, ledger: { entries: [], violations: [], files: 0 } });
   assert.equal(v(a, "INV-OFF").verdict, "HELD");
-  assert.equal(v({ ...a, ledger: { entries: [{ scope: "session" }], violations: [] } }, "INV-OFF").verdict, "MISS");
+  assert.equal(v({ ...a, ledger: { entries: [{ scope: "session" }], violations: [], files: 1 } }, "INV-OFF").verdict, "MISS");
 });
 
-test("INV-PREVC: fase não pulada sem completar → MISS; sem prevc → MISS", () => {
-  assert.equal(v(base({ prevc: { ...done, phases: { ...done.phases, V: "in_progress" } } }), "INV-PREVC").verdict, "MISS");
+test("INV-PREVC: rodada incompleta → MISS com o motivo; sem prevc → MISS", () => {
+  const m = base({ complete: false, incompleteReason: "result:error_max_turns" });
+  assert.equal(v(m, "INV-PREVC").verdict, "MISS");
+  assert.match(v(m, "INV-PREVC").evidence, /parada: result:error_max_turns/);
   assert.equal(v(base({ prevc: null }), "INV-PREVC").verdict, "MISS");
-  assert.equal(v(base({ prevc: { ...done, phases: { ...done.phases, R: "skipped" } } }), "INV-PREVC").verdict, "HELD");
 });
 
-test("coverage marca o que o ledger mostra", () => {
-  const c = Object.fromEntries(coverage(base()).map((x) => [x.feature, x.exercised]));
-  assert.equal(c["sessão por fase"], true);
-  assert.equal(c["override de fase"], true);
-  assert.equal(c["tier da task do plano"], false);
-  assert.equal(c["escalada no meio"], false);
-  assert.equal(c["model-route report"], true);
+test("coverage", () => {
+  const c = (m) => Object.fromEntries(coverage(o, m).map((x) => [x.feature, x.exercised]));
+  const b = c(base());
+  assert.deepEqual([b["sessão por fase"], b["esforço por skill"], b["subagente por agente"], b["override de fase"], b["esforço por passo"], b["ledger"], b["model-route report"]],
+    [true, true, true, true, true, true, true]);
+  assert.deepEqual([b["tier da task do plano"], b["escalada no meio"], b["escalada entre tentativas"], b["teto do usuário"], b["opt-in duplo (braço A)"]], [false, false, false, false, false]);
+  const m = clone(base({ planTiers: ["cheap"] }));
+  m.subagents[3].messages = [msg("E", "claude-haiku-5-5", "low")];
+  m.ledger.entries.push({ scope: "subagent", agentId: "a4", agentType: "general-purpose", phase: "E", tier: "cheap", source: "explicit" });
+  assert.equal(c(m)["tier da task do plano"], true);
+  const cc = clone(base({ ceiling: { model: "sonnet", effort: "medium" } }));
+  cc.subagents.push({ agentId: "a5", agentType: "devflow:architect", requestedModel: "sonnet", phase: "P", messages: [msg("P", "claude-sonnet-5-5", "medium")] });
+  assert.equal(c(cc)["teto do usuário"], true);
 });
 ```
 
@@ -1219,68 +1617,96 @@ test("coverage marca o que o ledger mostra", () => {
 
 `lib/invariants.mjs`:
 ```js
-// lib/invariants.mjs — vereditos (spec §7) e matriz de cobertura. Puro.
-import { modelTier, tierRank, effortRank, isRoutable, expectedSubagentTier, expectedSessionTiers, expectedSessionSwitches, PHASES } from "./tiers.mjs";
+// lib/invariants.mjs — vereditos (spec §7) contra o oráculo e a fase REAL; matriz de cobertura. Puro.
+import { modelTier, tierRank, effortRank, isRoutable, expectedSubagentTier, expectedSessionTiers, expectedSkillEffort, expectedAgentEffort, PHASES } from "./tiers.mjs";
 
 const JUSTIFIED = ["plan", "skill", "explicit"];
 const r = (id, verdict, evidence) => ({ id, verdict, evidence });
-const subLedger = (m, agentId) => m.ledger.entries.find((e) => e.scope === "subagent" && e.agentId === agentId) ?? null;
+const first = (s) => s.messages[0] ?? null;
+const ctOf = (m) => modelTier(m.ceiling.model);
+const spawnOf = (m, id) => m.ledger.entries.find((e) => e.scope === "subagent" && e.agentId === id && e.source) ?? null;
+const tally = (keys) => { const c = new Map(); for (const k of keys) c.set(k, (c.get(k) ?? 0) + 1); return [...c].map(([k, n]) => `${k}×${n}`).join(", "); };
+const list = (bad, max = 10) => [...new Set(bad)].slice(0, max).join("; ");
 
 function ceil(o, m) {
-  const ct = modelTier(m.ceiling.model), ce = effortRank(m.ceiling.effort);
-  const bad = [];
-  for (const x of m.session.models) if (tierRank(modelTier(x)) > tierRank(ct)) bad.push(`sessão ${x}`);
-  for (const e of m.session.efforts) if (effortRank(e) > ce) bad.push(`sessão esforço ${e}`);
-  for (const s of m.subagents) {
-    for (const x of s.models) if (tierRank(modelTier(x)) > tierRank(ct)) bad.push(`${s.agentType} ${x}`);
-    for (const e of s.efforts) if (effortRank(e) > ce) bad.push(`${s.agentType} esforço ${e}`);
-  }
-  if (!m.session.models.length && !m.subagents.length) return r("INV-CEIL", "N/A", "sem transcript");
-  return r("INV-CEIL", bad.length ? "MISS" : "HELD", bad.length ? bad.join("; ") : `teto ${m.ceiling.model}/${m.ceiling.effort}`);
+  if (!m.session.length && !m.subagents.some(first)) return r("INV-CEIL", "N/A", "sem transcript");
+  const ct = ctOf(m), ce = effortRank(m.ceiling.effort), bad = [];
+  const check = (who, x) => {
+    if (tierRank(modelTier(x.model)) > tierRank(ct)) bad.push(`${who} ${x.model}`);
+    if (x.effort && effortRank(x.effort) > ce) bad.push(`${who} esforço ${x.effort}`);
+  };
+  m.session.forEach((x) => check("sessão", x));
+  for (const s of m.subagents) s.messages.forEach((x) => check(s.agentType, x));
+  return r("INV-CEIL", bad.length ? "MISS" : "HELD", bad.length ? list(bad) : `teto ${m.ceiling.model}/${m.ceiling.effort}`);
 }
 
 function sess(o, m) {
   if (!m.routing) return r("INV-SESS", "N/A", "roteamento desligado");
-  if (!m.session.models.length) return r("INV-SESS", "N/A", "sem transcript da sessão");
-  const ct = modelTier(m.ceiling.model);
-  const limit = expectedSessionSwitches(o, ct) * Math.max(1, m.invocations);
-  const changes = m.session.models.length - 1;
-  const tiers = expectedSessionTiers(o, ct);
-  const okPhases = PHASES.filter((p, i) => i > 0 && tiers[p] !== tiers[PHASES[i - 1]]);
-  const wrong = m.ledger.entries.filter((e) => e.scope === "session" && e.switched === true && !okPhases.includes(e.phase)).map((e) => e.phase ?? "?");
-  const ev = `sequência ${m.session.models.join(" → ")}; trocas ${changes} (limite ${limit}); fases de troca no ledger: ${wrong.length ? `fora do esperado ${wrong.join(",")}` : "ok"}`;
-  return r("INV-SESS", changes > limit || wrong.length ? "MISS" : "HELD", ev);
+  const known = m.session.filter((x) => x.phase);
+  if (!known.length) return r("INV-SESS", "N/A", "sem mensagem da sessão com fase real");
+  const want = expectedSessionTiers(o, ctOf(m));
+  const bad = known.filter((x) => modelTier(x.model) !== want[x.phase]);
+  let changes = 0;
+  for (let i = 1; i < m.session.length; i++) if (m.session[i].model !== m.session[i - 1].model) changes++;
+  const ev = `${bad.length} de ${known.length} mensagens fora do tier da fase real${bad.length ? ` (${tally(bad.map((x) => `${x.phase}:${modelTier(x.model)}`))})` : ""}; trocas de modelo ${changes}; invocações ${m.invocations}`;
+  return r("INV-SESS", bad.length ? "MISS" : "HELD", ev);
+}
+
+function phaseSync(o, m) {
+  if (!m.routing) return r("INV-PHASE-SYNC", "N/A", "roteamento desligado");
+  const pairs = [];
+  for (const s of m.subagents) {
+    const sp = spawnOf(m, s.agentId);
+    if (sp?.phase && s.phase) pairs.push([sp.phase, s.phase]);
+  }
+  if (!pairs.length) return r("INV-PHASE-SYNC", "N/A", "nenhum despacho com fase no ledger e fase real");
+  const bad = pairs.filter(([a, b]) => a !== b);
+  return r("INV-PHASE-SYNC", bad.length ? "MISS" : "HELD",
+    `${bad.length} de ${pairs.length} despachos com fase do roteador ≠ fase real${bad.length ? ` (${tally(bad.map(([a, b]) => `${a}→${b}`))})` : ""}`);
 }
 
 function sub(o, m) {
   if (!m.routing) return r("INV-SUB", "N/A", "roteamento desligado");
-  const ct = modelTier(m.ceiling.model);
-  const routable = m.subagents.filter((s) => isRoutable(o, s.agentType));
-  if (!routable.length) return r("INV-SUB", "N/A", "nenhum subagente roteável");
+  const ct = ctOf(m);
+  const routable = m.subagents.filter((s) => isRoutable(o, s.agentType) && first(s));
+  if (!routable.length) return r("INV-SUB", "N/A", "nenhum subagente roteável com mensagens");
   const bad = [];
   for (const s of routable) {
-    const led = subLedger(m, s.agentId);
-    const want = expectedSubagentTier(o, s.agentType, led?.phase ?? null, ct);
-    const got = modelTier(s.models[0]);
+    const want = expectedSubagentTier(o, s.agentType, s.phase, ct);
+    const got = modelTier(first(s).model);
     if (got === want) continue;
-    if (led && JUSTIFIED.includes(led.source) && tierRank(got) <= tierRank(ct)) continue;
-    bad.push(`${s.agentType}@${led?.phase ?? "?"}: ${got} (oráculo ${want}, fonte ${led?.source ?? "sem ledger"})`);
+    const src = spawnOf(m, s.agentId)?.source ?? "sem-ledger";
+    if (JUSTIFIED.includes(src) && tierRank(got) <= tierRank(ct)) continue;
+    bad.push(`${s.agentType}@${s.phase ?? "?"}: ${got} (oráculo ${want}, fonte ${src})`);
   }
-  return r("INV-SUB", bad.length ? "MISS" : "HELD", bad.length ? bad.join("; ") : `${routable.length} subagentes conforme`);
+  return r("INV-SUB", bad.length ? "MISS" : "HELD", bad.length ? list(bad) : `${routable.length} subagentes conforme`);
 }
 
 function eff(o, m) {
   if (!m.routing) return r("INV-EFF", "N/A", "roteamento desligado");
-  const s = m.ledger.entries.filter((e) => e.scope === "session" && e.effort);
-  if (!s.length) return r("INV-EFF", "N/A", "sem esforço de sessão no ledger");
-  const bad = s.filter((e) => effortRank(e.effort) > effortRank(m.ceiling.effort));
-  return r("INV-EFF", bad.length ? "MISS" : "HELD", `${s.length} registros; acima do teto: ${bad.length}`);
+  const ce = m.ceiling.effort, bad = [];
+  let n = 0;
+  for (const x of m.session) {
+    const want = expectedSkillEffort(o, x.skill, ce);
+    if (!want) continue;
+    n++;
+    if (x.effort !== want) bad.push(`sessão ${x.skill}: ${x.effort ?? "?"} (oráculo ${want})`);
+  }
+  for (const s of m.subagents) {
+    const want = expectedAgentEffort(o, s.agentType, ce), f = first(s);
+    if (!want || !f) continue;
+    n++;
+    if (f.effort !== want) bad.push(`${s.agentType}: ${f.effort ?? "?"} (oráculo ${want})`);
+  }
+  if (!n) return r("INV-EFF", "N/A", "nenhuma mensagem com esforço previsto pelo oráculo");
+  return r("INV-EFF", bad.length ? "MISS" : "HELD", bad.length ? list(bad) : `${n} pontos conforme`);
 }
 
 function ledger(o, m) {
   if (!m.routing) return r("INV-LEDGER", "N/A", "roteamento desligado");
   if (!m.ledger.entries.length) return r("INV-LEDGER", "MISS", "roteado com ledger ligado e nenhuma linha gravada");
-  return r("INV-LEDGER", m.ledger.violations.length ? "MISS" : "HELD", m.ledger.violations.length ? m.ledger.violations.slice(0, 5).join("; ") : `${m.ledger.entries.length} linhas válidas`);
+  return r("INV-LEDGER", m.ledger.violations.length ? "MISS" : "HELD",
+    m.ledger.violations.length ? tally(m.ledger.violations) : `${m.ledger.entries.length} linhas válidas em ${m.ledger.files} arquivos`);
 }
 
 function off(o, m) {
@@ -1290,24 +1716,28 @@ function off(o, m) {
 
 function prevc(o, m) {
   if (!m.prevc) return r("INV-PREVC", "MISS", "sem prevc.json no workspace");
-  const pend = Object.entries(m.prevc.phases).filter(([, s]) => s !== "completed" && s !== "skipped").map(([k, s]) => `${k}=${s}`);
-  return r("INV-PREVC", pend.length ? "MISS" : "HELD", pend.length ? pend.join(", ") : `fases ${Object.keys(m.prevc.phases).join("")} concluídas`);
+  const st = PHASES.filter((p) => m.prevc.phases[p]).map((p) => `${p}=${m.prevc.phases[p].status}`).join(", ");
+  return r("INV-PREVC", m.complete ? "HELD" : "MISS", `${st}${m.incompleteReason ? `; parada: ${m.incompleteReason}` : ""}`);
 }
 
-export const evaluate = (o, m) => [ceil, sess, sub, eff, ledger, off, prevc].map((f) => f(o, m));
+export const evaluate = (o, m) => [ceil, sess, phaseSync, sub, eff, ledger, off, prevc].map((f) => f(o, m));
 
-export function coverage(m) {
+export function coverage(o, m) {
   const L = m.ledger.entries;
   const has = (pred) => L.some(pred);
+  const ct = ctOf(m);
+  const tierR = (s, ph) => expectedSubagentTier(o, s.agentType, ph, ct);
   const items = [
-    ["sessão por fase", m.session.models.length > 1 || has((e) => e.scope === "session" && e.switched === true)],
-    ["esforço por skill", has((e) => e.scope === "session" && e.skill && e.effort)],
+    ["sessão por fase", m.routing && new Set(m.session.map((x) => x.model)).size > 1],
+    ["esforço por skill", m.routing && m.session.some((x) => { const w = expectedSkillEffort(o, x.skill, m.ceiling.effort); return w && w !== m.ceiling.effort && x.effort === w; })],
     ["subagente por agente", has((e) => e.source === "agent")],
-    ["override de fase", has((e) => e.source === "phase")],
+    ["override de fase", m.routing && m.subagents.some((s) => s.agentType === "devflow:code-reviewer" && s.phase === "R" && first(s)
+      && tierR(s, "R") !== tierR(s, null) && modelTier(first(s).model) === tierR(s, "R"))],
+    ["tier da task do plano", m.planTiers.length > 0 && m.subagents.some((s) => s.agentType === "general-purpose" && s.phase === "E" && spawnOf(m, s.agentId)?.source === "explicit")],
     ["skill final-review", has((e) => e.source === "skill")],
-    ["tier da task do plano", has((e) => e.source === "plan")],
-    ["teto do usuário", m.routing && modelTier(m.ceiling.model) !== "capable"],
-    ["esforço por passo", m.subagents.some((s) => new Set(s.efforts).size > 1)],
+    ["teto do usuário", m.routing && m.subagents.some((s) => isRoutable(o, s.agentType) && first(s)
+      && tierRank(expectedSubagentTier(o, s.agentType, s.phase, "top")) > tierRank(ct) && modelTier(first(s).model) === ct)],
+    ["esforço por passo", m.subagents.some((s) => new Set(s.messages.map((x) => x.effort).filter(Boolean)).size > 1)],
     ["escalada no meio", has((e) => e.escalation?.at === "midRun")],
     ["escalada entre tentativas", has((e) => e.escalation?.at === "retry")],
     ["ledger", L.length > 0],
@@ -1320,7 +1750,7 @@ export function coverage(m) {
 
 - [ ] **Step 4: Rodar e ver passar** → PASS (11)
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): vereditos das invariantes e matriz de cobertura"`
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): vereditos contra a fase real e matriz de cobertura"`
 
 ---
 
@@ -1334,7 +1764,7 @@ export function coverage(m) {
 
 **Interfaces:**
 - Consumes: `evaluate`, `coverage` (Task 7), `loadOracle` (Task 2), `Metrics`.
-- Produces: `render({ title, runs: Array<{ metrics, verdicts, coverage }> }) → string` (Markdown); `economy(runs) → Array<{ armId, byModel, total: { input, output, cacheRead, cacheCreate, costUSD } }>`; CLI `node scripts/score.mjs --out results/<nome> runs/<id> [runs/<id> …]` grava `scorecard.md` e `summary.json`.
+- Produces: `esc(s) → string`; `economy(runs) → Array<{ armId, byModel, total: { input, output, cacheRead, cacheCreate, costUSD } }>`; `render({ title, runs: Array<{ metrics, verdicts, coverage }> }) → string`. CLI `node scripts/score.mjs --out results/<nome> <runDir>...` → `scorecard.md` e `summary.json` (só vereditos, cobertura, tokens e aceitação).
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -1342,28 +1772,42 @@ export function coverage(m) {
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { render, economy } from "../../lib/scorecard.mjs";
+import { render, economy, esc } from "../../lib/scorecard.mjs";
 
+const msg = (phase, model, out = 1, cacheRead = 0) => ({ ts: 0, phase, model, effort: "medium", skill: null, usage: { input: 1, output: out, cacheRead, cacheCreate: 0 } });
 const run = (armId, cost, out, passed) => ({
-  metrics: { armId, tokens: { "claude-opus-5-5": { input: 1, output: out, cacheRead: 10, cacheCreate: 5, costUSD: cost } }, acceptance: { passed, total: 20 }, complete: true, invocations: 1,
-             subagents: [{ agentType: "devflow:architect", models: ["claude-opus-5-5"] }] },
-  verdicts: [{ id: "INV-CEIL", verdict: "HELD", evidence: "ok" }, { id: "INV-SUB", verdict: "MISS", evidence: "architect|x" }],
+  metrics: { armId, routing: armId !== "A-baseline", invocations: 1, complete: true, incompleteReason: null,
+    tokens: { byModel: { "claude-opus-5-5": { input: 1, output: out, cacheRead: 10, cacheCreate: 5 } }, streamByModel: { "claude-opus-5-5": { input: 1, output: out, cacheRead: 10, cacheCreate: 5, costUSD: cost } }, streamDeltaPct: 0 },
+    acceptance: { passed, total: 13 },
+    session: [msg("P", "claude-opus-5-5", 3), msg("E", "claude-sonnet-5-5", 2, 9)],
+    subagents: [{ agentType: "devflow:architect", phase: "P", messages: [msg("P", "claude-opus-5-5", 4)] }],
+    ledger: { entries: [{ scope: "subagent", agentType: "devflow:architect", escalation: { at: "retry", action: "escalate" } }], violations: [], files: 1 },
+    env: { claudeVersion: "2.1.295", pluginVersion: "3.7.0", superpowersVersion: "6.4.1" } },
+  verdicts: [{ id: "INV-CEIL", verdict: "HELD", evidence: "ok" }, { id: "INV-SUB", verdict: "MISS", evidence: "[clique](https://evil) <img src=x> a|b" }],
   coverage: [{ feature: "ledger", exercised: armId !== "A-baseline", evidence: "" }],
 });
 
-test("economy soma por braço", () => {
-  const e = economy([run("A-baseline", 2, 100, 20)]);
-  assert.deepEqual(e[0].total, { input: 1, output: 100, cacheRead: 10, cacheCreate: 5, costUSD: 2 });
+test("esc neutraliza Markdown e HTML", () => {
+  assert.equal(esc("[a](b) <c> `d` *e* _f_ !g |h\ni"), "\\[a\\]\\(b\\) \\<c\\> \\`d\\` \\*e\\* \\_f\\_ \\!g \\|h i");
 });
 
-test("render: seções, vereditos, razão B÷A, n=1 declarado e escape de |", () => {
-  const md = render({ title: "Campanha X", runs: [run("A-baseline", 2, 100, 20), run("B-routed", 1, 50, 19)] });
-  for (const s of ["# Campanha X", "## Vereditos", "## Cobertura da v3.7", "## Economia", "## Qualidade", "## Por agente"]) assert.ok(md.includes(s), s);
+test("economy soma por braço, com custo do stream", () => {
+  assert.deepEqual(economy([run("A-baseline", 2, 100, 13)])[0].total, { input: 1, output: 100, cacheRead: 10, cacheCreate: 5, costUSD: 2 });
+});
+
+test("render: seções, vereditos, razão B÷A, n=1, tabelas por agente/fase/cache e escape", () => {
+  const md = render({ title: "Campanha X", runs: [run("A-baseline", 2, 100, 13), run("B-routed", 1, 50, 12)] });
+  for (const s of ["# Campanha X", "## Vereditos", "## Cobertura da v3.7", "## Economia", "## Por agente", "## Sessão por fase real", "## Cache frio nas trocas", "## Qualidade", "## Ambiente"]) assert.ok(md.includes(s), s);
   assert.match(md, /\| INV-CEIL \| HELD \| HELD \|/);
   assert.match(md, /\| INV-SUB \| MISS \| MISS \|/);
-  assert.match(md, /B-routed ÷ A-baseline[^\n]*0[,.]50/);
+  assert.match(md, /B-routed ÷ A-baseline[^\n]*0\.50/);
   assert.match(md, /n = 1/);
-  assert.ok(md.includes("architect\\|x"));
+  assert.match(md, /\| B-routed \| devflow:architect \| 1 \| claude-opus-5-5 \| 4 \| 1 \|/);
+  assert.match(md, /\| B-routed \| E \| claude-sonnet-5-5 \| 2 \|/);
+  assert.match(md, /claude-opus-5-5 → claude-sonnet-5-5[^\n]*0\.90/);
+  assert.ok(!/(^|[^\\])<img/.test(md));
+  assert.ok(!/(^|[^\\])\]\(/.test(md));
+  assert.match(md, /autorreportados/);
 });
 ```
 
@@ -1373,51 +1817,80 @@ test("render: seções, vereditos, razão B÷A, n=1 declarado e escape de |", ()
 
 `lib/scorecard.mjs`:
 ```js
-// lib/scorecard.mjs — scorecard Markdown (spec §7–§9). Puro.
-const esc = (s) => String(s ?? "").replaceAll("|", "\\|").replaceAll("\n", " ");
-const fmt = (x) => (typeof x === "number" ? (Number.isInteger(x) ? String(x) : x.toFixed(2)) : "—");
-const KEYS = ["input", "output", "cacheRead", "cacheCreate", "costUSD"];
+// lib/scorecard.mjs — scorecard Markdown (spec §7–§9). Só enums, IDs validados e números; tudo escapado. Puro.
+const KEYS = ["input", "output", "cacheRead", "cacheCreate"];
+export const esc = (s) => String(s ?? "").replace(/[\\`*_\[\]()<>!|]/g, (c) => `\\${c}`).replace(/[\r\n]+/g, " ");
+const fmt = (x) => (typeof x === "number" && Number.isFinite(x) ? (Number.isInteger(x) ? String(x) : x.toFixed(2)) : "—");
+const add = (acc, u) => { for (const k of KEYS) acc[k] = (acc[k] ?? 0) + (u?.[k] ?? 0); return acc; };
 
 export function economy(runs) {
-  return runs.map(({ metrics }) => {
-    const total = Object.fromEntries(KEYS.map((k) => [k, 0]));
-    for (const u of Object.values(metrics.tokens ?? {})) for (const k of KEYS) total[k] += u[k] ?? 0;
-    return { armId: metrics.armId, byModel: metrics.tokens ?? {}, total };
+  return runs.map(({ metrics: m }) => {
+    const total = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0, costUSD: 0 };
+    for (const u of Object.values(m.tokens?.byModel ?? {})) add(total, u);
+    for (const u of Object.values(m.tokens?.streamByModel ?? {})) total.costUSD += u.costUSD ?? 0;
+    return { armId: m.armId, byModel: m.tokens?.byModel ?? {}, total };
   });
 }
 
 export function render({ title, runs }) {
   const ids = runs.map((r) => r.metrics.armId);
-  const L = [`# ${esc(title)}`, "", `Braços: ${ids.join(", ")}. Cada braço é uma rodada (n = 1); números não são extrapolados.`, ""];
+  const head = (cols) => [`| ${cols.join(" | ")} |`, `|${cols.map(() => "---").join("|")}|`];
+  const L = [`# ${esc(title)}`, "", `Braços: ${ids.map(esc).join(", ")}. Cada braço é uma rodada (n = 1); números não são extrapolados. Ledger, prevc.json e transcripts são autorreportados pelo próprio sistema em teste.`, ""];
 
-  L.push("## Vereditos", "", `| Verificação | ${ids.join(" | ")} |`, `|---|${ids.map(() => "---").join("|")}|`);
+  L.push("## Vereditos", "", ...head(["Verificação", ...ids.map(esc)]));
   const vids = [...new Set(runs.flatMap((r) => r.verdicts.map((v) => v.id)))];
-  for (const id of vids) L.push(`| ${id} | ${runs.map((r) => r.verdicts.find((v) => v.id === id)?.verdict ?? "—").join(" | ")} |`);
+  for (const id of vids) L.push(`| ${esc(id)} | ${runs.map((r) => esc(r.verdicts.find((v) => v.id === id)?.verdict ?? "—")).join(" | ")} |`);
   L.push("", "**Evidências**", "");
-  for (const r of runs) for (const v of r.verdicts) if (v.verdict !== "N/A") L.push(`- ${r.metrics.armId} · ${v.id} · ${v.verdict}: ${esc(v.evidence)}`);
+  for (const r of runs) for (const v of r.verdicts) if (v.verdict !== "N/A") L.push(`- ${esc(r.metrics.armId)} · ${esc(v.id)} · ${esc(v.verdict)}: ${esc(v.evidence)}`);
 
-  L.push("", "## Cobertura da v3.7", "", `| Funcionalidade | ${ids.join(" | ")} |`, `|---|${ids.map(() => "---").join("|")}|`);
+  L.push("", "## Cobertura da v3.7", "", ...head(["Funcionalidade", ...ids.map(esc)]));
   const feats = [...new Set(runs.flatMap((r) => r.coverage.map((c) => c.feature)))];
   for (const f of feats) L.push(`| ${esc(f)} | ${runs.map((r) => (r.coverage.find((c) => c.feature === f)?.exercised ? "sim" : "não")).join(" | ")} |`);
 
   const eco = economy(runs);
-  L.push("", "## Economia", "", "| Braço | Modelo | Entrada | Saída | Cache lido | Cache criado | Custo de lista (US$) |", "|---|---|---|---|---|---|---|");
-  for (const e of eco) for (const [m, u] of Object.entries(e.byModel)) L.push(`| ${e.armId} | ${esc(m)} | ${KEYS.map((k) => fmt(u[k])).join(" | ")} |`);
+  L.push("", "## Economia", "", ...head(["Braço", "Modelo", "Entrada", "Saída", "Cache lido", "Cache criado"]));
+  for (const e of eco) for (const [m, u] of Object.entries(e.byModel)) L.push(`| ${esc(e.armId)} | ${esc(m)} | ${KEYS.map((k) => fmt(u[k])).join(" | ")} |`);
   const base = eco.find((e) => e.armId.startsWith("A"));
   if (base) for (const e of eco.filter((x) => x !== base)) {
-    L.push("", `- ${e.armId} ÷ ${base.armId}: saída ${fmt(e.total.output / (base.total.output || 1))}, custo de lista ${fmt(e.total.costUSD / (base.total.costUSD || 1))}`);
+    L.push("", `- ${esc(e.armId)} ÷ ${esc(base.armId)}: saída ${fmt(e.total.output / (base.total.output || 1))}, custo de lista ${fmt(e.total.costUSD / (base.total.costUSD || 1))}`);
   }
-  L.push("", "O custo de lista é um peso por modelo, não o consumo da cota da assinatura (que não é público).");
+  L.push("", "Fonte: transcripts deduplicados. O custo de lista vem do modelUsage do stream e é um peso por modelo, não o consumo da cota da assinatura.");
+  for (const { metrics: m } of runs) if (typeof m.tokens?.streamDeltaPct === "number" && m.tokens.streamDeltaPct > 5) L.push(`- Alerta ${esc(m.armId)}: stream e transcripts divergem ${fmt(m.tokens.streamDeltaPct)}% na saída.`);
 
-  L.push("", "## Qualidade", "", "| Braço | Aceitação | PREVC completo | Invocações |", "|---|---|---|---|");
-  for (const { metrics: m } of runs) L.push(`| ${m.armId} | ${m.acceptance ? `${m.acceptance.passed}/${m.acceptance.total}` : "—"} | ${m.complete ? "sim" : "não"} | ${m.invocations ?? "—"} |`);
-
-  L.push("", "## Por agente", "", "| Braço | Agente | Despachos | Modelos |", "|---|---|---|---|");
+  L.push("", "## Por agente", "", ...head(["Braço", "Agente", "Despachos", "Modelos", "Saída", "Escaladas"]));
   for (const { metrics: m } of runs) {
     const by = new Map();
-    for (const s of m.subagents ?? []) { const x = by.get(s.agentType) ?? { n: 0, models: new Set() }; x.n++; s.models.forEach((k) => x.models.add(k)); by.set(s.agentType, x); }
-    for (const [t, x] of by) L.push(`| ${m.armId} | ${esc(t)} | ${x.n} | ${[...x.models].join(", ")} |`);
+    for (const s of m.subagents ?? []) {
+      const x = by.get(s.agentType) ?? { n: 0, models: new Set(), out: 0 };
+      x.n++;
+      for (const g of s.messages) { x.models.add(g.model); x.out += g.usage.output; }
+      by.set(s.agentType, x);
+    }
+    const escal = (t) => (m.ledger?.entries ?? []).filter((e) => e.agentType === t && e.escalation?.action === "escalate").length;
+    for (const [t, x] of by) L.push(`| ${esc(m.armId)} | ${esc(t)} | ${x.n} | ${[...x.models].map(esc).join(", ")} | ${x.out} | ${escal(t)} |`);
   }
+
+  L.push("", "## Sessão por fase real", "", ...head(["Braço", "Fase", "Modelo", "Saída"]));
+  for (const { metrics: m } of runs) {
+    const by = new Map();
+    for (const x of m.session ?? []) { const k = `${x.phase ?? "?"}|${x.model}`; by.set(k, (by.get(k) ?? 0) + x.usage.output); }
+    for (const [k, out] of by) { const [ph, model] = k.split("|"); L.push(`| ${esc(m.armId)} | ${esc(ph)} | ${esc(model)} | ${out} |`); }
+  }
+
+  L.push("", "## Cache frio nas trocas", "", "Razão de cache lido na primeira mensagem da sessão após cada troca de modelo.", "");
+  for (const { metrics: m } of runs) {
+    const s = m.session ?? [];
+    for (let i = 1; i < s.length; i++) if (s[i].model !== s[i - 1].model) {
+      const u = s[i].usage, tot = u.input + u.cacheRead + u.cacheCreate;
+      L.push(`- ${esc(m.armId)} · fase ${esc(s[i].phase ?? "?")}: ${esc(s[i - 1].model)} → ${esc(s[i].model)}, cache lido ${fmt(tot ? u.cacheRead / tot : 0)}`);
+    }
+  }
+
+  L.push("", "## Qualidade", "", ...head(["Braço", "Aceitação", "PREVC terminou", "Invocações", "Parada"]));
+  for (const { metrics: m } of runs) L.push(`| ${esc(m.armId)} | ${m.acceptance ? `${m.acceptance.passed}/${m.acceptance.total}` : "—"} | ${m.complete ? "sim" : "não"} | ${fmt(m.invocations)} | ${esc(m.incompleteReason ?? "—")} |`);
+
+  L.push("", "## Ambiente", "", ...head(["Braço", "Claude Code", "DevFlow", "superpowers"]));
+  for (const { metrics: m } of runs) L.push(`| ${esc(m.armId)} | ${esc(m.env?.claudeVersion ?? "—")} | ${esc(m.env?.pluginVersion ?? "—")} | ${esc(m.env?.superpowersVersion ?? "—")} |`);
   return L.join("\n") + "\n";
 }
 ```
@@ -1427,29 +1900,32 @@ export function render({ title, runs }) {
 #!/usr/bin/env node
 // Junta as rodadas de uma campanha e grava results/<nome>/{scorecard.md,summary.json}.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve, basename } from "node:path";
+import { join, resolve, basename, sep } from "node:path";
 import { loadOracle } from "../lib/tiers.mjs";
 import { evaluate, coverage } from "../lib/invariants.mjs";
 import { render } from "../lib/scorecard.mjs";
 
 const a = process.argv.slice(2);
 const oi = a.indexOf("--out");
-if (oi < 0 || !a[oi + 1]) { console.error("uso: score.mjs --out results/<nome> runs/<id>..."); process.exit(2); }
+if (oi < 0 || !a[oi + 1]) { console.error("uso: score.mjs --out results/<nome> <runDir>..."); process.exit(2); }
 const out = resolve(a[oi + 1]);
 const LAB = resolve(new URL("..", import.meta.url).pathname);
-if (!out.startsWith(join(LAB, "results") + "/")) { console.error("score: --out deve ficar em results/"); process.exit(2); }
+if (!out.startsWith(join(LAB, "results") + sep)) { console.error("score: --out deve ficar em results/"); process.exit(2); }
 const dirs = a.filter((_, i) => i !== oi && i !== oi + 1);
 const o = loadOracle();
-const runs = dirs.map((d) => { const metrics = JSON.parse(readFileSync(join(d, "metrics.json"), "utf8")); return { metrics, verdicts: evaluate(o, metrics), coverage: coverage(metrics) }; });
+const runs = dirs.map((d) => { const metrics = JSON.parse(readFileSync(join(d, "metrics.json"), "utf8")); return { metrics, verdicts: evaluate(o, metrics), coverage: coverage(o, metrics) }; });
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, "scorecard.md"), render({ title: `Campanha ${basename(out)}`, runs }));
-writeFileSync(join(out, "summary.json"), JSON.stringify(runs.map((r) => ({ armId: r.metrics.armId, verdicts: r.verdicts.map(({ id, verdict }) => ({ id, verdict })), coverage: r.coverage.map(({ feature, exercised }) => ({ feature, exercised })), tokens: r.metrics.tokens, acceptance: r.metrics.acceptance })), null, 2) + "\n");
+writeFileSync(join(out, "summary.json"), JSON.stringify(runs.map((r) => ({
+  armId: r.metrics.armId, verdicts: r.verdicts.map(({ id, verdict }) => ({ id, verdict })),
+  coverage: r.coverage.map(({ feature, exercised }) => ({ feature, exercised })), tokens: r.metrics.tokens.byModel, acceptance: r.metrics.acceptance,
+})), null, 2) + "\n");
 process.stdout.write(join(out, "scorecard.md") + "\n");
 ```
 
-- [ ] **Step 4: Rodar e ver passar** → PASS (2)
+- [ ] **Step 4: Rodar e ver passar** → PASS (3)
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): scorecard da campanha"`
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(lab): scorecard com economia por agente e fase, cache frio e escape"`
 
 ---
 
@@ -1463,9 +1939,9 @@ process.stdout.write(join(out, "scorecard.md") + "\n");
 
 **Interfaces:**
 - Consumes: `modelsYaml` (Task 1).
-- Produces: `materialize({ seedDir, briefPath, arm, wsDir }) → void` (cria o workspace com um commit inicial em `main`); constantes `FIRST_PROMPT`, `RESUME_PROMPT`.
+- Produces: `materialize({ seedDir, briefPath, arm, wsDir })`; `FIRST_PROMPT`, `RESUME_PROMPT`, `PREFLIGHT_PROMPT`.
 
-- [ ] **Step 1: Escrever o brief** — `brief/PRODUCT.md`, em pt-BR, com **exatamente** este contrato (a suíte oculta da Task 10 depende dele):
+- [ ] **Step 1: Escrever o brief** — `brief/PRODUCT.md`, com **exatamente** este contrato (a suíte oculta depende dele):
 
 ```markdown
 # shortlink — encurtador de links
@@ -1519,9 +1995,9 @@ data/
 pt-BR
 ```
 
-`seed/.mcp.json` — mesma entrada `dotcontext` do `.mcp.json` do repo `devflow`:
+`seed/.mcp.json` — versão **exata** do dotcontext (spec L16). Rode `npm view @dotcontext/cli version` e use o número retornado (na revisão R era `1.1.1`):
 ```json
-{ "mcpServers": { "dotcontext": { "command": "npx", "args": ["-y", "@dotcontext/cli@latest", "--lang", "pt-BR", "mcp"] } } }
+{ "mcpServers": { "dotcontext": { "command": "npx", "args": ["-y", "@dotcontext/cli@1.1.1", "--lang", "pt-BR", "mcp"] } } }
 ```
 
 `seed/.context/.devflow.yaml.tmpl`:
@@ -1552,28 +2028,31 @@ import { mkdtempSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materialize, FIRST_PROMPT, RESUME_PROMPT } from "../../lib/seed.mjs";
+import { materialize, FIRST_PROMPT, RESUME_PROMPT, PREFLIGHT_PROMPT } from "../../lib/seed.mjs";
 import { loadArm } from "../../lib/arm.mjs";
 
 const LAB = new URL("../..", import.meta.url).pathname;
 const arm = (id) => loadArm(JSON.parse(readFileSync(join(LAB, "arms", `${id}.json`), "utf8")));
 const ws = (id) => { const d = join(mkdtempSync(join(tmpdir(), "lab-seed-")), "ws"); materialize({ seedDir: join(LAB, "seed"), briefPath: join(LAB, "brief/PRODUCT.md"), arm: arm(id), wsDir: d }); return d; };
+const git = (d, ...a) => execFileSync("git", ["-C", d, ...a], { encoding: "utf8" }).trim();
 
-test("workspace B: brief, .devflow.yaml com models, um commit em main, sem acceptance", () => {
+test("workspace B: brief, .devflow.yaml com models, um commit em main, sem remoto e sem acceptance", () => {
   const d = ws("B-routed");
   assert.ok(existsSync(join(d, "PRODUCT.md")));
   const y = readFileSync(join(d, ".context/.devflow.yaml"), "utf8");
   assert.match(y, /\nmodels:\n  enabled: true\n/);
   assert.ok(!y.includes("{{MODELS}}"));
   assert.ok(!existsSync(join(d, ".context/.devflow.yaml.tmpl")));
-  assert.equal(execFileSync("git", ["-C", d, "rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim(), "1");
-  assert.equal(execFileSync("git", ["-C", d, "branch", "--show-current"], { encoding: "utf8" }).trim(), "main");
-  assert.equal(execFileSync("git", ["-C", d, "remote"], { encoding: "utf8" }).trim(), "");
+  assert.deepEqual([git(d, "rev-list", "--count", "HEAD"), git(d, "branch", "--show-current"), git(d, "remote")], ["1", "main", ""]);
   assert.ok(!readdirSync(d, { recursive: true }).some((p) => String(p).includes("acceptance")));
 });
 
-test("workspace A: sem bloco models", () => {
-  assert.doesNotMatch(readFileSync(join(ws("A-baseline"), ".context/.devflow.yaml"), "utf8"), /models:/);
+test("workspace A: sem bloco models; .mcp.json com versão fixa do dotcontext", () => {
+  const d = ws("A-baseline");
+  assert.doesNotMatch(readFileSync(join(d, ".context/.devflow.yaml"), "utf8"), /models:/);
+  const mcp = readFileSync(join(d, ".mcp.json"), "utf8");
+  assert.match(mcp, /@dotcontext\/cli@\d+\.\d+\.\d+"/);
+  assert.doesNotMatch(mcp, /@latest/);
 });
 
 test("workspace já existente é recusado", () => {
@@ -1581,9 +2060,10 @@ test("workspace já existente é recusado", () => {
   assert.throws(() => materialize({ seedDir: join(LAB, "seed"), briefPath: join(LAB, "brief/PRODUCT.md"), arm: arm("A-baseline"), wsDir: d }), /já existe/);
 });
 
-test("prompts: o primeiro chama o devflow em modo auto; o de retomada pede merge local", () => {
+test("prompts", () => {
   assert.match(FIRST_PROMPT, /^\/devflow:devflow auto /);
   assert.match(RESUME_PROMPT, /merge local/);
+  assert.equal(PREFLIGHT_PROMPT, "Responda apenas: ok");
 });
 ```
 
@@ -1601,6 +2081,7 @@ import { modelsYaml } from "./arm.mjs";
 
 export const FIRST_PROMPT = "/devflow:devflow auto Construa o produto descrito em PRODUCT.md, percorrendo o PREVC inteiro.";
 export const RESUME_PROMPT = "Continue o workflow PREVC em modo autônomo a partir do estado atual, sem pedir confirmação. Na finalização, escolha merge local na main.";
+export const PREFLIGHT_PROMPT = "Responda apenas: ok";
 
 export function materialize({ seedDir, briefPath, arm, wsDir }) {
   if (existsSync(wsDir)) throw new Error(`workspace já existe: ${wsDir}`);
@@ -1610,7 +2091,7 @@ export function materialize({ seedDir, briefPath, arm, wsDir }) {
   writeFileSync(join(wsDir, ".context/.devflow.yaml"), readFileSync(tmpl, "utf8").replace("{{MODELS}}", modelsYaml(arm.models)));
   rmSync(tmpl);
   cpSync(briefPath, join(wsDir, "PRODUCT.md"));
-  const git = (...a) => execFileSync("git", ["-C", wsDir, ...a], { stdio: "ignore" });
+  const git = (...a) => execFileSync("git", ["-C", wsDir, ...a], { stdio: "ignore", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
   git("init", "-q", "-b", "main");
   git("config", "user.name", "routing-lab");
   git("config", "user.email", "routing-lab@localhost");
@@ -1621,13 +2102,13 @@ export function materialize({ seedDir, briefPath, arm, wsDir }) {
 
 - [ ] **Step 6: Rodar e ver passar** → PASS (4)
 
-- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): brief do shortlink, seed e materialização do workspace"`
+- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): brief do shortlink, seed com dotcontext fixo e workspace"`
 
 ---
 
 ### Task 10: Suíte de aceitação oculta e implementação de referência
 
-**Agent:** test-writer · **Tier:** standard · **Tests:** unit + e2e
+**Agent:** test-writer · **Tier:** standard · **Tests:** unit + e2e · **Revisão:** pesada (security-auditor)
 
 **Files:**
 - Create: `fixtures/shortlink-ref/src/server.mjs`, `fixtures/shortlink-ref/src/cli.mjs`, `fixtures/shortlink-broken/src/server.mjs`
@@ -1636,9 +2117,9 @@ export function materialize({ seedDir, briefPath, arm, wsDir }) {
 - Test: `tests/unit/accept.test.mjs`
 
 **Interfaces:**
-- Produces: `runAcceptance(wsDir) → Promise<{ passed, total, error? }>`; CLI `node scripts/accept.mjs --ws <dir> [--out <arquivo>]`. Env `SHORTLINK_WS` indica à suíte qual workspace subir.
+- Produces: `runAcceptance(wsDir, { timeoutMs? }) → Promise<{ passed, total, error? }>`; CLI `node scripts/accept.mjs --ws <dir> [--out <arquivo>]`. A suíte lê `SHORTLINK_WS`.
 
-- [ ] **Step 1: Escrever a suíte (os testes que a referência deve passar)**
+- [ ] **Step 1: Escrever a suíte**
 
 `acceptance/helpers.mjs`:
 ```js
@@ -1651,21 +2132,24 @@ import { promisify } from "node:util";
 
 export const WS = process.env.SHORTLINK_WS;
 export const TOKEN = "tok-123";
+const base = () => ({ PATH: process.env.PATH, HOME: process.env.HOME });
 const freePort = () => new Promise((res) => { const s = createServer(); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => res(p)); }); });
 
 export async function start({ data = mkdtempSync(join(tmpdir(), "sl-data-")), rate = "1000/1" } = {}) {
   const port = await freePort();
-  const proc = spawn("node", [join(WS, "src/server.mjs"), "--port", String(port), "--data", data], { env: { ...process.env, SHORTLINK_TOKEN: TOKEN, SHORTLINK_RATE_LIMIT: rate }, stdio: "ignore" });
-  const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 50; i++) { try { await fetch(`${base}/__ping`); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
-  return { base, data, stop: () => new Promise((r) => { proc.once("exit", r); proc.kill(); }) };
+  const proc = spawn(process.execPath, [join(WS, "src/server.mjs"), "--port", String(port), "--data", data],
+    { cwd: data, env: { ...base(), SHORTLINK_TOKEN: TOKEN, SHORTLINK_RATE_LIMIT: rate }, stdio: "ignore" });
+  const url = `http://127.0.0.1:${port}`;
+  for (let i = 0; i < 50 && proc.exitCode === null; i++) { try { await fetch(`${url}/__ping`); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
+  const stop = () => new Promise((r) => { if (proc.exitCode !== null || proc.signalCode !== null) return r(); proc.once("exit", r); proc.kill(); });
+  return { base: url, data, stop };
 }
 
-export const req = (base, path, { method = "GET", token = TOKEN, body, raw } = {}) =>
-  fetch(base + path, { method, redirect: "manual", headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json" }, body: raw ?? (body ? JSON.stringify(body) : undefined) });
+export const req = (url, path, { method = "GET", token = TOKEN, body, raw } = {}) =>
+  fetch(url + path, { method, redirect: "manual", headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json" }, body: raw ?? (body ? JSON.stringify(body) : undefined) });
 
-export const cli = (base, args) => promisify(execFile)("node", [join(WS, "src/cli.mjs"), ...args, "--server", base], { env: { ...process.env, SHORTLINK_TOKEN: TOKEN } })
-  .then((r) => ({ code: 0, out: r.stdout.trim() }), (e) => ({ code: e.code ?? 1, out: (e.stdout ?? "").trim() }));
+export const cli = (url, args) => promisify(execFile)(process.execPath, [join(WS, "src/cli.mjs"), ...args, "--server", url], { cwd: tmpdir(), env: { ...base(), SHORTLINK_TOKEN: TOKEN }, timeout: 15000 })
+  .then((r) => ({ code: 0, out: r.stdout.trim() }), (e) => ({ code: typeof e.code === "number" ? e.code : 1, out: (e.stdout ?? "").trim() }));
 ```
 
 `acceptance/api.test.mjs`:
@@ -1707,8 +2191,7 @@ test("redirect 302 com Location e contagem de hits", async () => {
   assert.equal(r.status, 302);
   assert.equal(r.headers.get("location"), "https://d.com");
   await req(s.base, "/hitme", { token: null });
-  const st = await (await req(s.base, "/links/hitme/stats")).json();
-  assert.deepEqual(st, { slug: "hitme", url: "https://d.com", hits: 2 });
+  assert.deepEqual(await (await req(s.base, "/links/hitme/stats")).json(), { slug: "hitme", url: "https://d.com", hits: 2 });
 });
 test("404 para slug desconhecido em GET, stats e DELETE; stats exige auth", async () => {
   assert.equal((await req(s.base, "/naoexiste", { token: null })).status, 404);
@@ -1726,8 +2209,7 @@ test("persistência: reinício com o mesmo --data preserva link e hits", async (
   await req(s.base, "/fica", { token: null });
   await s.stop();
   s = await start({ data: s.data });
-  const st = await (await req(s.base, "/links/fica/stats")).json();
-  assert.equal(st.hits, 1);
+  assert.equal((await (await req(s.base, "/links/fica/stats")).json()).hits, 1);
 });
 ```
 
@@ -1778,18 +2260,18 @@ before(async () => { s = await start(); });
 after(() => s.stop());
 
 test("add → get → stats → rm", async () => {
-  const add = await cli(s.base, ["add", "https://cli.com", "--slug", "pelacli"]);
-  assert.deepEqual(add, { code: 0, out: "pelacli" });
+  assert.deepEqual(await cli(s.base, ["add", "https://cli.com", "--slug", "pelacli"]), { code: 0, out: "pelacli" });
   assert.deepEqual(await cli(s.base, ["get", "pelacli"]), { code: 0, out: "https://cli.com" });
   assert.deepEqual(await cli(s.base, ["stats", "pelacli"]), { code: 0, out: "0" });
   assert.equal((await cli(s.base, ["rm", "pelacli"])).code, 0);
 });
-test("erro HTTP → código 1", async () => {
-  assert.equal((await cli(s.base, ["get", "naoexiste"])).code, 1);
+test("erro HTTP → código 1 e nada no stdout (com a CLI comprovadamente viva)", async () => {
+  assert.equal((await cli(s.base, ["add", "https://x.com", "--slug", "existe"])).code, 0);
+  assert.deepEqual(await cli(s.base, ["get", "naoexiste"]), { code: 1, out: "" });
 });
 ```
 
-- [ ] **Step 2: Escrever a implementação de referência**
+- [ ] **Step 2: Escrever a implementação de referência e o controle quebrado**
 
 `fixtures/shortlink-ref/src/server.mjs`:
 ```js
@@ -1852,17 +2334,17 @@ createServer(async (req, res) => {
       if (!validUrl(b?.url)) return send(res, 400, { error: "invalid url" });
       let s = b.slug;
       if (s !== undefined && !(typeof s === "string" && SLUG.test(s))) return send(res, 400, { error: "invalid slug" });
-      if (s === undefined) do { s = Array.from({ length: 7 }, () => ALNUM[randomInt(ALNUM.length)]).join(""); } while (db[s]);
-      if (db[s]) return send(res, 409, { error: "exists" });
+      if (s === undefined) do { s = Array.from({ length: 7 }, () => ALNUM[randomInt(ALNUM.length)]).join(""); } while (Object.hasOwn(db, s));
+      if (Object.hasOwn(db, s)) return send(res, 409, { error: "exists" });
       db[s] = { url: b.url, hits: 0 }; save();
       return send(res, 201, { slug: s, url: b.url });
     }
-    if (slug && stats && req.method === "GET") return db[slug] ? send(res, 200, { slug, url: db[slug].url, hits: db[slug].hits }) : send(res, 404, { error: "not found" });
-    if (slug && !stats && req.method === "DELETE") { if (!db[slug]) return send(res, 404, { error: "not found" }); delete db[slug]; save(); return send(res, 204); }
+    if (slug && stats && req.method === "GET") return Object.hasOwn(db, slug) ? send(res, 200, { slug, url: db[slug].url, hits: db[slug].hits }) : send(res, 404, { error: "not found" });
+    if (slug && !stats && req.method === "DELETE") { if (!Object.hasOwn(db, slug)) return send(res, 404, { error: "not found" }); delete db[slug]; save(); return send(res, 204); }
     return send(res, 404, { error: "not found" });
   }
   const slug = pathname.slice(1);
-  if (req.method === "GET" && db[slug]) { db[slug].hits++; save(); return send(res, 302, null, { location: db[slug].url }); }
+  if (req.method === "GET" && Object.hasOwn(db, slug)) { db[slug].hits++; save(); return send(res, 302, null, { location: db[slug].url }); }
   return send(res, 404, { error: "not found" });
 }).listen(port, "127.0.0.1");
 ```
@@ -1870,8 +2352,8 @@ createServer(async (req, res) => {
 `fixtures/shortlink-ref/src/cli.mjs`:
 ```js
 // CLI de referência do brief.
-const [cmd, a1, ...rest] = process.argv.slice(2);
 const all = process.argv.slice(2);
+const [cmd, a1] = all;
 const opt = (k) => { const i = all.indexOf(k); return i >= 0 ? all[i + 1] : undefined; };
 const base = opt("--server");
 const auth = { authorization: `Bearer ${process.env.SHORTLINK_TOKEN ?? ""}`, "content-type": "application/json" };
@@ -1886,7 +2368,7 @@ const run = async () => {
 run().catch((e) => { process.stderr.write(String(e.message) + "\n"); process.exit(1); });
 ```
 
-`fixtures/shortlink-broken/src/server.mjs` (serve tudo com 500, para provar que a suíte reprova):
+`fixtures/shortlink-broken/src/server.mjs` (responde 500 a tudo, para provar que a suíte reprova):
 ```js
 import { createServer } from "node:http";
 const i = process.argv.indexOf("--port");
@@ -1899,7 +2381,7 @@ createServer((req, res) => { res.writeHead(500); res.end(); }).listen(Number(pro
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAcceptance } from "../../lib/accept.mjs";
@@ -1908,8 +2390,8 @@ const LAB = new URL("../..", import.meta.url).pathname;
 
 test("referência passa em tudo", async () => {
   const r = await runAcceptance(join(LAB, "fixtures/shortlink-ref"));
-  assert.ok(r.total >= 13, `total=${r.total}`);
-  assert.equal(r.passed, r.total);
+  assert.equal(r.total, 13);
+  assert.equal(r.passed, 13);
 });
 test("implementação quebrada reprova", async () => {
   const r = await runAcceptance(join(LAB, "fixtures/shortlink-broken"));
@@ -1920,6 +2402,14 @@ test("workspace sem src/server.mjs → passed 0 com erro, sem travar", async () 
   assert.equal(r.passed, 0);
   assert.match(r.error, /server\.mjs/);
 });
+test("servidor que morre ao subir não trava a suíte", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "lab-acc-"));
+  mkdirSync(join(ws, "src"));
+  writeFileSync(join(ws, "src/server.mjs"), "process.exit(1);\n");
+  const r = await runAcceptance(ws, { timeoutMs: 60000 });
+  assert.equal(r.passed, 0);
+  assert.ok(r.total > 0 || r.error);
+});
 ```
 
 - [ ] **Step 4: Rodar e ver falhar** — `node --test tests/unit/accept.test.mjs` → FAIL (`Cannot find module .../lib/accept.mjs`)
@@ -1928,24 +2418,31 @@ test("workspace sem src/server.mjs → passed 0 com erro, sem travar", async () 
 
 `lib/accept.mjs`:
 ```js
-// lib/accept.mjs — roda a suíte oculta de fora do workspace (spec L4).
+// lib/accept.mjs — roda a suíte oculta de fora do workspace, com env mínimo e grupo de processos (spec §10).
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const SUITE = new URL("../acceptance/", import.meta.url).pathname;
 
-export function runAcceptance(wsDir, { timeoutMs = 120000 } = {}) {
+export function runAcceptance(wsDir, { timeoutMs = 180000 } = {}) {
   if (!existsSync(join(wsDir, "src/server.mjs"))) return Promise.resolve({ passed: 0, total: 0, error: "workspace sem src/server.mjs" });
+  const box = mkdtempSync(join(tmpdir(), "lab-accept-"));
+  mkdirSync(join(box, "home"));
   return new Promise((resolve) => {
-    const p = spawn("node", ["--test", "--test-reporter=tap", "--test-concurrency=1", SUITE], { env: { ...process.env, SHORTLINK_WS: wsDir } });
+    const p = spawn(process.execPath, ["--test", "--test-reporter=tap", "--test-concurrency=1", SUITE],
+      { cwd: box, env: { PATH: process.env.PATH, HOME: join(box, "home"), SHORTLINK_WS: wsDir }, detached: true, stdio: ["ignore", "pipe", "ignore"] });
     let out = "";
     p.stdout.on("data", (c) => { out += c; });
-    const t = setTimeout(() => p.kill("SIGKILL"), timeoutMs);
+    const killGroup = () => { try { process.kill(-p.pid, "SIGKILL"); } catch {} };
+    const t = setTimeout(killGroup, timeoutMs);
     p.on("close", () => {
       clearTimeout(t);
+      killGroup(); // servidores órfãos do código do agente
       const num = (k) => Number(out.match(new RegExp(`^# ${k} (\\d+)$`, "m"))?.[1] ?? 0);
-      resolve({ passed: num("pass"), total: num("tests") });
+      const total = num("tests");
+      resolve({ passed: num("pass"), total, ...(total ? {} : { error: "suíte sem resumo TAP" }) });
     });
   });
 }
@@ -1960,75 +2457,105 @@ import { runAcceptance } from "../lib/accept.mjs";
 const a = process.argv.slice(2);
 const opt = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undefined; };
 if (!opt("--ws")) { console.error("uso: accept.mjs --ws <dir> [--out <arquivo>]"); process.exit(2); }
-const r = await runAcceptance(resolve(opt("--ws")));
-const json = JSON.stringify(r) + "\n";
+const json = JSON.stringify(await runAcceptance(resolve(opt("--ws")))) + "\n";
 if (opt("--out")) writeFileSync(opt("--out"), json); else process.stdout.write(json);
 ```
 
-- [ ] **Step 6: Rodar e ver passar** — `node --test tests/unit/accept.test.mjs` → PASS (3). Se um caso da suíte falhar contra a referência, o erro está na suíte ou na referência — corrija aqui (é código do laboratório, não estímulo).
+- [ ] **Step 6: Rodar e ver passar** — `node --test tests/unit/accept.test.mjs` → PASS (4). Falha da suíte contra a referência = erro na suíte ou na referência (código do laboratório): corrija aqui.
 
-- [ ] **Step 7: Commit** — `git add -A && git commit -m "test(lab): suíte de aceitação oculta com referência e controle quebrado"`
+- [ ] **Step 7: Commit** — `git add -A && git commit -m "test(lab): suíte de aceitação oculta isolada, referência e controle quebrado"`
 
 ---
 
 ### Task 11: Driver da rodada e coleta
 
-**Agent:** backend-specialist · **Tier:** capable · **Tests:** e2e
+**Agent:** backend-specialist · **Tier:** capable · **Tests:** e2e · **Revisão:** pesada (security-auditor)
 
 **Files:**
 - Create: `lib/collect.mjs`, `scripts/run-arm.mjs`, `scripts/collect.mjs`, `tests/e2e/fake-claude.mjs`
 - Test: `tests/e2e/run-arm.test.mjs`
 
 **Interfaces:**
-- Consumes: Tasks 1, 4, 5, 6, 9, 10.
-- Produces: `node scripts/run-arm.mjs --arm arms/<id>.json --runs runs [--plugin-dir D] [--claude-bin claude] [--max-resumes 6] [--run-id ID]` → `runs/<id>/{run.json, stream-<n>.jsonl, ws/, xdg/}`, imprime o caminho da rodada. `collectRun(runDir, { projectsRoot, pluginDir }) → Metrics` e `node scripts/collect.mjs --run runs/<id> [--projects-root D] [--plugin-dir D]` → `runs/<id>/metrics.json` (inclui `acceptance`). `run.json = { armId, routing, ceiling, sessionIds, invocations, exitCodes, done, startedAt, endedAt }`.
+- Consumes: Tasks 1, 3, 4, 5, 6, 9, 10.
+- Produces:
+  - `node scripts/run-arm.mjs --arm arms/<id>.json [--runs DIR] [--plugin-dir D] [--superpowers-dir D] [--claude-bin claude] [--max-resumes 0..20] [--timeout-min N] [--run-id ID] [--allow-home]` → `<runs>/<id>/{run.json, stream-preflight.jsonl, stream-<n>.jsonl, prevc-<n>.json, ws/, xdg/, gh/, gitconfig}`; imprime o caminho da rodada. Saída 0 (terminou ou parou honestamente), 2 (uso inválido), 3 (preflight reprovado).
+  - `run.json = { armId, routing, ceiling, claudeVersion, pluginVersion, superpowersVersion, sessionIds, invocations, exitCodes, killed, done, incompleteReason, preflightProblems?, startedAt, endedAt }`.
+  - `collectRun(runDir, { projectsRoot }) → Metrics` (formato da Task 7; subagentes ordenados pelo primeiro timestamp); `node scripts/collect.mjs --run <runDir> [--projects-root D] [--plugin-dir D] [--no-report]` → `metrics.json` (inclui `acceptance`) e `report.md` (só na rodada).
 
-- [ ] **Step 1: Escrever o `claude` falso**
+- [ ] **Step 1: Escrever o `claude` falso** (formato real, sondas da fase R)
 
-`tests/e2e/fake-claude.mjs` (simula duas invocações: a 1ª conclui P/R/E e para; a retomada conclui V/C):
+`tests/e2e/fake-claude.mjs`:
 ```js
 #!/usr/bin/env node
-// `claude` falso para o e2e: escreve stream-json, transcripts, ledger e prevc.json canônicos.
+// `claude` falso para o e2e, no formato real (spec §13): stream-json com init; transcripts com timestamp, effort e
+// attributionSkill; ledger um arquivo por processo (spawn com ID completo + usage; sessão sem effort); prevc.json com timestamps.
 import { mkdirSync, writeFileSync, appendFileSync, cpSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const argv = process.argv.slice(2);
-const resume = argv.includes("--resume") ? argv[argv.indexOf("--resume") + 1] : null;
+if (argv[0] === "--version") { process.stdout.write("2.1.295 (Claude Code)\n"); process.exit(0); }
+const E = process.env;
+if (E.ROUTING_LAB_FAKE_ENV_DUMP) writeFileSync(E.ROUTING_LAB_FAKE_ENV_DUMP, Object.keys(E).sort().join("\n"));
+const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
+const dirs = argv.filter((_, i) => argv[i - 1] === "--plugin-dir");
+const prompt = val("-p");
+const resume = val("--resume");
+const routed = E.DEVFLOW_MODEL_ROUTING === "1";
+const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+const init = (sid) => out({ type: "system", subtype: "init", session_id: sid, model: "claude-opus-5-5",
+  plugins: [{ name: "devflow", path: dirs[0] }, { name: "superpowers", path: dirs[1] }],
+  mcp_servers: E.ROUTING_LAB_FAKE_PREFLIGHT_FAIL ? [] : [{ name: "dotcontext", status: "connected" }] });
+const result = (sid, model, cost, subtype = "success") => out({ type: "result", subtype, is_error: subtype !== "success", num_turns: 3, terminal_reason: "completed", session_id: sid,
+  modelUsage: { [model]: { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 100, cacheCreationInputTokens: 20, costUSD: cost } }, subagent_stats: { spawned: 1, completed: 1, failed: 0 } });
+
+if (prompt?.startsWith("Responda apenas")) { init("pre-0"); result("pre-0", "claude-haiku-5-5", 0.001); process.exit(0); }
+
 const sid = resume ?? "11111111-2222-3333-4444-555555555555";
 const ws = process.cwd();
-const proj = join(process.env.FAKE_PROJECTS_ROOT, ws.replace(/[^A-Za-z0-9]/g, "-"));
+const proj = join(E.ROUTING_LAB_FAKE_PROJECTS, ws.replace(/[^A-Za-z0-9]/g, "-"));
 mkdirSync(join(proj, sid, "subagents"), { recursive: true });
-const msg = (id, model, effort) => JSON.stringify({ type: "assistant", effort, timestamp: "2026-10-09T10:00:00Z", message: { id, model, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 } } });
-const pv = (phases) => { mkdirSync(join(ws, ".context/runtime/workflows"), { recursive: true }); writeFileSync(join(ws, ".context/runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { name: "shortlink", scale: 3, current_phase: Object.keys(phases).at(-1) }, phases } })); };
-const routed = process.env.DEVFLOW_MODEL_ROUTING === "1";
-const led = routed ? join(process.env.XDG_DATA_HOME, "devflow-model-routing", "fake") : null;
-if (led) mkdirSync(led, { recursive: true });
-const L = (e) => led && appendFileSync(join(led, `${sid}.jsonl`), JSON.stringify({ ts: "2026-10-09T10:00:00Z", adapter: "mod", ...e }) + "\n");
+const ts = (hm) => `2026-10-09T${hm}:00.000Z`;
+let k = 0;
+const msg = (hm, model, effort, skill) => JSON.stringify({ type: "assistant", timestamp: ts(hm), effort, ...(skill ? { attributionSkill: skill } : {}),
+  message: { id: `m${resume ? 2 : 1}-${k++}`, model, content: [{ type: "text", text: "SEGREDO" }], usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 } } });
+const sub = (id, type, req, lines) => {
+  writeFileSync(join(proj, sid, `subagents/agent-${id}.meta.json`), JSON.stringify({ agentType: type, ...(req ? { model: req } : {}), description: "SEGREDO" }));
+  writeFileSync(join(proj, sid, `subagents/agent-${id}.jsonl`), lines.join("\n") + "\n");
+};
+const ph = (s, e) => ({ status: e ? "completed" : "in_progress", started_at: ts(s), ...(e ? { completed_at: ts(e) } : {}) });
+const prevc = (phases, current) => {
+  mkdirSync(join(ws, ".context/runtime/workflows"), { recursive: true });
+  writeFileSync(join(ws, ".context/runtime/workflows/prevc.json"), JSON.stringify({ version: 2, status: { project: { name: "shortlink", scale: 3, current_phase: current }, phases } }));
+};
+const led = routed ? join(E.XDG_DATA_HOME, "devflow-model-routing", "abcdef0123456789") : null;
+const L = (file, e) => { if (!led) return; mkdirSync(led, { recursive: true }); appendFileSync(join(led, file), JSON.stringify({ ts: "2026-10-09T10:00:00.000Z", sessionId: file.slice(0, -6), adapter: "mod", ...e }) + "\n"); };
+const U = { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+const big = routed ? "claude-sonnet-5-5" : "claude-opus-5-5";
 
+init(sid);
 if (!resume) {
-  appendFileSync(join(proj, `${sid}.jsonl`), [msg("m1", "claude-opus-5-5", "xhigh"), msg("m2", "claude-opus-5-5", "xhigh")].join("\n") + "\n");
-  writeFileSync(join(proj, sid, "subagents/agent-r1.meta.json"), JSON.stringify({ agentType: "devflow:code-reviewer", model: routed ? "opus" : undefined }));
-  writeFileSync(join(proj, sid, "subagents/agent-r1.jsonl"), msg("r1", "claude-opus-5-5", "high") + "\n");
-  L({ scope: "subagent", agentId: "r1", agentType: "devflow:code-reviewer", phase: "R", tier: "capable", source: "phase" });
-  pv({ P: { status: "completed" }, R: { status: "completed" }, E: { status: "in_progress" } });
+  if (E.ROUTING_LAB_FAKE_RESULT_ERROR) { result(sid, "claude-opus-5-5", 0.1, "error_during_execution"); process.exit(1); }
+  appendFileSync(join(proj, `${sid}.jsonl`), [msg("10:01", "claude-opus-5-5", "xhigh", "superpowers:brainstorming"), msg("10:11", "claude-opus-5-5", "xhigh")].join("\n") + "\n");
+  sub("r1", "devflow:code-reviewer", routed ? "opus" : null, [msg("10:12", "claude-opus-5-5", "medium"), msg("10:13", "claude-opus-5-5", "high")]);
+  L("proc1.jsonl", { scope: "subagent", agentId: "r1", agentType: "devflow:code-reviewer", model: "claude-opus-5-5", phase: "R", tier: "capable", ceiling: "capable", effort: "medium", source: "phase" });
+  L("proc1.jsonl", { scope: "subagent", agentId: "r1", agentType: "devflow:code-reviewer", model: "claude-opus-5-5", phase: "R", usage: U });
+  L("proc1.jsonl", { scope: "session", model: "claude-opus-5-5", phase: "P", usage: U });
+  prevc({ P: ph("10:00", "10:10"), R: ph("10:10", "10:20"), E: ph("10:20") }, "E");
+  result(sid, "claude-opus-5-5", routed ? 0.4 : 0.5);
 } else {
-  const m = routed ? "claude-sonnet-5-5" : "claude-opus-5-5";
-  appendFileSync(join(proj, `${sid}.jsonl`), [msg("m3", m, routed ? "medium" : "xhigh")].join("\n") + "\n");
-  writeFileSync(join(proj, sid, "subagents/agent-d1.meta.json"), JSON.stringify({ agentType: "devflow:documentation-writer" }));
-  writeFileSync(join(proj, sid, "subagents/agent-d1.jsonl"), msg("d1", routed ? "claude-haiku-5-5" : "claude-opus-5-5", routed ? "low" : "xhigh") + "\n");
-  L({ scope: "session", phase: "E", switched: true, effort: "medium", skill: "devflow:prevc-execution", model: m });
-  L({ scope: "subagent", agentId: "d1", agentType: "devflow:documentation-writer", phase: "C", tier: "cheap", source: "agent" });
-  pv({ P: { status: "completed" }, R: { status: "completed" }, E: { status: "completed" }, V: { status: "completed" }, C: { status: "completed" } });
-  if (process.env.FAKE_REF && !existsSync(join(ws, "src"))) cpSync(join(process.env.FAKE_REF, "src"), join(ws, "src"), { recursive: true });
+  appendFileSync(join(proj, `${sid}.jsonl`), [msg("10:21", big, routed ? "medium" : "xhigh", "devflow:prevc-execution"), msg("10:41", big, routed ? "medium" : "xhigh"),
+    msg("10:51", big, routed ? "low" : "xhigh", "devflow:prevc-confirmation")].join("\n") + "\n");
+  sub("d1", "devflow:documentation-writer", routed ? "haiku" : null, [msg("10:52", routed ? "claude-haiku-5-5" : "claude-opus-5-5", "low")]);
+  L("proc2.jsonl", { scope: "subagent", agentId: "d1", agentType: "devflow:documentation-writer", model: "claude-haiku-5-5", phase: "C", tier: "cheap", ceiling: "capable", effort: "low", source: "agent" });
+  L("proc2.jsonl", { scope: "subagent", agentId: "d1", agentType: "devflow:documentation-writer", model: "claude-haiku-5-5", phase: "C", usage: U });
+  L("proc2.jsonl", { scope: "session", model: big, phase: "E", switched: true, usage: U });
+  prevc({ P: ph("10:00", "10:10"), R: ph("10:10", "10:20"), E: ph("10:20", "10:40"), V: ph("10:40", "10:50"), C: ph("10:50", "11:00") }, "C");
+  if (E.ROUTING_LAB_FAKE_REF && !existsSync(join(ws, "src"))) cpSync(join(E.ROUTING_LAB_FAKE_REF, "src"), join(ws, "src"), { recursive: true });
+  result(sid, big, routed ? 0.2 : 0.5);
 }
-const usage = { [routed && resume ? "claude-sonnet-5-5" : "claude-opus-5-5"]: { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 100, cacheCreationInputTokens: 20, costUSD: routed ? 0.2 : 0.5 } };
-process.stdout.write([
-  JSON.stringify({ type: "system", subtype: "init", session_id: sid }),
-  JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 4, terminal_reason: "completed", session_id: sid, modelUsage: usage, subagent_stats: { spawned: 1, completed: 1, failed: 0 } }),
-].join("\n") + "\n");
 ```
 
-Run: `chmod +x tests/e2e/fake-claude.mjs` (o driver o executa direto como `--claude-bin`).
+Run: `chmod +x tests/e2e/fake-claude.mjs`
 
 - [ ] **Step 2: Escrever o e2e que falha**
 
@@ -2036,52 +2563,77 @@ Run: `chmod +x tests/e2e/fake-claude.mjs` (o driver o executa direto como `--cla
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, existsSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const LAB = new URL("../..", import.meta.url).pathname;
 const FAKE = join(LAB, "tests/e2e/fake-claude.mjs");
 
-function runArm(armId) {
-  const runs = mkdtempSync(join(tmpdir(), "lab-runs-"));
+function runArm(armId, { env: extra = {}, args = [], runs = mkdtempSync(join(tmpdir(), "lab-runs-")) } = {}) {
   const projects = mkdtempSync(join(tmpdir(), "lab-proj-"));
-  const env = { ...process.env, FAKE_PROJECTS_ROOT: projects, FAKE_REF: join(LAB, "fixtures/shortlink-ref") };
-  const runDir = execFileSync("node", [join(LAB, "scripts/run-arm.mjs"), "--arm", join(LAB, `arms/${armId}.json`), "--runs", runs, "--plugin-dir", "/nao-usado", "--claude-bin", FAKE, "--run-id", `t-${armId}`], { env, encoding: "utf8" }).trim();
-  execFileSync("node", [join(LAB, "scripts/collect.mjs"), "--run", runDir, "--projects-root", projects, "--no-report"], { env, encoding: "utf8" });
-  return { runDir, run: JSON.parse(readFileSync(join(runDir, "run.json"), "utf8")), metrics: JSON.parse(readFileSync(join(runDir, "metrics.json"), "utf8")) };
+  const env = { ...process.env, ROUTING_LAB_FAKE_PROJECTS: projects, ROUTING_LAB_FAKE_REF: join(LAB, "fixtures/shortlink-ref"), ...extra };
+  const r = spawnSync("node", [join(LAB, "scripts/run-arm.mjs"), "--arm", join(LAB, `arms/${armId}.json`), "--runs", runs, "--plugin-dir", "/nao-usado",
+    "--superpowers-dir", "/nao-usado-sp", "--claude-bin", FAKE, "--run-id", `t-${armId}`, ...args], { env, encoding: "utf8" });
+  const runDir = join(runs, `t-${armId}`);
+  const run = existsSync(join(runDir, "run.json")) ? JSON.parse(readFileSync(join(runDir, "run.json"), "utf8")) : null;
+  return { r, runDir, projects, run };
 }
+const collect = ({ runDir, projects }) => {
+  execFileSync("node", [join(LAB, "scripts/collect.mjs"), "--run", runDir, "--projects-root", projects, "--no-report"]);
+  return JSON.parse(readFileSync(join(runDir, "metrics.json"), "utf8"));
+};
 
-test("driver retoma até concluir C, acumulando sessão e uso das duas invocações", () => {
-  const { run, metrics, runDir } = runArm("B-routed");
-  assert.equal(run.invocations, 2);
-  assert.equal(run.done, true);
-  assert.deepEqual(run.sessionIds, ["11111111-2222-3333-4444-555555555555"]);
-  assert.deepEqual(readdirSync(runDir).filter((f) => f.startsWith("stream-")).sort(), ["stream-1.jsonl", "stream-2.jsonl"]);
-  assert.deepEqual(Object.keys(metrics.tokens).sort(), ["claude-opus-5-5", "claude-sonnet-5-5"]);
-  assert.deepEqual(metrics.session.models, ["claude-opus-5-5", "claude-sonnet-5-5"]);
-  assert.equal(metrics.subagents.length, 2);
-  assert.equal(metrics.ledger.entries.length, 3);
-  assert.equal(metrics.acceptance.passed, metrics.acceptance.total);
-  assert.equal(metrics.complete, true);
+test("braço B: preflight, retomada até concluir C, instantâneos, tokens pelos transcripts sem duplicar", () => {
+  const x = runArm("B-routed");
+  assert.equal(x.r.status, 0, x.r.stderr);
+  assert.deepEqual([x.run.invocations, x.run.done, x.run.incompleteReason, x.run.claudeVersion], [2, true, null, "2.1.295"]);
+  assert.deepEqual(x.run.sessionIds, ["11111111-2222-3333-4444-555555555555"]);
+  assert.deepEqual(readdirSync(x.runDir).filter((f) => /^(stream|prevc)-/.test(f)).sort(), ["prevc-1.json", "prevc-2.json", "stream-1.jsonl", "stream-2.jsonl", "stream-preflight.jsonl"]);
+  const m = collect(x);
+  assert.deepEqual(Object.keys(m.tokens.byModel).sort(), ["claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]);
+  assert.equal(m.tokens.byModel["claude-opus-5-5"].input, 40);
+  assert.deepEqual(m.session.map((x) => x.phase), ["P", "R", "E", "V", "C"]);
+  assert.deepEqual(m.subagents.map((s) => [s.agentType, s.phase]), [["devflow:code-reviewer", "R"], ["devflow:documentation-writer", "C"]]);
+  assert.deepEqual([m.ledger.entries.length, m.ledger.violations, m.ledger.files], [6, [], 2]);
+  assert.equal(m.acceptance.passed, m.acceptance.total);
+  assert.equal(m.complete, true);
 });
 
-test("braço A: sem ledger e sem DEVFLOW_MODEL_ROUTING no ambiente do claude", () => {
-  const prev = process.env.DEVFLOW_MODEL_ROUTING;
-  process.env.DEVFLOW_MODEL_ROUTING = "1";
-  try {
-    const { metrics } = runArm("A-baseline");
-    assert.equal(metrics.ledger.entries.length, 0);
-    assert.equal(metrics.routing, false);
-  } finally { if (prev === undefined) delete process.env.DEVFLOW_MODEL_ROUTING; else process.env.DEVFLOW_MODEL_ROUTING = prev; }
+test("braço A: ambiente por allowlist chega ao claude; sem ledger", () => {
+  const dump = join(mkdtempSync(join(tmpdir(), "lab-env-")), "env.txt");
+  const x = runArm("A-baseline", { env: { DEVFLOW_MODEL_ROUTING: "1", GH_TOKEN: "x", ANTHROPIC_MODEL: "opus", SSH_AUTH_SOCK: "/s", ROUTING_LAB_FAKE_ENV_DUMP: dump } });
+  const keys = readFileSync(dump, "utf8").split("\n");
+  for (const k of ["DEVFLOW_MODEL_ROUTING", "GH_TOKEN", "ANTHROPIC_MODEL", "SSH_AUTH_SOCK"]) assert.ok(!keys.includes(k), k);
+  for (const k of ["GIT_CONFIG_GLOBAL", "GH_CONFIG_DIR", "XDG_DATA_HOME", "DISABLE_AUTOUPDATER"]) assert.ok(keys.includes(k), k);
+  const m = collect(x);
+  assert.deepEqual([m.routing, m.ledger.entries.length], [false, 0]);
+});
+
+test("preflight reprovado: sai com 3, sem invocar o PREVC", () => {
+  const x = runArm("B-routed", { env: { ROUTING_LAB_FAKE_PREFLIGHT_FAIL: "1" } });
+  assert.equal(x.r.status, 3);
+  assert.deepEqual([x.run.incompleteReason, x.run.invocations, x.run.preflightProblems], ["preflight", 0, ["dotcontext-desconectado"]]);
+});
+
+test("result de erro: para sem retomar", () => {
+  const x = runArm("B-routed", { env: { ROUTING_LAB_FAKE_RESULT_ERROR: "1" } });
+  assert.equal(x.r.status, 0);
+  assert.deepEqual([x.run.invocations, x.run.done, x.run.incompleteReason], [1, false, "result:error_during_execution"]);
+});
+
+test("--runs dentro do laboratório e --max-resumes inválido são recusados", () => {
+  assert.equal(runArm("B-routed", { runs: join(LAB, "runs") }).r.status, 2);
+  assert.equal(runArm("B-routed", { args: ["--max-resumes", "abc"] }).r.status, 2);
+  assert.equal(runArm("B-routed", { args: ["--max-resumes", "99"] }).r.status, 2);
 });
 
 test("metrics.json não carrega texto de transcript nem caminho do workspace", () => {
-  const { metrics, runDir } = runArm("B-routed");
-  const s = JSON.stringify(metrics);
-  assert.ok(!s.includes(runDir));
-  assert.ok(!s.includes("content"));
+  const x = runArm("B-routed");
+  const s = JSON.stringify(collect(x));
+  assert.ok(!s.includes(x.runDir));
+  assert.ok(!s.includes("SEGREDO"));
 });
 ```
 
@@ -2092,50 +2644,107 @@ test("metrics.json não carrega texto de transcript nem caminho do workspace", (
 `scripts/run-arm.mjs`:
 ```js
 #!/usr/bin/env node
-// Driver de uma rodada (spec L6): materializa, roda `claude -p`, retoma até a fase C concluir.
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+// Driver de uma rodada (spec L6, L12–L15): isolamento, preflight, retomada, parada honesta.
+import { readFileSync, writeFileSync, mkdirSync, existsSync, openSync, closeSync } from "node:fs";
+import { spawn, execFileSync } from "node:child_process";
+import { join, resolve, sep } from "node:path";
+import { tmpdir, homedir } from "node:os";
 import { loadArm, armArgs, armEnv } from "../lib/arm.mjs";
-import { materialize, FIRST_PROMPT, RESUME_PROMPT } from "../lib/seed.mjs";
-import { parseStream } from "../lib/stream.mjs";
-import { readPrevc } from "../lib/prevc.mjs";
-import { pluginDirFor } from "../lib/plugin.mjs";
+import { materialize, FIRST_PROMPT, RESUME_PROMPT, PREFLIGHT_PROMPT } from "../lib/seed.mjs";
+import { parseStream, preflightProblems } from "../lib/stream.mjs";
+import { readPrevcText, mergePrevc, isFinished } from "../lib/prevc.mjs";
+import { readSafe, safeDir } from "../lib/safe-read.mjs";
+import { pluginDirFor, superpowersDir, pluginVersion } from "../lib/plugin.mjs";
 
 const LAB = resolve(new URL("..", import.meta.url).pathname);
 const a = process.argv.slice(2);
 const opt = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
-if (!opt("--arm")) { console.error("uso: run-arm.mjs --arm arms/<id>.json [--runs runs] [--plugin-dir D] [--claude-bin claude] [--max-resumes 6] [--run-id ID]"); process.exit(2); }
+const die = (msg) => { console.error(`run-arm: ${msg}`); process.exit(2); };
+const inside = (p, root) => p === root || p.startsWith(root + sep);
 
+if (!opt("--arm")) die("uso: run-arm.mjs --arm arms/<id>.json [--runs DIR] [--plugin-dir D] [--superpowers-dir D] [--claude-bin claude] [--max-resumes 0..20] [--timeout-min N] [--run-id ID] [--allow-home]");
 const arm = loadArm(JSON.parse(readFileSync(opt("--arm"), "utf8")));
-const pluginDir = resolve(opt("--plugin-dir", pluginDirFor("v3.7.0")));
+const mr = opt("--max-resumes", "6");
+if (!/^\d{1,2}$/.test(mr) || Number(mr) > 20) die("--max-resumes deve ser inteiro de 0 a 20");
+const tm = opt("--timeout-min", "240");
+if (!/^\d{1,4}$/.test(tm) || Number(tm) < 1) die("--timeout-min deve ser inteiro positivo");
 const runId = opt("--run-id", `${new Date().toISOString().replace(/[:.]/g, "-")}-${arm.id}`);
-if (!/^[A-Za-z0-9-]{1,80}$/.test(runId)) { console.error("run-id inválido"); process.exit(2); }
-const runDir = join(resolve(opt("--runs", join(LAB, "runs"))), runId);
-if (existsSync(runDir)) { console.error(`rodada já existe: ${runDir}`); process.exit(2); }
+if (!/^[A-Za-z0-9-]{1,80}$/.test(runId)) die("run-id inválido");
+const runsRoot = resolve(opt("--runs", join(tmpdir(), "devflow-routing-lab", "runs")));
+if (inside(runsRoot, LAB)) die("--runs não pode ficar dentro do laboratório (spec L13)");
+if (inside(runsRoot, resolve(homedir())) && !a.includes("--allow-home")) die("--runs não pode ficar dentro de $HOME (CLAUDE.md ancestral; spec L13)");
+const runDir = join(runsRoot, runId);
+if (existsSync(runDir)) die(`rodada já existe: ${runDir}`);
+
+const pluginDir = resolve(opt("--plugin-dir", pluginDirFor("v3.7.0")));
+const spDir = resolve(opt("--superpowers-dir", superpowersDir()));
 const ws = join(runDir, "ws"), xdg = join(runDir, "xdg");
 mkdirSync(xdg, { recursive: true });
+mkdirSync(join(runDir, "gh"));
+writeFileSync(join(runDir, "gitconfig"), "");
 materialize({ seedDir: join(LAB, "seed"), briefPath: join(LAB, "brief/PRODUCT.md"), arm, wsDir: ws });
 
-const maxResumes = Number(opt("--max-resumes", "6"));
+const env = armEnv(arm, process.env, { xdgDir: xdg, runDir });
 const claude = opt("--claude-bin", "claude");
-const run = { armId: arm.id, routing: arm.routing, ceiling: arm.ceiling, sessionIds: [], invocations: 0, exitCodes: [], done: false, startedAt: new Date().toISOString(), endedAt: null };
-const isDone = () => { const p = readPrevc(ws); return !!p && p.phases.C === "completed"; };
+const base = { pluginDir, superpowersDir: spDir, mcpConfig: join(ws, ".mcp.json") };
+const ver = (s) => (typeof s === "string" && /^\d+\.\d+\.\d+$/.test(s) ? s : null);
+let claudeVersion = null;
+try { claudeVersion = ver(execFileSync(claude, ["--version"], { encoding: "utf8", env, timeout: 30000 }).trim().split(/\s+/)[0]); } catch {}
+const run = { armId: arm.id, routing: arm.routing, ceiling: arm.ceiling, claudeVersion, pluginVersion: pluginVersion(pluginDir), superpowersVersion: pluginVersion(spDir),
+  sessionIds: [], invocations: 0, exitCodes: [], killed: false, done: false, incompleteReason: null, startedAt: new Date().toISOString(), endedAt: null };
+const save = () => { run.endedAt = new Date().toISOString(); writeFileSync(join(runDir, "run.json"), JSON.stringify(run, null, 2) + "\n"); };
 
-for (let i = 0; i <= maxResumes && !run.done; i++) {
-  const resume = run.sessionIds.at(-1) ?? null;
-  const r = spawnSync(claude, armArgs(arm, { pluginDir, prompt: i === 0 ? FIRST_PROMPT : RESUME_PROMPT, resume: i === 0 ? null : resume }), {
-    cwd: ws, env: armEnv(arm, process.env, xdg), encoding: "utf8", maxBuffer: 1024 * 2 ** 20, timeout: 4 * 3600 * 1000,
+// stdout direto para arquivo (nada de buffer em memória); timeout mata o grupo de processos.
+function invoke(name, args) {
+  const file = join(runDir, `stream-${name}.jsonl`);
+  const fd = openSync(file, "w");
+  return new Promise((res) => {
+    let done = false, killed = false, t = null;
+    const finish = (code) => { if (done) return; done = true; clearTimeout(t); closeSync(fd); res({ code, killed, stream: parseStream(readFileSync(file, "utf8")) }); };
+    const p = spawn(claude, args, { cwd: ws, env, stdio: ["ignore", fd, "ignore"], detached: true });
+    t = setTimeout(() => { killed = true; try { process.kill(-p.pid, "SIGKILL"); } catch {} }, Number(tm) * 60000);
+    p.on("error", () => finish(-1));
+    p.on("close", (code) => finish(code ?? -1));
   });
-  run.invocations++;
-  run.exitCodes.push(r.status ?? -1);
-  writeFileSync(join(runDir, `stream-${run.invocations}.jsonl`), r.stdout ?? "");
-  for (const s of parseStream(r.stdout ?? "").sessionIds) if (!run.sessionIds.includes(s)) run.sessionIds.push(s);
-  run.done = isDone();
-  if (!run.sessionIds.length) break; // nem sessão abriu: não há o que retomar
 }
-run.endedAt = new Date().toISOString();
-writeFileSync(join(runDir, "run.json"), JSON.stringify(run, null, 2) + "\n");
+
+function snapshot(n) {
+  const dir = safeDir(ws, ".context", "runtime", "workflows");
+  const txt = dir ? readSafe(join(dir, "prevc.json"), 2 ** 20) : null;
+  if (txt) writeFileSync(join(runDir, `prevc-${n}.json`), txt);
+  return txt ? readPrevcText(txt) : null;
+}
+const branch = () => { try { return execFileSync("git", ["-C", ws, "branch", "--show-current"], { encoding: "utf8", env }).trim(); } catch { return null; } };
+
+const pre = await invoke("preflight", armArgs(arm, { ...base, prompt: PREFLIGHT_PROMPT, model: "haiku", effort: "low" }));
+const problems = preflightProblems(pre.stream.init, pluginDir);
+if (problems.length) {
+  run.incompleteReason = "preflight";
+  run.preflightProblems = problems;
+  save();
+  console.error(`run-arm: preflight reprovado: ${problems.join(", ")}`);
+  process.stdout.write(runDir + "\n");
+  process.exit(3);
+}
+
+const snaps = [];
+for (let i = 1; i <= Number(mr) + 1; i++) {
+  const resume = run.sessionIds.at(-1) ?? null;
+  if (i > 1 && !resume) { run.incompleteReason = "sem-sessao"; break; }
+  const r = await invoke(String(i), armArgs(arm, { ...base, prompt: i === 1 ? FIRST_PROMPT : RESUME_PROMPT, resume: i === 1 ? null : resume }));
+  run.invocations++;
+  run.exitCodes.push(r.code);
+  for (const s of r.stream.sessionIds) if (!run.sessionIds.includes(s)) run.sessionIds.push(s);
+  const snap = snapshot(i);
+  if (snap) snaps.push(snap);
+  if (r.killed) { run.killed = true; run.incompleteReason = "killed"; break; }
+  const res = r.stream.result;
+  if (!res || res.isError || res.subtype !== "success") { run.incompleteReason = `result:${res?.subtype ?? "ausente"}`; break; }
+  run.done = isFinished(mergePrevc(snaps), branch());
+  if (run.done) break;
+}
+if (!run.done && !run.incompleteReason) run.incompleteReason = "max-resumes";
+save();
 process.stdout.write(runDir + "\n");
 ```
 
@@ -2143,36 +2752,68 @@ process.stdout.write(runDir + "\n");
 
 `lib/collect.mjs`:
 ```js
-// lib/collect.mjs — monta o Metrics de uma rodada (spec L8). Só números, enums e IDs.
+// lib/collect.mjs — monta o Metrics de uma rodada (spec L8). Só números, enums e IDs validados.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseStream, mergeUsage } from "./stream.mjs";
 import { projectSlug, readSession } from "./transcripts.mjs";
 import { readLedger } from "./ledger.mjs";
-import { readPrevc } from "./prevc.mjs";
+import { readPrevcText, mergePrevc, phaseAt } from "./prevc.mjs";
+import { readSafe, listSafe, safeDir } from "./safe-read.mjs";
+
+const KEYS = ["input", "output", "cacheRead", "cacheCreate"];
+const TIER = /\*\*Tier:\*\*\s*`?(cheap|standard|capable|top)\b/g;
+const firstTs = (s) => s.messages[0]?.ts ?? Infinity;
+
+function planTiers(ws) {
+  const out = new Set();
+  for (const parts of [["docs", "superpowers", "plans"], [".context", "plans"]]) {
+    const d = safeDir(ws, ...parts);
+    if (!d) continue;
+    for (const f of listSafe(d, "file").filter((x) => x.endsWith(".md"))) for (const m of (readSafe(join(d, f), 4 * 2 ** 20) ?? "").matchAll(TIER)) out.add(m[1]);
+  }
+  return [...out].sort();
+}
 
 export function collectRun(runDir, { projectsRoot }) {
   const run = JSON.parse(readFileSync(join(runDir, "run.json"), "utf8"));
   const ws = join(runDir, "ws");
-  let tokens = {};
-  for (const f of readdirSync(runDir).filter((x) => /^stream-\d+\.jsonl$/.test(x)).sort()) {
+  const files = readdirSync(runDir);
+  const snaps = files.filter((f) => /^prevc-\d+\.json$/.test(f)).sort((x, y) => parseInt(x.slice(6), 10) - parseInt(y.slice(6), 10))
+    .map((f) => readPrevcText(readFileSync(join(runDir, f), "utf8"))).filter(Boolean);
+  const prevc = mergePrevc(snaps);
+  const at = (ts) => (prevc ? phaseAt(prevc.phases, ts) : null);
+  const slug = projectSlug(ws);
+  const session = [], subagents = [];
+  for (const sid of run.sessionIds ?? []) {
+    const t = readSession(projectsRoot, slug, sid);
+    for (const x of t.main) session.push({ ...x, phase: at(x.ts) });
+    for (const s of t.subagents) {
+      if (subagents.some((y) => y.agentId === s.agentId)) continue;
+      subagents.push({ ...s, phase: s.messages.length ? at(s.messages[0].ts) : null, messages: s.messages.map((x) => ({ ...x, phase: at(x.ts) })) });
+    }
+  }
+  session.sort((x, y) => x.ts - y.ts);
+  subagents.sort((x, y) => firstTs(x) - firstTs(y));
+  const byModel = {};
+  for (const x of [...session, ...subagents.flatMap((s) => s.messages)]) {
+    const u = (byModel[x.model] ??= { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 });
+    for (const k of KEYS) u[k] += x.usage[k];
+  }
+  let streamByModel = {};
+  for (const f of files.filter((x) => /^stream-\d+\.jsonl$/.test(x))) {
     const s = parseStream(readFileSync(join(runDir, f), "utf8"));
-    if (s.result) tokens = mergeUsage(tokens, s.result.modelUsage);
+    if (s.result) streamByModel = mergeUsage(streamByModel, s.result.modelUsage);
   }
-  const proj = join(projectsRoot, projectSlug(ws));
-  const session = { models: [], efforts: [] };
-  const subagents = [];
-  for (const sid of run.sessionIds) {
-    const t = readSession(proj, sid);
-    for (const m of t.main.models) if (session.models.at(-1) !== m) session.models.push(m);
-    session.efforts.push(...t.main.efforts);
-    for (const s of t.subagents) if (!subagents.some((x) => x.agentId === s.agentId)) subagents.push({ agentId: s.agentId, agentType: s.agentType, models: s.models, efforts: s.efforts });
-  }
-  const prevc = readPrevc(ws);
+  const outT = Object.values(byModel).reduce((n, u) => n + u.output, 0);
+  const outS = Object.values(streamByModel).reduce((n, u) => n + u.output, 0);
   return {
-    armId: run.armId, routing: run.routing, ceiling: run.ceiling, invocations: run.invocations,
-    complete: run.done, prevc, session, subagents, ledger: readLedger(join(runDir, "xdg")), tokens,
-    reportOk: false, acceptance: null,
+    armId: run.armId, routing: run.routing, ceiling: run.ceiling, invocations: run.invocations, complete: run.done,
+    incompleteReason: run.incompleteReason ?? null, killed: run.killed === true, prevc, session, subagents,
+    ledger: readLedger(join(runDir, "xdg")),
+    tokens: { byModel, streamByModel, streamDeltaPct: outT ? (Math.abs(outS - outT) / outT) * 100 : null },
+    planTiers: planTiers(ws), reportOk: false, acceptance: null,
+    env: { claudeVersion: run.claudeVersion ?? null, pluginVersion: run.pluginVersion ?? null, superpowersVersion: run.superpowersVersion ?? null },
   };
 }
 ```
@@ -2180,7 +2821,7 @@ export function collectRun(runDir, { projectsRoot }) {
 `scripts/collect.mjs`:
 ```js
 #!/usr/bin/env node
-// Gera runs/<id>/metrics.json (+ report.md do model-route, que fica só em runs/).
+// Gera <runDir>/metrics.json (+ report.md do model-route, que fica só na rodada).
 import { writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -2192,25 +2833,26 @@ import { pluginDirFor } from "../lib/plugin.mjs";
 
 const a = process.argv.slice(2);
 const opt = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
-if (!opt("--run")) { console.error("uso: collect.mjs --run runs/<id> [--projects-root D] [--plugin-dir D] [--no-report]"); process.exit(2); }
+if (!opt("--run")) { console.error("uso: collect.mjs --run <runDir> [--projects-root D] [--plugin-dir D] [--no-report]"); process.exit(2); }
 const runDir = resolve(opt("--run"));
 const projectsRoot = resolve(opt("--projects-root", join(homedir(), ".claude/projects")));
 const m = collectRun(runDir, { projectsRoot });
 if (!a.includes("--no-report")) {
   const plugin = resolve(opt("--plugin-dir", pluginDirFor("v3.7.0")));
   const ws = join(runDir, "ws");
-  const r = spawnSync("node", [join(plugin, "scripts/model-route.mjs"), "report", "--cwd", ws, "--transcripts", join(projectsRoot, projectSlug(ws))], { encoding: "utf8", env: { ...process.env, XDG_DATA_HOME: join(runDir, "xdg") } });
+  const r = spawnSync("node", [join(plugin, "scripts/model-route.mjs"), "report", "--cwd", ws, "--transcripts", join(projectsRoot, projectSlug(ws))],
+    { encoding: "utf8", env: { PATH: process.env.PATH, HOME: process.env.HOME, XDG_DATA_HOME: join(runDir, "xdg") }, timeout: 120000 });
   writeFileSync(join(runDir, "report.md"), r.stdout ?? "");
-  m.reportOk = r.status === 0 && (r.stdout ?? "").trim().length > 0;
+  m.reportOk = r.status === 0 && /\|\s*(devflow:[A-Za-z-]+|general-purpose)\s*\|/.test(r.stdout ?? "");
 }
 m.acceptance = await runAcceptance(join(runDir, "ws"));
 writeFileSync(join(runDir, "metrics.json"), JSON.stringify(m, null, 2) + "\n");
 process.stdout.write(join(runDir, "metrics.json") + "\n");
 ```
 
-- [ ] **Step 6: Rodar e ver passar** — `node --test tests/e2e/run-arm.test.mjs` → PASS (3)
+- [ ] **Step 6: Rodar e ver passar** — `node --test tests/e2e/run-arm.test.mjs` → PASS (6)
 
-- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): driver da rodada com retomada e coleta de métricas"`
+- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): driver isolado com preflight, retomada e parada honesta; coleta pela fase real"`
 
 ---
 
@@ -2223,8 +2865,8 @@ process.stdout.write(join(runDir, "metrics.json") + "\n");
 - Test: `tests/e2e/campaign.test.mjs`
 
 **Interfaces:**
-- Consumes: todos os scripts anteriores.
-- Produces: `node scripts/campaign.mjs --arms A-baseline,B-routed [--name N] [--ref v3.7.0] [--claude-bin claude] [--projects-root D] [--runs runs] [--no-report]` → `results/<name>/scorecard.md` (default `name` = `<AAAA-MM-DD>-<braços>`).
+- Consumes: todos os scripts anteriores; `isPristine` (Task 3).
+- Produces: `node scripts/campaign.mjs --arms A-baseline,B-routed [--name N] [--ref v3.7.0] [--runs DIR] [--claude-bin claude] [--superpowers-dir D] [--projects-root D] [--max-resumes N] [--timeout-min N] [--no-report] [--no-ensure]` → `results/<name>/scorecard.md`. `--no-ensure` não clona nem confere o plugin (só para testes).
 
 - [ ] **Step 1: Escrever o e2e que falha**
 
@@ -2241,12 +2883,16 @@ const LAB = new URL("../..", import.meta.url).pathname;
 
 test("campanha A+B com claude falso gera scorecard com vereditos e economia", () => {
   const name = `e2e-${process.pid}`;
-  const env = { ...process.env, FAKE_PROJECTS_ROOT: mkdtempSync(join(tmpdir(), "lab-proj-")), FAKE_REF: join(LAB, "fixtures/shortlink-ref"), DEVFLOW_PLUGIN_DIR: "/nao-usado" };
+  const projects = mkdtempSync(join(tmpdir(), "lab-proj-"));
+  const env = { ...process.env, ROUTING_LAB_FAKE_PROJECTS: projects, ROUTING_LAB_FAKE_REF: join(LAB, "fixtures/shortlink-ref"), DEVFLOW_PLUGIN_DIR: "/nao-usado" };
   try {
-    const out = execFileSync("node", [join(LAB, "scripts/campaign.mjs"), "--arms", "A-baseline,B-routed", "--name", name, "--claude-bin", join(LAB, "tests/e2e/fake-claude.mjs"), "--projects-root", env.FAKE_PROJECTS_ROOT, "--runs", mkdtempSync(join(tmpdir(), "lab-runs-")), "--no-report", "--no-ensure"], { env, encoding: "utf8" });
-    const md = readFileSync(out.trim(), "utf8");
+    const out = execFileSync("node", [join(LAB, "scripts/campaign.mjs"), "--arms", "A-baseline,B-routed", "--name", name, "--claude-bin", join(LAB, "tests/e2e/fake-claude.mjs"),
+      "--superpowers-dir", "/nao-usado-sp", "--projects-root", projects, "--runs", mkdtempSync(join(tmpdir(), "lab-runs-")), "--no-report", "--no-ensure"], { env, encoding: "utf8" });
+    const md = readFileSync(out.trim().split("\n").at(-1), "utf8");
     assert.match(md, /\| INV-OFF \| HELD \| N\/A \|/);
     assert.match(md, /\| INV-CEIL \| HELD \| HELD \|/);
+    assert.match(md, /\| INV-SESS \| N\/A \| HELD \|/);
+    assert.match(md, /\| INV-PHASE-SYNC \| N\/A \| HELD \|/);
     assert.match(md, /\| INV-SUB \| N\/A \| HELD \|/);
     assert.match(md, /B-routed ÷ A-baseline/);
   } finally { rmSync(join(LAB, "results", name), { recursive: true, force: true }); }
@@ -2260,52 +2906,65 @@ test("campanha A+B com claude falso gera scorecard com vereditos e economia", ()
 `scripts/campaign.mjs`:
 ```js
 #!/usr/bin/env node
-// Roda braços em sequência (nunca em paralelo — spec §10) e gera o scorecard.
-import { execFileSync } from "node:child_process";
+// Roda braços em sequência (nunca em paralelo — spec §10), confere o plugin antes/depois e gera o scorecard.
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ensurePlugin, pluginDirFor } from "../lib/plugin.mjs";
+import { ensurePlugin, pluginDirFor, isPristine } from "../lib/plugin.mjs";
 
 const LAB = resolve(new URL("..", import.meta.url).pathname);
 const a = process.argv.slice(2);
 const opt = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
+const die = (msg, code = 2) => { console.error(`campaign: ${msg}`); process.exit(code); };
 const arms = (opt("--arms") ?? "").split(",").filter(Boolean);
-if (!arms.length || arms.some((x) => !/^[A-Za-z0-9-]{1,32}$/.test(x))) { console.error("uso: campaign.mjs --arms A-baseline,B-routed [--name N] [--ref R] ..."); process.exit(2); }
-const ref = opt("--ref", "v3.7.0");
+if (!arms.length || arms.some((x) => !/^[A-Za-z0-9-]{1,32}$/.test(x))) die("uso: campaign.mjs --arms A-baseline,B-routed [--name N] [--ref R] ...");
 const name = opt("--name", `${new Date().toISOString().slice(0, 10)}-${arms.join("+")}`);
-const pluginDir = a.includes("--no-ensure") ? pluginDirFor(ref) : ensurePlugin({ ref });
-const pass = (k) => (opt(k) ? [k, opt(k)] : []);
-const node = (script, args) => execFileSync("node", [join(LAB, "scripts", script), ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+if (!/^[A-Za-z0-9+._-]{1,80}$/.test(name)) die("--name inválido");
+const testMode = a.includes("--no-ensure");
+const pluginDir = testMode ? pluginDirFor(opt("--ref", "v3.7.0")) : ensurePlugin({ ref: opt("--ref", "v3.7.0") });
+const pristine = () => testMode || isPristine(pluginDir);
+if (!pristine()) die("plugin sob teste com alterações locais; recrie o clone", 4);
+const pass = (k) => (opt(k) !== undefined ? [k, opt(k)] : []);
+const node = (script, args) => spawnSync("node", [join(LAB, "scripts", script), ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 
 const runDirs = [];
 for (const id of arms) {
-  const runDir = node("run-arm.mjs", ["--arm", join(LAB, "arms", `${id}.json`), "--plugin-dir", pluginDir, ...pass("--runs"), ...pass("--claude-bin"), ...pass("--max-resumes")]);
-  node("collect.mjs", ["--run", runDir, "--plugin-dir", pluginDir, ...pass("--projects-root"), ...(a.includes("--no-report") ? ["--no-report"] : [])]);
+  const r = node("run-arm.mjs", ["--arm", join(LAB, "arms", `${id}.json`), "--plugin-dir", pluginDir, ...pass("--runs"), ...pass("--claude-bin"),
+    ...pass("--superpowers-dir"), ...pass("--max-resumes"), ...pass("--timeout-min")]);
+  const runDir = (r.stdout ?? "").trim().split("\n").at(-1);
+  if (!runDir || !existsSync(join(runDir, "run.json"))) die(`braço ${id}: rodada não criada (saída ${r.status})`, 5);
+  if (r.status === 3) console.error(`campaign: braço ${id} reprovado no preflight; segue para o scorecard como incompleto`);
+  const c = node("collect.mjs", ["--run", runDir, "--plugin-dir", pluginDir, ...pass("--projects-root"), ...(a.includes("--no-report") ? ["--no-report"] : [])]);
+  if (c.status !== 0) die(`braço ${id}: coleta falhou`, 5);
   runDirs.push(runDir);
+  if (!pristine()) die(`plugin sob teste alterado durante o braço ${id}; campanha abortada`, 4);
 }
-process.stdout.write(node("score.mjs", ["--out", join(LAB, "results", name), ...runDirs]) + "\n");
+const s = node("score.mjs", ["--out", join(LAB, "results", name), ...runDirs]);
+if (s.status !== 0) die("score falhou", 5);
+process.stdout.write(s.stdout);
 ```
 
 - [ ] **Step 4: Rodar e ver passar** — `node --test tests/e2e/campaign.test.mjs` → PASS
 
 - [ ] **Step 5: Escrever a documentação**
 
-`README.md`: objetivo (as quatro perguntas da spec §1), pré-requisitos (Claude Code ≥ 2.1.293, Node ≥ 22, repo `devflow` como irmão com a tag `v3.7.0`, superpowers em escopo de usuário, login no Claude Code), comandos (`bash tests/run-unit.sh`, `run-integration.sh`, `run-e2e.sh`, `run-lint.sh`, `node scripts/campaign.mjs --arms A-baseline,B-routed`), mapa de diretórios e as regras: "capturar, não resolver", "só números em `results/`", "nunca em paralelo".
+`README.md`: objetivo (Q1–Q4 da spec §1) e hipóteses H1/H2; pré-requisitos (Claude Code ≥ 2.1.293 logado, Node ≥ 22, repo `devflow` irmão com a tag `v3.7.0`, superpowers no cache do Claude Code); comandos (`bash tests/run-unit.sh`, `run-integration.sh`, `run-e2e.sh`, `run-lint.sh`, `node scripts/campaign.mjs --arms A-baseline,B-routed`); mapa de diretórios; regras: "capturar, não resolver", "só números em `results/`", "nunca em paralelo", "rodadas em tmpdir"; isolamento L12 e o **risco residual** (não é sandbox; caminhos absolutos seguem legíveis).
 
-`runbooks/campaign.md`: (1) `bash tests/run-unit.sh && bash tests/run-integration.sh && bash tests/run-e2e.sh`; (2) `node scripts/campaign.mjs --arms A-baseline,B-routed` em background, com custo declarado (duas rodadas PREVC completas na cota da assinatura; cada uma pode levar horas); (3) como acompanhar (`runs/<id>/stream-<n>.jsonl` cresce; `prevc.json` do `ws/`); (4) rodada `incomplete`: não retomar à mão, registrar como achado; (5) ler o scorecard e registrar os `MISS` em `results/<nome>/findings.md` com evidência; (6) braços C e D opcionais: `--arms C-ceiling` e `--arms D-stress`.
+`runbooks/campaign.md`: (1) contrato verde (`run-unit`, `run-integration`, `run-e2e`, `run-lint`); (2) custo declarado: dois PREVC completos na cota da assinatura, horas cada; (3) disparo em background: `node scripts/campaign.mjs --arms A-baseline,B-routed`; (4) acompanhamento: `<runs>/<id>/stream-<n>.jsonl` cresce, `prevc-<n>.json` aparece a cada invocação; (5) rodada `incomplete` (cota, preflight, `killed`, `max-resumes`): não retomar à mão; registrar como achado; (6) ler o scorecard e registrar os `MISS` em `results/<nome>/findings.md` com a evidência e a hipótese (H1/H2/nova); (7) braços C e D opcionais; (8) isolamento forte opcional: wrapper `--claude-bin` com `bwrap --ro-bind / / --bind <runDir> <runDir> --tmpfs $HOME/.ssh …` (testar antes; não é o padrão).
 
-`runbooks/refine.md`: hipótese → braço novo `arms/B2-<hipótese>.json` copiado de `B-routed` com `models.overrides` → `--arms B2-<hipótese>` → comparar com o B da campanha anterior (mesmo brief) → se a hipótese se confirma, abrir um workflow no repo `devflow` propondo a mudança no `assets/model-routing/routes.json` e reavaliar com `--ref <branch>`.
+`runbooks/refine.md`: hipótese → braço novo `arms/B2-<hipótese>.json` copiado de `B-routed` com `models.overrides` → `--arms B2-<hipótese>` → comparar com o B anterior (mesmo brief, mesma versão do Claude Code) → se confirma, abrir workflow no repo `devflow` propondo a mudança no `assets/model-routing/routes.json` (ou no adaptador, se o achado for H1/H2) e reavaliar com `--ref <branch>`.
 
 - [ ] **Step 6: Rodar o contrato inteiro**
 
 Run: `bash tests/run-unit.sh && bash tests/run-integration.sh && bash tests/run-e2e.sh && bash tests/run-lint.sh`
 Expected: tudo PASS (achados L1 marcados como `todo` não reprovam)
 
-- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): campanha, runbooks e README"`
+- [ ] **Step 7: Commit** — `git add -A && git commit -m "feat(lab): campanha com integridade do plugin, runbooks e README"`
 
 ---
 
 ## Fase V deste workflow (não é task de E)
 
 1. Contrato completo do laboratório verde (Step 6 da Task 12).
-2. Revisão de segurança de `run-arm.mjs`, `collect.mjs` e `lib/safe-read.mjs` (`security-auditor`).
-3. **Campanha real:** `node scripts/campaign.mjs --arms A-baseline,B-routed` em background; ao fim, `results/<data>-A-baseline+B-routed/scorecard.md` revisado e os `MISS` registrados em `findings.md`. Achados do DevFlow viram backlog no repo `devflow`; não se corrigem nesta rodada.
+2. Revisão de segurança pesada de `run-arm.mjs`, `collect.mjs`, `lib/accept.mjs` e `lib/safe-read.mjs` (`security-auditor`).
+3. **Campanha real:** `node scripts/campaign.mjs --arms A-baseline,B-routed` em background, pelo operador ou pela sessão orquestradora; ao fim, `results/<data>-A-baseline+B-routed/scorecard.md` revisado e os `MISS` registrados em `findings.md` com a hipótese correspondente. Achados do DevFlow viram backlog no repo `devflow`; não se corrigem nesta rodada.
