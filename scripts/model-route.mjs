@@ -159,7 +159,8 @@ function cmdReport(o, cwd) {
   for (const f of listDir(dir).filter((n) => n.endsWith(".jsonl"))) {
     for (const line of safe(join(dir, f), TRANSCRIPT_MAX).split("\n")) {
       try {
-        const e = JSON.parse(line);
+        const e = buildEntry(JSON.parse(line)); // revalida pela allowlist da gravação: o arquivo pode ter sido adulterado
+        if (!Object.keys(e).length) continue;
         if (!since || Date.parse(e.ts) >= since) { entries.push(e); ledger.push(e); }
       } catch { /* linha inválida ignorada */ }
     }

@@ -256,3 +256,22 @@ test("report: ledger vazio → seção diz que não há comparativo", () => {
   const f = fixture();
   assert.match(run(["report"], f), /sem comparativo/);
 });
+
+test("report com ledger adulterado: não lança e não ecoa texto livre (revalida na leitura)", () => {
+  const f = fixture();
+  const dir = ledgerDirFrom({ xdgDataHome: f.xdg, home: f.xdg, cwd: f.dir });
+  mkdirSync(dir, { recursive: true });
+  const ts = "2026-10-08T12:00:00.000Z";
+  const lines = [
+    { ts, scope: "subagent", agentType: { toString: 1 }, model: "sonnet", usage: { input_tokens: 5, output_tokens: 7 } },
+    { ts, scope: "session", phase: { toString: 1 }, model: "sonnet", usage: { input_tokens: 5 }, switched: true, cacheReadRatio: { toString: 1 } },
+    { ts, scope: "subagent", agentType: "devflow:code-reviewer", model: "SEGREDO LIVRE <script>", usage: { input_tokens: 9 } },
+    { ts, scope: "session", phase: "E", model: "sonnet", usage: { input_tokens: 5 }, switched: true, cacheReadRatio: { toString: 1 } },
+    { ts, scope: "subagent", agentType: "x", escalation: { at: "midRun", action: "escalate", scores: { is_stuck: "SEGREDO" } } },
+  ];
+  writeFileSync(join(dir, "mod.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const r = spawnSync("node", [CLI, "report", "--cwd", f.dir], { encoding: "utf8", env: f.env, timeout: 10000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Subagentes/);
+  assert.doesNotMatch(r.stdout, /SEGREDO|script/);
+});
