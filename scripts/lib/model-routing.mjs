@@ -127,7 +127,9 @@ export function resolveSubagentRoute({ table, config, agentType, phase, skill, t
 
   const tier = capAtCeiling(chosen.tier, ceiling, config.maxTier);
   if (!tier) return null;
-  const effort = capEffort(table.agents?.[name]?.effort ?? table.effortByTier?.[tier], ceilingEffort);
+  // No próprio teto (inclui a rota inherit) o esforço do usuário é preservado: o do tier não rebaixa xhigh.
+  const wantEffort = table.agents?.[name]?.effort ?? (tier === ceiling ? ceilingEffort : table.effortByTier?.[tier]);
+  const effort = capEffort(wantEffort, ceilingEffort);
   // D21: alias só quando muda algo. Igual ao teto (herda) ou explícito já dentro do teto → não toca.
   const unchanged = hasExplicit ? tier === chosen.tier : tier === ceiling;
   return { tier, model: unchanged ? null : toAlias(tier), effort, source: chosen.source, ceiling };

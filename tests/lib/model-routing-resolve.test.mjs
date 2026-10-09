@@ -104,3 +104,12 @@ test("sessão: fase que resolve para o teto, sem esforço de skill → esforço 
   assert.equal(r.tier, "capable");
   assert.equal(r.effort, "xhigh");
 });
+
+test("rota inherit (tier = teto) preserva o esforço do usuário em vez de rebaixar xhigh para high", () => {
+  const r = resolveSubagentRoute({ ...base, agentType: "devflow:nao-mapeado-no-table", phase: "E", config: on, table: { ...table, routablePrefix: "devflow:", agents: {}, phases: {}, skills: {} } });
+  assert.deepEqual([r.source, r.model, r.effort], ["inherit", null, "xhigh"]);
+  const r2 = resolveSubagentRoute({ ...base, ceilingModel: "claude-sonnet-5-5", ceilingEffort: "high", agentType: "devflow:nao-mapeado-no-table", phase: "E", table: { ...table, routablePrefix: "devflow:", agents: {}, phases: {}, skills: {} } });
+  assert.equal(r2.effort, "high");
+  // abaixo do teto o esforço do tier continua valendo
+  assert.equal(resolveSubagentRoute({ ...base, agentType: "devflow:documentation-writer", phase: "E" }).effort, "low");
+});
