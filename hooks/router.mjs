@@ -16,6 +16,7 @@ const S = {
   loaded: false,
   disabled: false,
   sessionOff: false,
+  pendingSwitch: false,
   cwd: null,
   ledgerPath: null,
   lines: [],
@@ -50,21 +51,24 @@ async function ensure($) {
     S.cwd = st?.kind === "dir" && st.realPath ? st.realPath : null;
   } catch { S.cwd = null; }
   try { S.table = JSON.parse(await $.fs.read(`${$.plugin.root}/assets/model-routing/routes.json`)); } catch { S.table = null; }
-  const optIn = await $.env.get("DEVFLOW_MODEL_ROUTING");
-  S.config = effectiveConfig(readModels((await safeRead($, ".context/.devflow.yaml")) ?? ""), optIn);
-  if (S.config.enabled && S.config.ledger) {
-    const home = await $.env.get("HOME");
-    const xdg = await $.env.get("XDG_DATA_HOME");
-    if (home && S.cwd) S.ledgerPath = `${ledgerDirFrom({ xdgDataHome: xdg, home, cwd: S.cwd })}/${S.sessionKey}.jsonl`;
-  }
-  await detectOtherRouter($);
+  try {
+    const optIn = await $.env.get("DEVFLOW_MODEL_ROUTING");
+    S.config = effectiveConfig(readModels((await safeRead($, ".context/.devflow.yaml")) ?? ""), optIn);
+    if (S.config.enabled && S.config.ledger) {
+      const home = await $.env.get("HOME");
+      const xdg = await $.env.get("XDG_DATA_HOME");
+      if (home && S.cwd) S.ledgerPath = `${ledgerDirFrom({ xdgDataHome: xdg, home, cwd: S.cwd })}/${S.sessionKey}.jsonl`;
+    }
+  } catch { S.config = effectiveConfig(readModels(""), undefined); S.ledgerPath = null; } // falha ao ler o ambiente → roteamento desligado
+  if (S.config.enabled) await detectOtherRouter($);
 }
 
 // D17: outro roteador de sessão habilitado → a camada de sessão do DevFlow se desliga.
 async function detectOtherRouter($) {
   try {
     const s = await $.settings.read();
-    const names = Object.keys(s?.enabledPlugins ?? {});
+    // Só entradas habilitadas (=== true): plugin instalado mas desabilitado não conta.
+    const names = Object.entries(s?.enabledPlugins ?? {}).filter(([, v]) => v === true).map(([n]) => n);
     if (names.some((n) => /jev[-_]?router/i.test(n))) {
       S.sessionOff = true;
       $.ui.toast("DevFlow: outro roteador de sessão está habilitado — a camada de sessão do DevFlow fica desligada; subagentes seguem roteados.");
@@ -136,7 +140,7 @@ async function onAgentSpawn($, e, next) {
   const route = core.onSpawn(S.core, e, { table: S.table, config: S.config, phase: S.core.phase, skill: S.core.skill });
   const res = await next(route?.model ? { ...e, model: route.model } : e);
   if (res && "agentId" in res) {
-    core.onSpawned(S.core, res.agentId, route, res.model);
+    core.onSpawned(S.core, res.agentId, route, res.model, e.subagentType);
     if (route) ledger({ scope: "subagent", agentId: res.agentId, agentType: e.subagentType, phase: S.core.phase, tier: route.tier, model: res.model, effort: route.effort, source: route.source, ceiling: route.ceiling });
   }
   return res;
@@ -162,7 +166,10 @@ async function onTurnComplete($, e, next) {
     if (active() && res?.usage) {
       const u = res.usage;
       const total = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-      ledger({ scope: e.agentId ? "subagent" : "session", agentId: e.agentId, phase: S.core.phase, skill: S.core.skill, model: u.model, usage: u, cacheReadRatio: total ? (u.cache_read_input_tokens ?? 0) / total : undefined });
+      // A troca de fase marcada no turn.step vai na próxima linha da sessão que tem usage (o relatório só lê essas).
+      const switched = !e.agentId && S.pendingSwitch ? true : undefined;
+      if (!e.agentId) S.pendingSwitch = false;
+      ledger({ scope: e.agentId ? "subagent" : "session", agentId: e.agentId, agentType: e.agentId ? S.core.agentTypes[e.agentId] : undefined, switched, phase: S.core.phase, skill: S.core.skill, model: u.model, usage: u, cacheReadRatio: total ? (u.cache_read_input_tokens ?? 0) / total : undefined });
       if (!e.agentId) await flushLedger($);
     }
   } catch { /* ledger nunca quebra o turno */ }
@@ -171,12 +178,12 @@ async function onTurnComplete($, e, next) {
 
 /** @type {import('claude-code').Register} */
 export const register = (on) => {
-  on("session.start", onSessionStart);
+  on("session.start", onSessionStart).catch(($, e, next) => next(e));
   on("command.run", onCommand).catch(($, e, next) => next(e));
-  on("turn.start", onTurnStart);
+  on("turn.start", onTurnStart).catch(($, e, next) => next(e));
   on("agent.spawn", onAgentSpawn).catch(($, e, next) => next(e));
   on("tool.call", onToolCall).catch(($, e, next) => next(e));
-  on("turn.complete", onTurnComplete);
+  on("turn.complete", onTurnComplete).catch(($, e, next) => next(e));
   on("turn.step", async function* ($, e, next) {
     let patch = null;
     try {
@@ -187,7 +194,7 @@ export const register = (on) => {
           core.observeSession(S.core, e); // teto observado sempre (D17), mesmo com a sessão desligada
           core.learnId(S.core, e.model); // ID completo do tier do teto sempre conhecido
           if (!S.sessionOff) patch = core.onSessionStep(S.core, e, { table: S.table, config: S.config });
-          if (patch?.switched) ledger({ scope: "session", phase: S.core.phase, tier: S.core.sessionTier, switched: true });
+          if (patch?.switched) S.pendingSwitch = true;
           if (patch) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
         }
       }

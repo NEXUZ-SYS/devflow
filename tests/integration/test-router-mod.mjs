@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { aggregate, renderMarkdown } from "../../scripts/lib/routing-report.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OPUS = "claude-opus-5-5";
@@ -162,4 +163,72 @@ test("Skill: a da sessão (tool.call sem agentId) muda a skill; a de subagente n
   assert.equal((await H.step({ turnId: "t1", index: 1, model: OPUS, effort: "xhigh", messageCount: 2 })).effort, "medium");
   await H.call("tool.call", { tool: "Skill", tool_use_id: "s2", skill: "superpowers:brainstorming" }, async () => ({}));
   assert.equal((await H.step({ turnId: "t1", index: 2, model: OPUS, effort: "xhigh", messageCount: 3 })).effort, "xhigh");
+});
+
+const YAML_LEDGER = "models:\n  enabled: true\n  ledger: true\n";
+
+test("contrato ponta a ponta: o ledger REAL do mod fecha com o relatório (agentType nos subagentes, trocas de fase = 1)", async () => {
+  const root = mkRepo(YAML_LEDGER, "R");
+  const setPhase = (p) => fs.writeFileSync(path.join(root, ".context/runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { current_phase: p } } }));
+  const H = await load({ root });
+  await H.turn();
+  const spawnAs = (agentId, subagentType, model) =>
+    H.call("agent.spawn", { prompt: "p", fork: false, subagentType, parentModel: OPUS }, async () => ({ agentId, model }));
+  await spawnAs("a1", "devflow:documentation-writer", "claude-haiku-5-5");
+  await spawnAs("a2", "devflow:architect", OPUS);
+  await H.call("turn.complete", { agentId: "a1" }, async () => ({ usage: { model: "claude-haiku-5-5", input_tokens: 100, output_tokens: 10 } }));
+  await H.call("turn.complete", { agentId: "a2" }, async () => ({ usage: { model: OPUS, input_tokens: 200, output_tokens: 20 } }));
+  await H.call("turn.complete", {}, async () => ({ usage: { model: OPUS, input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 9000 } }));
+  setPhase("E");
+  await H.call("turn.start", { text: "x", turnId: "t2" });
+  await H.step({ turnId: "t2", index: 0, model: OPUS, effort: "xhigh", messageCount: 3 });
+  await H.call("turn.complete", {}, async () => ({ usage: { model: SONNET, input_tokens: 5000, output_tokens: 50, cache_read_input_tokens: 0 } }));
+  const entries = H.log.writes.at(-1).text.trim().split("\n").map((l) => JSON.parse(l));
+  const agg = aggregate(entries);
+  assert.deepEqual([...agg.subagents.keys()].sort(), ["devflow:architect", "devflow:documentation-writer"]);
+  assert.equal(agg.phaseSwitches.length, 1);
+  const md = renderMarkdown(agg);
+  assert.doesNotMatch(md, /\| \? \|/);
+  assert.match(md, /Trocas de fase da sessão: 1 /);
+  assert.match(md, /devflow:documentation-writer \| claude-haiku-5-5 \| 1 \|/);
+});
+
+test("aggregate conta switched mesmo em linha sem usage (defesa)", () => {
+  const agg = aggregate([{ scope: "session", phase: "E", switched: true }]);
+  assert.equal(agg.phaseSwitches.length, 1);
+});
+
+test("hooks do mod têm .catch (spec §9): $.env.get que rejeita no turn.start → next é chamado e nada é roteado", async () => {
+  const root = mkRepo();
+  const H = await load({ root });
+  H.$.env.get = async () => { throw new Error("boom"); };
+  let nextCalled = false;
+  await H.call("turn.start", { text: "x", turnId: "t1" }, async (x) => { nextCalled = true; return x; });
+  assert.ok(nextCalled, "next chamado");
+  await H.call("session.start", {});
+  await H.call("turn.complete", {}, async () => ({ usage: { model: OPUS, input_tokens: 1 } }));
+  const seen = await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS });
+  assert.equal(seen.model, undefined);
+  assert.deepEqual(H.log.writes, []);
+  const stepped = await H.step({ turnId: "t1", index: 0, model: OPUS, effort: "xhigh", messageCount: 1 });
+  assert.equal(stepped.effort, "xhigh");
+});
+
+test("D17: outro roteador desabilitado (false) não desliga a sessão; habilitado (true) desliga e avisa", async () => {
+  for (const [val, off] of [[false, false], [true, true]]) {
+    const H = await load({ root: mkRepo() });
+    const toasts = [];
+    H.$.settings.read = async () => ({ enabledPlugins: { "jev-router@mkt": val } });
+    H.$.ui.toast = (t) => toasts.push(t);
+    const first = await H.turn();
+    assert.equal(first.effort, off ? "xhigh" : "medium", `valor ${val}`);
+    assert.equal(toasts.length, off ? 1 : 0);
+  }
+  // sem opt-in efetivo não há aviso algum
+  const H = await load({ root: mkRepo(), env: { HOME: "/home/t" } });
+  const toasts = [];
+  H.$.settings.read = async () => ({ enabledPlugins: { "jev-router@mkt": true } });
+  H.$.ui.toast = (t) => toasts.push(t);
+  await H.turn();
+  assert.deepEqual(toasts, []);
 });

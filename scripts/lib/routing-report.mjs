@@ -21,6 +21,8 @@ export function aggregate(entries) {
       }
       continue;
     }
+    // Defesa: a troca de fase conta mesmo em linha sem usage.
+    if (e?.scope === "session" && e.switched && !e.usage) agg.phaseSwitches.push({ phase: String(e.phase ?? "-"), cacheReadRatio: e.cacheReadRatio ?? null });
     if (!e?.usage || typeof e.model !== "string") continue;
     if (e.scope === "subagent") {
       add(zeroIn(sub(agg.subagents, agent), e.model), e.usage);

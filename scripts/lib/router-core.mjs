@@ -7,7 +7,7 @@ const MAX_SUMMARY = 300;
 const rank = (t) => TIERS.indexOf(t);
 
 export function createRouterState() {
-  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, ids: {}, agents: {} };
+  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, ids: {}, agents: {}, agentTypes: {} };
 }
 
 // Sondas R-3: e.model/e.effort que chegam ao turn.step da sessão são sempre os do usuário.
@@ -55,10 +55,13 @@ export function onSpawn(state, e, { table, config, phase, skill }) {
   });
 }
 
-export function onSpawned(state, agentId, route, resolvedModel) {
+// agentType de TODO subagente despachado (roteado ou não): o ledger de consumo o agrupa por tipo.
+export function onSpawned(state, agentId, route, resolvedModel, agentType) {
   learnId(state, resolvedModel);
+  if (agentId && typeof agentType === "string") state.agentTypes[agentId] = agentType;
   if (!agentId || !route) return;
   state.agents[agentId] = {
+    agentType: typeof agentType === "string" ? agentType : null,
     tier: tierOf(resolvedModel) ?? route.tier, ceiling: route.ceiling, effortBase: route.effort,
     streak: 0, errors: [], decided: false, escalatedTo: null,
   };
