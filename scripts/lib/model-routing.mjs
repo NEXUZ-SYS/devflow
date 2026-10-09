@@ -28,8 +28,8 @@ export function tierOf(value) {
   return null;
 }
 
-export const toAlias = (tier) => ALIAS[tier] ?? null;
-export const toRole = (tier) => ROLE[tier] ?? null;
+export const toAlias = (tier) => (Object.hasOwn(ALIAS, tier) ? ALIAS[tier] : null);
+export const toRole = (tier) => (Object.hasOwn(ROLE, tier) ? ROLE[tier] : null);
 
 export function nextTier(tier) {
   const i = rank(tier);

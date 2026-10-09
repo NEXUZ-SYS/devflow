@@ -28,6 +28,10 @@ test("toAlias e toRole traduzem cada tier e recusam o resto", () => {
   assert.deepEqual(R.TIERS.map(R.toAlias), ["haiku", "sonnet", "opus", "fable"]);
   assert.deepEqual(R.TIERS.map(R.toRole), ["pi/smol", "default", "pi/slow", "pi/plan"]);
   assert.equal(R.toAlias("x"), null);
+  for (const k of ["constructor", "toString", "__proto__"]) {
+    assert.equal(R.toAlias(k), null, `toAlias(${k})`);
+    assert.equal(R.toRole(k), null, `toRole(${k})`);
+  }
 });
 
 test("nextTier sobe um degrau e para no topo", () => {
