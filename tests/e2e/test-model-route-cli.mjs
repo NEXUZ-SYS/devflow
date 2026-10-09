@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -274,4 +274,24 @@ test("report com ledger adulterado: não lança e não ecoa texto livre (revalid
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /Subagentes/);
   assert.doesNotMatch(r.stdout, /SEGREDO|script/);
+});
+
+test(".context como symlink de diretório para fora: a CLI não lê YAML nem prevc.json de fora (§9)", () => {
+  const f = fixture({ models: null, phase: null });
+  const fora = mkdtempSync(join(tmpdir(), "ctx-fora-"));
+  mkdirSync(join(fora, "runtime/workflows"), { recursive: true });
+  writeFileSync(join(fora, ".devflow.yaml"), "models:\n  enabled: true\n");
+  writeFileSync(join(fora, "runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { name: "x", current_phase: "C" } } }));
+  rmSync(join(f.dir, ".context"), { recursive: true, force: true });
+  symlinkSync(fora, join(f.dir, ".context"));
+  assert.equal(JSON.parse(run(["resolve", "--agent", "general-purpose"], f)).route, null);
+  assert.equal(JSON.parse(run(["resolve", "--agent", "general-purpose", "--runtime", "omp"], f)).route, null);
+});
+
+test("omp: .context/agents symlink de diretório para fora → resolve null (§9, D5)", () => {
+  const f = fixture();
+  const fora = mkdtempSync(join(tmpdir(), "ag-fora-"));
+  writeFileSync(join(fora, "x.md"), "---\nmodel: haiku\n---\n");
+  symlinkSync(fora, join(f.dir, ".context/agents"));
+  assert.equal(JSON.parse(run(["resolve", "--agent", "devflow:x", "--runtime", "omp"], f)).route, null);
 });

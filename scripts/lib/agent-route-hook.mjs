@@ -1,12 +1,12 @@
 // scripts/lib/agent-route-hook.mjs — fallback CLÁSSICO do roteamento de subagentes (spec D4/D15).
 // Sai com um único JSON ou nada; nunca nega; nunca emite permissionDecision; erro → nada.
 // Toda leitura de arquivo é sem seguir symlink e sem bloquear (segurança 1).
-import { readFileSync, openSync, readSync, fstatSync, closeSync, realpathSync, constants } from "node:fs";
-import { join, dirname, sep } from "node:path";
+import { readFileSync, openSync, readSync, fstatSync, closeSync, constants } from "node:fs";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readModels } from "./models-config.mjs";
 import { resolveSubagentRoute, effectiveConfig, phaseFromPrevcJson, functionHooksOn } from "./model-routing.mjs";
-import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
+import { readInRoot } from "./safe-read.mjs";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAIL = 256 * 1024;
@@ -39,19 +39,6 @@ export function sessionModelFromTranscript(path) {
     } catch { /* linha cortada na borda da cauda */ }
   }
   return last;
-}
-
-// Leitura segura de arquivo do projeto: o caminho REAL tem de ficar sob a raiz REAL
-// (symlink de diretório intermediário não escapa); qualquer erro = ausente.
-function readInRoot(root, rel) {
-  try {
-    const base = realpathSync(root);
-    const abs = realpathSync(join(root, rel));
-    if (!abs.startsWith(base + sep)) return null;
-    return readRegularFileSafe(abs, SAFE_READ_MAX_BYTES);
-  } catch {
-    return null;
-  }
 }
 
 export function decide(input, env = process.env) {

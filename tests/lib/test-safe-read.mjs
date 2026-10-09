@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { readRegularFileSafe, readRegularFileDetailed } from "../../scripts/lib/safe-read.mjs";
+import { readRegularFileSafe, readRegularFileDetailed, readInRoot, readInRootDetailed } from "../../scripts/lib/safe-read.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "safe-read-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -53,4 +53,20 @@ test("nofollow: false segue symlink para arquivo regular e continua recusando FI
   const t0 = Date.now();
   assert.equal(readRegularFileDetailed(viaLink, 1024, { nofollow: false }).code, "NOT_FILE");
   assert.ok(Date.now() - t0 < 1000);
+});
+
+test("readInRoot: dentro da raiz lê; symlink de diretório para fora, ausente e fora da raiz dão null (§9)", () => {
+  const root = mkdtempSync(join(tmpdir(), "inroot-"));
+  const fora = mkdtempSync(join(tmpdir(), "inroot-fora-"));
+  mkdirSync(join(root, "a"));
+  writeFileSync(join(root, "a/ok.txt"), "dentro");
+  writeFileSync(join(fora, "x.txt"), "fora");
+  symlinkSync(fora, join(root, "esc"));
+  assert.equal(readInRoot(root, "a/ok.txt"), "dentro");
+  assert.equal(readInRoot(root, "esc/x.txt"), null);
+  assert.equal(readInRootDetailed(root, "esc/x.txt").code, "OUTSIDE_ROOT");
+  assert.equal(readInRootDetailed(root, "a/nao.txt").code, "ENOENT");
+  symlinkSync(join(root, "a/ok.txt"), join(root, "a/ln.txt"));
+  assert.equal(readInRoot(root, "a/ln.txt"), "dentro", "symlink para dentro segue (comportamento do clássico)");
+  assert.equal(readInRootDetailed(root, "a/ln.txt", undefined, { nofollow: true }).code, "ELOOP");
 });

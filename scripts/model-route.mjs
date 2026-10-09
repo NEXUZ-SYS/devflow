@@ -6,13 +6,12 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readModels } from "./lib/models-config.mjs";
-import { resolveSubagentRoute, effectiveConfig, tierOf, toAlias, toRole, minTier, TIERS } from "./lib/model-routing.mjs";
+import { resolveSubagentRoute, effectiveConfig, phaseFromPrevcJson, tierOf, toAlias, toRole, minTier, TIERS } from "./lib/model-routing.mjs";
 import { ompCeilingTier } from "./lib/omp-ceiling.mjs";
 import { rubricPrompt, parseAnswers, combine } from "./lib/escalation.mjs";
 import { buildEntry, ledgerDirFrom } from "./lib/routing-ledger.mjs";
 import { aggregate, renderMarkdown, beforeAfter } from "./lib/routing-report.mjs";
-import { readWorkflowState } from "./lib/workflow-resume.mjs";
-import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./lib/safe-read.mjs";
+import { readRegularFileSafe, readInRoot, SAFE_READ_MAX_BYTES } from "./lib/safe-read.mjs";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TRANSCRIPT_MAX = 64 * 1024 * 1024;
@@ -32,11 +31,8 @@ function args(argv) {
 
 const safe = (p, max = SAFE_READ_MAX_BYTES) => readRegularFileSafe(p, max) ?? "";
 const table = () => JSON.parse(readFileSync(join(PLUGIN_ROOT, "assets/model-routing/routes.json"), "utf8"));
-const config = (cwd) => effectiveConfig(readModels(safe(join(cwd, ".context/.devflow.yaml"))), process.env.DEVFLOW_MODEL_ROUTING);
-const phaseOf = (cwd) => {
-  const p = readWorkflowState(cwd)?.phase;
-  return ["P", "R", "E", "V", "C"].includes(p) ? p : null;
-};
+const config = (cwd) => effectiveConfig(readModels(readInRoot(cwd, ".context/.devflow.yaml") ?? ""), process.env.DEVFLOW_MODEL_ROUTING);
+const phaseOf = (cwd) => phaseFromPrevcJson(readInRoot(cwd, ".context/runtime/workflows/prevc.json") ?? "");
 const ledgerDir = (cwd) => ledgerDirFrom({ xdgDataHome: process.env.XDG_DATA_HOME, home: process.env.HOME || homedir(), cwd });
 const str = (v) => (typeof v === "string" ? v : null);
 // Diretório ausente, não-diretório ou sem permissão vira lista vazia (o CLI sai com 0).

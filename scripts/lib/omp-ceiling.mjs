@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseYaml, parseFrontmatter } from "./frontmatter.mjs";
 import { agentName, tierOf } from "./model-routing.mjs";
-import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
+import { readInRootDetailed } from "./safe-read.mjs";
 
 export function ompCeilingTier(pluginRoot, projectRoot, agentType) {
   let roles;
@@ -15,13 +15,15 @@ export function ompCeilingTier(pluginRoot, projectRoot, agentType) {
   const def = Object.hasOwn(defaults, name) ? defaults[name]?.model : undefined;
   if (def !== undefined && def !== null) return tierOf(String(def));
   if (/^[a-z0-9-]+$/.test(name)) {
-    const content = readRegularFileSafe(join(projectRoot, ".context/agents", `${name}.md`), SAFE_READ_MAX_BYTES);
-    if (content) {
+    // Arquivo que EXISTE mas não pode ser lido (symlink, FIFO, grande, fora da raiz) = teto ilegível (D5):
+    // só a AUSÊNCIA (ENOENT) cai no genérico.
+    const r = readInRootDetailed(projectRoot, join(".context/agents", `${name}.md`), undefined, { nofollow: true });
+    if (r.ok) {
       try {
-        const model = parseFrontmatter(content).data?.model;
+        const model = parseFrontmatter(r.text).data?.model;
         if (model !== undefined && model !== null && model !== "") return tierOf(String(model));
       } catch { /* frontmatter inválido: segue para o genérico */ }
-    }
+    } else if (r.code !== "ENOENT") return null;
   }
   return tierOf(String(roles.activities?.execution ?? ""));
 }
