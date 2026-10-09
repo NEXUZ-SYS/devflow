@@ -63,7 +63,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 ## Consequências
 
 **Positivas**
-- Economia medível (ledger + `model-route report`), sem classificador externo.
+- Economia medível (ledger + `model-route report`, que traz o comparativo antes × depois usado pelo gate de 2 semanas), sem classificador externo.
 - Mesma decisão nos três runtimes; teto do usuário garantido onde legível.
 
 **Negativas**
@@ -72,7 +72,8 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Peso de cada modelo na cota não é público: relatório em tokens, não em % da cota.
 
 **Riscos aceitos**
-- **Aberto:** Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `"modules"`, e todos os hooks do DevFlow somem. Mitigações em avaliação: plugin irmão para o mod, ou versão mínima obrigatória. Decisão do operador pendente.
+- Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `"modules"`, e todos os hooks do DevFlow somem. O operador aceitou o risco em 2026-10-10; ele será medido na fase V com um Claude Code antigo, se houver um disponível. Alternativas descartadas por ora: plugin irmão para o mod, versão mínima obrigatória.
+- Risco residual do teto no hook clássico: um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript. É raro; no Claude Code a CLI resolve contra o teto `top`.
 - Garantia de teto só vale quando o adaptador lê o teto; ilegível → não roteia.
 - Gate: o relatório de 2 semanas deve confirmar economia sem regressão de escaladas.
 
@@ -80,6 +81,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 
 - SEMPRE resolver a rota na lib pura (sem `node:*`) e traduzir tier por adaptador; NUNCA ID fixo de modelo na tabela.
 - NUNCA rotear acima do modelo/esforço do usuário; teto ilegível → não rotear.
+- QUANDO a CLI roda com `--runtime omp`, ENTÃO limitar a saída ao teto do agente (decisão do operador de 2026-10-10), lido nesta ordem: `agent_role_defaults` de `omp/omp-roles.yaml`, depois o `model:` de `.context/agents/<nome>.md`, depois `activities.execution`; teto ilegível → não rotear.
 - SEMPRE exigir opt-in duplo: `models.enabled` do repo **e** `DEVFLOW_MODEL_ROUTING=1`; o repositório sozinho nunca liga.
 - SEMPRE alias na ferramenta Agent/`agent.spawn` e ID completo no `turn.step`; sem ID conhecido, só esforço.
 - SEMPRE ler arquivos do repositório com leitura segura (sem link, sem bloqueio, arquivo regular, tamanho limitado; no mod, `$.fs.stat` com `realPath` sob a raiz).
