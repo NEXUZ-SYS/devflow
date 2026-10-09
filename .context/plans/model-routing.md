@@ -6,7 +6,7 @@ planSlug: model-routing
 scope: LARGE
 autonomy: supervised
 status: filled
-progress: 92
+progress: 100
 generated: "2026-10-08"
 scaffoldVersion: "2.0.0"
 summary: "Escolhe modelo e esforço da sessão principal (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task do plano), sempre abaixo do modelo e do esforço do usuário, com escalada por rubrica e medição por ledger. Lib única com tier abstrato e três adaptadores: mod (function hooks), fallback clássico PreToolUse e omp. Opt-in por models.enabled. Jev avaliado e descartado na v1."
@@ -93,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T03:09:47.517Z"
+lastUpdated: "2026-10-09T03:16:44.728Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -120,11 +120,11 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T03:09:47.517Z | Progress: 92%
+> Last updated: 2026-10-09T03:16:44.728Z | Progress: 100%
 
 ### phase-2 [DONE]
 - Started: 2026-10-09T01:58:34.711Z
-- Completed: 2026-10-09T03:09:47.517Z
+- Completed: 2026-10-09T03:16:44.728Z
 
 - [x] Step 1: Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs) *(2026-10-09T02:01:20.851Z)*
   - Output: 54c13eb + 1c4079b — scripts/lib/model-routing.mjs (núcleo puro) e tests/lib/model-routing.test.mjs (11 testes)
@@ -162,3 +162,6 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 - [x] Step 12: Task 12 — doctor, guia pós-update, passo no config e no init *(2026-10-09T03:09:47.517Z)*
   - Output: Check model-routing no doctor + post-update-guide + passo 2.7 no config + item 9 no project-init; functionHooksOn exportada de model-routing.mjs; commit 2280760
   - Notes: Revisão leve aprovada; 3 Minor adiados (provável fix: config §3/§5.3 não citam models: — regeneração pode descartar o bloco). Sensor unit verde.
+- [x] Step 13: Task 13 — ADR e documentação *(2026-10-09T03:16:44.728Z)*
+  - Output: ADR 017 (gated, sondas 2.1.294), docs/model-routing.md, README, spec §10 corrigida, teste do clássico sem fase; commits eefe70b + d1f3dcb
+  - Notes: Revisão + fix round 1 (sondas R-4/R-6/R-7 na ADR; flags no guia; teste de fase nula). URLs de Evidências conferidas por WebFetch. Minor adiados: drift R-2/R-8 ADR×spec×guia. Sensores lint + integration verdes. Todas as 13 tasks concluídas; próximo = revisão final da branch (opus).
