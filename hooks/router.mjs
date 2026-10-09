@@ -1,11 +1,13 @@
 // hooks/router.mjs — adaptador MOD do roteamento de modelos (spec §4.2/§4.3, D18–D21).
 // Só traduz eventos do engine para scripts/lib/router-core.mjs. Qualquer falha → next(e) intocado.
+// Também hospeda o monitor ao vivo (seção "Monitor ao vivo"): o engine aceita um módulo por plugin.
 // Exigência do validate: toda função que recebe `$` é declarada aqui no topo; o estado é do módulo.
 import * as core from "../scripts/lib/router-core.mjs";
 import { readModels } from "../scripts/lib/models-config.mjs";
 import { effectiveConfig, phaseFromPrevcJson } from "../scripts/lib/model-routing.mjs";
 import { rubricPrompt, parseAnswers, combine } from "../scripts/lib/escalation.mjs";
 import { buildEntry, ledgerDirFrom } from "../scripts/lib/routing-ledger.mjs";
+import * as mc from "../scripts/lib/monitor-core.mjs";
 
 const MAX_FILE = 256 * 1024;
 const MAX_LEDGER_LINES = 2000;
@@ -206,15 +208,7 @@ async function onTurnComplete($, e, next) {
   return res;
 }
 
-/** @type {import('claude-code').Register} */
-export const register = (on) => {
-  on("session.start", onSessionStart).catch(($, e, next) => next(e));
-  on("command.run", onCommand).catch(($, e, next) => next(e));
-  on("turn.start", onTurnStart).catch(($, e, next) => next(e));
-  on("agent.spawn", onAgentSpawn).catch(($, e, next) => next(e));
-  on("tool.call", onToolCall).catch(($, e, next) => next(e));
-  on("turn.complete", onTurnComplete).catch(($, e, next) => next(e));
-  on("turn.step", async function* ($, e, next) {
+async function* routerTurnStep($, e, next) {
     let patch = null;
     try {
       await ensure($);
@@ -240,5 +234,106 @@ export const register = (on) => {
     if (patch?.model) rw.model = patch.model;
     if (patch?.effort) rw.effort = patch.effort;
     return yield* next(Object.keys(rw).length ? { ...e, ...rw } : e);
-  });
+}
+
+// ─── Monitor ao vivo (spec 2026-10-09-router-monitor-toolbar, M5/M9) ─────────────────────────────
+// Só observa: cada mon* devolve o resultado de next com e intacto; a lógica própria fica em try.
+// Mora neste arquivo porque o engine só segue `$` até funções declaradas no arquivo dos on(...).
+const ROWS = { plugin: "devflow", key: "monitorRows" };
+const RETRIES = { plugin: "devflow", key: "monitorRetries" };
+const TICK_MS = 1000;
+const M = { st: null, hydrating: null, timer: null, inTick: false };
+
+async function monLoad($) {
+  const [rows, retries] = await Promise.all([$.state.get(ROWS), $.state.get(RETRIES)]);
+  return { rows: Array.isArray(rows?.value) ? rows.value.map((r) => ({ ...r })) : [], retries: { ...(retries?.value ?? {}) } };
+}
+
+// Cópia de trabalho única: hooks concorrentes esperam a mesma leitura (nenhum sobrescreve o outro).
+async function monHydrate($) {
+  if (M.st) return M.st;
+  if (!M.hydrating) M.hydrating = monLoad($).finally(() => { M.hydrating = null; });
+  M.st = await M.hydrating;
+  return M.st;
+}
+
+async function monTick($) {
+  if (M.inTick || !M.st || !mc.isLive(M.st)) return; // sem linha viva: nada a escrever
+  M.inTick = true;
+  try {
+    let list = null;
+    try { list = await $.agent.list(); } catch { list = null; }
+    mc.reap(M.st, { list, now: await $.clock.now() });
+    await $.state.set(ROWS, M.st.rows); // grava sempre: a escrita redesenha a faixa e anda o cronômetro
+  } catch {} finally { M.inTick = false; }
+}
+
+async function monSessionStart($, e, next) {
+  const r = await next(e);
+  try {
+    await monHydrate($);
+    if (!M.timer) M.timer = $.clock.every(TICK_MS, () => { void monTick($); });
+  } catch {}
+  return r;
+}
+
+async function monTurnStart($, e, next) {
+  try {
+    await monHydrate($);
+    mc.openMain(M.st, { now: await $.clock.now() });
+    await $.state.set(ROWS, M.st.rows);
+  } catch {}
+  return next(e);
+}
+
+async function monAgentSpawn($, e, next) {
+  const res = await next(e);
+  try {
+    if (res && typeof res.agentId === "string") {
+      await monHydrate($);
+      mc.onSpawned(M.st, { agentId: res.agentId, subagentType: e.subagentType, description: e.description, prompt: e.prompt, model: res.model, now: await $.clock.now() });
+      await $.state.set(ROWS, M.st.rows);
+      await $.state.set(RETRIES, M.st.retries);
+    }
+  } catch {}
+  return res;
+}
+
+async function monToolCall($, e, next) {
+  const res = await next(e);
+  try {
+    await monHydrate($);
+    if (mc.onTool(M.st, { loopId: e.agentId ?? "main", isError: !!res?.isError, now: await $.clock.now() })) await $.state.set(ROWS, M.st.rows);
+  } catch {}
+  return res;
+}
+
+async function monTurnComplete($, e, next) {
+  const res = await next(e);
+  try {
+    if (!e.agentId) {
+      await monHydrate($);
+      if (mc.closeMain(M.st)) await $.state.set(ROWS, M.st.rows);
+    }
+  } catch {}
+  return res;
+}
+
+async function* monTurnStep($, e, next) {
+  try {
+    await monHydrate($);
+    if (mc.onStep(M.st, { loopId: e.agentId ?? "main", model: e.model, effort: e.effort, now: await $.clock.now() })) await $.state.set(ROWS, M.st.rows);
+  } catch {}
+  return yield* next(e);
+}
+
+/** @type {import('claude-code').Register} */
+export const register = (on) => {
+  on("session.start", ($, e, next) => monSessionStart($, e, (x) => onSessionStart($, x, next))).catch(($, e, next) => next(e));
+  on("command.run", onCommand).catch(($, e, next) => next(e));
+  on("turn.start", ($, e, next) => monTurnStart($, e, (x) => onTurnStart($, x, next))).catch(($, e, next) => next(e));
+  on("agent.spawn", ($, e, next) => monAgentSpawn($, e, (x) => onAgentSpawn($, x, next))).catch(($, e, next) => next(e));
+  on("tool.call", ($, e, next) => monToolCall($, e, (x) => onToolCall($, x, next))).catch(($, e, next) => next(e));
+  on("turn.complete", ($, e, next) => monTurnComplete($, e, (x) => onTurnComplete($, x, next))).catch(($, e, next) => next(e));
+  on("turn.step", async function* ($, e, next) { return yield* monTurnStep($, e, (x) => routerTurnStep($, x, next)); });
 };
