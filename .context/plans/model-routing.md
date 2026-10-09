@@ -41,6 +41,46 @@ phases:
     required_artifacts:
       - handoff-summary
     summary: "Tasks 1–5 e 7: libs puras (tiers, parser models:, resolvedores, escalada, ledger/relatório, router-core). Task 6: CLI model-route. Task 8: adaptador mod. Task 9: fallback clássico. Task 10: adaptador omp. Task 11: skills (tier no plano, escalada entre tentativas). Task 12: doctor, guia pós-update, passo no devflow:config. Task 13: ADR e docs. Revisão leve por task; pesada (security-auditor) nas Tasks 8 e 9."
+    steps:
+      - order: 1
+        description: "Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs)"
+        assignee: "backend-specialist"
+      - order: 2
+        description: "Task 2 — bloco models: no parser único (yaml-block, models-config, devflow-config)"
+        assignee: "backend-specialist"
+      - order: 3
+        description: "Task 3 — routes.json e resolvedores de sessão e subagente"
+        assignee: "backend-specialist"
+      - order: 4
+        description: "Task 4 — rubrica e combinação da escalada (escalation.mjs)"
+        assignee: "backend-specialist"
+      - order: 5
+        description: "Task 5 — ledger com valores validados e relatório (routing-ledger, routing-report)"
+        assignee: "backend-specialist"
+      - order: 6
+        description: "Task 6 — CLI model-route (resolve, escalate, report) com leitura segura"
+        assignee: "backend-specialist"
+      - order: 7
+        description: "Task 7 — router-core, máquina de estado pura do mod"
+        assignee: "backend-specialist"
+      - order: 8
+        description: "Task 8 — adaptador mod hooks/router.mjs (revisão pesada)"
+        assignee: "security-auditor"
+      - order: 9
+        description: "Task 9 — fallback clássico PreToolUse da ferramenta Agent (revisão pesada)"
+        assignee: "security-auditor"
+      - order: 10
+        description: "Task 10 — adaptador omp com teto"
+        assignee: "backend-specialist"
+      - order: 11
+        description: "Task 11 — skills: tier no plano e escalada entre tentativas"
+        assignee: "documentation-writer"
+      - order: 12
+        description: "Task 12 — doctor, guia pós-update, passo no config e no init"
+        assignee: "backend-specialist"
+      - order: 13
+        description: "Task 13 — ADR e documentação"
+        assignee: "architect-specialist"
   - id: "phase-3"
     name: "Validation"
     prevc: "V"
@@ -53,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T01:19:24.294Z"
+lastUpdated: "2026-10-09T01:57:05.102Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -80,4 +120,4 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T01:19:24.294Z | Progress: 0%
+> Last updated: 2026-10-09T01:57:05.102Z | Progress: 0%
