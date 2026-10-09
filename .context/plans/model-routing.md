@@ -27,8 +27,8 @@ phases:
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
-    status: pending
-    summary: "Gate de 8 sondas do comportamento do Claude Code (R-1..R-8 no plano), cada uma com consequência definida, mais revisão do architect (desenho e precedência) e do security-auditor (mod e hook clássico mexem em todo despacho de subagente; containment do prevc.json; ledger por allowlist; nenhum deny)."
+    status: in_progress
+    summary: "Architect e security-auditor APROVADO-COM-RESSALVAS (15 + 10 achados; segurança com PoCs: link para /dev/zero levou o processo a 3,9 GB, FIFO trava o hook, decisor em loop, valor livre no ledger, protótipo poluído; 3.840 combinações de rubrica sem furar o teto). Sondas R-1..R-10 no Claude Code 2.1.294 (claude -p + plugin de sonda): hooks+modules juntos; mod exige CLAUDE_CODE_ENABLE_FUNCTION_HOOKS; turn.step exige ID completo; e.model/parentModel = modelo do usuário; skill.prompt qualificado; updatedInput sem permissionDecision; $.fs.stat com realPath; trocar só o esforço não invalida cache. Decisões do operador: corrigir dentro da R; D18 opt-in duplo (repo + DEVFLOW_MODEL_ROUTING=1); D19 escalada no meio desligada por padrão, perguntada no init/config; D20 omp via --runtime omp com teto. D21 derivada da sonda (alias no Agent, ID no turn.step). Spec e plano revisados; dry-run do plano revisado 163/163 + validate do mod + claude plugin test 5/5. Achados do próprio dry-run: kit só lê *.test.ts; stubs de op event respondem { value }/{ deny }. Pendente: aprovação R→E pelo operador."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
@@ -53,7 +53,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-08T22:30:00.000Z"
+lastUpdated: "2026-10-09T01:19:24.294Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -77,3 +77,7 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 - Spec e plano: commit `355ea53` na branch `feature/model-routing`.
 - Dry-run do plano no scratchpad da sessão: libs puras 43/43, parser + regressão 85/85, CLI 9/9, hook clássico 6/6.
+
+## Execution History
+
+> Last updated: 2026-10-09T01:19:24.294Z | Progress: 0%

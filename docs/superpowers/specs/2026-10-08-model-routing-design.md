@@ -103,10 +103,10 @@ afeta o cache.
 |---|---|
 | D1 | Escopo = **sessão principal (por fase/skill) + subagentes**. Advisor fora. (Revisada: na primeira rodada, só subagentes.) |
 | D2 | Todo sinal de roteamento vem do estado do DevFlow (fase, skill, agente, task): tabela determinística, sem classificador externo. |
-| D3 | Subagentes — quatro fontes, nesta precedência: tier da task do plano → fase/skill → override do projeto → default do agente → `inherit`. |
+| D3 | Subagentes — quatro fontes, nesta precedência: tier da task do plano → skill que despacha (contexto explícito, ex.: revisão final) → fase (projeto antes do plugin) → agente (projeto antes do plugin) → `inherit`. (Revisada na R: a skill vinha depois do override de fase do projeto, o que rebaixava a revisão final.) |
 | D4 | **Uma lib, três adaptadores.** A lib resolve um **tier abstrato** (`cheap/standard/capable/top`); cada runtime o traduz: **mod** (Claude Code com function hooks), **fallback clássico** `PreToolUse` (Claude Code sem function hooks; só subagentes), **omp** (tier → model role; só subagentes). |
-| D5 | **Teto = escolha do usuário.** Modelo: o modelo da sessão que o usuário escolheu (o mod guarda o original antes de rotear a sessão; o clássico lê do transcript; o omp usa o role da sessão). Esforço: o `effortLevel` da sessão. Nada roda acima. `maxTier` é teto adicional opcional. |
-| D6 | **Opt-in pelo config**: `agents/*.md` não ganham `model:`; tudo vive no `routes.yaml` e só os adaptadores aplicam, com `models.enabled: true`. |
+| D5 | **Teto = escolha do usuário.** Modelo: no mod, o `e.model` que chega a cada `turn.step` da sessão e o `parentModel` do `agent.spawn` (as sondas confirmaram que são sempre os do usuário, mesmo com a sessão roteada); no clássico, o último modelo do transcript; no omp, o role que o agente teria sem roteamento. Esforço: o `e.effort` da sessão. Nada roda acima. `maxTier` é teto adicional opcional. A garantia vale quando o adaptador consegue ler o teto; teto ilegível → não roteia. |
+| D6 | **Opt-in duplo (D18)**: `agents/*.md` não ganham `model:`; tudo vive no `routes.json` e só os adaptadores aplicam, com `models.enabled: true` no repositório **e** a confirmação do usuário. |
 | D7 | Escalada de subagente **entre tentativas**: a skill chama `model-route.mjs escalate`, que devolve uma rubrica; o controlador responde; o CLI combina os limiares de forma determinística. |
 | D8 | A escalada só roda após sinal de falha/ambíguo; conclusão bem-sucedida é provada pelo ledger do `verify:` (ADR-013). |
 | D9 | Medição = ledger de decisões sem conteúdo + relatório; no mod, `usage` do `turn.complete`; no clássico/omp, dos transcripts. Opt-in (ADR-005). |
@@ -114,10 +114,14 @@ afeta o cache.
 | D11 | **Sessão por fase, sticky:** o modelo da sessão principal muda só na fronteira de fase do PREVC e fica fixo dentro dela; fora de workflow PREVC, não muda. Default com **uma troca por workflow** (R→E). |
 | D12 | **Esforço da sessão por skill**, a cada turno (sem custo de cache), limitado pelo `effortLevel` do usuário. |
 | D13 | **Esforço por passo em subagente** (mod): falha de ferramenta sobe um degrau no passo seguinte; sucesso volta ao base. |
-| D14 | **Escalada no meio do subagente** (mod): N falhas de ferramenta seguidas (default 3) → decisor via `$.model.complete` (tier `cheap`) com a mesma rubrica → se `escalate`, sobe o modelo pelo resto daquele subagente. No máximo **uma** troca por subagente, nunca para baixo, ≤ teto. Falha do decisor → regra fixa: segue no tier atual. |
+| D14 | **Escalada no meio do subagente** (mod, **atrás de `midRun.enabled`, desligada por padrão — D19**): ao atingir exatamente N falhas de ferramenta seguidas (default 3) → decisor via `$.model.complete` (alias `haiku`) com a mesma rubrica, **uma consulta por subagente** → se `escalate`, sobe o modelo pelo resto daquele subagente. No máximo uma troca por subagente, nunca para baixo, ≤ teto. Falha do decisor → segue no tier atual. |
 | D15 | No clássico e no omp não há camada de sessão, nem esforço por passo, nem escalada no meio — só escolha inicial e escalada entre tentativas. A diferença é declarada no onboarding. |
 | D16 | **Sem Jev na v1** (§2.5). Interface `decider` com implementações `rubric-controller` (entre tentativas) e `model-complete` (no meio); um decisor externo entra depois como novo adaptador. |
-| D17 | **Controle do usuário:** comando `/devflow-route` (status / on / off / `session off`), registrado pelo mod; `/model` manual do usuário passa a ser o novo teto. Se outro roteador de sessão (ex.: jev-router) estiver ativo, a camada de sessão do DevFlow se desliga e avisa — nunca dois mods decidindo o mesmo `turn.step` da sessão. |
+| D17 | **Controle do usuário:** comando `/devflow-route` (status / on / off / `session off`), registrado pelo mod; `/model` e `/effort` do usuário passam a ser o novo teto no passo seguinte (lidos de `e.model`/`e.effort`). Se outro roteador de sessão estiver habilitado (`$.settings.read().enabledPlugins`), a camada de sessão do DevFlow se desliga e avisa — nunca dois mods decidindo o mesmo `turn.step` da sessão. O teto dos subagentes continua sendo observado mesmo com a camada de sessão desligada. |
+| D18 | **Quem liga é o usuário.** Rotear exige `models.enabled: true` no `.devflow.yaml` (versionado) **e** `DEVFLOW_MODEL_ROUTING=1` no ambiente do usuário (bloco `env` do `~/.claude/settings.json`). Repositório clonado sozinho não liga nada; o `doctor` avisa quando o repo pede roteamento sem a confirmação. (Achado de segurança da R.) |
+| D19 | **Escalada no meio desligada por padrão** (`models.midRun.enabled: false`); o onboarding (`/devflow init` → `devflow:config`) pergunta se o usuário quer ligar. O esforço por passo (D13) continua ligado: a sonda R-10 mostrou que trocar só o esforço não invalida o cache. |
+| D20 | **omp completo:** o CLI aceita `--runtime omp` em `resolve`/`escalate` e devolve o model role; o enrich do omp aplica teto (o role que o agente teria sem roteamento) e `maxTier`. Tier da task e escalada entre tentativas chegam ao omp. |
+| D21 | **ID completo só no `turn.step`.** A sonda R-3 mostrou que o `turn.step` recusa alias. O mod aprende o ID completo de cada tier pelo retorno do `agent.spawn` (que resolve o alias); sem ID conhecido para o tier, a camada de sessão ajusta só o esforço. Na ferramenta Agent / `agent.spawn` vale sempre alias; quando o tier é o próprio teto, o despacho não é tocado. |
 
 ## 4. Arquitetura
 
@@ -154,7 +158,7 @@ afeta o cache.
 |---|---|---|
 | `scripts/lib/model-routing.mjs` | Resolução de sessão e de subagente, teto, escada, tradução tier→alias/role. Pura, sem `node:*`. | tabela e config como argumento |
 | `scripts/lib/escalation.mjs` | Rubrica (perguntas fechadas) e `combine(respostas, limiares)` → `{action, tier}`. Pura. | — |
-| `assets/model-routing/routes.yaml` | `session.phases`, `session.skills` (esforço), `agents`, `phases`, `skills`, `effortByTier`, tipos roteáveis, mapas tier→alias e tier→role. | — |
+| `assets/model-routing/routes.json` | `session.phases`, `session.skills` (esforço), `agents`, `phases`, `skills`, `effortByTier`, tipos roteáveis, mapas tier→alias e tier→role. | — |
 | `scripts/lib/devflow-config.mjs` | Lê `models:` (ADR-011); inválido → desligado. | — |
 | `scripts/lib/routing-ledger.mjs` | Formato e allowlist do ledger; escrita em XDG para o CLI. | config |
 | `scripts/model-route.mjs` | CLI: `resolve`, `escalate` (emite rubrica / combina respostas), `report`. | libs (Node) |
@@ -197,7 +201,7 @@ Code aceitar os dois juntos; senão, plugin irmão `devflow-router` no mesmo mar
 | capable | `opus` | `pi/slow` | `high` |
 | top | `fable` | `pi/plan` | `high` |
 
-**Sessão principal por fase** (`routes.yaml → session.phases`)
+**Sessão principal por fase** (`routes.json → session.phases`)
 
 | Fase | Tier da sessão |
 |---|---|
@@ -205,7 +209,7 @@ Code aceitar os dois juntos; senão, plugin irmão `devflow-router` no mesmo mar
 | E, V, C | standard |
 | fora de workflow | sem troca |
 
-**Esforço da sessão por skill** (`routes.yaml → session.skills`; sempre ≤ `effortLevel` do usuário)
+**Esforço da sessão por skill** (`routes.json → session.skills`; sempre ≤ `effortLevel` do usuário)
 
 | Skill | Esforço |
 |---|---|
@@ -214,7 +218,7 @@ Code aceitar os dois juntos; senão, plugin irmão `devflow-router` no mesmo mar
 | `devflow:commit-message`, `devflow:documentation`, `devflow:prevc-confirmation` | `low` |
 | demais | base do tier da fase |
 
-**Subagentes — default por agente** (`routes.yaml → agents`)
+**Subagentes — default por agente** (`routes.json → agents`)
 
 | Tier/esforço | Agentes |
 |---|---|
@@ -283,13 +287,27 @@ models:
   maxTier: capable       # teto adicional opcional (o teto principal é a escolha do usuário)
   ledger: true           # opt-in (ADR-005)
   overrides:             # camada 3 — projeto (tiers abstratos)
-    agents:  { documentation-writer: { tier: standard } }
-    phases:  { E: { general-purpose: { tier: cheap } } }
-    session: { phases: { E: capable } }
+    agents:
+      documentation-writer:
+        tier: standard
+    phases:
+      E:
+        general-purpose:
+          tier: cheap
+    session:
+      phases:
+        E: capable
   midRun:
+    enabled: false       # D19 — escalada no meio desligada por padrão; o onboarding pergunta
     failureStreak: 3
-  thresholds: { capability: 0.6, claimsDone: 0.8 }
+  thresholds:
+    capability: 0.6
+    claimsDone: 0.8
 ```
+
+Além do bloco acima, rotear exige `DEVFLOW_MODEL_ROUTING=1` no ambiente do **usuário** (D18) — o
+onboarding mostra o bloco `env` do `~/.claude/settings.json`; o plugin nunca escreve nele. O leitor do
+subset YAML não aceita mapas inline (`{ ... }`): overrides em estilo bloco.
 
 ### 7.2 Passo "Roteamento de modelos" no `devflow:config`
 
@@ -326,13 +344,17 @@ o cache frio está comendo a economia.
 
 | Ponto | Falha | Comportamento |
 |---|---|---|
-| Mod (qualquer hook) | exceção, config inválida, decisor falhou | `next(e)` intocado (comportamento de hoje); nunca `deny` |
-| Hook clássico | erro, timeout (200 ms), config inválida | sai vazio; nunca nega; um único JSON via `json.dumps`, C0 escapado (ADR-014/015) |
+| Mod (qualquer hook) | exceção, config inválida, decisor falhou | `.catch` → `next(e)` intocado (comportamento de hoje); nunca `deny` |
+| Hook clássico | erro, timeout (5 s), config inválida | sai vazio; nunca nega; nunca emite `permissionDecision`; um único JSON via `JSON.stringify`; wrapper com `exec node` (o processo morre junto com o timeout) |
 | `updatedInput` / `next({...e})` | — | preserva todos os campos; só altera `model`/`effort` |
-| `prevc.json` | ausente, symlink, fora do root | camada de sessão sem troca; containment por realpath; allowlist `P/R/E/V/C` (ADR-014) |
+| Arquivos vindos do repositório (`.devflow.yaml`, `prevc.json`) | symlink, FIFO, `/dev/zero`, dispositivo, enorme, fora do root | **leitura segura** em todos os adaptadores e no CLI: `readRegularFileSafe` (`O_NOFOLLOW`, `O_NONBLOCK`, só arquivo regular, limite de tamanho); no mod, `$.fs.stat({resolve:true})` recusa `isLink`, `kind !== "file"`, tamanho acima do limite e `realPath` fora da raiz; allowlist `P/R/E/V/C` (ADR-014). (PoC da R: link para `/dev/zero` levou o processo a 3,9 GB em 1 s.) |
+| Cauda do transcript (clássico) | FIFO, enorme | aberta com `O_NOFOLLOW`/`O_NONBLOCK`, só arquivo regular, lê ≤ 256 KB do fim |
 | Teto ilegível | — | não roteia |
 | Outro roteador de sessão ativo | — | camada de sessão desligada, aviso uma vez (D17) |
-| Ledger | falha de escrita | ignorada; arquivo `0600` |
+| Ledger | falha de escrita | ignorada; valores por allowlist/regex (`^[A-Za-z0-9:_./-]{1,64}$`) ou enum, nunca texto livre; diretório `0700`, arquivo `0600` no CLI; o mod grava no máximo uma vez por turno da sessão, com teto de linhas |
+| Relatório | `agentType` hostil (`__proto__`) | buckets em `Map`/`Object.create(null)` |
+| Redação da rubrica | relatório enorme | corta em 16 KB, redige, corta em 8 KB (a redação é quadrática no pior caso) |
+| Decisor do meio | falhas seguidas | uma consulta por subagente, só quando a sequência atinge exatamente N |
 
 **Dados:** nada sai da Anthropic. O `state` da escalada no meio vai para uma completion na própria
 sessão, já redigido e truncado (`instinct-redact.mjs`). A rubrica entre tentativas é respondida pelo
@@ -351,21 +373,24 @@ controlador, que já tem o relatório no contexto.
 `usage` do `turn.complete` a troca de modelo da sessão na fronteira, o subagente no modelo roteado e o
 teto respeitado; uma sessão com o mod desligado confirmando o fallback clássico; relatório sobre ambas.
 
-## 11. Verificações obrigatórias na fase R
+## 11. Resultados das sondas da fase R (Claude Code 2.1.294)
 
-1. `hooks/hooks.json` de um plugin aceita `hooks` clássicos e `modules` juntos? (empacotamento)
-2. `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` é exigida para plugin instalado por marketplace? Como o hook
-   clássico detecta que o mod está ativo (exclusão mútua).
-3. Reescrever `model` no `turn.step` da sessão principal é refletido no que o usuário vê (`/model`,
-   status) e não é revertido pelo engine; como o mod obtém o modelo e o `effortLevel` originais.
-4. `skill.prompt` dispara para skills de plugin (`devflow:*`, `superpowers:*`) invocadas pela
-   ferramenta Skill, com o nome qualificado.
-5. Fallback clássico: `updatedInput` vale sem `permissionDecision: allow`? Se exigir, só atua quando o
-   `permission_mode` já auto-aprova a ferramenta Agent. Nome no matcher (`Agent`/`Task`).
-6. `$.model.complete` aceita alias de tier (`haiku`) e quanto da cota consome; `$.fs` fora do
-   diretório do plugin (ledger em `~/.local/share/`).
-7. Como detectar outro roteador de sessão (ex.: jev-router) carregado.
-8. Versão mínima do Claude Code com `agent.spawn.parentModel`, `skill.prompt` e `claude plugin test`.
+Executadas com `claude -p` e um plugin de sonda descartável (hook clássico + módulo), fora do repositório.
+
+| # | Pergunta | Resultado |
+|---|---|---|
+| R-1 | `hooks` clássicos e `modules` no mesmo `hooks/hooks.json` | **Sim** — `claude plugin validate` aceita e os dois rodam na mesma sessão. O mod fica no próprio plugin. |
+| R-2 | Mod depende de `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | **Sim** — sem a variável o módulo não carrega. O hook clássico usa a variável como sinal de exclusão mútua. |
+| R-3 | Reescrever o `model` no `turn.step` da sessão | **Sim, só com ID completo** (`claude-haiku-4-5-20251001` respondeu; o alias `haiku` fez o turno falhar). `e.model` e `e.effort` que chegam são sempre os do usuário; `parentModel` do `agent.spawn` também. Ver D21. |
+| R-4 | `skill.prompt` para skill de plugin | **Sim**, com nome qualificado (`probe-routing:ping`). |
+| R-5 | `updatedInput` sem `permissionDecision` | **Sim** — o subagente rodou com `model: haiku` (`meta.json`). Ferramenta: `Agent`. |
+| R-6 | `$.fs.write` fora do plugin; `$.model.complete` com alias | **Sim** nos dois. `$.fs.stat` existe (`isLink`, `kind`, `size`, `realPath`). Não há append. |
+| R-7 | Detectar outro roteador de sessão | Não há `$.plugin.list`; `$.settings.read().enabledPlugins` expõe os plugins habilitados. |
+| R-8 | Versão mínima | **2.1.294** (versão testada); abaixo dela o `doctor` avisa e o mod é no-op. |
+| R-10 | Trocar só o esforço invalida o cache? | **Não** — esforço alternado `high/low` a cada passo, leitura de cache igual ao controle. |
+
+Restrição do `claude plugin validate` descoberta na sonda: uma função que recebe `$` precisa ser
+declarada no topo do módulo (não dentro do `register`); hooks que decidem pedem `.catch`.
 
 ## 12. Fora do escopo
 
@@ -380,7 +405,9 @@ teto respeitado; uma sessão com o mod desligado confirmando o fallback clássic
 
 Decisão arquitetural sem ADR correspondente (relação `none`): cria uma ADR nova ("Roteamento de
 modelos do DevFlow — lib única com tier abstrato, sessão por fase e subagentes por agente/fase/task,
-teto na escolha do usuário, três adaptadores"), com guardrails de D4–D6, D11, D14 e D17. Número
+teto na escolha do usuário, três adaptadores"), com guardrails de D4–D6, D11, D14, D17, D18 e D21,
+mais: leitura segura de todo arquivo vindo do repositório; o mod importa `models-config.mjs` direto (puro)
+e o parser segue único (ADR-011); a garantia de teto depende de o adaptador conseguir lê-lo. Número
 definido na criação (há renumeração pendente na feature de rastreabilidade). Estende sem contrariar
 ADR-005, 009, 011, 014 e 015.
 
