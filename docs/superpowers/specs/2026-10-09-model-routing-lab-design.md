@@ -73,7 +73,7 @@ Registradas antes da primeira rodada, para que o resultado não seja racionaliza
 | # | Decisão |
 |---|---|
 | L1 | Repo **separado e irmão** do `devflow`: `devflow-routing-lab`, git local sem remoto. Spec e plano ficam no repo `devflow` (é onde roda o workflow). O `devflow-e2e-sandbox` não é tocado. |
-| L2 | O plugin sob teste é a **tag `v3.7.0`**, clonada (`git clone --depth 1 --branch v3.7.0` do repo local) para `.cache/` do laboratório e carregada com `claude --plugin-dir`. O superpowers também vem por `--plugin-dir` (cópia do cache do operador, versão registrada). `git status --porcelain` do clone é conferido vazio antes e depois de cada braço. Outro ref (`--ref`) serve para validar um ajuste. |
+| L2 | O plugin sob teste é a **tag `v3.7.0`**, clonada (`git clone --depth 1 --branch v3.7.0` do repo local) para `${XDG_CACHE_HOME:-~/.cache}/devflow-routing-lab/` — **fora** do laboratório (emenda da fase E: dentro dele, `$CLAUDE_PLUGIN_ROOT/../..` alcançava a suíte oculta) — e carregada com `claude --plugin-dir`. O superpowers também vem por `--plugin-dir` (cópia do cache do operador, versão registrada). `git status --porcelain` do clone é conferido vazio antes e depois de cada braço. Outro ref (`--ref`) serve para validar um ajuste. |
 | L3 | O software-alvo é **um encurtador de links** (API HTTP + autenticação por token + limite de taxa + CLI), em Node ≥ 22, só biblioteca padrão. |
 | L4 | O agente vê só `brief/PRODUCT.md`. A **suíte de aceitação** (`acceptance/`) e a referência ficam no laboratório, fora do alcance relativo do workspace (L13). |
 | L5 | Cada execução é um **braço** descrito por dados (`arms/<id>.json`): teto (`--model`/`--effort`) e o bloco `models:` do `.devflow.yaml`. |
@@ -167,6 +167,7 @@ fase desconhecida → a mensagem não entra na verificação.
 | INV-LEDGER | Ledger dentro da allowlist | B, C, D | nenhuma violação na leitura normalizada; roteado com ledger ligado e zero linhas = MISS |
 | INV-OFF | Roteamento desligado não deixa rastro | A | zero linhas de ledger |
 | INV-PREVC | PREVC terminou | todos | terminou pela regra L7 |
+| INV-ISOL | Rodada não tocou o laboratório | todos | zero referências ao caminho do laboratório ou a `shortlink-ref` nos transcripts (só a contagem é guardada) e `.claude/settings*.json` do workspace sem alteração entre invocações (emenda da fase E) |
 
 **Matriz de cobertura da v3.7** (exercitada / não exercitada, com o sinal observável): sessão por fase
 (D11) · esforço por skill (D12) · subagente por agente (D3) · override de fase (`code-reviewer` na fase
@@ -198,6 +199,7 @@ workflow próprio no repo `devflow`. Fora do escopo: resultado do `verify:` por 
 |---|---|---|
 | `bypassPermissions` | agente alcança credenciais, rede, outros repos | L12 + L13. **Risco residual aceito:** não é sandbox — caminhos absolutos (`~/.ssh`, `~/.git-credentials`, repo `devflow`) seguem legíveis; o modelo de ameaça é acidente de um agente cooperativo, não adversário. Isolamento forte (`bwrap` via `--claude-bin`) fica como opção no runbook. |
 | Plugin sob teste alterado pelo agente | resultado contaminado | `git status --porcelain` do clone antes/depois de cada braço; sujo → campanha aborta |
+| Suíte oculta alterada durante a rodada | Q3 forjado ou contaminado | digest de `acceptance/**`, `fixtures/**` e `lib/accept.mjs` antes/depois de cada braço; mudou → campanha aborta; total da aceitação conferido (13) |
 | Rodada travada ou sem cota | retomadas à toa | L15 |
 | Leitura de dados do agente | link em diretório intermediário, FIFO, arquivo enorme, JSON não-objeto, `__proto__` | só arquivo regular (`O_NOFOLLOW`), listagem com `withFileTypes` aceitando só arquivo/diretório reais, contenção por `realpath` sob a raiz; linha não-objeto vira violação; agregações em `Map`/`Object.create(null)` |
 | Texto livre em `results/` | injeção de Markdown/link no scorecard versionado | ledger normalizado; violações como códigos; evidências só com enums, IDs validados e números; `esc` neutraliza `` []()<>`*_!| `` e quebras de linha |

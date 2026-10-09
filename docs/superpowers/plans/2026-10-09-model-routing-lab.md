@@ -2976,6 +2976,12 @@ Desvios do código transcrito acima, decididos durante a execução (o código n
   - INV-OFF e "opt-in duplo": qualquer rastro de ledger (linhas, violações ou arquivos) reprova.
   - Cobertura pelo sinal do GABARITO §5: "sessão por fase" exige o tier esperado numa fase cujo tier ≠ teto; "subagente por agente" exige subagente com mensagens; "tier da task do plano" exige mensagens e tier ∈ `planTiers`; "esforço por passo" exige braço roteado e tipo roteável; "ledger" exige zero violações.
 
+- **Tasks 10 e 11 — endurecimento após revisão pesada** (security-auditor na S10 e revisão do implementador na S11):
+  - `9436f81` (aceitação): `stop()` com SIGKILL após 2 s; `--test-timeout=30000`; `AbortSignal.timeout` no ping (500 ms) e em `req` (10 s); `killSignal: "SIGKILL"` na CLI; `parseTap` exportado com `EXPECTED_TOTAL = 13` (último resumo; `total-inesperado`; contagem parcial sem resumo); dados e cwd dentro do `box`, apagado no `close`.
+  - `8fe00d9` (driver/isolamento): cache do plugin em `${XDG_CACHE_HOME:-~/.cache}/devflow-routing-lab/` (fora do laboratório — de `LAB/.cache`, `$CLAUDE_PLUGIN_ROOT/../..` alcançava a referência e a suíte oculta); `run-arm` recusa `--plugin-dir`/`--superpowers-dir` dentro do laboratório; **INV-ISOL** (nova, após INV-PREVC, todos os braços): `countRefs` conta no texto bruto dos transcripts referências ao caminho do laboratório e a `shortlink-ref` (só o número) e `settingsHashes` detecta `.claude/settings*.json` alterados entre invocações; SIGINT/SIGTERM/SIGHUP matam o grupo e gravam `interrupted` (saída 130); grupo morto também no `close`; `--mcp-config` aponta para cópia em `runDir/mcp.json`; `git` do workspace com timeout e `core.fsmonitor=false`.
+- **Task 12 (`938dfa9`)**: `lib/integrity.mjs` (`suiteDigest` de `acceptance/**`, `fixtures/**`, `lib/accept.mjs`); a campanha confere o digest antes e depois de cada braço (e depois da coleta) e aborta com 4 se mudar; agulha "GABARITO" removida do INV-ISOL (aparece em docs do próprio plugin); `--runs` comparado também por realpath do ancestral existente; `GABARITO.md` com a linha do INV-ISOL.
+- **Contrato final do laboratório:** unit 91, e2e 19, L1 18 (0 achados L1), lint limpo.
+
 ## Fase V deste workflow (não é task de E)
 
 1. Contrato completo do laboratório verde (Step 6 da Task 12).

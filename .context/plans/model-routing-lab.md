@@ -31,10 +31,10 @@ phases:
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
-    status: pending
+    status: completed
     required_sensors:
       - lint
-    summary: "12 tasks no repo irmão ../devflow-routing-lab (contrato verify próprio: tests/run-{unit,integration,e2e,lint}.sh). Revisão leve por task; pesada (security-auditor) na Task 11 (driver com bypassPermissions)."
+    summary: "12 stories em autonomous-loop sequencial (AO ausente), cada uma despachada ao agente da story com o modelo do Tier do plano (cheap→haiku, standard→sonnet, capable→opus): 16 commits no repo irmão devflow-routing-lab (branch feature/routing-lab, sem remoto). Contrato final: unit 91, e2e 19, L1 18 (CLI v3.7 = oráculo em todos os agentes×fases; H1/H2 caracterizadas no router-core), lint limpo. Revisões que mudaram o código: S7 (revisão crítica do implementador opus: 5 falso-HELD + 3 falso-MISS corrigidos, 15b5f51); S10 (security-auditor: APROVADO-COM-RESSALVAS — ALTA: cache do plugin dentro do lab expunha a suíte oculta; travamento zerava braço; suíte alterável) e S11 (implementador: sinais, sobras, config no ws) → endurecimentos 9436f81 + 8fe00d9 em paralelo (arquivos disjuntos, commits por caminho explícito) + 938dfa9 (digest da suíte na campanha, INV-ISOL). Emendas registradas no plano e na spec."
     steps:
       - order: 1
         description: "Task 1 — bootstrap do repo e braços como dados (lib/arm.mjs, arms/*.json)"
@@ -82,7 +82,7 @@ phases:
     prevc: "C"
     status: pending
     summary: "Spec, plano e tracking no repo devflow via PR; laboratório fica local (sem remoto). Memória e handoff atualizados."
-lastUpdated: "2026-10-09T16:11:51.925Z"
+lastUpdated: "2026-10-09T16:48:00.660Z"
 ---
 
 # Laboratório de validação autônoma do roteamento de modelos
@@ -102,4 +102,4 @@ Tracking do workflow `model-routing-e2e-validation`. O conteúdo canônico está
 
 ## Execution History
 
-> Last updated: 2026-10-09T16:11:51.925Z | Progress: 0%
+> Last updated: 2026-10-09T16:48:00.660Z | Progress: 0%

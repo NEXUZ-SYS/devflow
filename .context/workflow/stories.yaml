@@ -10,7 +10,7 @@ escalation:
   upgrade_after_streak: 5
 stats:
   total: 12
-  completed: 0
+  completed: 12
   failed: 0
   escalated: 0
   consecutive_failures: 0
@@ -22,105 +22,129 @@ stories:
     agent: backend-specialist
     tier: standard
     priority: 1
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: []
+    completed_at: "2026-10-09T16:49:37+00:00"
+    note: "88932ba; 5/5 unit; lint ok"
   - id: "S2"
     title: "Oráculo independente e gabarito"
     description: "Task 2 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: test-writer
     tier: capable
     priority: 2
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S1"]
+    completed_at: "2026-10-09T16:51:27+00:00"
+    note: "2d7b1fd; 11/11 unit; oráculo = spec §5 sem divergência"
   - id: "S3"
     title: "Cache da tag e camada L1 determinística"
     description: "Task 3 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: test-writer
     tier: standard
     priority: 3
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S2"]
+    completed_at: "2026-10-09T16:52:42+00:00"
+    note: "21eb0da; L1 18/18 sem achados; H1/H2 caracterizadas"
   - id: "S4"
     title: "Leitura do stream-json"
     description: "Task 4 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: cheap
     priority: 4
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S1"]
+    completed_at: "2026-10-09T16:53:30+00:00"
+    note: "e098594; 19/19 unit"
   - id: "S5"
     title: "Leitura segura e transcripts"
     description: "Task 5 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: standard
     priority: 5
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S1"]
+    completed_at: "2026-10-09T16:54:11+00:00"
+    note: "c52a0f3; 27/27 unit"
   - id: "S6"
     title: "Ledger e prevc.json"
     description: "Task 6 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: cheap
     priority: 6
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S5"]
+    completed_at: "2026-10-09T16:54:51+00:00"
+    note: "6ca749d; 35/35 unit"
   - id: "S7"
     title: "Invariantes e matriz de cobertura"
     description: "Task 7 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: capable
     priority: 7
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 2
     blocked_by: ["S2", "S6"]
+    completed_at: "2026-10-09T17:00:20+00:00"
+    note: "e55961b + 15b5f51 (correção de 8 falso HELD/MISS + cobertura pelo sinal do gabarito); 59/59 unit"
   - id: "S8"
     title: "Scorecard"
     description: "Task 8 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: standard
     priority: 8
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S7"]
+    completed_at: "2026-10-09T17:01:20+00:00"
+    note: "def9947; 62/62 unit"
   - id: "S9"
     title: "Software-alvo, seed e materialização do workspace"
     description: "Task 9 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: standard
     priority: 9
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S1"]
+    completed_at: "2026-10-09T17:02:10+00:00"
+    note: "c89177d; 66/66 unit; dotcontext 1.1.1"
   - id: "S10"
     title: "Suíte de aceitação oculta e implementação de referência"
     description: "Task 10 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: test-writer
     tier: standard
     priority: 10
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S9"]
+    completed_at: "2026-10-09T17:03:41+00:00"
+    note: "bba221b; 70/70 unit; ref 13/13; revisão pesada security em paralelo com S11"
   - id: "S11"
     title: "Driver da rodada e coleta"
     description: "Task 11 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: backend-specialist
     tier: capable
     priority: 11
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 2
     blocked_by: ["S4", "S5", "S6", "S9", "S10"]
+    completed_at: "2026-10-09T17:20:50+00:00"
+    note: "c68cd7d + 9436f81 (H-A aceitação) + 8fe00d9 (H-B isolamento/driver); unit 88, e2e 15, L1 18"
   - id: "S12"
     title: "Campanha, runbooks e README"
     description: "Task 12 do plano (TDD: teste que falha → implementação → passa → commit no repo do laboratório). Siga o código e os comandos do plano literalmente."
     agent: documentation-writer
     tier: standard
     priority: 12
-    status: pending
-    attempts: 0
+    status: completed
+    attempts: 1
     blocked_by: ["S3", "S8", "S11"]
+    completed_at: "2026-10-09T17:26:12+00:00"
+    note: "938dfa9; unit 91, e2e 19, L1 18, lint ok"
