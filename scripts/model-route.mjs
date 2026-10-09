@@ -6,7 +6,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readModels } from "./lib/models-config.mjs";
-import { resolveSubagentRoute, effectiveConfig, tierOf, toAlias, toRole, TIERS } from "./lib/model-routing.mjs";
+import { resolveSubagentRoute, effectiveConfig, tierOf, toAlias, toRole, minTier, TIERS } from "./lib/model-routing.mjs";
+import { ompCeilingTier } from "./lib/omp-ceiling.mjs";
 import { rubricPrompt, parseAnswers, combine } from "./lib/escalation.mjs";
 import { buildEntry, ledgerDirFrom } from "./lib/routing-ledger.mjs";
 import { aggregate, renderMarkdown } from "./lib/routing-report.mjs";
@@ -50,11 +51,18 @@ function writeLedger(cwd, cfg, entry) {
   } catch { /* ledger nunca quebra o fluxo */ }
 }
 
+// No omp não há adaptador em execução: a CLI limita (D5). No Claude Code o adaptador limita (teto "top").
+function ceilingFor(o, cwd) {
+  return o.runtime === "omp" ? ompCeilingTier(PLUGIN_ROOT, cwd, o.agent) : "top";
+}
+
 function cmdResolve(o, cwd) {
+  const ceiling = ceilingFor(o, cwd);
+  if (!ceiling) { process.stdout.write(JSON.stringify({ route: null }) + "\n"); return; }
   const route = resolveSubagentRoute({
     table: table(), config: config(cwd), agentType: o.agent,
     phase: str(o.phase) ?? phaseOf(cwd), skill: str(o.skill), taskTier: str(o["task-tier"]),
-    explicitModel: null, ceilingModel: "top", ceilingEffort: "max",
+    explicitModel: null, ceilingModel: ceiling, ceilingEffort: "max",
   });
   const out = route ? { ...route, model: route.model ?? toAlias(route.tier), ...(o.runtime === "omp" ? { role: toRole(route.tier) } : {}) } : null;
   process.stdout.write(JSON.stringify({ route: out }) + "\n");
@@ -72,9 +80,14 @@ function cmdEscalate(o, cwd) {
     process.stdout.write(JSON.stringify({ action: "keep", tier: current, model: null, role: null, reason: "roteamento desligado" }) + "\n");
     return;
   }
+  const ompCeiling = ceilingFor(o, cwd);
+  if (!ompCeiling) {
+    process.stdout.write(JSON.stringify({ action: "keep", tier: current, model: null, role: null, reason: "teto ilegível" }) + "\n");
+    return;
+  }
   const d = current
     ? combine(parseAnswers(str(o.answers) ?? ""), {
-        current, ceiling: tierOf(str(o.ceiling) ?? "top") ?? "top", maxTier: cfg.maxTier,
+        current, ceiling: minTier(ompCeiling, tierOf(str(o.ceiling) ?? "top") ?? "top"), maxTier: cfg.maxTier,
         signalRed: !!o["signal-red"], midRun: false, thresholds: cfg.thresholds,
       })
     : { action: "keep", tier: null, reason: "tier atual inválido" };

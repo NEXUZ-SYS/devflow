@@ -6,6 +6,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symli
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { ompCeilingTier } from "../../scripts/lib/omp-ceiling.mjs";
+const PLUGIN = new URL("../..", import.meta.url).pathname;
 const CLI = new URL("../../scripts/model-route.mjs", import.meta.url).pathname;
 
 function fixture({ models = "models:\n  enabled: true\n  ledger: true\n", phase = "E", optIn = "1" } = {}) {
@@ -28,7 +30,7 @@ test("resolve lê a fase do prevc.json e devolve alias", () => {
 });
 
 test("resolve com task-tier e --runtime omp devolve o role", () => {
-  const r = JSON.parse(run(["resolve", "--agent", "general-purpose", "--task-tier", "capable", "--runtime", "omp"], fixture())).route;
+  const r = JSON.parse(run(["resolve", "--agent", "devflow:architect", "--task-tier", "capable", "--runtime", "omp"], fixture())).route;
   assert.deepEqual([r.tier, r.source, r.role], ["capable", "plan", "pi/slow"]);
 });
 
@@ -131,4 +133,59 @@ test("escalate respeita o opt-in (D18/D5): sem a env ou sem models.enabled → k
   const rep = join(mkdtempSync(join(tmpdir(), "rep-")), "r.txt");
   writeFileSync(rep, "x");
   assert.match(run(["escalate", "--agent", "general-purpose", "--tier", "cheap", "--report", rep], fixture({ optIn: null })), /needed_tier/);
+});
+
+// ---- teto do omp na CLI (D5): sem adaptador em execução, a CLI limita a saída ----
+const ans = (needed) => JSON.stringify({ failure_is_capability: 0.9, claims_done_with_evidence: 0.1, is_stuck: 0.9, needed_tier: needed });
+const resolveOmp = (agent, f, extra = []) => JSON.parse(run(["resolve", "--agent", agent, "--task-tier", "capable", "--runtime", "omp", ...extra], f)).route;
+
+test("omp: agente genérico é limitado ao role de activities.execution (tier <= standard)", () => {
+  const r = resolveOmp("general-purpose", fixture());
+  assert.deepEqual([r.tier, r.role], ["standard", "default"]);
+});
+
+test("omp: agent_role_defaults é o teto (architect pi/plan deixa passar pi/slow)", () => {
+  const r = resolveOmp("devflow:architect", fixture());
+  assert.deepEqual([r.tier, r.role], ["capable", "pi/slow"]);
+});
+
+test("omp: escalate acima do teto fica no teto", () => {
+  const d = JSON.parse(run(["escalate", "--agent", "general-purpose", "--tier", "cheap", "--answers", ans("top"), "--runtime", "omp"], fixture()));
+  assert.deepEqual([d.action, d.tier, d.role], ["escalate", "standard", "default"]);
+});
+
+test("omp: --ceiling explícito menor vence o teto do omp", () => {
+  const d = JSON.parse(run(["escalate", "--agent", "architect", "--tier", "cheap", "--answers", ans("top"), "--runtime", "omp", "--ceiling", "standard"], fixture()));
+  assert.deepEqual([d.action, d.tier], ["escalate", "standard"]);
+});
+
+test("omp: teto ilegível (role commit) → resolve null e escalate keep sem ledger", () => {
+  const f = fixture();
+  assert.equal(resolveOmp("devflow:documentation-writer", f), null);
+  const d = JSON.parse(run(["escalate", "--agent", "documentation-writer", "--tier", "cheap", "--answers", ans("top"), "--runtime", "omp"], f));
+  assert.deepEqual([d.action, d.reason, d.model, d.role], ["keep", "teto ilegível", null, null]);
+  assert.deepEqual(readdirSync(f.xdg), [], "keep por teto ilegível não grava no ledger");
+});
+
+test("omp: sem default, o model do .context/agents/<nome>.md é o teto", () => {
+  const f = fixture();
+  mkdirSync(join(f.dir, ".context/agents"), { recursive: true });
+  writeFileSync(join(f.dir, ".context/agents/x.md"), "---\nname: x\nmodel: haiku\n---\ncorpo\n");
+  const r = resolveOmp("devflow:x", f);
+  assert.deepEqual([r.tier, r.role], ["cheap", "pi/smol"]);
+});
+
+test("omp: nome de agente fora de ^[a-z0-9-]+$ não lê arquivo (cai no execution)", () => {
+  const f = fixture();
+  mkdirSync(join(f.dir, ".context/agents"), { recursive: true });
+  writeFileSync(join(f.dir, ".context/agents/x.md"), "---\nmodel: haiku\n---\n");
+  assert.equal(ompCeilingTier(PLUGIN, f.dir, "../agents/x"), "standard");
+  assert.equal(ompCeilingTier(PLUGIN, f.dir, "x"), "cheap");
+});
+
+test("sem --runtime omp o teto continua top (o adaptador limita)", () => {
+  const r = JSON.parse(run(["resolve", "--agent", "general-purpose", "--task-tier", "capable"], fixture())).route;
+  assert.equal(r.tier, "capable");
+  const d = JSON.parse(run(["escalate", "--agent", "general-purpose", "--tier", "cheap", "--answers", ans("top")], fixture()));
+  assert.deepEqual([d.action, d.tier], ["escalate", "top"]);
 });
