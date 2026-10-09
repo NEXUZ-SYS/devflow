@@ -217,4 +217,4 @@ grep -cE '^  odoo-[0-9]+:' .context/engineering/stacks/manifest.yaml 2>/dev/null
 **Se NÃO configurado:**
 1. Rode `/devflow config` e escolha "Roteamento de modelos".
 2. Confirme no seu escopo: adicione `"DEVFLOW_MODEL_ROUTING": "1"` ao bloco `env` do `~/.claude/settings.json` (sem isso nada é roteado).
-3. (Recomendado) `"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"` no mesmo bloco, para a camada de sessão e o esforço por passo.
+3. (Opcional) `"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"` no mesmo bloco, só se o seu Claude Code exigir; nas versões testadas (2.1.293 a 2.1.295) o mod carrega sem ela.

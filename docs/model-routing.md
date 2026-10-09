@@ -18,13 +18,13 @@ Os tiers são abstratos (`cheap`, `standard`, `capable`, `top`); cada adaptador 
 
 | Adaptador | Quando | Sessão por fase | Esforço por skill/passo | Escalada no meio | Subagentes | Teto lido de |
 |---|---|---|---|---|---|---|
-| Mod (function hooks) | Claude Code com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | sim | sim | opt-in | sim | modelo e esforço originais da sessão |
-| Clássico (`PreToolUse` na ferramenta Agent) | Claude Code sem function hooks | não | não | não | sim, só escolha inicial | último modelo do transcript |
+| Mod (function hooks) | Claude Code que carrega a chave `modules` do `hooks.json` (2.1.293 a 2.1.295 carregam sem variável) | sim | sim | opt-in | sim | modelo e esforço originais da sessão |
+| Clássico (`PreToolUse` na ferramenta Agent) | Claude Code em que o mod não carrega | não | não | não | sim, só escolha inicial (a partir do 2º turno) | último modelo do transcript |
 | omp | oh-my-pi | não | não | não | sim, tier para model role | o role que o agente teria sem roteamento (ordem abaixo) |
 
 **Teto do omp.** O adaptador do omp, e a CLI com `--runtime omp`, leem o teto nesta ordem: `agent_role_defaults` de `omp/omp-roles.yaml`; depois o `model:` de `.context/agents/<nome>.md`; depois `activities.execution`. Teto ilegível (por exemplo, o role `commit`) significa não rotear: `resolve` devolve `route: null` e `escalate` devolve `keep`. Sem `--runtime omp`, a CLI resolve contra o teto `top`.
 
-Versão testada do Claude Code: 2.1.294. O check `model-routing` do `doctor` avisa quando o roteamento está pedido e confirmado e a versão do Claude Code é anterior à testada; nesse caso o mod pode não carregar.
+Versões testadas do Claude Code: 2.1.293, 2.1.294 e 2.1.295, que leem o `hooks.json` inteiro e carregam hooks clássicos e mod (medido em sessões reais com `claude -p` e `--plugin-dir`). Versões anteriores não estavam disponíveis para medir. O check `model-routing` do `doctor` avisa quando o roteamento está pedido e confirmado e a versão do Claude Code é anterior à testada; nesse caso o mod pode não carregar.
 
 ## Como ligar
 
@@ -32,7 +32,11 @@ Rotear exige **dois** consentimentos; o repositório sozinho nunca liga nada.
 
 1. No repositório, `models.enabled: true` em `.context/.devflow.yaml`. O `/devflow config` (e o `/devflow init`) conduz a entrevista: camadas, `maxTier`, ledger e escalada no meio.
 2. No seu ambiente, `DEVFLOW_MODEL_ROUTING=1` (bloco `env` do `~/.claude/settings.json`). O plugin nunca escreve nesse arquivo.
-3. Para o mod, também `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`. Sem ela, o hook clássico assume os subagentes.
+3. Opcional: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`. Nas versões testadas (2.1.293, 2.1.294 e 2.1.295) o mod carrega sem ela, até com o valor `0`; se o seu Claude Code exigir, ligue com essa variável (`1|true|yes|on`).
+
+**Mod e clássico juntos.** O hook clássico consulta a variável só para a exclusão mútua. Com ela ausente, mod e clássico podem decidir o mesmo despacho, e o resultado converge: o clássico só emite rebaixamento abaixo do modelo atual da sessão e o mod nunca passa do modelo original. Não há furo de teto nem degradação (verificado com `devflow:architect` na fase E e por simulação).
+
+**Limitação do clássico (primeiro despacho).** No `PreToolUse` do primeiro despacho de uma sessão o transcript ainda não tem mensagem do assistente; o teto fica ilegível e o clássico não roteia (teto ilegível significa não rotear). A partir do segundo turno ele roteia. Isso só afeta o clássico; o mod roteia desde o primeiro despacho.
 
 Exemplo de bloco no `.devflow.yaml` (overrides em estilo bloco, sem mapas inline):
 
@@ -68,6 +72,11 @@ Com `models.ledger: true`, cada decisão vira uma linha JSONL fora do repositór
 
 A seção "Antes × depois" do `report` compara tokens por modelo (entrada, saída e % da saída) em duas janelas, para subagentes e para a sessão. O corte é o timestamp da **primeira linha do ledger**; com o ledger vazio não há corte e o relatório diz que não há comparativo. A janela "depois" vem do ledger; a janela "antes" (e a "depois" quando o ledger não traz `usage`) é preenchida a partir dos transcripts de `--transcripts`. Sem `--transcripts`, a janela "antes" fica vazia. Esse é o comparativo que o gate de 2 semanas usa.
 
+Notas de medição:
+- O corte é a primeira linha do ledger. Turnos da mesma sessão anteriores a essa linha caem no "antes"; em janelas de dias a distorção é desprezível.
+- A troca de modelo da sessão é medida contra o último modelo **aplicado**, e não contra `e.model`, porque o Claude Code entrega sempre o modelo do usuário nesse campo.
+- "Despachos" conta `agentId` distintos, não linhas do ledger.
+
 ## Armadilha no `.devflow.yaml`
 
 Um comentário na mesma linha depois de uma chave de mapa (`overrides:   # …`) apaga o submapa no leitor. Ponha o comentário na linha de cima.
@@ -77,7 +86,8 @@ Um comentário na mesma linha depois de uma chave de mapa (`overrides:   # …`)
 - O peso de cada modelo na cota do Max não é público; o relatório fala em tokens por modelo, nunca em "% da cota".
 - A garantia de teto vale quando o adaptador consegue lê-lo; teto ilegível significa não rotear.
 - O relatório cobre só o diretório atual (worktrees não são somados).
+- No clássico, o primeiro despacho de cada sessão não é roteado (transcript sem mensagem do assistente).
 - Fora do mod não há sessão por fase, esforço por passo nem escalada no meio.
-- Risco aceito: um Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `modules`. O operador aceitou o risco em 2026-10-10; ele será medido na fase V com um Claude Code antigo, se houver um disponível.
+- Risco aceito: um Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `modules`. O operador aceitou o risco em 2026-10-10; a chave foi medida na fase V: 2.1.293, 2.1.294 e 2.1.295 carregam hooks clássicos e mod; versões anteriores não estavam disponíveis para medir, e o risco segue aceito para elas.
 - No hook clássico, um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript (raro; no Claude Code a CLI resolve contra o teto `top`).
 - A decisão é `gated`: o relatório de 2 semanas precisa confirmar a economia sem regressão de escaladas.
