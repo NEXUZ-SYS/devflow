@@ -16,6 +16,9 @@
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readModels } from "./models-config.mjs";
+import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
 import { loadPermissions, detectLegacySchema } from "./permissions-evaluator.mjs";
 import { resolveReadPaths, contextPaths } from "./context-paths.mjs";
 import { readVerifyFromPath, readBlockField } from "./devflow-config.mjs";
@@ -614,7 +617,46 @@ const mempalaceEnv = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv];
+const MODEL_ROUTING_MIN = [2, 1, 293]; // menor versão medida carregando o mod (fase V)
+
+function claudeVersionOf(ctx) {
+  if (typeof ctx.claudeVersion === "string") return ctx.claudeVersion;
+  try { return execFileSync("claude", ["--version"], { encoding: "utf-8", timeout: 5000 }).trim(); } catch { return ""; }
+}
+
+function belowMin(version) {
+  const m = String(version).match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const v = m.slice(1).map(Number);
+  for (let i = 0; i < 3; i++) if (v[i] !== MODEL_ROUTING_MIN[i]) return v[i] < MODEL_ROUTING_MIN[i];
+  return false;
+}
+
+const modelRouting = {
+  id: "model-routing",
+  title: "Roteamento de modelos (models: no .devflow.yaml)",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const m = readModels(readRegularFileSafe(join(ctx.cwd, ".context", ".devflow.yaml"), SAFE_READ_MAX_BYTES) ?? "");
+    if (!m.enabled) return { status: "SKIP", diagnosis: "Roteamento de modelos não pedido por este repositório (opt-in).", repair: "" };
+    const env = ctx.env ?? process.env;
+    if (env.DEVFLOW_MODEL_ROUTING !== "1") {
+      return {
+        status: "WARN",
+        diagnosis: "Este repositório pede roteamento de modelos (models.enabled), mas ele só liga com a sua confirmação.",
+        repair: 'Para aceitar, adicione "DEVFLOW_MODEL_ROUTING": "1" ao bloco env do ~/.claude/settings.json e reinicie. Para recusar, não faça nada.',
+      };
+    }
+    const version = claudeVersionOf(ctx);
+    if (belowMin(version)) {
+      return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.293): o mod pode não carregar.`, repair: "Atualize o Claude Code." };
+    }
+    return { status: "OK", diagnosis: "Roteamento de modelos ativo (mod + fallback clássico).", repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv, modelRouting];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);

@@ -104,6 +104,14 @@ Guia completo: **[docs/guia-enforcement-standards.md](docs/guia-enforcement-stan
 
 ---
 
+## Roteamento de modelos
+
+O DevFlow pode escolher modelo e esforço conforme a fase do PREVC, a skill ativa, o agente e a task do plano: a sessão principal troca de modelo só na fronteira de fase e os subagentes recebem o tier que o trabalho pede, sempre **limitados ao modelo e ao esforço que você escolheu**. É opt-in duplo (`models.enabled` no repositório e `DEVFLOW_MODEL_ROUTING=1` no seu ambiente), funciona no Claude Code (mod ou fallback clássico; a variável `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` é opcional nas versões testadas) e no omp, e mede a economia em tokens por modelo.
+
+Guia completo: **[docs/model-routing.md](docs/model-routing.md)** · decisão: [ADR-017](.context/engineering/adrs/017-model-routing-v1.0.0.md).
+
+---
+
 ## Compatibilidade
 
 | Ferramenta | Subagents | MCP | Hooks |
@@ -329,7 +337,7 @@ devflow/
 ├── assets/skills/    # profiles/<fw>/ — skills de framework, NÃO registradas; copiadas sob detecção de perfil
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
-├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n
+├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n + mod de function hooks (router.mjs, roteamento de modelos)
 ├── locales/          # Traduções (en-US, pt-BR, es-ES)
 ├── references/       # Mapa de skills + mapeamento de ferramentas por plataforma
 ├── tests/            # 208 testes (unit, E2E, validação estrutural)

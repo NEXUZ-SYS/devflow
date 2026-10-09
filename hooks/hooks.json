@@ -1,4 +1,5 @@
 {
+  "modules": ["./router.mjs"],
   "hooks": {
     "SessionStart": [
       {
@@ -71,6 +72,17 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" pre-tool-use-ratchet",
             "async": false,
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" pre-tool-use-agent",
+            "async": false,
+            "timeout": 5
           }
         ]
       }

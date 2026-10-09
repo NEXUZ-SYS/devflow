@@ -1,0 +1,67 @@
+// tests/lib/test-doctor-model-routing.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CHECKS } from "../../scripts/lib/doctor.mjs";
+
+const check = CHECKS.find((c) => c.id === "model-routing");
+function cwdWith(yaml) {
+  const d = mkdtempSync(join(tmpdir(), "doctor-mr-"));
+  mkdirSync(join(d, ".context"));
+  if (yaml !== null) writeFileSync(join(d, ".context/.devflow.yaml"), yaml);
+  return d;
+}
+const ON = "models:\n  enabled: true\n";
+const ALL = { DEVFLOW_MODEL_ROUTING: "1", CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1" };
+
+test("check registrado", () => assert.ok(check));
+
+test("repo sem models → SKIP", () => {
+  assert.equal(check.run({ cwd: cwdWith("git:\n  strategy: x\n"), env: {}, claudeVersion: "2.1.294" }).status, "SKIP");
+});
+
+test("repo pede roteamento sem a confirmação do usuário → WARN (D18)", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: {}, claudeVersion: "2.1.294" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /pede roteamento/);
+  assert.match(r.repair, /DEVFLOW_MODEL_ROUTING/);
+});
+
+// Mudança deliberada (verificação real da fase V): o Claude Code 2.1.293-2.1.295 carrega o mod SEM
+// CLAUDE_CODE_ENABLE_FUNCTION_HOOKS, e até com =0. O antigo WARN "só o fallback clássico" era falso.
+test("ligado sem function hooks na versão testada → OK (mod + fallback clássico), sem WARN falso", () => {
+  for (const hooks of [undefined, "0"]) {
+    const env = { DEVFLOW_MODEL_ROUTING: "1", ...(hooks === undefined ? {} : { CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: hooks }) };
+    const r = check.run({ cwd: cwdWith(ON), env, claudeVersion: "2.1.294" });
+    assert.equal(r.status, "OK");
+    assert.equal(r.diagnosis, "Roteamento de modelos ativo (mod + fallback clássico).");
+  }
+});
+
+test("Claude Code abaixo da versão testada → WARN", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: ALL, claudeVersion: "2.1.200" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /2\.1\.293/);
+});
+
+test("tudo ligado na versão testada → OK", () => {
+  assert.equal(check.run({ cwd: cwdWith(ON), env: ALL, claudeVersion: "2.1.294" }).status, "OK");
+});
+
+test("function hooks aceitos como o Claude Code: ' True ' → OK", () => {
+  const env = { DEVFLOW_MODEL_ROUTING: "1", CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: " True " };
+  assert.equal(check.run({ cwd: cwdWith(ON), env, claudeVersion: "2.1.294" }).status, "OK");
+});
+
+test("2.1.293 (medida na fase V: carrega o mod) → OK, sem WARN de versão", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: { DEVFLOW_MODEL_ROUTING: "1" }, claudeVersion: "2.1.293" });
+  assert.equal(r.status, "OK", r.diagnosis);
+});
+
+test("2.1.292 (abaixo da medida) → WARN citando a versão testada 2.1.293", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: { DEVFLOW_MODEL_ROUTING: "1" }, claudeVersion: "2.1.292" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /2\.1\.293/);
+});

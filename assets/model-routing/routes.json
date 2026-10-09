@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "routable": ["general-purpose"],
+  "routablePrefix": "devflow:",
+  "effortByTier": { "cheap": "low", "standard": "medium", "capable": "high", "top": "high" },
+  "agents": {
+    "architect": { "tier": "capable", "effort": "high" },
+    "security-auditor": { "tier": "capable", "effort": "high" },
+    "bug-fixer": { "tier": "standard", "effort": "high" },
+    "performance-optimizer": { "tier": "standard", "effort": "high" },
+    "product-manager": { "tier": "standard", "effort": "high" },
+    "code-reviewer": { "tier": "standard", "effort": "medium" },
+    "feature-developer": { "tier": "standard", "effort": "medium" },
+    "test-writer": { "tier": "standard", "effort": "medium" },
+    "refactoring-specialist": { "tier": "standard", "effort": "medium" },
+    "backend-specialist": { "tier": "standard", "effort": "medium" },
+    "frontend-specialist": { "tier": "standard", "effort": "medium" },
+    "database-specialist": { "tier": "standard", "effort": "medium" },
+    "devops-specialist": { "tier": "standard", "effort": "medium" },
+    "mobile-specialist": { "tier": "standard", "effort": "medium" },
+    "business-context": { "tier": "standard", "effort": "medium" },
+    "product-context": { "tier": "standard", "effort": "medium" },
+    "operations-context": { "tier": "standard", "effort": "medium" },
+    "engineering-context": { "tier": "standard", "effort": "medium" },
+    "documentation-writer": { "tier": "cheap", "effort": "low" },
+    "memory-specialist": { "tier": "cheap", "effort": "low" },
+    "general-purpose": { "tier": "standard" }
+  },
+  "phases": {
+    "P": { "general-purpose": "standard" },
+    "R": { "general-purpose": "standard", "code-reviewer": "capable" },
+    "E": { "general-purpose": "standard" },
+    "V": { "general-purpose": "standard" },
+    "C": { "general-purpose": "cheap", "documentation-writer": "cheap" }
+  },
+  "skills": {
+    "final-review": { "*": "capable" }
+  },
+  "session": {
+    "phases": { "P": "ceiling", "R": "ceiling", "E": "standard", "V": "standard", "C": "standard" },
+    "skills": {
+      "superpowers:brainstorming": "ceiling",
+      "superpowers:writing-plans": "ceiling",
+      "superpowers:systematic-debugging": "ceiling",
+      "devflow:prevc-review": "ceiling",
+      "devflow:prevc-execution": "medium",
+      "superpowers:subagent-driven-development": "medium",
+      "devflow:prevc-validation": "medium",
+      "devflow:commit-message": "low",
+      "devflow:documentation": "low",
+      "devflow:prevc-confirmation": "low"
+    }
+  }
+}

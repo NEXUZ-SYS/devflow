@@ -4,7 +4,8 @@
 // que o hook lê; readFileSync seguiria o link e bloquearia até o timeout, perdendo a
 // decisão. Aqui: O_NOFOLLOW (symlink → falha), O_NONBLOCK (abrir FIFO não bloqueia),
 // fstat exige arquivo regular dentro do teto de bytes, e a leitura é pelo próprio fd.
-import { openSync, fstatSync, readSync, closeSync, constants } from "node:fs";
+import { openSync, fstatSync, readSync, closeSync, realpathSync, lstatSync, constants } from "node:fs";
+import { join, sep } from "node:path";
 
 /** Teto padrão das leituras de configuração e estado do projeto. */
 export const SAFE_READ_MAX_BYTES = 1024 * 1024;
@@ -51,5 +52,37 @@ export function readRegularFileDetailed(path, maxBytes = SAFE_READ_MAX_BYTES, { 
 /** Conteúdo UTF-8 do arquivo regular `path` (≤ `maxBytes`), ou `null` se não passar. */
 export function readRegularFileSafe(path, maxBytes) {
   const r = readRegularFileDetailed(path, maxBytes);
+  return r.ok ? r.text : null;
+}
+
+/**
+ * Leitura de arquivo do projeto com containment (spec §9): o caminho REAL de `root/rel` tem de
+ * ficar sob o REAL de `root` (symlink de diretório intermediário não escapa). Nunca lança.
+ * `nofollow: true` recusa também symlink no componente final (ELOOP), mesmo para dentro da raiz.
+ *
+ * @returns {{ok: true, text: string} | {ok: false, code: string, message: string}}
+ *   `code`: ENOENT (ausente), OUTSIDE_ROOT, ou o motivo de readRegularFileDetailed.
+ */
+export function readInRootDetailed(root, rel, maxBytes = SAFE_READ_MAX_BYTES, { nofollow = false } = {}) {
+  let base, abs;
+  try {
+    base = realpathSync(root);
+    abs = realpathSync(join(root, rel));
+  } catch (e) {
+    if (e?.code === "ENOENT") {
+      try { lstatSync(join(root, rel)); return { ok: false, code: "ELOOP", message: "symlink sem destino" }; } catch { /* ausente de verdade */ }
+    }
+    return { ok: false, code: e?.code || "EREALPATH", message: e?.message || String(e) };
+  }
+  if (!abs.startsWith(base + sep)) return { ok: false, code: "OUTSIDE_ROOT", message: "fora da raiz" };
+  if (nofollow) {
+    try { if (lstatSync(join(root, rel)).isSymbolicLink()) return { ok: false, code: "ELOOP", message: "symlink" }; } catch { /* segue: a leitura reporta */ }
+  }
+  return readRegularFileDetailed(abs, maxBytes);
+}
+
+/** Texto do arquivo regular `root/rel` contido na raiz, ou `null` por qualquer motivo. */
+export function readInRoot(root, rel, maxBytes = SAFE_READ_MAX_BYTES) {
+  const r = readInRootDetailed(root, rel, maxBytes);
   return r.ok ? r.text : null;
 }

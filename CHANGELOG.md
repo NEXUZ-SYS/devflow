@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — roteamento de modelos
+
+O DevFlow passa a escolher o modelo e o esforço da sessão (por fase do PREVC e por skill) e dos subagentes (por agente, fase e tier da task). O objetivo é gastar menos da cota do plano. A regra que vale para tudo: **nada roda acima do modelo e do esforço que o usuário escolheu**, e quando o teto não é legível o roteamento não acontece.
+
+- **Opt-in duplo.** O repositório pede com `models.enabled: true` no `.devflow.yaml`, e o usuário confirma com `DEVFLOW_MODEL_ROUTING=1` no próprio ambiente. O plugin nunca escreve no `~/.claude/settings.json`. O `/devflow config` ganhou a unidade "Roteamento de modelos", e o `/devflow-doctor` ganhou o check `model-routing`.
+- **Três adaptadores sobre uma lib pura.** A lib trabalha com um tier abstrato (`cheap < standard < capable < top`):
+  - o mod de function hooks (`hooks/router.mjs`): sessão por fase, esforço por passo e escalada no meio da execução, desligada por padrão;
+  - o fallback clássico `PreToolUse` da ferramenta Agent, que nunca nega um despacho;
+  - o omp (`--runtime omp`), em que o tier vira model role, limitado ao role do próprio agente.
+- **A sessão só troca de modelo na fronteira de fase.** O teto do subagente é sempre o modelo original do usuário, mesmo com a sessão já rebaixada.
+- **Escalada entre tentativas.** `prevc-planning` declara o `**Tier:**` de cada task. `prevc-execution` e `autonomous-loop` resolvem o modelo do despacho e escalam por rubrica (`model-route resolve|escalate`).
+- **Medição.** O `model-route report` mostra os tokens por modelo e agente, a sessão por fase, as escaladas, as trocas de fase com a razão de cache no passo seguinte e o comparativo antes × depois. O ledger é opt-in, fica fora do repositório, guarda só números e passa pela allowlist tanto na gravação quanto na leitura.
+
+Versão mínima medida: Claude Code 2.1.293. Nessa versão o mod carrega sem `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`; a variável é opcional. Guia em `docs/model-routing.md`; decisão na ADR 017 (Proposto, `gated` no relatório de duas semanas). As pendências estão em `docs/superpowers/2026-10-10-model-routing-pendencias.md`.
+
 ## [3.6.0] — 2026-10-08
 
 ### Added — `baseline reinit`: refazer o baseline de um standard

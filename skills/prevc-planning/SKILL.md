@@ -244,12 +244,17 @@ For each task group, note which agent role is best suited:
 ```markdown
 ## Task Group: API Layer
 **Agent:** backend-specialist
+**Tier:** cheap | standard | capable
 **Handoff from:** architect (after design review)
 
 - [ ] Step 1: Write failing test for endpoint
 - [ ] Step 2: Run test, confirm failure
 ...
 ```
+
+**Tier** é a complexidade da task para o roteamento de modelos (spec 2026-10-08-model-routing):
+`cheap` = mecânica (1–2 arquivos, spec completa); `standard` = integração entre arquivos;
+`capable` = julgamento de desenho. Escolha um valor só. Inerte quando o roteamento não está ligado.
 
 ### Step 4.5: Generate stories.yaml (if autonomy is assisted or autonomous)
 

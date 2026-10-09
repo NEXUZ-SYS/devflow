@@ -11,12 +11,11 @@
 import { readFileSync, statSync } from "node:fs";
 import { parseYaml } from "./frontmatter.mjs";
 import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
+import { namedBlock, normalizeNewlines } from "./yaml-block.mjs";
+export { readModels } from "./models-config.mjs";
+import { readModels } from "./models-config.mjs";
 
 const MAX_BYTES = 256 * 1024; // cap anti-ReDoS / arquivo absurdo → fallback
-
-function normalizeNewlines(text) {
-  return String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
 
 // Remove comentário inline: primeiro espaço + '#' até o fim.
 function stripInlineComment(v) {
@@ -26,29 +25,6 @@ function stripInlineComment(v) {
 function leadingWidth(line) {
   const m = line.match(/^(\s*)/);
   return m ? m[1].length : 0;
-}
-
-// Retorna apenas as linhas DENTRO do bloco top-level `git:` (fecha na 1ª linha
-// não-indentada não-vazia). Espelha o fallback do read_yaml_field do hook.
-// Coleta as linhas de um bloco de topo (`<name>:` sem valor) até o dedent.
-// Genérica desde 2026-07-23: `readField` cobria só `git:`, o que empurrava os
-// consumidores de campos aninhados (grounding:, instincts:, …) a escrever
-// parser ad-hoc — a violação do ADR-011 era lacuna de API, não indisciplina.
-function namedBlock(text, name) {
-  const esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const head = new RegExp("^" + esc + ":\\s*$");
-  const lines = normalizeNewlines(text).split("\n");
-  const block = [];
-  let inBlock = false;
-  for (const line of lines) {
-    if (!inBlock) {
-      if (head.test(line)) inBlock = true;
-      continue;
-    }
-    if (line.trim() !== "" && !/^\s/.test(line)) break; // dedent → fim do bloco
-    block.push(line);
-  }
-  return block;
 }
 
 // Atalho retrocompatível: os call-sites internos seguem inalterados.
@@ -266,8 +242,11 @@ function main(argv) {
       console.error(String(e.message || e));
       process.exit(1);
     }
+  } else if (cmd === "read-models") {
+    const text = readTextOrNull(argv[1]);
+    process.stdout.write(JSON.stringify(readModels(text ?? "")) + "\n");
   } else {
-    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>|read-block-field <bloco> <campo>|read-verify> <path>");
+    console.error("uso: devflow-config <read-autofinish|read-versioning|read-field <campo>|read-block-field <bloco> <campo>|read-verify|read-models> <path>");
     process.exit(2);
   }
 }

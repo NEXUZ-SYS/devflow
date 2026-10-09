@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# hooks/pre-tool-use-agent — fallback clássico do roteamento de subagentes (sem function hooks).
+# Toda a lógica em scripts/lib/agent-route-hook.mjs; saída = um JSON ou nada; nunca nega.
+# `exec`: o node herda o PID do wrapper e morre junto com o timeout do Claude Code (segurança 1).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+exec node "${PLUGIN_ROOT}/scripts/lib/agent-route-hook.mjs" 2>/dev/null

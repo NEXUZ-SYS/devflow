@@ -5,7 +5,7 @@
 // Claude Code's AskUserQuestion accepts AT MOST 4 options per question. This
 // test parses every `options:` block in the skill and asserts the cap, plus
 // that the 5.3 "patch incremental" menu was split into a SINGLE call with TWO
-// questions (so the 5 configurable areas still fit the 4-option limit).
+// questions (so the 6 configurable areas still fit the 4-option limit).
 //
 // This is a real portability invariant (the runtime rejects >4 options), not a
 // content check — it parses structure and enforces a hard runtime constraint.
@@ -77,7 +77,7 @@ function section53(lines) {
   return lines.slice(start, end);
 }
 
-test("5.3 patch-incremental menu is a SINGLE call with TWO questions (3+2 split)", () => {
+test("5.3 patch-incremental menu is a SINGLE call with TWO questions (3+3 split)", () => {
   const sec = section53(lines);
   // single call → one `questions:` list
   const hasQuestionsList = sec.some((l) => /^\s*questions:\s*$/.test(l));
@@ -85,7 +85,7 @@ test("5.3 patch-incremental menu is a SINGLE call with TWO questions (3+2 split)
   // two questions
   const questionCount = sec.filter((l) => /^\s*-?\s*question:/.test(l)).length;
   assert.equal(questionCount, 2, `5.3 must have exactly 2 questions, found ${questionCount}`);
-  // two options: blocks, each ≤ 4 and together covering the 5 areas
+  // two options: blocks, each ≤ 4 and together covering the 6 areas
   const optionBlocks = [];
   for (let i = 0; i < sec.length; i++) {
     if (/^\s*options:\s*$/.test(sec[i])) optionBlocks.push(countOptions(sec, i));
@@ -93,5 +93,5 @@ test("5.3 patch-incremental menu is a SINGLE call with TWO questions (3+2 split)
   assert.equal(optionBlocks.length, 2, `5.3 must have 2 options: blocks, found ${optionBlocks.length}`);
   for (const c of optionBlocks) assert.ok(c >= 1 && c <= MAX_OPTIONS, `each 5.3 question ≤ ${MAX_OPTIONS} options`);
   const total = optionBlocks.reduce((a, b) => a + b, 0);
-  assert.equal(total, 5, `5.3 must still offer all 5 areas, found ${total}`);
+  assert.equal(total, 6, `5.3 must still offer all 6 areas, found ${total}`);
 });

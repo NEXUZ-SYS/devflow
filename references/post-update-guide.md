@@ -204,3 +204,17 @@ grep -cE '^  odoo-[0-9]+:' .context/engineering/stacks/manifest.yaml 2>/dev/null
 - Standards de perfil passam a declarar `appliesFrom`/`appliesUntil`: um standard exclusivo do 18 não dispara num projeto 17.
 
 **Verificação:** o manifesto passa a ter uma única série da família, e `devflow stacks reconcile` reporta `podar: —`.
+
+## Roteamento de modelos
+
+**O que é:** escolhe modelo e esforço da sessão (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task), sempre abaixo do modelo e do esforço que você escolheu. Mede a economia com `model-route report`.
+
+**Detecção:** bloco `models:` ausente no `.devflow.yaml`.
+```bash
+! grep -q "^models:" .context/.devflow.yaml 2>/dev/null
+```
+
+**Se NÃO configurado:**
+1. Rode `/devflow config` e escolha "Roteamento de modelos".
+2. Confirme no seu escopo: adicione `"DEVFLOW_MODEL_ROUTING": "1"` ao bloco `env` do `~/.claude/settings.json` (sem isso nada é roteado).
+3. (Opcional) `"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"` no mesmo bloco, só se o seu Claude Code exigir; nas versões testadas (2.1.293 a 2.1.295) o mod carrega sem ela.
