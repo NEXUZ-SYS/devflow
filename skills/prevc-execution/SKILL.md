@@ -256,7 +256,9 @@ Responda a rubrica com um JSON e peça a decisão:
 node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --answers "$ANSWERS" --signal-red
 ```
 
-`escalate` → re-despache com o `model` devolvido; `human` → escalada humana atual; `keep` → retry no mesmo modelo.
+`$TIER` é o `route.tier` devolvido pelo `resolve` do despacho original. Se aquele despacho foi sem rota (`route` nulo), não há escalada de modelo: siga o retry normal.
+
+`escalate` → re-despache com o `model` devolvido (sob omp, o campo útil do retorno é `role`, não `model`); `human` → escalada humana atual; `keep` → retry no mesmo modelo.
 
 ## Model role (omp)
 

@@ -493,7 +493,7 @@ AskUserQuestion:
       description: "Bump patch/minor disparam o release.yml automaticamente; major sempre espera você. O PR ainda precisa de merge humano para publicar — o auto-disparo evita o passo manual de abrir, não o gate."
 ```
 
-### 2.7 (opcional) Roteamento de modelos
+### 2.7 Roteamento de modelos (opcional)
 
 Passo "Roteamento de modelos" (perguntas em pt-BR, uma por vez):
 
@@ -618,9 +618,15 @@ node "$CLAUDE_PLUGIN_ROOT/scripts/lib/orchestrator-config.mjs" block-mode "<MODE
 
 Substituir `<MODE>` por `suggest` (opção "Sugerir quando compensar") ou `auto` (opção "Automático"). Quando `enabled:false`, chamar sem `mode` — a lib descarta o campo. Anexar a saída ao `.devflow.yaml`.
 
+**Regras de geração para models:**
+- Se o Step 2.7 não foi alcançado/respondido, ou o usuário não quis ligar o roteamento: **não incluir** a seção `models:` (ausência = roteamento desligado).
+- Se o usuário ligou o roteamento: gravar o bloco `models:` do passo 2.7 (item 6), em estilo bloco, e aplicá-lo com `mergeSection(yaml, "models", <bloco models:>)` (`scripts/lib/devflow-yaml-merge.mjs`).
+- Se a seção `models:` **já existir** no arquivo, ela é **preservada**: uma regeneração completa não a descarta nem a sobrescreve, a menos que o usuário tenha escolhido reconfigurar o roteamento de modelos.
+- Comentários explicativos vão na linha de cima de uma chave de mapa; um comentário na mesma linha (`overrides:   # …`) apaga o submapa no leitor.
+
 **Regras de geração no modo patch incremental (Step 5.3):**
 - **NUNCA** regenerar o arquivo inteiro. Aplicar **somente** a(s) seção(ões) da(s) unidade(s) selecionada(s); o cabeçalho-comentário e as demais seções ficam verbatim.
-- Para cada seção YAML (`git:`, `mempalace:`, `grounding:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
+- Para cada seção YAML (`git:`, `mempalace:`, `grounding:`, `models:`): montar o bloco com as regras acima e aplicá-lo via o helper `scripts/lib/devflow-yaml-merge.mjs` — `mergeSection(yamlAtual, "<nome>", "<bloco>")` substitui-ou-anexa preservando o resto. Equivalente manual: usar `Edit` para trocar/anexar **apenas** o bloco `<nome>:`.
 - `routines.json` (§4.6) e `.mcp.json` (§2.4) já são não-destrutivos por construção (seed incremental por id e merge dentro de `mcpServers`) — não sobrescrever.
 - Se uma unidade for desmarcada, **não emitir** sua seção — ausência continua significando desativado (regras acima).
 - **`orchestrator:`** — **somente** se o Step 2.6 foi respondido (não pulado): se ausente, gerar via `orchestratorBlock(...)` e anexar; se presente, substituir o bloco inteiro preservando as demais seções. Usar `{enabled:false}` quando "Não usar" ou `NEEDS_USER_SCOPE`; usar `{mode:'<MODE>'}` quando habilitado. Se o Step 2.6 foi pulado, **não tocar** na seção `orchestrator:` (ausência continua significando não configurado).
@@ -729,7 +735,7 @@ SECTIONS=$(node "$CLAUDE_PLUGIN_ROOT/scripts/lib/devflow-yaml-merge.mjs" top-lev
 # docs-mcp-server e mempalace MCP → reusar as detecções de §2.4 (HAS_DOCS_MCP) e P6 (HAS_MEMPALACE)
 ```
 
-Imprimir um painel cobrindo as 9 áreas (✅/⬚), por exemplo:
+Imprimir um painel cobrindo todas as áreas (inclusive `models`, presente quando `models` está em `$SECTIONS`) (✅/⬚), por exemplo:
 
 ```
 Estado atual de .context/.devflow.yaml:
@@ -741,6 +747,7 @@ Estado atual de .context/.devflow.yaml:
   ✅ docs-mcp-server ....... ativado (.mcp.json)
   ✅ Doc-grounding ......... docs-only
   ⬚ Rotinas de manutenção . não configurado
+  ⬚ Roteamento de modelos .. não configurado   (✅ ligado/desligado quando a seção `models:` existe)
 ```
 
 #### 5.2 Menu de 3 vias
@@ -765,7 +772,7 @@ AskUserQuestion:
 
 #### 5.3 Patch incremental
 
-> ⚠️ **Runtime cap:** no Claude Code o `AskUserQuestion` aceita **no máximo 4 opções por pergunta**. As 5 áreas são apresentadas como **um único call com duas perguntas** (3+2). A **união** das seleções das duas perguntas é o conjunto de áreas a configurar.
+> ⚠️ **Runtime cap:** no Claude Code o `AskUserQuestion` aceita **no máximo 4 opções por pergunta**. As 6 áreas são apresentadas como **um único call com duas perguntas** (3+3). A **união** das seleções das duas perguntas é o conjunto de áreas a configurar.
 
 ```
 AskUserQuestion (1 call, 2 perguntas):
@@ -788,6 +795,8 @@ AskUserQuestion (1 call, 2 perguntas):
           description: "Sourcing obrigatório de fatos de stack via MCP (§2.5 — depende do docs-mcp-server)"
         - label: "Rotinas de manutenção"
           description: "Semear .context/routines.json com o health-check periódico (§4.6)"
+        - label: "Roteamento de modelos"
+          description: "Rotear modelo/esforço por fase e subagente, escalada no meio da execução e ledger (§2.7)"
 ```
 
 **Pré-marcar (multiSelect default) apenas as áreas ausentes** do painel 5.1 (em ambas as perguntas) — assim o default já é "só o que falta", mas o usuário pode marcar uma área já configurada para alterá-la. Trate a **união** das duas respostas como a lista final de unidades a aplicar.
@@ -801,6 +810,7 @@ Para **cada** unidade selecionada, rodar **somente** o(s) bloco(s) de pergunta c
 | docs-mcp-server | §2.4 / P9 | editar `.mcp.json` (merge em `mcpServers`) |
 | Doc-grounding | §2.5 / P10 | `mergeSection(yaml, "grounding", <bloco grounding:>)` |
 | Rotinas de manutenção | §4.6 | acrescentar as routines ausentes, preservando as existentes |
+| Roteamento de modelos | §2.7 | `mergeSection(yaml, "models", <bloco models:>)` |
 
 Ao final, reimprimir o painel 5.1 atualizado para confirmar o que mudou.
 

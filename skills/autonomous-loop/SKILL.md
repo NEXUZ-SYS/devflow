@@ -207,7 +207,9 @@ Na avaliação do resultado, os **gates leem o JSON validado** (`overall_correct
        node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --report "$REPORT"
        node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --answers "$ANSWERS" --signal-red
        ```
-       `escalate` → retry com o `model` devolvido; `human` → Step 5 (escalada humana); `keep` → retry no mesmo modelo.
+       `$TIER` é o `route.tier` devolvido pelo `resolve` do despacho original da story. Se aquele despacho foi sem rota (`route` nulo), não há escalada de modelo: siga o retry normal.
+
+       `escalate` → retry com o `model` devolvido (sob omp, o campo útil do retorno é `role`, não `model`); `human` → Step 5 (escalada humana); `keep` → retry no mesmo modelo.
      - Log: "Story <id> failed (attempt <n>/<max>). Retrying with adjusted approach."
      - Continue to Step 2 (will re-select this story due to priority)
    - If `story.attempts >= escalation.max_retries_per_story`:
