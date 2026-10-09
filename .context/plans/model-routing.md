@@ -6,7 +6,7 @@ planSlug: model-routing
 scope: LARGE
 autonomy: supervised
 status: filled
-progress: 15
+progress: 23
 generated: "2026-10-08"
 scaffoldVersion: "2.0.0"
 summary: "Escolhe modelo e esforço da sessão principal (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task do plano), sempre abaixo do modelo e do esforço do usuário, com escalada por rubrica e medição por ledger. Lib única com tier abstrato e três adaptadores: mod (function hooks), fallback clássico PreToolUse e omp. Opt-in por models.enabled. Jev avaliado e descartado na v1."
@@ -93,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T02:03:16.702Z"
+lastUpdated: "2026-10-09T02:05:10.625Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -120,11 +120,11 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T02:03:16.702Z | Progress: 15%
+> Last updated: 2026-10-09T02:05:10.625Z | Progress: 23%
 
 ### phase-2 [DONE]
 - Started: 2026-10-09T01:58:34.711Z
-- Completed: 2026-10-09T02:03:16.702Z
+- Completed: 2026-10-09T02:05:10.625Z
 
 - [x] Step 1: Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs) *(2026-10-09T02:01:20.851Z)*
   - Output: 54c13eb + 1c4079b — scripts/lib/model-routing.mjs (núcleo puro) e tests/lib/model-routing.test.mjs (11 testes)
@@ -132,3 +132,6 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 - [x] Step 2: Task 2 — bloco models: no parser único (yaml-block, models-config, devflow-config) *(2026-10-09T02:03:16.702Z)*
   - Output: f94b5c8 — yaml-block.mjs, models-config.mjs (readModels), devflow-config.mjs reexporta + read-models; 85/85 com regressão do parser
   - Notes: Revisão aprovada sem achados bloqueantes; 1 Minor adiado (import sem uso). Sensor unit verde.
+- [x] Step 3: Task 3 — routes.json e resolvedores de sessão e subagente *(2026-10-09T02:05:10.625Z)*
+  - Output: 1d67173 — assets/model-routing/routes.json + resolveSubagentRoute/resolveSessionRoute/agentName; 13 testes (+11 da Task 1)
+  - Notes: Revisão aprovada (D5, D21, D3 conferidos); 2 Minor adiados. Sensor unit verde.
