@@ -40,7 +40,7 @@ persistência entre sessões, envio de dados para fora, reaparecer agente retoma
 |---|---|---|
 | M1 | Linha: `{rótulo} Modelo: {modelo}·{esforço} ({origem}) \| Tempo: {cronômetro} \| Falhas: {streak} \| Retentativas: {n}` | operador; esforço proposto e aceito |
 | M2 | **Falhas** = streak de falhas de ferramenta seguidas, a regra do `router-core` (erro soma 1, sucesso zera) | operador |
-| M3 | **Retentativas** = redespachos da mesma task pelo mesmo papel: chave `subagentType::papel::id da task`. 1º despacho = 0; sem id = `—` | operador; papel acrescentado na R (architect #1) |
+| M3 | **Retentativas** = redespachos da mesma task pelo mesmo papel: chave `workflow|-::subagentType::papel|-::id da task` (escopo por workflow do PREVC, M10). 1º despacho = 0; sem id = `—` | operador; papel acrescentado na R (architect #1) |
 | M4 | Faixa **sempre** visível com agente vivo; origem por linha: `roteado`, `teto` ou `router off` | operador |
 | M5 | **rev.2.** Um único módulo de hooks: a cola do monitor (o que usa `$`) mora em `hooks/router.mjs`, numa seção própria, e envolve cada hook do router por fora. A lógica pura fica em `scripts/lib/monitor-core.mjs`. | restrição do engine medida nas sondas (§8) |
 | M6 | Sem JSX: `h(...)` global, `$.state.get/set` puros, para seguir importável no node | sonda confirmou |
@@ -180,7 +180,7 @@ sessão                                    Modelo: opus-5-5·high (teto)        
 - **Limitação conhecida.** Agente retomado por SendMessage depois de `completed` não volta à faixa (não
   há `agent.spawn`); backlog.
 - **Sempre ligado.** A linha `sessão` aparece a cada turno em todo projeto com o plugin (M8).
-- **ADR-017.** Relação **alinhada**: o monitor não lê arquivo do repositório, não grava ledger e não envia
+- **ADR-017.** Relação **alinhada**: o monitor não lê arquivo do repositório (o roteador lê o `prevc.json` com a leitura segura, só para o escopo das retentativas), não grava ledger e não envia
   nada para fora. O router só publica; nunca consome o estado do monitor.
 
 ## 7. Testes
