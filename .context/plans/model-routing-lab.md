@@ -75,8 +75,8 @@ phases:
   - id: "phase-3"
     name: "Validation"
     prevc: "V"
-    status: pending
-    summary: "Contrato completo do laboratório verde; revisão de segurança de run-arm/collect/safe-read; campanha real A+B ao vivo e scorecard revisado, MISS registrados em findings.md e backlog no repo devflow."
+    status: completed
+    summary: "Contrato do lab verde e observado (unit 105, e2e 28, L1 18, lint); verify-gate do lab auto-reportado (lab sem verify:). code-reviewer (opus): CONFORME-COM-RESSALVAS, B8 ok (test( 0→137, nenhum skip/assert esvaziado). security-auditor (opus): APROVADO-COM-RESSALVAS com B1 bloqueante (preflight só conferia presença) → allowlist exata em todo init (35ec4c5). Preflight REAL aprovado. Campanha real: braço A morto pelo Claude Code por pressão de memória aos 32 min (driver parou limpo); smoke da rodada parcial validou o leitor de transcripts no formato real e achou 2 lacunas de coleta (f090e95). Evidência prévia de H1 (um turno -p atravessou P→R→E) e de turnos extras por notificação de background. Operador decidiu rodar a campanha A+B no tmux. Achados e backlog: docs/superpowers/2026-10-09-model-routing-lab-findings.md."
   - id: "phase-4"
     name: "Confirmation"
     prevc: "C"
