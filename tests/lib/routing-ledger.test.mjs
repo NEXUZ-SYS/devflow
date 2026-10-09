@@ -126,3 +126,13 @@ test("libs são puras", () => {
     assert.doesNotMatch(src, /from\s+["']node:/, f);
   }
 });
+
+test("beforeAfter: linha adulterada com scope:'cut' é ignorada e não lança", () => {
+  const ledger = [
+    { ts: "2026-10-08T12:00:00.000Z", scope: "subagent", agentType: "x", model: "claude-a", usage: { input_tokens: 1, output_tokens: 1 } },
+    { ts: "2026-10-08T12:01:00.000Z", scope: "cut", model: "claude-a", usage: { input_tokens: 5, output_tokens: 5 } },
+  ];
+  let ba;
+  assert.doesNotThrow(() => { ba = beforeAfter(ledger, []); });
+  assert.equal(typeof ba.cut, "number");
+});

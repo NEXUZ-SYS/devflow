@@ -102,6 +102,23 @@ test("report --transcripts soma o usage dos subagentes sem ler conteúdo", () =>
   assert.doesNotMatch(out, /SEGREDO/);
 });
 
+test("report: mesmo message.id repetido em 3 linhas conta uma vez (tabelas por agente e antes × depois)", () => {
+  const f = fixture();
+  const dir = ledgerDirFrom({ xdgDataHome: f.xdg, home: f.xdg, cwd: f.dir });
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "mod.jsonl"), JSON.stringify({ ts: "2026-10-08T12:00:00.000Z", scope: "subagent", agentType: "devflow:code-reviewer", escalation: { at: "retry", from: "cheap", to: "standard", action: "escalate" } }) + "\n");
+  const proj = mkdtempSync(join(tmpdir(), "dedup-"));
+  const sub = join(proj, "s1", "subagents");
+  mkdirSync(sub, { recursive: true });
+  writeFileSync(join(sub, "agent-a.meta.json"), JSON.stringify({ agentType: "devflow:code-reviewer" }));
+  const line = (id) => JSON.stringify({ timestamp: "2026-10-08T11:00:00.000Z", type: "assistant", message: { id, model: "claude-opus-5", content: "SEGREDO", usage: { input_tokens: 1000, output_tokens: 2000 } } });
+  writeFileSync(join(sub, "agent-a.jsonl"), [line("msg_X"), line("msg_X"), line("msg_X")].join("\n"));
+  const out = run(["report", "--transcripts", proj], f);
+  assert.match(out, /devflow:code-reviewer \| claude-opus-5 \| 1 \| 1\.0k \| 2\.0k/);
+  assert.match(out, /\| antes \| claude-opus-5 \| 1\.0k \| 2\.0k \|/);
+  assert.doesNotMatch(out, /msg_X|SEGREDO/);
+});
+
 test("uso inválido → exit 2", () => {
   assert.equal(spawnSync("node", [CLI, "voar"], { encoding: "utf8" }).status, 2);
 });

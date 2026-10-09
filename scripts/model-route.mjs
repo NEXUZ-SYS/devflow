@@ -110,10 +110,12 @@ function transcriptEntries(projectsDir) {
       let agentType;
       try { agentType = String(JSON.parse(safe(join(sub, meta))).agentType ?? "?"); } catch { continue; }
       const byModel = new Map();
+      const seen = new Set();
       for (const line of safe(join(sub, meta.replace(/\.meta\.json$/, ".jsonl")), TRANSCRIPT_MAX).split("\n")) {
         let m;
         try { m = JSON.parse(line)?.message; } catch { continue; }
         if (!m?.usage || typeof m.model !== "string" || !m.model.startsWith("claude")) continue;
+        if (typeof m.id === "string") { if (seen.has(m.id)) continue; seen.add(m.id); }
         if (!byModel.has(m.model)) byModel.set(m.model, { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 });
         const u = byModel.get(m.model);
         for (const k of Object.keys(u)) if (typeof m.usage[k] === "number") u[k] += m.usage[k];
@@ -128,12 +130,14 @@ function transcriptEntries(projectsDir) {
 function transcriptMessages(projectsDir) {
   const out = [];
   const read = (path, scope) => {
+    const seen = new Set();
     for (const line of safe(path, TRANSCRIPT_MAX).split("\n")) {
       let j;
       try { j = JSON.parse(line); } catch { continue; }
       const m = j?.message;
       const ts = typeof j?.timestamp === "string" ? Date.parse(j.timestamp) : NaN;
       if (!m?.usage || typeof m.model !== "string" || !m.model.startsWith("claude") || !Number.isFinite(ts)) continue;
+      if (typeof m.id === "string") { if (seen.has(m.id)) continue; seen.add(m.id); }
       const usage = {};
       for (const k of ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]) if (typeof m.usage[k] === "number") usage[k] = m.usage[k];
       out.push({ ts, scope, model: m.model, usage });

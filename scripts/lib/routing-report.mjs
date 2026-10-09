@@ -54,7 +54,7 @@ export function beforeAfter(ledger, messages) {
   ba.cut = Math.min(...stamps);
   const ledgerHasUsage = (ledger ?? []).some((e) => e?.usage);
   for (const e of ledger ?? []) {
-    if (!e?.usage || typeof e.model !== "string" || !ba[e.scope] || !Object.hasOwn(ba, e.scope)) continue;
+    if (!e?.usage || typeof e.model !== "string" || (e.scope !== "session" && e.scope !== "subagent")) continue;
     addTok(ba[e.scope].after, e.model, e.usage);
   }
   for (const m of messages ?? []) {
