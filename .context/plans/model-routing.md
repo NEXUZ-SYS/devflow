@@ -6,7 +6,7 @@ planSlug: model-routing
 scope: LARGE
 autonomy: supervised
 status: filled
-progress: 38
+progress: 46
 generated: "2026-10-08"
 scaffoldVersion: "2.0.0"
 summary: "Escolhe modelo e esforço da sessão principal (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task do plano), sempre abaixo do modelo e do esforço do usuário, com escalada por rubrica e medição por ledger. Lib única com tier abstrato e três adaptadores: mod (function hooks), fallback clássico PreToolUse e omp. Opt-in por models.enabled. Jev avaliado e descartado na v1."
@@ -93,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T02:08:34.051Z"
+lastUpdated: "2026-10-09T02:14:39.935Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -120,11 +120,11 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T02:08:34.051Z | Progress: 38%
+> Last updated: 2026-10-09T02:14:39.935Z | Progress: 46%
 
 ### phase-2 [DONE]
 - Started: 2026-10-09T01:58:34.711Z
-- Completed: 2026-10-09T02:08:34.051Z
+- Completed: 2026-10-09T02:14:39.935Z
 
 - [x] Step 1: Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs) *(2026-10-09T02:01:20.851Z)*
   - Output: 54c13eb + 1c4079b — scripts/lib/model-routing.mjs (núcleo puro) e tests/lib/model-routing.test.mjs (11 testes)
@@ -141,3 +141,6 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 - [x] Step 5: Task 5 — ledger com valores validados e relatório (routing-ledger, routing-report) *(2026-10-09T02:08:34.051Z)*
   - Output: ba13a3f — routing-ledger.mjs (buildEntry/projectKey/ledgerDirFrom) e routing-report.mjs (aggregate com Map/renderMarkdown); 8 testes
   - Notes: Revisão aprovada; 4 Minor adiados (regex SAFE, base do ledgerDir, escape no markdown, testes de usage). Sensor unit verde.
+- [x] Step 6: Task 6 — CLI model-route (resolve, escalate, report) com leitura segura *(2026-10-09T02:14:39.935Z)*
+  - Output: 3cd1a50 + af6e661 — scripts/model-route.mjs (resolve/escalate/report, leitura segura, --runtime omp, --transcripts); 11 testes e2e
+  - Notes: Revisão aprovada após fix round 1 (exit 0 no report com --transcripts inválido); 3 Minor adiados. Sensores unit e e2e verdes.
