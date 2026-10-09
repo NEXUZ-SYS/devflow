@@ -163,6 +163,16 @@ DESIGN_FE=$(node "$CLAUDE_PLUGIN_ROOT/scripts/design/detect-frontend.mjs" . 2>/d
 - Se `DESIGN_FE=false` (backend-only): **pular** — nada a fazer (os linters de design têm `applyTo` front-end, ficam inertes).
 - Se `DESIGN_FE=true`: o enforcement determinístico (linters `std-design-*`) já se aplica automaticamente. **Após o scaffold do `.context/` (Steps 3–4)**, rodar `/devflow:devflow-design init` para o bootstrap de contexto (register brand/product em `.context/.devflow.yaml`, scaffold do knowledge `product-design-system`/`tone-of-voice`/`business-icp` via `/devflow:knowledge`, semear tokens, waivers/opt-out). Passo **não-bloqueante**; se o usuário recusar, apontar `/devflow:devflow-design init` para depois. NÃO rodar antes do `.context/` existir (o init precisa da camada de knowledge para escrever).
 
+## Step 0.8: Monitor ao vivo do roteamento (verificação)
+
+O DevFlow mostra, acima do prompt, uma linha por agente em execução (modelo·esforço e origem, tempo, falhas, retentativas). É **sempre ligado** e não grava nada no projeto; aqui só se verifica que o Claude Code carrega o mod:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor
+```
+
+Mostre o resultado ao usuário. WARN não bloqueia o init: repasse o reparo indicado (normalmente atualizar o Claude Code).
+
 ## Initialization Strategy
 
 DevFlow uses a **tiered approach** — always prefer the richest available tool:

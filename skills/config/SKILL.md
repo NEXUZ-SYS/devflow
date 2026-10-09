@@ -649,6 +649,14 @@ Após gerar o arquivo, mostrar ao usuário:
 Para reconfigurar: /devflow config
 ```
 
+Em seguida, verifique o monitor ao vivo do roteamento (sempre ligado; nada a configurar) e mostre o resultado:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor
+```
+
+WARN não bloqueia: repasse o reparo indicado.
+
 ### 4.5 Oferecer instalação do hook de auto-mine (opt-in)
 
 **Só executar se** mempalace foi ativado **e** `autoMine` é `post-merge` (default).

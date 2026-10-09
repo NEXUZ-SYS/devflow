@@ -656,7 +656,26 @@ const modelRouting = {
   },
 };
 
-export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv, modelRouting];
+// Monitor ao vivo do roteamento: sempre ligado em todo projeto com o plugin (spec 2026-10-09-router-monitor-toolbar M8).
+// O onboarding só verifica que o Claude Code carrega o mod (hooks.json → modules).
+const routerMonitor = {
+  id: "router-monitor",
+  title: "Monitor ao vivo do roteamento (faixa acima do prompt)",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const version = claudeVersionOf(ctx);
+    if (!/\d+\.\d+\.\d+/.test(String(version))) {
+      return { status: "WARN", diagnosis: "Não foi possível ler a versão do Claude Code; o monitor ao vivo só aparece quando o mod carrega.", repair: "Confira `claude --version` (testado a partir de 2.1.293)." };
+    }
+    if (belowMin(version)) {
+      return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.293): o monitor ao vivo e o roteamento por mod podem não carregar.`, repair: "Atualize o Claude Code." };
+    }
+    return { status: "OK", diagnosis: `Monitor ao vivo do roteamento disponível (Claude Code ${version}).`, repair: "" };
+  },
+};
+
+export const CHECKS = [mcpConfigValid, mcpConnectivity, mempalaceHealth, devflowConfig, gitHooks, groundingMcp, permissionsHealth, adrInjection, harnessSensors, pluginDeclaredInstalled, pluginScope, pluginMarketplaceKnown, pluginUpToDate, mempalaceEnv, modelRouting, routerMonitor];
 
 export function getCheck(id) {
   return CHECKS.find(c => c.id === id);
