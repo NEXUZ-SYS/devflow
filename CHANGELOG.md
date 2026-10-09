@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.7.0] — 2026-10-09
+
 ### Added — roteamento de modelos
 
 O DevFlow passa a escolher o modelo e o esforço da sessão (por fase do PREVC e por skill) e dos subagentes (por agente, fase e tier da task). O objetivo é gastar menos da cota do plano. A regra que vale para tudo: **nada roda acima do modelo e do esforço que o usuário escolheu**, e quando o teto não é legível o roteamento não acontece.
