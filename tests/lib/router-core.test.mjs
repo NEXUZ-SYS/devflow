@@ -20,7 +20,7 @@ test("sessão: a troca é EFETIVA, marcada no passo em que o patch aplica outro 
     const rw = step(s, "claude-opus-5-5", "xhigh");
     marks.push([phase, !!rw?.switched, rw?.model ?? null]);
   }
-  assert.deepEqual(marks.filter((m) => m[1]).map((m) => m[0]), marks.filter((m) => m[2]).map((m) => m[0]), "switched <=> patch com model");
+  assert.deepEqual(marks.filter((m) => m[1]).map((m) => m[0]), ["E"], "só E troca; V e C seguem em sonnet (e.model sempre vem como o do usuário, R-3)");
   assert.ok(marks.find((m) => m[0] === "E")[1], "E sai de opus para sonnet: troca");
   assert.equal(marks.find((m) => m[0] === "P")[1], false, "P fica no modelo do usuário: sem troca");
 });
@@ -174,4 +174,15 @@ test("applyMidRun: respeita maxTier", () => {
 test("router-core é puro", () => {
   const src = readFileSync(new URL("../../scripts/lib/router-core.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /from\s+["']node:/);
+});
+
+test("sessão: e.model sempre igual ao do usuário (R-3) — 3 passos em E dão 1 troca; voltar ao modelo do usuário dá a 2a", () => {
+  const s = C.createRouterState();
+  C.learnId(s, "claude-sonnet-5-5");
+  const marks = [];
+  for (const phase of ["E", "E", "E", "R"]) {
+    C.onTurnStart(s, { phase });
+    marks.push(!!step(s, "claude-opus-5-5", "xhigh")?.switched);
+  }
+  assert.deepEqual(marks, [true, false, false, true]);
 });

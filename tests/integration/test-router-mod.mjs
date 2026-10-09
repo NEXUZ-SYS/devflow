@@ -208,6 +208,25 @@ test("sessão que começa no modelo do usuário: o 1o turn.step que aplica outro
   assert.match(renderMarkdown(aggregate(entries)), /Trocas de fase da sessão: 1 /);
 });
 
+test("R-3: e.model sempre do usuário — 3 passos em E dão exatamente 1 switched; voltar ao modelo do usuário conta a 2a", async () => {
+  const root = mkRepo(YAML_LEDGER, "E");
+  const setPhase = (p) => fs.writeFileSync(path.join(root, ".context/runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { current_phase: p } } }));
+  const H = await load({ root });
+  await H.call("session.start", {});
+  await H.call("agent.spawn", { prompt: "p", fork: false, subagentType: "devflow:code-reviewer", parentModel: OPUS }, async () => ({ agentId: "a0", model: SONNET }));
+  const round = async (i, phase) => {
+    if (phase) setPhase(phase);
+    await H.call("turn.start", { text: "x", turnId: `t${i}` });
+    await H.step({ turnId: `t${i}`, index: 0, model: OPUS, effort: "xhigh", messageCount: i + 1 });
+    await H.call("turn.complete", {}, async () => ({ usage: { model: SONNET, input_tokens: 10, output_tokens: 5 } }));
+  };
+  for (let i = 1; i <= 3; i++) await round(i);
+  const sw = () => H.log.writes.at(-1).text.trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.scope === "session" && e.switched === true).length;
+  assert.equal(sw(), 1);
+  await round(4, "R"); // fase sem roteamento: volta ao modelo do usuário
+  assert.equal(sw(), 2);
+});
+
 test("aggregate conta switched mesmo em linha sem usage (defesa)", () => {
   const agg = aggregate([{ scope: "session", phase: "E", switched: true }]);
   assert.equal(agg.phaseSwitches.length, 1);

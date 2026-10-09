@@ -7,7 +7,7 @@ const MAX_SUMMARY = 300;
 const rank = (t) => TIERS.indexOf(t);
 
 export function createRouterState() {
-  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, ids: {}, agents: {}, agentTypes: {} };
+  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, lastSessionModel: null, ids: {}, agents: {}, agentTypes: {} };
 }
 
 // Sondas R-3: e.model/e.effort que chegam ao turn.step da sessão são sempre os do usuário.
@@ -32,18 +32,29 @@ export function learnId(state, modelId) {
   if (t) state.ids[t] = modelId;
 }
 
+// e.model chega SEMPRE com o modelo do usuário (sonda R-3), mesmo depois de uma troca. Por isso a troca
+// é medida contra o último modelo EFETIVAMENTE aplicado à sessão (lastSessionModel). No 1o passo a sessão
+// estava no modelo do usuário. Troca só de esforço não conta (não custa cache).
+function markSwitch(state, rw, model) {
+  const effective = rw.model ?? model;
+  const before = state.lastSessionModel ?? model;
+  rw.switched = typeof effective === "string" && typeof before === "string" && effective !== before;
+  if (typeof effective === "string") state.lastSessionModel = effective;
+}
+
 export function onSessionStep(state, { model, effort }, { table, config }) {
   if (!state.userModel) return null;
   const route = resolveSessionRoute({ table, config, phase: state.phase, skill: state.skill, userModel: state.userModel, userEffort: state.userEffort });
-  if (!route) return null;
-  state.sessionTier = route.tier;
   const rw = { switched: false };
+  if (!route) { markSwitch(state, rw, model); return rw.switched ? rw : null; }
+  state.sessionTier = route.tier;
   if (route.tier !== route.ceiling) {
     const id = state.ids[route.tier];
-    if (id && id !== model) { rw.model = id; rw.switched = true; } // D21: sem ID aprendido, só esforço. Troca EFETIVA = outro modelo (só esforço não custa cache)
+    if (id && id !== model) rw.model = id; // D21: sem ID aprendido, só esforço
   }
   if (route.effort && route.effort !== effort) rw.effort = route.effort;
-  return rw.model || rw.effort ? rw : null;
+  markSwitch(state, rw, model);
+  return rw.model || rw.effort || rw.switched ? rw : null;
 }
 
 export function onSpawn(state, e, { table, config, phase, skill }) {
