@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -79,4 +79,33 @@ test("stdin inválido → vazio, exit 0", () => {
   const r = spawnSync("bash", [HOOK], { input: "{lixo", encoding: "utf8" });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, "");
+});
+
+test("fix1: function hooks ligado em qualquer grafia aceita pelo Claude Code → vazio", () => {
+  for (const v of ["true", "yes", "on", "TRUE", " On ", "1"]) {
+    assert.equal(run(fx(), { subagent_type: "general-purpose", prompt: "p" }, { CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: v }), null, v);
+  }
+});
+
+test("fix1: .context symlink de diretório para fora da raiz → vazio", () => {
+  const f = fx({ models: null });
+  const fora = mkdtempSync(join(tmpdir(), "ptu-fora-"));
+  writeFileSync(join(fora, ".devflow.yaml"), "models:\n  enabled: true\n");
+  rmSync(join(f.dir, ".context"), { recursive: true });
+  symlinkSync(fora, join(f.dir, ".context"));
+  assert.equal(run(f, { subagent_type: "general-purpose", prompt: "p" }), null);
+});
+
+test("fix1: prevc.json FIFO ou symlink para /dev/zero → não trava; /dev/tty como config → vazio", () => {
+  const t0 = Date.now();
+  const a = fx({ phase: null });
+  execFileSync("mkfifo", [join(a.dir, ".context/runtime/workflows/prevc.json")]);
+  run(a, { subagent_type: "general-purpose", prompt: "p" }, {}, 4000);
+  const b = fx({ phase: null });
+  symlinkSync("/dev/zero", join(b.dir, ".context/runtime/workflows/prevc.json"));
+  run(b, { subagent_type: "general-purpose", prompt: "p" }, {}, 4000);
+  const c = fx({ models: null });
+  symlinkSync("/dev/tty", join(c.dir, ".context/.devflow.yaml"));
+  assert.equal(run(c, { subagent_type: "general-purpose", prompt: "p" }, {}, 4000), null);
+  assert.ok(Date.now() - t0 < 4000);
 });
