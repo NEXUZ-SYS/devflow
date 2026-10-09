@@ -43,7 +43,7 @@ Precedência no subagente: tier da task → skill → fase → agente → `inher
 Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 
 - R-1: `hooks` clássicos e `modules` no mesmo `hooks.json` — aceito pelo `claude plugin validate`; os dois rodam na mesma sessão.
-- R-2: o mod só carrega com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` (`1|true|yes|on`); o hook clássico usa a variável como exclusão mútua.
+- R-2: na fase R, o mod só carregava com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` (`1|true|yes|on`). **Fase V (F1): não vale mais.** Os Claude Code 2.1.293, 2.1.294 e 2.1.295 carregam o mod sem a variável, até com valor `0` (provável mudança de flag no servidor). O hook clássico consulta a variável só para a exclusão mútua.
 - R-3: o `model` do `turn.step` da sessão só é reescrito com ID completo (alias falha); `e.model`/`e.effort` e `parentModel` chegam sempre com os valores do usuário.
 - R-4: `skill.prompt` dispara para skill de plugin, com nome qualificado.
 - R-5: `updatedInput` funciona sem `permissionDecision` (ferramenta `Agent`).
@@ -72,7 +72,9 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Peso de cada modelo na cota não é público: relatório em tokens, não em % da cota.
 
 **Riscos aceitos**
-- Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `"modules"`, e todos os hooks do DevFlow somem. O operador aceitou o risco em 2026-10-10; ele será medido na fase V com um Claude Code antigo, se houver um disponível. Alternativas descartadas por ora: plugin irmão para o mod, versão mínima obrigatória.
+- Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `"modules"`, e todos os hooks do DevFlow somem. Medido na fase V: 2.1.293, 2.1.294 e 2.1.295 leem o `hooks.json` inteiro e carregam hooks clássicos e mod; versões anteriores não estavam disponíveis para medir, e o operador aceitou o risco para elas em 2026-10-10.
+- Convergência mod + clássico (verificada na fase V): sem a variável, os dois podem decidir o mesmo despacho; o clássico só emite rebaixamento abaixo do modelo atual da sessão e o mod nunca passa do original, então não há furo de teto nem degradação.
+- Limitação conhecida do clássico: no `PreToolUse` do primeiro despacho da sessão o transcript ainda não tem mensagem do assistente, o teto fica ilegível e ele não roteia (D5). Roteia do 2º turno em diante. O mod roteia desde o primeiro despacho. Alternativas descartadas por ora: plugin irmão para o mod, versão mínima obrigatória.
 - Risco residual do teto no hook clássico: um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript. É raro; no Claude Code a CLI resolve contra o teto `top`.
 - Garantia de teto só vale quando o adaptador lê o teto; ilegível → não roteia.
 - Gate: o relatório de 2 semanas deve confirmar economia sem regressão de escaladas.
