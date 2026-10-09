@@ -3,6 +3,7 @@ export const MAX_ROWS = 50;
 export const MAX_KEYS = 500;
 export const PROMPT_SCAN = 2048;
 export const STALE_MS = 30_000;
+export const GRACE_MS = 3000; // linha nova ausente da lista (lida antes do spawn) não sai
 
 const DONE = new Set(["completed", "failed", "killed"]);
 const TASK_RE = /\bTask (\d+[a-z]?)\b/;
@@ -92,7 +93,7 @@ export function reap(state, { list, now }) {
   const status = Array.isArray(list) ? new Map(list.map((a) => [a?.id, a?.status])) : null;
   state.rows = state.rows.filter((r) => {
     if (r.id === "main") return true;
-    if (status) return status.has(r.id) && !DONE.has(status.get(r.id));
+    if (status) return status.has(r.id) ? !DONE.has(status.get(r.id)) : now - r.startedAt <= GRACE_MS;
     return now - r.lastEventAt <= STALE_MS;
   });
   return state.rows.length !== before;

@@ -167,3 +167,21 @@ test("$.state lançando: todo hook devolve o resultado de next com e intacto", a
   assert.deepEqual(await H.step(e), e);
   assert.deepEqual(await H.call("turn.start", { text: "x", turnId: "t" }, async () => "SEGUIU"), "SEGUIU");
 });
+
+test("tick com agent.list atrasada não apaga o subagente criado nesse intervalo", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let slow = false;
+  const H = await load({ list: async () => { if (slow) await gate; return [{ id: "a1", status: "running" }]; } });
+  await H.start();
+  await H.spawn({ description: "Task 1" }, "a1");
+  H.clock.now = 10_000;
+  slow = true;
+  const ticking = H.tick();
+  await new Promise((r) => setTimeout(r, 5));
+  await H.spawn({ description: "Task 2" }, "a2");
+  release();
+  await ticking;
+  await new Promise((r) => setTimeout(r, 5));
+  assert.ok(H.store.monitorRows.some((r) => r.id === "a2"));
+});

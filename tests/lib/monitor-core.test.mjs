@@ -104,9 +104,20 @@ test("reap: com lista, sai quem terminou ou sumiu; sessão nunca sai", () => {
   mc.openMain(st, { now: 0 });
   for (const id of ["a1", "a2", "a3", "a4"]) mc.onSpawned(st, { agentId: id, subagentType: "t", now: 0 });
   const list = [{ id: "a1", status: "running" }, { id: "a2", status: "completed" }, { id: "a3", status: "killed" }];
-  assert.equal(mc.reap(st, { list, now: 1 }), true);
+  assert.equal(mc.reap(st, { list, now: mc.GRACE_MS + 1 }), true);
   assert.deepEqual(st.rows.map((r) => r.id), ["main", "a1"]);
   assert.equal(mc.isLive(st), true);
+});
+
+test("reap: linha ausente da lista com menos de GRACE_MS fica; com mais, sai; DONE sai mesmo nova", () => {
+  const st = mc.createMonitorState();
+  mc.onSpawned(st, { agentId: "novo", subagentType: "t", now: 1000 });
+  mc.onSpawned(st, { agentId: "feito", subagentType: "t", now: 1000 });
+  const list = [{ id: "feito", status: "completed" }];
+  mc.reap(st, { list, now: 1000 + mc.GRACE_MS });
+  assert.deepEqual(st.rows.map((r) => r.id), ["novo"]);
+  mc.reap(st, { list, now: 1000 + mc.GRACE_MS + 1 });
+  assert.deepEqual(st.rows.map((r) => r.id), []);
 });
 
 test("reap: sem lista (falhou), sai só quem está sem evento há mais de 30 s", () => {

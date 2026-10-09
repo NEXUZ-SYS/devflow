@@ -252,28 +252,26 @@ async function monLoad($) {
 // Cópia de trabalho única: hooks concorrentes esperam a mesma leitura (nenhum sobrescreve o outro).
 async function monHydrate($) {
   if (M.st) return M.st;
-  if (!M.hydrating) M.hydrating = monLoad($).finally(() => { M.hydrating = null; });
-  M.st = await M.hydrating;
-  return M.st;
+  if (!M.hydrating) M.hydrating = monLoad($).then((s) => (M.st ??= s)).finally(() => { M.hydrating = null; });
+  return M.st ?? await M.hydrating;
 }
 
 async function monTick($) {
   if (M.inTick || !M.st || !mc.isLive(M.st)) return; // sem linha viva: nada a escrever
   M.inTick = true;
   try {
+    const now = await $.clock.now(); // antes da lista: linha criada depois fica dentro da carência
     let list = null;
     try { list = await $.agent.list(); } catch { list = null; }
-    mc.reap(M.st, { list, now: await $.clock.now() });
+    mc.reap(M.st, { list, now });
     await $.state.set(ROWS, M.st.rows); // grava sempre: a escrita redesenha a faixa e anda o cronômetro
   } catch {} finally { M.inTick = false; }
 }
 
 async function monSessionStart($, e, next) {
   const r = await next(e);
-  try {
-    await monHydrate($);
-    if (!M.timer) M.timer = $.clock.every(TICK_MS, () => { void monTick($); });
-  } catch {}
+  try { if (!M.timer) M.timer = $.clock.every(TICK_MS, () => { void monTick($); }); } catch {}
+  try { await monHydrate($); } catch {}
   return r;
 }
 
