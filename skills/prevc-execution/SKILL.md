@@ -230,6 +230,34 @@ For LARGE scale workflows, add checkpoints every 3-5 tasks:
 | "Agent handoffs are overhead" | Handoffs with artifacts prevent context loss between specialists. |
 | "The plan changed, I'll adapt on the fly" | Update the plan document first. Then execute the updated plan. |
 
+## Roteamento de modelos (quando ligado)
+
+Ao despachar o implementer de uma task cujo plano declara `**Tier:**`, obtenha o modelo e passe-o na ferramenta Agent (sob omp, acrescente `--runtime omp` e use `route.role`):
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" resolve --agent general-purpose --task-tier "$TASK_TIER"
+```
+
+Use `route.model` como `model` do despacho; se `route` for `null`, despache sem `model`. Não passe teto: o adaptador aplica o teto real (o modelo que o usuário escolheu). Para a revisão final da branch:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" resolve --agent general-purpose --skill final-review
+```
+
+Quando um subagente volta com falha (teste vermelho no ledger do `verify:`, revisor reprovou, `BLOCKED`), salve o relatório dele em arquivo e gere a rubrica:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --report "$REPORT"
+```
+
+Responda a rubrica com um JSON e peça a decisão:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --answers "$ANSWERS" --signal-red
+```
+
+`escalate` → re-despache com o `model` devolvido; `human` → escalada humana atual; `keep` → retry no mesmo modelo.
+
 ## Model role (omp)
 
 Quando `detect-runtime` = `omp`, selecione o model role conforme `omp/omp-roles.yaml`:

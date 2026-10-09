@@ -202,6 +202,12 @@ Na avaliação do resultado, os **gates leem o JSON validado** (`overall_correct
    - If `story.attempts < escalation.max_retries_per_story`:
      - Set `story.status: failed`
      - **Mini-replanning:** Analyze the error, identify root cause, adjust approach
+     - Se o roteamento de modelos estiver ligado: gere a rubrica e a decisão de modelo para o retry (sob omp, acrescente `--runtime omp`):
+       ```bash
+       node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --report "$REPORT"
+       node "$CLAUDE_PLUGIN_ROOT/scripts/model-route.mjs" escalate --agent "$AGENT" --tier "$TIER" --answers "$ANSWERS" --signal-red
+       ```
+       `escalate` → retry com o `model` devolvido; `human` → Step 5 (escalada humana); `keep` → retry no mesmo modelo.
      - Log: "Story <id> failed (attempt <n>/<max>). Retrying with adjusted approach."
      - Continue to Step 2 (will re-select this story due to priority)
    - If `story.attempts >= escalation.max_retries_per_story`:
