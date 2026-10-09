@@ -10,7 +10,7 @@ import { resolveSubagentRoute, effectiveConfig, tierOf, toAlias, toRole, minTier
 import { ompCeilingTier } from "./lib/omp-ceiling.mjs";
 import { rubricPrompt, parseAnswers, combine } from "./lib/escalation.mjs";
 import { buildEntry, ledgerDirFrom } from "./lib/routing-ledger.mjs";
-import { aggregate, renderMarkdown } from "./lib/routing-report.mjs";
+import { aggregate, renderMarkdown, beforeAfter } from "./lib/routing-report.mjs";
 import { readWorkflowState } from "./lib/workflow-resume.mjs";
 import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./lib/safe-read.mjs";
 
@@ -124,19 +124,43 @@ function transcriptEntries(projectsDir) {
   return out;
 }
 
+// Antes × depois (spec §8): uma linha por MENSAGEM com timestamp; só campos numéricos de usage.
+function transcriptMessages(projectsDir) {
+  const out = [];
+  const read = (path, scope) => {
+    for (const line of safe(path, TRANSCRIPT_MAX).split("\n")) {
+      let j;
+      try { j = JSON.parse(line); } catch { continue; }
+      const m = j?.message;
+      const ts = typeof j?.timestamp === "string" ? Date.parse(j.timestamp) : NaN;
+      if (!m?.usage || typeof m.model !== "string" || !m.model.startsWith("claude") || !Number.isFinite(ts)) continue;
+      const usage = {};
+      for (const k of ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]) if (typeof m.usage[k] === "number") usage[k] = m.usage[k];
+      out.push({ ts, scope, model: m.model, usage });
+    }
+  };
+  for (const name of listDir(projectsDir)) {
+    if (name.endsWith(".jsonl")) read(join(projectsDir, name), "session");
+    const sub = join(projectsDir, name, "subagents");
+    for (const f of listDir(sub).filter((n) => n.endsWith(".jsonl"))) read(join(sub, f), "subagent");
+  }
+  return out;
+}
+
 function cmdReport(o, cwd) {
   const dir = ledgerDir(cwd);
   const since = typeof o.since === "string" ? Date.parse(o.since) : 0;
   const entries = typeof o.transcripts === "string" ? transcriptEntries(o.transcripts) : [];
+  const ledger = [];
   for (const f of listDir(dir).filter((n) => n.endsWith(".jsonl"))) {
     for (const line of safe(join(dir, f), TRANSCRIPT_MAX).split("\n")) {
       try {
         const e = JSON.parse(line);
-        if (!since || Date.parse(e.ts) >= since) entries.push(e);
+        if (!since || Date.parse(e.ts) >= since) { entries.push(e); ledger.push(e); }
       } catch { /* linha inválida ignorada */ }
     }
   }
-  process.stdout.write(renderMarkdown(aggregate(entries)) + "\n");
+  process.stdout.write(renderMarkdown(aggregate(entries), beforeAfter(ledger, typeof o.transcripts === "string" ? transcriptMessages(o.transcripts) : [])) + "\n");
 }
 
 function main(argv) {

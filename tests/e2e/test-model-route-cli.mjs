@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symli
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { ledgerDirFrom } from "../../scripts/lib/routing-ledger.mjs";
 import { ompCeilingTier } from "../../scripts/lib/omp-ceiling.mjs";
 const PLUGIN = new URL("../..", import.meta.url).pathname;
 const CLI = new URL("../../scripts/model-route.mjs", import.meta.url).pathname;
@@ -188,4 +189,53 @@ test("sem --runtime omp o teto continua top (o adaptador limita)", () => {
   assert.equal(r.tier, "capable");
   const d = JSON.parse(run(["escalate", "--agent", "general-purpose", "--tier", "cheap", "--answers", ans("top")], fixture()));
   assert.deepEqual([d.action, d.tier], ["escalate", "top"]);
+});
+
+// ---- antes × depois (spec §8) ----
+function baFixture(ledgerLines) {
+  const f = fixture();
+  const dir = ledgerDirFrom({ xdgDataHome: f.xdg, home: f.xdg, cwd: f.dir });
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "mod.jsonl"), ledgerLines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const proj = mkdtempSync(join(tmpdir(), "ba-transcripts-"));
+  const line = (timestamp, model, i, o) => JSON.stringify({ timestamp, type: "assistant", message: { model, content: "SEGREDO", usage: { input_tokens: i, output_tokens: o } } });
+  mkdirSync(join(proj, "s1", "subagents"), { recursive: true });
+  writeFileSync(join(proj, "s1.jsonl"), [line("2026-10-08T11:00:00.000Z", "claude-opus-5", 1000, 600), line("2026-10-08T15:00:00.000Z", "claude-opus-5", 2000, 400)].join("\n"));
+  writeFileSync(join(proj, "s1", "subagents", "agent-a.meta.json"), JSON.stringify({ agentType: "devflow:code-reviewer" }));
+  writeFileSync(join(proj, "s1", "subagents", "agent-a.jsonl"), [
+    line("2026-10-08T11:30:00.000Z", "claude-opus-5", 3000, 3000),
+    line("2026-10-08T14:00:00.000Z", "claude-sonnet-5", 4000, 1000),
+    "linha quebrada",
+  ].join("\n"));
+  return { f, proj };
+}
+const cutLine = { ts: "2026-10-08T12:00:00.000Z", scope: "subagent", agentType: "devflow:code-reviewer", escalation: { at: "retry", from: "cheap", to: "standard", action: "escalate" } };
+
+test("report: Antes × depois separa as janelas pelo menor ts do ledger (clássico: transcripts >= corte entram no depois)", () => {
+  const { f, proj } = baFixture([cutLine]);
+  const out = run(["report", "--transcripts", proj], f);
+  assert.match(out, /## Antes × depois/);
+  assert.match(out, /Corte: 2026-10-08T12:00:00\.000Z/);
+  const [subs, sess] = out.split("### Sessão");
+  assert.match(subs, /\| antes \| claude-opus-5 \| 3\.0k \| 3\.0k \| 100\.0% \|/);
+  assert.match(subs, /\| depois \| claude-sonnet-5 \| 4\.0k \| 1\.0k \| 100\.0% \|/);
+  assert.match(sess, /\| antes \| claude-opus-5 \| 1\.0k \| 0\.6k \| 100\.0% \|/);
+  assert.match(sess, /\| depois \| claude-opus-5 \| 2\.0k \| 0\.4k \| 100\.0% \|/);
+  assert.doesNotMatch(out, /SEGREDO/);
+});
+
+test("report: com usage no ledger, transcripts posteriores ao corte NÃO entram no depois", () => {
+  const { f, proj } = baFixture([{ ts: "2026-10-08T12:00:00.000Z", scope: "subagent", agentType: "devflow:code-reviewer", model: "claude-haiku-5", usage: { input_tokens: 500, output_tokens: 250 } }]);
+  const out = run(["report", "--transcripts", proj], f);
+  const [subs, sess] = out.split("### Sessão");
+  const afterSub = subs.slice(subs.indexOf("## Antes × depois"));
+  assert.match(afterSub, /\| depois \| claude-haiku-5 \| 0\.5k \| 0\.3k \| 100\.0% \|/);
+  assert.doesNotMatch(afterSub, /\| depois \| claude-sonnet-5/);
+  assert.doesNotMatch(sess, /\| depois \|/, "sessão: nada do ledger e transcript posterior descartado");
+  assert.match(sess, /\| antes \| claude-opus-5/);
+});
+
+test("report: ledger vazio → seção diz que não há comparativo", () => {
+  const f = fixture();
+  assert.match(run(["report"], f), /sem comparativo/);
 });

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildEntry, LEDGER_KEYS, projectKey, ledgerDirFrom } from "../../scripts/lib/routing-ledger.mjs";
-import { aggregate, renderMarkdown } from "../../scripts/lib/routing-report.mjs";
+import { aggregate, renderMarkdown, beforeAfter, renderBeforeAfter } from "../../scripts/lib/routing-report.mjs";
 
 test("buildEntry: só chaves da allowlist, nunca conteúdo", () => {
   const e = buildEntry({
@@ -63,6 +63,61 @@ test("aggregate soma por modelo × agente e conta escaladas e trocas", () => {
 test("aggregate não polui o protótipo com agentType hostil (segurança 8)", () => {
   aggregate([{ scope: "subagent", agentType: "__proto__", model: "polluted", usage: { input_tokens: 1 } }]);
   assert.equal(({}).polluted, undefined);
+});
+
+const U = (i, o) => ({ input_tokens: i, output_tokens: o });
+const T0 = "2026-10-08T12:00:00.000Z";
+const msg = (iso, scope, model, i, o) => ({ ts: Date.parse(iso), scope, model, usage: U(i, o) });
+
+test("beforeAfter: corte é o menor ts do ledger; janelas e percentuais por modelo", () => {
+  const ledger = [
+    { ts: "2026-10-08T13:00:00.000Z", scope: "subagent", model: "sonnet", usage: U(10, 30) },
+    { ts: T0, scope: "subagent", model: "haiku", usage: U(5, 10) },
+    { ts: T0, scope: "session", phase: "E", model: "sonnet", usage: U(7, 4) },
+  ];
+  const msgs = [
+    msg("2026-10-08T11:00:00.000Z", "subagent", "claude-opus-5", 100, 60),
+    msg("2026-10-08T11:30:00.000Z", "subagent", "claude-sonnet-5", 50, 40),
+    msg("2026-10-08T11:59:59.000Z", "session", "claude-opus-5", 9, 9),
+    msg("2026-10-08T14:00:00.000Z", "subagent", "claude-opus-5", 999, 999), // ignorada: ledger tem usage
+  ];
+  const ba = beforeAfter(ledger, msgs);
+  assert.equal(ba.cut, Date.parse(T0));
+  assert.equal(ba.subagent.before.get("claude-opus-5").output_tokens, 60);
+  assert.equal(ba.subagent.after.get("sonnet").output_tokens, 30);
+  assert.equal(ba.subagent.after.has("claude-opus-5"), false);
+  assert.equal(ba.session.before.get("claude-opus-5").input_tokens, 9);
+  assert.equal(ba.session.after.get("sonnet").input_tokens, 7);
+  const md = renderBeforeAfter(ba);
+  assert.match(md, /## Antes × depois/);
+  assert.match(md, /2026-10-08T12:00:00\.000Z/);
+  assert.match(md, /\| antes \| claude-opus-5 \| 0\.1k \| 0\.1k \| 60\.0% \|/);
+  assert.match(md, /\| depois \| sonnet \| 0\.0k \| 0\.0k \| 75\.0% \|/);
+});
+
+test("beforeAfter: sem usage no ledger, transcripts >= corte entram no depois (clássico/omp)", () => {
+  const ledger = [{ ts: T0, scope: "subagent", agentType: "x", escalation: { at: "retry", action: "keep" } }];
+  const ba = beforeAfter(ledger, [msg("2026-10-08T10:00:00.000Z", "subagent", "claude-a", 1, 2), msg(T0, "subagent", "claude-b", 3, 8)]);
+  assert.equal(ba.subagent.before.get("claude-a").output_tokens, 2);
+  assert.equal(ba.subagent.after.get("claude-b").output_tokens, 8);
+});
+
+test("beforeAfter: ledger vazio não tem comparativo e a seção diz isso", () => {
+  const ba = beforeAfter([], [msg(T0, "subagent", "claude-a", 1, 2)]);
+  assert.equal(ba.cut, null);
+  assert.match(renderBeforeAfter(ba), /sem comparativo/);
+  assert.doesNotMatch(renderBeforeAfter(ba), /\| antes \|/);
+});
+
+test("beforeAfter: modelo hostil não polui o protótipo; mensagem sem timestamp válido é ignorada", () => {
+  const ba = beforeAfter([{ ts: T0, scope: "subagent", model: "__proto__", usage: U(1, 1) }], [{ ts: NaN, scope: "subagent", model: "claude-z", usage: U(1, 1) }]);
+  assert.equal(({}).input_tokens, undefined);
+  assert.equal(ba.subagent.before.size, 0);
+});
+
+test("renderMarkdown inclui a seção Antes × depois quando recebe o comparativo", () => {
+  assert.match(renderMarkdown(aggregate([]), beforeAfter([], [])), /## Antes × depois/);
+  assert.doesNotMatch(renderMarkdown(aggregate([])), /Antes × depois/);
 });
 
 test("libs são puras", () => {
