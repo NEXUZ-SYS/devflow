@@ -5,47 +5,50 @@ spec: docs/superpowers/specs/2026-10-09-router-monitor-toolbar-design.md
 scale: MEDIUM
 autonomy: supervised
 created: "2026-10-09"
+revised: "2026-10-09 — rev.2 (fase R): restrições do engine das sondas, revisão do architect, onboarding"
 requiredSignals: [unit, integration, e2e, lint]
 ---
 
-# Monitor do roteamento de modelos — Plano de implementação
+# Monitor do roteamento de modelos — Plano de implementação (rev.2)
 
-> **DevFlow workflow:** router-monitor-toolbar | **Scale:** MEDIUM | **Phase:** P→R
+> **DevFlow workflow:** router-monitor-toolbar | **Scale:** MEDIUM | **Phase:** R→E
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Faixa ao vivo acima do prompt com uma linha por agente em execução (sessão e subagentes): `Modelo: m·esforço (origem) | Tempo | Falhas | Retentativas`.
+**Goal:** Faixa ao vivo acima do prompt com uma linha por agente em execução (sessão e subagentes): `Modelo: m·esforço (origem) | Tempo | Falhas | Retentativas`, sempre ligada em todo projeto com o plugin, e onboarding que verifica que o mod carrega.
 
-**Architecture:** Lib pura `scripts/lib/monitor-core.mjs` (estado das linhas, id da task, retentativas, streak, formatação) consumida por um segundo módulo de mod, `hooks/router-monitor.mjs`, que observa eventos e desenha a faixa `AbovePrompt`. O `hooks/router.mjs` existente só publica o modelo/esforço **aplicados** e a origem no valor `devflow.routing` do `$.state`.
+**Architecture:** Lógica pura em `scripts/lib/monitor-core.mjs`. A cola com o engine (tudo que usa `$`) mora numa seção "Monitor ao vivo" de `hooks/router.mjs`, porque o engine aceita um módulo por plugin, um hook por evento e só segue `$` até funções do mesmo arquivo (spec §3.1). O `register` compõe cada hook do monitor **por fora** do hook do router. O router publica o modelo/esforço aplicados em `$.state` (`devflow.routing`). O doctor ganha o check `router-monitor`, chamado pelo `project-init` e pelo `config`.
 
 **Tech Stack:** ES modules `.mjs` sem dependências; API de mods do Claude Code (`on`, `$.state`, `$.clock`, `$.agent.list`, `$.ui.resolve`, `h` global); `node --test`; `claude plugin test` / `claude plugin validate`.
 
-**Agents:** feature-developer (Tasks 1, 2, 4, 5), backend-specialist (Task 3 — router, peça sensível à ADR-017), test-writer + documentation-writer (Task 6).
+**Agents:** feature-developer (Tasks 1, 2, 6), backend-specialist (Tasks 3, 4, 5 — `hooks/router.mjs`, peça sensível à ADR-017; revisão mais cuidadosa na Task 4, que muda o `register`), documentation-writer (Task 7).
 
-**Spec:** `docs/superpowers/specs/2026-10-09-router-monitor-toolbar-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-09-router-monitor-toolbar-design.md` (rev.2)
 
 **requiredSignals:** `[unit, integration, e2e, lint]`
 
 ## Global Constraints
 
-- O monitor **só observa**: todo hook devolve o resultado de `next(e)` com `e` intacto e é registrado com `.catch(($, e, next) => next(e))`. Nunca nega, nunca reescreve.
-- O monitor nunca lê arquivo do repositório, nunca grava ledger, nunca envia dado para fora; nunca exibe trecho de prompt nem de descrição livre (só tipo + id da task).
-- `$.state` do plugin `devflow`: chaves `routing` (escrita só pelo router), `monitorRows` e `monitorRetries` (escritas só pelo monitor). Refs com `plugin`/`key` **literais** no código. Valores JSON, nunca `undefined` (usar `null`).
-- Limites: 50 linhas rastreadas; 500 chaves de retentativa (sai a mais antiga); id da task só nos primeiros 2048 caracteres do prompt; linha órfã sai após 30 000 ms sem evento quando `$.agent.list()` falha; até 6 linhas visíveis + `+N agentes`; rótulo cortado em 32 colunas.
+- O monitor **só observa**: cada função `mon*` devolve o resultado de `next(...)` com `e` intacto; a lógica própria fica em `try`. Nunca nega, nunca reescreve.
+- O monitor nunca lê arquivo do repositório, nunca grava ledger, nunca envia dado para fora; nunca exibe trecho de prompt nem de descrição livre (só tipo, id da task e papel).
+- **Restrições do engine (não violar):** `hooks/hooks.json` segue com `modules: ["./router.mjs"]` (um módulo); cada evento é registrado uma vez; o hook passado a `on` é função literal ou nome de função; `$` só é passado a funções declaradas em `hooks/router.mjs` (nunca a função importada). Toda cola com `$` fica em `hooks/router.mjs`.
+- `$.state` do plugin `devflow`: `routing` (escrito só pelo router), `monitorRows` e `monitorRetries` (escritos só pelo monitor). Refs com `plugin`/`key` literais. Valores JSON, nunca `undefined` (usar `null`).
+- Limites: 50 linhas; 500 chaves de retentativa (sai a mais antiga); 100 loops publicados; id da task só nos primeiros 2048 caracteres do prompt; linha órfã sai após 30 000 ms sem evento quando `$.agent.list()` falha; linhas visíveis `min(6, maxRows − 1)` + `+N agentes`; rótulo cortado em 40 colunas.
 - Formato da linha: `{rótulo} Modelo: {modelo sem "claude-"}·{esforço|-} ({roteado|teto|router off}) | Tempo: {mm:ss|h:mm:ss} | Falhas: {streak} | Retentativas: {n|—}`.
-- Cores (ThemeKey): `Falhas` `warning` de 1 a `failureStreak − 1`, `error` a partir de `failureStreak` (padrão 3); `Retentativas ≥ 1` `warning`; origem `roteado` `success`, `teto` `subtle`, `router off` `inactive`.
-- Id da task: `description` com `\bTask (\d+[a-z]?)\b` → `Task N`; senão prompt com `^\s*Current story:\s*(S\d+)\b` (multilinha) → `S2`; senão `null`.
-- O router segue as guardrails da ADR-017; a escrita em `$.state` fica em `try` próprio e não altera nada que o router devolve.
-- Idioma de código/comentários/commits: pt-BR (termos técnicos mantidos). Commits só com pathspec explícito (há WIP do operador na árvore: `.context/plans/model-routing.md`, `.context/workflow/.checkpoint/last.json`, `.gitignore`, `docs/jev*`, `docs/test-writer.md`, spec session-start — nunca adicionar).
+- Cores (ThemeKey): `Falhas` `warning` de 1 a `failureStreak − 1`, `error` a partir de `failureStreak` (padrão 3); `Retentativas ≥ 1` `warning`; origem `roteado` `success`, `teto` `subtle`, `router off` `inactive`. Sem cor, omitir a prop `color`.
+- Id da task: `description` com `\bTask (\d+[a-z]?)\b` → `Task N`; senão prompt com `^\s*(?:[-*]\s+)?Current story:\s*(S\d+)\b` (multilinha) → `S2`; senão `null`. Papel: `Implement`/`Fix` → `implement`, `Review`/`Re-review` → `review` (início da description). Chave: `tipo::papel|-::id`.
+- Um único `$.clock.every(1000)` por instância do módulo, aberto no `session.start`; tick sem linha viva não escreve; trava `inTick`.
+- Idioma de código/comentários/commits: pt-BR. Commits sempre com pathspec explícito (há WIP do operador na árvore: `.context/plans/model-routing.md`, `.context/workflow/.checkpoint/last.json`, `.gitignore`, `docs/jev*`, `docs/test-writer.md`, spec session-start — nunca adicionar).
 - Subagents de implementação: **proibido** `gh`, criar PR, merge, push. Só commit local na branch `feature/router-monitor-toolbar`.
+- Testes nunca alteram arquivo versionado (provas de RED por teste escrito antes do código, nunca editando e revertendo arquivo do repo).
 
 ## Review Focus
 
-1. Subagente em **background** que sobrevive ao fim do turno da sessão: a linha dele deve continuar na faixa depois do `turn.complete` da sessão (teste na Task 4).
-2. **Recarga a quente** no meio de uma rodada: um módulo novo, com `$.state` já povoado, deve reabrir o cronômetro no `session.start` sem zerar contadores (teste na Task 4).
-3. **`$.agent.list()` rejeitando**: a linha órfã sai pelo critério de 30 s, e não fica para sempre (teste na Task 4).
-4. **`Task N` só no corpo do prompt** (não na `description`): não conta como id; só `Current story:` é lido do prompt (teste na Task 1).
-5. **`/devflow-route off` no meio da rodada**: as linhas passam a `router off` e o modelo publicado (agora velho) deixa de valer (testes nas Tasks 2 e 3).
+1. Subagente em **background** que sobrevive ao fim do turno: a linha continua depois do `turn.complete` da sessão (Task 4).
+2. **Recarga a quente** no meio da rodada: módulo novo com `$.state` povoado reabre o cronômetro no `session.start` sem zerar contadores (Task 4).
+3. **`$.agent.list()` rejeitando**: linha órfã sai pelo critério de 30 s (Task 4).
+4. **SDD real**: todos os papéis despachados como `general-purpose`; o reviewer não pode virar retentativa do implementer (Tasks 1 e 4).
+5. **`/devflow-route off` e roteamento só de esforço**: `router off` ignora o publicado velho; esforço roteado conta como `roteado` (Tasks 2 e 3).
 
 ---
 
@@ -55,20 +58,22 @@ requiredSignals: [unit, integration, e2e, lint]
 |---|---|---|
 | `scripts/lib/monitor-core.mjs` | criar | estado + formatação, puro |
 | `tests/lib/monitor-core.test.mjs` | criar | unit |
-| `hooks/router.mjs` | modificar | publicar `devflow.routing` |
+| `hooks/router.mjs` | modificar | publicar `devflow.routing` (Task 3); seção "Monitor ao vivo" + `register` composto (Tasks 4–5) |
 | `tests/integration/test-router-mod.mjs` | modificar | `$.state` falso + testes da publicação |
+| `tests/integration/test-router-monitor-mod.mjs` | criar | monitor via `hooks/router.mjs` real com `$` falso |
 | `types/index.d.ts` | criar | contrato `PluginState.devflow` |
 | `.claude-plugin/plugin.json` | modificar | `"types": "./types/index.d.ts"` |
-| `hooks/router-monitor.mjs` | criar | módulo do monitor (eventos, tick, render) |
-| `tests/integration/test-router-monitor-mod.mjs` | criar | integração com `$` falso |
-| `hooks/router-monitor.test.ts` | criar | smoke do kit |
-| `hooks/hooks.json` | modificar | `modules: ["./router.mjs", "./router-monitor.mjs"]` |
-| `tests/e2e/router-monitor-validate.e2e.test.mjs` | criar | `claude plugin validate .` |
+| `tests/e2e/router-monitor-validate.e2e.test.mjs` | criar | contrato + `claude plugin validate .` |
+| `hooks/router-monitor.test.ts` | criar | kit: faixa montada |
+| `hooks/router.test.ts` | modificar | `mock.clock(on)` no `stubEnv` |
+| `scripts/lib/doctor.mjs` | modificar | check `router-monitor` |
+| `tests/lib/test-doctor-router-monitor.mjs` | criar | unit do check |
+| `skills/project-init/SKILL.md`, `skills/config/SKILL.md`, `skills/doctor/SKILL.md` | modificar | onboarding |
 | `docs/model-routing.md`, `CHANGELOG.md` | modificar | documentação |
 
 ---
 
-### Task 1: monitor-core — estado das linhas, id da task e retentativas
+### Task 1: monitor-core — estado das linhas, id da task, papel e retentativas
 
 **Agent:** feature-developer
 **Tests:** unit
@@ -79,15 +84,14 @@ requiredSignals: [unit, integration, e2e, lint]
 
 **Interfaces:**
 - Consumes: nada.
-- Produces (usadas nas Tasks 2, 4 e 5):
+- Produces (Tasks 2, 4, 5):
   - constantes `MAX_ROWS=50`, `MAX_KEYS=500`, `PROMPT_SCAN=2048`, `STALE_MS=30000`
   - `createMonitorState(): { rows: Row[], retries: Record<string, number> }`
   - `Row = { id: string, label: string, startedAt: number, lastEventAt: number, model: string|null, effort: string|null, streak: number, retries: number|null }`
-  - `extractTaskId({ description?, prompt? }): string|null`
+  - `extractTaskId({ description?, prompt? }): string|null` · `extractRole(description): "implement"|"review"|null`
   - `onSpawned(state, { agentId, subagentType, description, prompt, model, now }): Row|null`
   - `openMain(state, { now }): void` · `closeMain(state): boolean`
-  - `onTool(state, { loopId, isError, now }): boolean`
-  - `onStep(state, { loopId, model, effort, now }): boolean` (true quando modelo/esforço mudou)
+  - `onTool(state, { loopId, isError, now }): boolean` · `onStep(state, { loopId, model, effort, now }): boolean`
   - `reap(state, { list: Array<{id, status}>|null, now }): boolean` · `isLive(state): boolean`
 
 - [ ] **Step 1: Escrever o teste falhando**
@@ -105,8 +109,9 @@ test("extractTaskId: Task N na description (formatos do SDD)", () => {
   assert.equal(mc.extractTaskId({ description: "Re-review Task 18b fix round 2" }), "Task 18b");
 });
 
-test("extractTaskId: Current story no prompt (autonomous-loop)", () => {
+test("extractTaskId: Current story no prompt, com e sem marcador de lista (autonomous-loop)", () => {
   assert.equal(mc.extractTaskId({ description: "story", prompt: "Contexto\n- Current story: S2 — login\n" }), "S2");
+  assert.equal(mc.extractTaskId({ description: "story", prompt: "Current story: S7 — x" }), "S7");
 });
 
 test("extractTaskId: Task N só no corpo do prompt não conta; sem id → null", () => {
@@ -116,21 +121,36 @@ test("extractTaskId: Task N só no corpo do prompt não conta; sem id → null",
 });
 
 test("extractTaskId: story além de 2048 caracteres do prompt é ignorada", () => {
-  const prompt = "x".repeat(mc.PROMPT_SCAN) + "\nCurrent story: S9\n";
+  const prompt = "x".repeat(mc.PROMPT_SCAN) + "\n- Current story: S9\n";
   assert.equal(mc.extractTaskId({ description: "d", prompt }), null);
 });
 
-test("onSpawned: 1º despacho = 0 retentativas; mesmo tipo e task = +1; outro tipo não soma", () => {
-  const st = mc.createMonitorState();
-  const a = mc.onSpawned(st, { agentId: "a1", subagentType: "devflow:test-writer", description: "Implement Task 3: x", prompt: "", model: "sonnet", now: 1000 });
-  assert.deepEqual(a, { id: "a1", label: "devflow:test-writer · Task 3", startedAt: 1000, lastEventAt: 1000, model: "sonnet", effort: null, streak: 0, retries: 0 });
-  assert.equal(mc.onSpawned(st, { agentId: "a2", subagentType: "devflow:test-writer", description: "Re-review Task 3 fix round 1", now: 2000 }).retries, 1);
-  assert.equal(mc.onSpawned(st, { agentId: "a3", subagentType: "devflow:code-reviewer", description: "Review Task 3", now: 3000 }).retries, 0);
+test("extractRole: Implement/Fix → implement; Review/Re-review → review; resto → null", () => {
+  assert.equal(mc.extractRole("Implement Task 3: x"), "implement");
+  assert.equal(mc.extractRole("Fix Task 3 findings"), "implement");
+  assert.equal(mc.extractRole("Review Task 3 (spec + quality)"), "review");
+  assert.equal(mc.extractRole("Re-review Task 3 fix round 1"), "review");
+  assert.equal(mc.extractRole("mapear o código"), null);
+  assert.equal(mc.extractRole(undefined), null);
 });
 
-test("onSpawned: sem id de task → retries null e rótulo só com o tipo; sem agentId → null", () => {
+test("onSpawned: SDD real (tudo general-purpose) — reviewer não vira retentativa do implementer", () => {
   const st = mc.createMonitorState();
-  const r = mc.onSpawned(st, { agentId: "a1", subagentType: "Explore", description: "mapear", now: 1 });
+  const gp = (agentId, description, now) => mc.onSpawned(st, { agentId, subagentType: "general-purpose", description, prompt: "", model: "sonnet", now });
+  const a = gp("a1", "Implement Task 3: parser", 1000);
+  assert.deepEqual(a, { id: "a1", label: "general-purpose · Task 3 · implement", startedAt: 1000, lastEventAt: 1000, model: "sonnet", effort: null, streak: 0, retries: 0 });
+  assert.equal(gp("a2", "Review Task 3 (spec + quality)", 2000).retries, 0);
+  assert.equal(gp("a3", "Re-review Task 3 fix round 1", 3000).retries, 1);
+  assert.equal(gp("a4", "Implement Task 3: parser", 4000).retries, 1);
+  assert.equal(st.retries["general-purpose::review::Task 3"], 2);
+});
+
+test("onSpawned: story sem papel usa '-' na chave; sem id de task → retries null", () => {
+  const st = mc.createMonitorState();
+  const s = mc.onSpawned(st, { agentId: "a1", subagentType: "devflow:test-writer", description: "story", prompt: "- Current story: S2 — x", now: 1 });
+  assert.equal(s.label, "devflow:test-writer · S2");
+  assert.equal(st.retries["devflow:test-writer::-::S2"], 1);
+  const r = mc.onSpawned(st, { agentId: "a2", subagentType: "Explore", description: "mapear", now: 1 });
   assert.equal(r.retries, null);
   assert.equal(r.label, "Explore");
   assert.equal(mc.onSpawned(st, { subagentType: "Explore", now: 1 }), null);
@@ -141,7 +161,7 @@ test("onSpawned: limite de 500 chaves descarta a mais antiga; 50 linhas preserva
   mc.openMain(st, { now: 0 });
   for (let i = 0; i < mc.MAX_KEYS + 1; i++) mc.onSpawned(st, { agentId: `a${i}`, subagentType: "t", description: `Task ${i}`, now: i });
   assert.equal(Object.keys(st.retries).length, mc.MAX_KEYS);
-  assert.equal(st.retries["t::Task 0"], undefined);
+  assert.equal(st.retries["t::-::Task 0"], undefined);
   assert.equal(st.rows.length, mc.MAX_ROWS);
   assert.equal(st.rows[0].id, "main");
 });
@@ -220,7 +240,9 @@ export const STALE_MS = 30_000;
 
 const DONE = new Set(["completed", "failed", "killed"]);
 const TASK_RE = /\bTask (\d+[a-z]?)\b/;
-const STORY_RE = /^\s*Current story:\s*(S\d+)\b/m;
+const STORY_RE = /^\s*(?:[-*]\s+)?Current story:\s*(S\d+)\b/m;
+const IMPLEMENT_RE = /^\s*(?:Implement|Fix)\b/i;
+const REVIEW_RE = /^\s*(?:Re-?review|Review)\b/i;
 
 export function createMonitorState() {
   return { rows: [], retries: {} };
@@ -231,6 +253,14 @@ export function extractTaskId({ description, prompt } = {}) {
   if (d) return `Task ${d[1]}`;
   const p = typeof prompt === "string" ? prompt.slice(0, PROMPT_SCAN).match(STORY_RE) : null;
   return p ? p[1] : null;
+}
+
+// O SDD despacha implementer e reviewer como general-purpose: o papel separa as chaves.
+export function extractRole(description) {
+  if (typeof description !== "string") return null;
+  if (IMPLEMENT_RE.test(description)) return "implement";
+  if (REVIEW_RE.test(description)) return "review";
+  return null;
 }
 
 function bumpRetry(state, key) {
@@ -246,9 +276,11 @@ export function onSpawned(state, { agentId, subagentType, description, prompt, m
   if (typeof agentId !== "string" || !agentId) return null;
   const type = typeof subagentType === "string" && subagentType ? subagentType : "agente";
   const taskId = extractTaskId({ description, prompt });
-  const retries = taskId ? bumpRetry(state, `${type}::${taskId}`) : null;
+  const role = taskId ? extractRole(description) : null;
+  const retries = taskId ? bumpRetry(state, `${type}::${role ?? "-"}::${taskId}`) : null;
+  const label = taskId ? `${type} · ${taskId}${role ? ` · ${role}` : ""}` : type;
   const row = {
-    id: agentId, label: taskId ? `${type} · ${taskId}` : type, startedAt: now, lastEventAt: now,
+    id: agentId, label, startedAt: now, lastEventAt: now,
     model: typeof model === "string" && model ? model : null, effort: null, streak: 0, retries,
   };
   state.rows = state.rows.filter((r) => r.id !== agentId);
@@ -306,13 +338,13 @@ export const isLive = (state) => state.rows.length > 0;
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `node --test tests/lib/monitor-core.test.mjs`
-Expected: PASS (12 testes)
+Expected: PASS (13 testes)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add scripts/lib/monitor-core.mjs tests/lib/monitor-core.test.mjs
-git commit -m "feat(router-monitor): estado das linhas, id da task e retentativas (lib pura)" -- scripts/lib/monitor-core.mjs tests/lib/monitor-core.test.mjs
+git commit -m "feat(router-monitor): estado das linhas, id da task, papel e retentativas (lib pura)" -- scripts/lib/monitor-core.mjs tests/lib/monitor-core.test.mjs
 ```
 
 ---
@@ -327,13 +359,13 @@ git commit -m "feat(router-monitor): estado das linhas, id da task e retentativa
 - Test: `tests/lib/monitor-core.test.mjs` (acrescentar ao fim)
 
 **Interfaces:**
-- Consumes: `createMonitorState`, `onSpawned`, `openMain`, `onTool`, `onStep` (Task 1).
-- Produces (usadas na Task 5):
-  - constantes `VISIBLE=6`, `LABEL_COLS=32`, `DEFAULT_FAILURE_STREAK=3`
+- Consumes: Task 1.
+- Produces (Task 5):
+  - constantes `VISIBLE=6`, `LABEL_COLS=40`, `DEFAULT_FAILURE_STREAK=3`
   - `Routing = { active: boolean, failureStreak: number, loops: Record<string, { model: string|null, effort: string|null, origin: "roteado"|"teto" }> }`
-  - `fmtDuration(ms): string` · `shortModel(model): string` · `originOf(routing|undefined, loopId): "roteado"|"teto"|"router off"`
+  - `fmtDuration(ms)`, `shortModel(model)`, `originOf(routing|undefined, loopId)`, `visibleFor(maxRows): number`
   - `view(state, { routing, now, visible? }): { rows: ViewRow[], more: number }`
-  - `ViewRow = { id, label, model, origin, originColor, time, streak, streakColor, retries, retriesColor }` (`model` já como `sonnet-5-5·medium`; cores são ThemeKey ou `undefined`)
+  - `ViewRow = { id, label, model, origin, originColor, time, streak, streakColor, retries, retriesColor }` (cores: ThemeKey ou `undefined`)
   - `lineText(viewRow): string`
 
 - [ ] **Step 1: Escrever o teste falhando**
@@ -361,6 +393,13 @@ test("originOf: roteado/teto com router ativo; router off sem valor ou desligado
   assert.equal(mc.originOf({ ...routing, active: false }, "a1"), "router off");
 });
 
+test("visibleFor: min(6, maxRows − 1); maxRows inválido → 6; nunca menos de 1", () => {
+  assert.equal(mc.visibleFor(20), 6);
+  assert.equal(mc.visibleFor(5), 4);
+  assert.equal(mc.visibleFor(1), 1);
+  assert.equal(mc.visibleFor(undefined), 6);
+});
+
 test("view: sessão primeiro, subagentes por início, modelo publicado vence o observado", () => {
   const st = mc.createMonitorState();
   mc.onSpawned(st, { agentId: "b", subagentType: "devflow:test-writer", description: "Implement Task 3: x", model: "sonnet", now: 2000 });
@@ -375,7 +414,7 @@ test("view: sessão primeiro, subagentes por início, modelo publicado vence o o
   assert.equal(b.origin, "roteado");
   assert.equal(b.originColor, "success");
   assert.equal(b.time, "01:12");
-  assert.equal(mc.lineText(b), "devflow:test-writer · Task 3     Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 0");
+  assert.equal(mc.lineText(b), "devflow:test-writer · Task 3 · implement Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 0");
   assert.equal(v.rows[0].model, "opus-5-5·high");
   assert.equal(v.rows[0].origin, "teto");
   assert.equal(v.rows[1].model, "?·-");
@@ -415,7 +454,7 @@ test("view: failureStreak inválido cai no padrão 3", () => {
   assert.equal(mc.view(st, { routing: { active: true, failureStreak: "x", loops: {} }, now: 0 }).rows[0].streakColor, "warning");
 });
 
-test("view: até 6 linhas + more; rótulo cortado em 32 colunas com reticências", () => {
+test("view: visible + more; rótulo cortado em 40 colunas com reticências", () => {
   const st = mc.createMonitorState();
   for (let i = 0; i < 9; i++) mc.onSpawned(st, { agentId: `a${i}`, subagentType: "devflow:um-tipo-de-agente-com-nome-enorme", now: i });
   const v = mc.view(st, { routing: undefined, now: 10 });
@@ -423,13 +462,14 @@ test("view: até 6 linhas + more; rótulo cortado em 32 colunas com reticências
   assert.equal(v.more, 3);
   assert.equal(v.rows[0].label.length, mc.LABEL_COLS);
   assert.ok(v.rows[0].label.endsWith("…"));
+  assert.equal(mc.view(st, { routing: undefined, now: 10, visible: 2 }).more, 7);
 });
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `node --test tests/lib/monitor-core.test.mjs`
-Expected: FAIL — `mc.fmtDuration is not a function` (e demais funções novas)
+Expected: FAIL — `mc.fmtDuration is not a function` (e as demais funções novas)
 
 - [ ] **Step 3: Implementar o mínimo**
 
@@ -437,7 +477,7 @@ Acrescentar ao fim de `scripts/lib/monitor-core.mjs`:
 
 ```js
 export const VISIBLE = 6;
-export const LABEL_COLS = 32;
+export const LABEL_COLS = 40;
 export const DEFAULT_FAILURE_STREAK = 3;
 const ORIGIN_COLOR = { roteado: "success", teto: "subtle", "router off": "inactive" };
 
@@ -445,8 +485,8 @@ export function fmtDuration(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600);
   const p = (n) => String(n).padStart(2, "0");
-  const ms_ = `${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
-  return h ? `${h}:${ms_}` : ms_;
+  const mmss = `${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+  return h ? `${h}:${mmss}` : mmss;
 }
 
 export function shortModel(model) {
@@ -456,6 +496,11 @@ export function shortModel(model) {
 export function originOf(routing, loopId) {
   if (routing?.active !== true) return "router off";
   return routing.loops?.[loopId]?.origin === "roteado" ? "roteado" : "teto";
+}
+
+// Linhas que cabem na faixa: o prop maxRows da AbovePrompt menos a linha "+N agentes".
+export function visibleFor(maxRows) {
+  return Number.isInteger(maxRows) && maxRows > 0 ? Math.max(1, Math.min(VISIBLE, maxRows - 1)) : VISIBLE;
 }
 
 const cut = (s, n) => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
@@ -489,7 +534,7 @@ export function lineText(v) {
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `node --test tests/lib/monitor-core.test.mjs`
-Expected: PASS (20 testes)
+Expected: PASS (22 testes)
 
 - [ ] **Step 5: Commit**
 
@@ -500,35 +545,68 @@ git commit -m "feat(router-monitor): formatação da faixa (tempo, modelo, orige
 
 ---
 
-### Task 3: router publica a decisão aplicada em `devflow.routing`
+### Task 3: router publica a decisão aplicada em `devflow.routing` + contrato do `$.state`
 
-**Agent:** backend-specialist (revisão leve focada em: nada do que o router devolve muda; ADR-017)
-**Tests:** integration
+**Agent:** backend-specialist (revisão focada: nada do que o router devolve muda; ADR-017)
+**Tests:** integration + e2e
 
 **Files:**
 - Modify: `hooks/router.mjs`
 - Create: `types/index.d.ts`
 - Modify: `.claude-plugin/plugin.json`
 - Test: `tests/integration/test-router-mod.mjs`
+- Create: `tests/e2e/router-monitor-validate.e2e.test.mjs`
 
 **Interfaces:**
-- Consumes: `tierOf` de `scripts/lib/model-routing.mjs` (já exportado).
-- Produces (lido nas Tasks 4 e 5): valor `$.state` `{ plugin: "devflow", key: "routing" }` com a forma `Routing` da Task 2. `loops.main` = sessão; `loops[agentId]` = subagente roteado.
+- Consumes: `tierOf` não é necessário; nada novo de outras tasks.
+- Produces (Tasks 4–5): valor `$.state` `{ plugin: "devflow", key: "routing" }` com a forma `Routing` (Task 2). `loops.main` = sessão; `loops[agentId]` = subagente roteado. Contrato `types/index.d.ts` com `routing`, `monitorRows`, `monitorRetries`.
 
-- [ ] **Step 1: Escrever o teste falhando**
+- [ ] **Step 1: Escrever os testes falhando**
 
-Em `tests/integration/test-router-mod.mjs`, dentro de `load()`:
-- trocar `const log = { reads: [], writes: [], completes: [], status: [] };` por
-  `const log = { reads: [], writes: [], completes: [], status: [], state: {} };`
-- acrescentar ao objeto `$`, depois de `ui: …,`, a linha:
+(a) `tests/e2e/router-monitor-validate.e2e.test.mjs`:
+
+```js
+// e2e: o plugin real declara o contrato de $.state e passa no `claude plugin validate .`.
+// O validate é pulado com aviso quando o `claude` não está instalado (mesma regra do tests/run-integration.sh).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const hasClaude = spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0;
+
+test("plugin.json aponta o contrato e ele declara as chaves do monitor; hooks.json segue com um módulo", () => {
+  const plugin = JSON.parse(fs.readFileSync(path.join(REPO, ".claude-plugin/plugin.json"), "utf8"));
+  assert.equal(plugin.types, "./types/index.d.ts");
+  const types = fs.readFileSync(path.join(REPO, "types/index.d.ts"), "utf8");
+  for (const k of ["routing", "monitorRows", "monitorRetries"]) assert.match(types, new RegExp(`\\b${k}:`));
+  assert.doesNotMatch(types, /export\s*\{\s*\}/); // o validate recusa export que não seja de tipo
+  const hooks = JSON.parse(fs.readFileSync(path.join(REPO, "hooks/hooks.json"), "utf8"));
+  assert.deepEqual(hooks.modules, ["./router.mjs"]); // o engine aceita um módulo por plugin
+});
+
+test("claude plugin validate . passa", { skip: hasClaude ? false : "claude ausente — validate NÃO rodou" }, () => {
+  const r = spawnSync("claude", ["plugin", "validate", "."], { cwd: REPO, encoding: "utf8", timeout: 120_000 });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+});
+```
+
+(b) Em `tests/integration/test-router-mod.mjs`, dentro de `load()`:
+- assinatura: `async function load({ root, env = ON, statOverride, complete, stateThrows = false } = {})`
+- logo no início do corpo: `const flags = { stateThrows };`
+- `const log = { reads: [], writes: [], completes: [], status: [], state: {} };`
+- acrescentar ao objeto `$`, depois de `ui: …,`:
 
 ```js
     state: {
       get: async (r) => ({ value: log.state[r.key], version: 0 }),
-      set: async (r, v) => { if (stateThrows) throw new Error("state off"); log.state[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
+      set: async (r, v) => { if (flags.stateThrows) throw new Error("state off"); log.state[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
     },
 ```
-- e a assinatura de `load` passa a `async function load({ root, env = ON, statOverride, complete, stateThrows = false } = {})`.
+- no `return` de `load`, acrescentar `flags`: `return { call, step, spawn, turn, log, $, flags };`
 
 Acrescentar ao fim do arquivo:
 
@@ -545,12 +623,22 @@ test("monitor: spawn roteado publica modelo, esforço e origem aplicados", async
   assert.equal(typeof r.loops.a1.effort, "string");
 });
 
-test("monitor: spawn no teto não vira roteado", async () => {
+test("monitor: tipo não roteável não publica loop (o monitor mostra teto)", async () => {
   const H = await load({ root: mkRepo() });
   await H.turn();
-  await H.spawn({ subagentType: "devflow:architect", parentModel: SONNET });
-  const l = H.log.state.routing.loops.a1;
-  assert.ok(!l || l.origin === "teto");
+  await H.spawn({ subagentType: "Explore", parentModel: OPUS });
+  assert.equal(H.log.state.routing.active, true);
+  assert.equal(H.log.state.routing.loops.a1, undefined);
+});
+
+test("monitor: só o esforço roteado na sessão já conta como roteado", async () => {
+  const H = await load({ root: mkRepo() });
+  const first = await H.turn(); // fase E, sem ID de sonnet aprendido: só o esforço muda
+  assert.equal(first.effort, "medium");
+  const main = H.log.state.routing.loops.main;
+  assert.equal(main.model, OPUS);
+  assert.equal(main.effort, "medium");
+  assert.equal(main.origin, "roteado");
 });
 
 test("monitor: passo da sessão publica o modelo aplicado (não o e.model do usuário)", async () => {
@@ -579,39 +667,37 @@ test("monitor: /devflow-route off publica active false; sem opt-in também", asy
   assert.equal(H2.log.state.routing.active, false);
 });
 
-test("monitor: $.state.set lançando não muda o que o router devolve", async () => {
+test("monitor: $.state.set lançando não muda o que o router devolve, e a publicação é tentada de novo", async () => {
   const H = await load({ root: mkRepo(), stateThrows: true });
   await H.turn();
   const seen = await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS });
   assert.equal(seen.model, "haiku");
+  assert.equal(H.log.state.routing, undefined);
+  H.flags.stateThrows = false;
+  await H.call("command.run", { command: "devflow-route", args: "status" });
+  assert.equal(H.log.state.routing.active, true);
 });
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `node --test tests/integration/test-router-mod.mjs`
-Expected: FAIL nos 5 primeiros testes novos (`Cannot read properties of undefined (reading 'active')` / `'loops'`); o 6º e os antigos passam.
+Run: `node --test tests/e2e/router-monitor-validate.e2e.test.mjs tests/integration/test-router-mod.mjs`
+Expected: FAIL — o e2e (`plugin.types` é `undefined`) e os testes novos de integração (`Cannot read properties of undefined (reading 'active')` / `'loops'`). Os testes antigos passam.
 
 - [ ] **Step 3: Implementar o mínimo**
 
 Em `hooks/router.mjs`:
 
-1. Trocar a linha de import de `model-routing.mjs` por:
+1. Depois de `const MAX_LEDGER_LINES = 2000;` (linha 11):
 
 ```js
-import { effectiveConfig, phaseFromPrevcJson, tierOf } from "../scripts/lib/model-routing.mjs";
-```
-
-2. Depois de `const MAX_LEDGER_LINES = 2000;`:
-
-```js
-const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo hooks/router-monitor.mjs
+const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo monitor ao vivo (seção abaixo)
 const MAX_PUB_LOOPS = 100;
 ```
 
-3. No objeto `S`, acrescentar os campos `pub: {},` e `pubLast: "",`.
+2. No objeto `S` (linhas 12–25), acrescentar antes de `sessionKey`: `pub: {},` e `pubLast: "",`.
 
-4. Depois da função `active`:
+3. Depois de `const active = …` (linha 27):
 
 ```js
 function pubLoop(id, entry) {
@@ -622,41 +708,40 @@ function pubLoop(id, entry) {
   for (let i = 0; i < ks.length - MAX_PUB_LOOPS; i++) delete S.pub[ks[i]];
 }
 
-// Monitor (spec 2026-10-09-router-monitor-toolbar): só publica; nunca muda o que o router decide.
+// Monitor (spec 2026-10-09-router-monitor-toolbar §3.4): só publica; nunca muda o que o router decide.
 async function publish($) {
   try {
     const value = { active: active(), failureStreak: S.config.midRun?.failureStreak ?? 3, loops: S.pub };
     const json = JSON.stringify(value);
     if (json === S.pubLast) return;
-    S.pubLast = json;
     await $.state.set(ROUTING, value);
+    S.pubLast = json; // só depois do set: falha é tentada de novo na próxima publicação
   } catch {}
 }
 ```
 
-5. Na última linha de `ensure($)` (depois de `if (S.config.enabled) await detectOtherRouter($);`): `await publish($);`
+4. Ao fim de `ensure($)`, depois de `if (S.config.enabled) await detectOtherRouter($);`: `await publish($);`
 
-6. Em `onCommand`, logo antes de `const c = S.core;`: `await publish($);`
+5. Em `onCommand`, logo antes de `const c = S.core;`: `await publish($);`
 
-7. Em `onAgentSpawn`, dentro de `if (res && "agentId" in res) { … }`, depois da linha do `ledger(...)`:
+6. Em `onAgentSpawn`, dentro de `if (res && "agentId" in res) { … }`, depois da linha do `ledger(...)`:
 
 ```js
     if (route) {
-      pubLoop(res.agentId, { model: res.model ?? null, effort: route.effort ?? null, origin: route.tier !== route.ceiling ? "roteado" : "teto" });
+      const effortRouted = S.core.userEffort != null && route.effort != null && route.effort !== S.core.userEffort;
+      pubLoop(res.agentId, { model: res.model ?? null, effort: route.effort ?? null, origin: route.tier !== route.ceiling || effortRouted ? "roteado" : "teto" });
       await publish($);
     }
 ```
 
-8. No hook `turn.step`, dentro do `if (active()) { … }`, depois do bloco `if (e.agentId) … else { … }` (ainda dentro do `if (active())`):
+7. No hook `turn.step` (linhas 187–206), dentro do `if (active()) { … }`, depois do bloco `if (e.agentId) … else { … }` (ainda dentro do `if (active())`):
 
 ```js
         if (e.agentId && patch && S.pub[e.agentId]) {
           const cur = S.pub[e.agentId];
           pubLoop(e.agentId, { ...cur, model: patch.model ?? cur.model, effort: patch.effort ?? cur.effort });
         } else if (!e.agentId) {
-          const teto = tierOf(S.core.userModel);
-          const routed = !S.sessionOff && !!S.core.sessionTier && !!teto && S.core.sessionTier !== teto;
-          pubLoop("main", { model: patch?.model ?? e.model ?? null, effort: patch?.effort ?? e.effort ?? null, origin: routed ? "roteado" : "teto" });
+          pubLoop("main", { model: patch?.model ?? e.model ?? null, effort: patch?.effort ?? e.effort ?? null, origin: patch?.model || patch?.effort ? "roteado" : "teto" });
         }
         await publish($);
 ```
@@ -664,7 +749,8 @@ async function publish($) {
 Criar `types/index.d.ts`:
 
 ```ts
-// Contrato do $.state do plugin devflow (claude plugin validate confere as chaves usadas nos módulos).
+// Contrato do $.state do plugin devflow (o claude plugin validate confere as chaves usadas no módulo).
+// Só exports de tipo: o validate recusa qualquer outro export.
 export type RoutingOrigin = "roteado" | "teto";
 export type RoutingLoop = { model: string | null; effort: string | null; origin: RoutingOrigin };
 export type RoutingSnapshot = { active: boolean; failureStreak: number; loops: Record<string, RoutingLoop> };
@@ -688,41 +774,42 @@ Em `.claude-plugin/plugin.json`, acrescentar depois de `"license": "MIT",` a lin
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `node --test tests/integration/test-router-mod.mjs && node --test tests/lib/router-core.test.mjs`
-Expected: PASS (antigos + 6 novos)
+Run: `node --test tests/e2e/router-monitor-validate.e2e.test.mjs tests/integration/test-router-mod.mjs tests/lib/router-core.test.mjs`
+Expected: PASS (com `claude` instalado o validate roda; sem ele, aparece como SKIP com o aviso).
 
-Run: `claude plugin validate .` (se `claude` existir)
-Expected: sem erro sobre `$.state` / `types`.
+Run: `claude plugin test .` (se `claude` existir)
+Expected: os 5 testes de `hooks/router.test.ts` seguem passando.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add hooks/router.mjs types/index.d.ts .claude-plugin/plugin.json tests/integration/test-router-mod.mjs
-git commit -m "feat(router-monitor): router publica modelo/esforço aplicados e origem em \$.state" -- hooks/router.mjs types/index.d.ts .claude-plugin/plugin.json tests/integration/test-router-mod.mjs
+git add hooks/router.mjs types/index.d.ts .claude-plugin/plugin.json tests/integration/test-router-mod.mjs tests/e2e/router-monitor-validate.e2e.test.mjs
+git commit -m "feat(router-monitor): router publica modelo/esforço aplicados e origem em \$.state; contrato do plugin" -- hooks/router.mjs types/index.d.ts .claude-plugin/plugin.json tests/integration/test-router-mod.mjs tests/e2e/router-monitor-validate.e2e.test.mjs
 ```
 
 ---
 
-### Task 4: módulo do monitor — eventos e cronômetro
+### Task 4: monitor no `router.mjs` — eventos, composição e cronômetro
 
-**Agent:** feature-developer
+**Agent:** backend-specialist (revisão mais cuidadosa: muda o `register` do router)
 **Tests:** integration
 
 **Files:**
-- Create: `hooks/router-monitor.mjs`
+- Modify: `hooks/router.mjs`
 - Test: `tests/integration/test-router-monitor-mod.mjs`
 
 **Interfaces:**
-- Consumes: Task 1 inteira; valor `routing` (Task 3) só na Task 5.
-- Produces: `register(on)`; valores `$.state` `monitorRows` (`Row[]`) e `monitorRetries`; hooks em `session.start`, `turn.start`, `agent.spawn`, `tool.call`, `turn.step`, `turn.complete`. A Task 5 acrescenta o `ui.render`.
+- Consumes: Task 1 inteira (`import * as mc from "../scripts/lib/monitor-core.mjs"`); `publish`/`ROUTING` (Task 3).
+- Produces (Task 5): objeto de módulo `M = { st, hydrating, timer, inTick }`, refs `ROWS`/`RETRIES`, funções `monHydrate($)`, `monTick($)`, `monSessionStart`, `monTurnStart`, `monAgentSpawn`, `monToolCall`, `monTurnComplete`, `monTurnStep` (gerador), e o hook do router extraído para `async function* routerTurnStep($, e, next)`.
 
 - [ ] **Step 1: Escrever o teste falhando**
 
 `tests/integration/test-router-monitor-mod.mjs`:
 
 ```js
-// Testa hooks/router-monitor.mjs de verdade: register(on) coleta os hooks; `$` falso com $.state,
-// relógio controlável e $.agent.list configurável. O kit (hooks/router-monitor.test.ts) é só smoke de carga.
+// Testa o monitor ao vivo dentro de hooks/router.mjs de verdade: register(on) coleta os hooks; `$` falso
+// com $.state, relógio controlável e $.agent.list configurável. Sem DEVFLOW_MODEL_ROUTING o router fica
+// desligado (o monitor tem que funcionar mesmo assim). O kit (hooks/router-monitor.test.ts) cobre o engine.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -735,27 +822,37 @@ globalThis.h = (tag, props, ...children) => ({ tag, props: props ?? {}, children
 const textOf = (node) => (node === null || node === undefined ? "" : typeof node === "string" || typeof node === "number" ? String(node) : node.children.map(textOf).join(""));
 
 async function load({ store = {}, list = async () => [], throwsState = false } = {}) {
-  const mod = await import(pathToFileURL(path.join(REPO, "hooks/router-monitor.mjs")).href + `?t=${n++}`);
+  const mod = await import(pathToFileURL(path.join(REPO, "hooks/router.mjs")).href + `?t=${n++}`);
   const hooks = {};
-  const on = (ev, a, b) => { const h = b ?? a; hooks[ev] = { h, c: null }; return { catch(c) { hooks[ev].c = c; return this; } }; };
+  const on = (ev, a, b) => { hooks[ev] = { h: b ?? a, c: null }; return { catch(c) { hooks[ev].c = c; return this; } }; };
   mod.register(on);
   const clock = { now: 0, timers: [] };
+  const writes = [];
+  const fail = async () => { throw new Error("ENOENT"); };
   const $ = {
+    plugin: { root: REPO },
+    env: { get: async () => undefined },
+    session: { cwd: async () => null },
+    settings: { read: async () => ({ enabledPlugins: {} }) },
+    command: { register: async () => ({}) },
+    fs: { stat: fail, read: fail, write: async () => {} },
+    model: { complete: async () => ({ isAnswered: false, reason: "empty-reply" }) },
     state: {
       get: async (r) => { if (throwsState) throw new Error("x"); return { value: store[r.key], version: 0 }; },
-      set: async (r, v) => { if (throwsState) throw new Error("x"); store[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
+      set: async (r, v) => { if (throwsState) throw new Error("x"); store[r.key] = JSON.parse(JSON.stringify(v)); writes.push(r.key); return { isSet: true, version: 1 }; },
     },
     clock: {
       now: async () => clock.now,
       every: (ms, fn) => { const t = { ms, fn, cancelled: false, cancel() { t.cancelled = true; } }; clock.timers.push(t); return t; },
     },
     agent: { list },
-    ui: { resolve: () => ({ Box: "Box", Text: "Text" }) },
+    ui: { resolve: () => ({ Box: "Box", Text: "Text" }), status: () => {}, toast: () => {} },
   };
   const call = async (ev, e, nextImpl = async (x) => x) => {
     const { h, c } = hooks[ev];
-    const next = async (x) => nextImpl(x);
-    try { return await h($, e, next); } catch (err) { return c ? c($, e, next) : { skipped: String(err) }; }
+    let called = false, settled;
+    const next = async (x) => { called = true; settled = await nextImpl(x); return settled; };
+    try { return await h($, e, next); } catch (err) { return c ? c($, e, async (x) => (called ? settled : next(x))) : { skipped: String(err) }; }
   };
   const step = async (e) => {
     let sent;
@@ -765,29 +862,33 @@ async function load({ store = {}, list = async () => [], throwsState = false } =
     return sent;
   };
   const live = () => clock.timers.filter((t) => !t.cancelled);
-  const tick = async () => { for (const t of live()) await t.fn(); await new Promise((r) => setTimeout(r, 0)); };
+  const tick = async () => { for (const t of live()) t.fn(); await new Promise((r) => setTimeout(r, 0)); };
+  const start = () => call("session.start", {}, async () => ({}));
   const spawn = (e, agentId = "a1", model = "claude-sonnet-5-5") =>
-    call("agent.spawn", { prompt: "", description: "", subagentType: "devflow:test-writer", parentModel: "claude-opus-5-5", ...e }, async () => ({ model, agentId }));
-  return { call, step, spawn, tick, live, clock, store, hooks };
+    call("agent.spawn", { prompt: "", description: "", subagentType: "general-purpose", parentModel: "claude-opus-5-5", fork: false, ...e }, async () => ({ model, agentId }));
+  return { call, step, spawn, tick, live, start, clock, store, writes, hooks };
 }
 
-test("spawn com Task 3 cria a linha, devolve o resultado intacto e abre o cronômetro", async () => {
+test("session.start abre um único cronômetro de 1 s, também num segundo session.start", async () => {
   const H = await load();
-  const res = await H.spawn({ description: "Implement Task 3: parser" });
-  assert.deepEqual(res, { model: "claude-sonnet-5-5", agentId: "a1" });
-  const row = H.store.monitorRows[0];
-  assert.equal(row.label, "devflow:test-writer · Task 3");
-  assert.equal(row.retries, 0);
+  await H.start();
+  await H.start();
   assert.equal(H.live().length, 1);
   assert.equal(H.live()[0].ms, 1000);
 });
 
-test("redespacho da mesma task do mesmo tipo vira Retentativas 1", async () => {
+test("SDD real: resultado do spawn intacto; reviewer e implementer contam separados", async () => {
   const H = await load();
-  await H.spawn({ description: "Implement Task 3: parser" }, "a1");
-  await H.spawn({ description: "Implement Task 3: parser (fix)" }, "a2");
-  assert.equal(H.store.monitorRows.find((r) => r.id === "a2").retries, 1);
-  assert.equal(H.store.monitorRetries["devflow:test-writer::Task 3"], 2);
+  await H.start();
+  const res = await H.spawn({ description: "Implement Task 3: parser" }, "a1");
+  assert.deepEqual(res, { model: "claude-sonnet-5-5", agentId: "a1" });
+  await H.spawn({ description: "Review Task 3 (spec + quality)" }, "a2");
+  await H.spawn({ description: "Re-review Task 3 fix round 1" }, "a3");
+  await H.spawn({ description: "Implement Task 3: parser" }, "a4");
+  const by = Object.fromEntries(H.store.monitorRows.map((r) => [r.id, r]));
+  assert.equal(by.a1.label, "general-purpose · Task 3 · implement");
+  assert.deepEqual([by.a1.retries, by.a2.retries, by.a3.retries, by.a4.retries], [0, 0, 1, 1]);
+  assert.equal(H.store.monitorRetries["general-purpose::review::Task 3"], 2);
 });
 
 test("tool.call: erros somam no loop do subagente, sucesso zera, agentId sem linha é ignorado", async () => {
@@ -803,7 +904,7 @@ test("tool.call: erros somam no loop do subagente, sucesso zera, agentId sem lin
   assert.equal(H.store.monitorRows.length, 1);
 });
 
-test("turn.start abre a sessão; turn.step anota modelo/esforço e repassa e intacto", async () => {
+test("turn.start abre a sessão; turn.step anota modelo/esforço e repassa e intacto (router desligado)", async () => {
   const H = await load();
   await H.call("turn.start", { text: "oi", turnId: "t1" });
   const e = { turnId: "t1", index: 0, model: "claude-opus-5-5", effort: "high", messageCount: 1 };
@@ -812,11 +913,13 @@ test("turn.start abre a sessão; turn.step anota modelo/esforço e repassa e int
   assert.equal(main.id, "main");
   assert.equal(main.model, "claude-opus-5-5");
   assert.equal(main.effort, "high");
+  assert.equal(H.store.routing.active, false);
 });
 
-test("background: fim do turno da sessão fecha só a sessão; o subagente segue até a lista dizer completed", async () => {
+test("background: fim do turno fecha só a sessão; o subagente segue até a lista dizer completed", async () => {
   let status = "running";
   const H = await load({ list: async () => [{ id: "a1", status }] });
+  await H.start();
   await H.call("turn.start", { text: "x", turnId: "t1" });
   await H.spawn({ description: "Task 2" });
   await H.call("turn.complete", { text: "fim" }, async () => ({ usage: {} }));
@@ -826,11 +929,11 @@ test("background: fim do turno da sessão fecha só a sessão; o subagente segue
   status = "completed";
   await H.tick();
   assert.deepEqual(H.store.monitorRows, []);
-  assert.equal(H.live().length, 0);
 });
 
 test("agent.list rejeitando: linha órfã sai após 30 s sem evento", async () => {
   const H = await load({ list: async () => { throw new Error("indisponível"); } });
+  await H.start();
   await H.spawn({ description: "Task 4" });
   H.clock.now = 10_000;
   await H.tick();
@@ -840,173 +943,209 @@ test("agent.list rejeitando: linha órfã sai após 30 s sem evento", async () =
   assert.equal(H.store.monitorRows.length, 0);
 });
 
+test("tick sem linha viva não escreve nada", async () => {
+  const H = await load();
+  await H.start();
+  const before = H.writes.length;
+  await H.tick();
+  await H.tick();
+  assert.equal(H.writes.length, before);
+});
+
 test("recarga a quente: módulo novo com $.state povoado reabre o cronômetro e mantém contadores", async () => {
   const store = {};
   const H1 = await load({ store, list: async () => [{ id: "a1", status: "running" }] });
-  await H1.spawn({ description: "Task 5" });
+  await H1.start();
+  await H1.spawn({ description: "Implement Task 5: x" });
   const H2 = await load({ store, list: async () => [{ id: "a1", status: "running" }] });
-  await H2.call("session.start", {}, async () => ({}));
+  await H2.start();
   assert.equal(H2.live().length, 1);
-  await H2.spawn({ description: "Task 5" }, "a2");
+  await H2.spawn({ description: "Implement Task 5: x" }, "a2");
   assert.equal(store.monitorRows.find((r) => r.id === "a2").retries, 1);
+  assert.ok(store.monitorRows.some((r) => r.id === "a1"));
 });
 
 test("$.state lançando: todo hook devolve o resultado de next com e intacto", async () => {
   const H = await load({ throwsState: true });
+  assert.deepEqual(await H.start(), {});
   assert.deepEqual(await H.spawn({ description: "Task 1" }), { model: "claude-sonnet-5-5", agentId: "a1" });
   const seen = [];
   await H.call("tool.call", { tool: "Bash", agentId: "a1" }, async (x) => { seen.push(x); return { text: "ok" }; });
   assert.deepEqual(seen, [{ tool: "Bash", agentId: "a1" }]);
   const e = { turnId: "t", index: 0, model: "m", effort: "low", messageCount: 1 };
   assert.deepEqual(await H.step(e), e);
+  assert.deepEqual(await H.call("turn.start", { text: "x", turnId: "t" }, async () => "SEGUIU"), "SEGUIU");
 });
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `node --test tests/integration/test-router-monitor-mod.mjs`
-Expected: FAIL — `Cannot find module .../hooks/router-monitor.mjs`
+Expected: FAIL — sem cronômetro (`live().length` 0) e sem `monitorRows` (`Cannot read properties of undefined`).
 
 - [ ] **Step 3: Implementar o mínimo**
 
-`hooks/router-monitor.mjs`:
+Em `hooks/router.mjs`:
+
+1. Acrescentar aos imports (depois da linha 8): `import * as mc from "../scripts/lib/monitor-core.mjs";`
+
+2. Extrair o gerador inline do `turn.step` (linhas 187–206, já com o acréscimo da Task 3) para uma função nomeada, declarada antes do `register`, com o **mesmo corpo**:
 
 ```js
-// Monitor ao vivo do roteamento de modelos (spec 2026-10-09-router-monitor-toolbar).
-// Só observa: todo hook devolve o resultado de next(e) com e intacto; nunca lê arquivo nem grava ledger.
-import * as mc from "../scripts/lib/monitor-core.mjs";
+async function* routerTurnStep($, e, next) {
+  let patch = null;
+  try {
+    // … corpo atual inalterado, incluindo o bloco de publicação da Task 3 …
+  } catch { patch = null; }
+  const rw = {};
+  if (patch?.model) rw.model = patch.model;
+  if (patch?.effort) rw.effort = patch.effort;
+  return yield* next(Object.keys(rw).length ? { ...e, ...rw } : e);
+}
+```
 
+3. Antes de `/** @type {import('claude-code').Register} */`, acrescentar a seção do monitor:
+
+```js
+// ─── Monitor ao vivo (spec 2026-10-09-router-monitor-toolbar, M5/M9) ─────────────────────────────
+// Só observa: cada mon* devolve o resultado de next com e intacto; a lógica própria fica em try.
+// Mora neste arquivo porque o engine só segue `$` até funções declaradas no arquivo dos on(...).
 const ROWS = { plugin: "devflow", key: "monitorRows" };
 const RETRIES = { plugin: "devflow", key: "monitorRetries" };
 const TICK_MS = 1000;
+const M = { st: null, hydrating: null, timer: null, inTick: false };
 
-let S = null; // cópia de trabalho; a verdade persistente fica em $.state (sobrevive a hot reload)
-let hydrating = null;
-let timer = null;
-
-async function hydrate($) {
-  if (S) return S;
-  hydrating ??= (async () => {
-    const [rows, retries] = await Promise.all([$.state.get(ROWS), $.state.get(RETRIES)]);
-    S = { rows: Array.isArray(rows?.value) ? rows.value.map((r) => ({ ...r })) : [], retries: { ...(retries?.value ?? {}) } };
-    return S;
-  })();
-  try { return await hydrating; } finally { hydrating = null; }
+async function monLoad($) {
+  const [rows, retries] = await Promise.all([$.state.get(ROWS), $.state.get(RETRIES)]);
+  return { rows: Array.isArray(rows?.value) ? rows.value.map((r) => ({ ...r })) : [], retries: { ...(retries?.value ?? {}) } };
 }
 
-async function save($) {
-  await $.state.set(ROWS, S.rows);
-  await $.state.set(RETRIES, S.retries);
+// Cópia de trabalho única: hooks concorrentes esperam a mesma leitura (nenhum sobrescreve o outro).
+async function monHydrate($) {
+  if (M.st) return M.st;
+  if (!M.hydrating) M.hydrating = monLoad($).finally(() => { M.hydrating = null; });
+  M.st = await M.hydrating;
+  return M.st;
 }
 
-function startTick($) {
-  if (timer || !S || !mc.isLive(S)) return;
-  timer = $.clock.every(TICK_MS, () => { void onTick($); });
-}
-
-async function onTick($) {
+async function monTick($) {
+  if (M.inTick || !M.st || !mc.isLive(M.st)) return; // sem linha viva: nada a escrever
+  M.inTick = true;
   try {
     let list = null;
     try { list = await $.agent.list(); } catch { list = null; }
-    mc.reap(S, { list, now: await $.clock.now() });
-    await save($); // grava sempre: a escrita redesenha a faixa e anda o cronômetro
-    if (!mc.isLive(S)) { timer?.cancel(); timer = null; }
-  } catch {}
+    mc.reap(M.st, { list, now: await $.clock.now() });
+    await $.state.set(ROWS, M.st.rows); // grava sempre: a escrita redesenha a faixa e anda o cronômetro
+  } catch {} finally { M.inTick = false; }
 }
 
-async function onSessionStart($, e, next) {
+async function monSessionStart($, e, next) {
   const r = await next(e);
-  try { await hydrate($); startTick($); } catch {}
+  try {
+    await monHydrate($);
+    if (!M.timer) M.timer = $.clock.every(TICK_MS, () => { void monTick($); });
+  } catch {}
   return r;
 }
 
-async function onTurnStart($, e, next) {
+async function monTurnStart($, e, next) {
   try {
-    await hydrate($);
-    mc.openMain(S, { now: await $.clock.now() });
-    await save($);
-    startTick($);
+    await monHydrate($);
+    mc.openMain(M.st, { now: await $.clock.now() });
+    await $.state.set(ROWS, M.st.rows);
   } catch {}
   return next(e);
 }
 
-async function onAgentSpawn($, e, next) {
+async function monAgentSpawn($, e, next) {
   const res = await next(e);
   try {
     if (res && typeof res.agentId === "string") {
-      await hydrate($);
-      mc.onSpawned(S, { agentId: res.agentId, subagentType: e.subagentType, description: e.description, prompt: e.prompt, model: res.model, now: await $.clock.now() });
-      await save($);
-      startTick($);
+      await monHydrate($);
+      mc.onSpawned(M.st, { agentId: res.agentId, subagentType: e.subagentType, description: e.description, prompt: e.prompt, model: res.model, now: await $.clock.now() });
+      await $.state.set(ROWS, M.st.rows);
+      await $.state.set(RETRIES, M.st.retries);
     }
   } catch {}
   return res;
 }
 
-async function onToolCall($, e, next) {
+async function monToolCall($, e, next) {
   const res = await next(e);
   try {
-    await hydrate($);
-    if (mc.onTool(S, { loopId: e.agentId ?? "main", isError: !!res?.isError, now: await $.clock.now() })) await save($);
+    await monHydrate($);
+    if (mc.onTool(M.st, { loopId: e.agentId ?? "main", isError: !!res?.isError, now: await $.clock.now() })) await $.state.set(ROWS, M.st.rows);
   } catch {}
   return res;
 }
 
-async function onTurnComplete($, e, next) {
+async function monTurnComplete($, e, next) {
   const res = await next(e);
   try {
     if (!e.agentId) {
-      await hydrate($);
-      if (mc.closeMain(S)) await save($);
+      await monHydrate($);
+      if (mc.closeMain(M.st)) await $.state.set(ROWS, M.st.rows);
     }
   } catch {}
   return res;
 }
 
+async function* monTurnStep($, e, next) {
+  try {
+    await monHydrate($);
+    if (mc.onStep(M.st, { loopId: e.agentId ?? "main", model: e.model, effort: e.effort, now: await $.clock.now() })) await $.state.set(ROWS, M.st.rows);
+  } catch {}
+  return yield* next(e);
+}
+```
+
+4. Substituir o `register` inteiro por (o monitor envolve o router por fora; hooks literais):
+
+```js
 /** @type {import('claude-code').Register} */
 export const register = (on) => {
-  on("session.start", onSessionStart).catch(($, e, next) => next(e));
-  on("turn.start", onTurnStart).catch(($, e, next) => next(e));
-  on("agent.spawn", onAgentSpawn).catch(($, e, next) => next(e));
-  on("tool.call", onToolCall).catch(($, e, next) => next(e));
-  on("turn.complete", onTurnComplete).catch(($, e, next) => next(e));
-  on("turn.step", async function* ($, e, next) {
-    try {
-      await hydrate($);
-      if (mc.onStep(S, { loopId: e.agentId ?? "main", model: e.model, effort: e.effort, now: await $.clock.now() })) await save($);
-    } catch {}
-    return yield* next(e);
-  });
+  on("session.start", ($, e, next) => monSessionStart($, e, (x) => onSessionStart($, x, next))).catch(($, e, next) => next(e));
+  on("command.run", onCommand).catch(($, e, next) => next(e));
+  on("turn.start", ($, e, next) => monTurnStart($, e, (x) => onTurnStart($, x, next))).catch(($, e, next) => next(e));
+  on("agent.spawn", ($, e, next) => monAgentSpawn($, e, (x) => onAgentSpawn($, x, next))).catch(($, e, next) => next(e));
+  on("tool.call", ($, e, next) => monToolCall($, e, (x) => onToolCall($, x, next))).catch(($, e, next) => next(e));
+  on("turn.complete", ($, e, next) => monTurnComplete($, e, (x) => onTurnComplete($, x, next))).catch(($, e, next) => next(e));
+  on("turn.step", async function* ($, e, next) { return yield* monTurnStep($, e, (x) => routerTurnStep($, x, next)); });
 };
 ```
 
+5. Atualizar o comentário do topo (linhas 1–3) acrescentando: `// Também hospeda o monitor ao vivo (seção "Monitor ao vivo"): o engine aceita um módulo por plugin.`
+
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `node --test tests/integration/test-router-monitor-mod.mjs`
-Expected: PASS (8 testes)
+Run: `node --test tests/integration/test-router-monitor-mod.mjs tests/integration/test-router-mod.mjs`
+Expected: PASS (9 novos + todos os do router).
+
+Run: `claude plugin validate .` e `claude plugin test .` (se `claude` existir)
+Expected: validate sem erro; os testes de `hooks/router.test.ts` passam.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add hooks/router-monitor.mjs tests/integration/test-router-monitor-mod.mjs
-git commit -m "feat(router-monitor): módulo observa spawn, ferramentas e passos com cronômetro" -- hooks/router-monitor.mjs tests/integration/test-router-monitor-mod.mjs
+git add hooks/router.mjs tests/integration/test-router-monitor-mod.mjs
+git commit -m "feat(router-monitor): monitor ao vivo envolve os hooks do router (spawn, ferramentas, passos, cronômetro)" -- hooks/router.mjs tests/integration/test-router-monitor-mod.mjs
 ```
 
 ---
 
-### Task 5: módulo do monitor — faixa `AbovePrompt`, registro no plugin e smoke do kit
+### Task 5: faixa `AbovePrompt` e testes do kit
 
-**Agent:** feature-developer
+**Agent:** backend-specialist
 **Tests:** integration (node com `$` falso + `claude plugin test .`)
 
 **Files:**
-- Modify: `hooks/router-monitor.mjs`
-- Modify: `hooks/hooks.json` (linha `"modules"`)
+- Modify: `hooks/router.mjs`
 - Create: `hooks/router-monitor.test.ts`
+- Modify: `hooks/router.test.ts`
 - Test: `tests/integration/test-router-monitor-mod.mjs` (acrescentar)
 
 **Interfaces:**
-- Consumes: `mc.view`, `mc.LABEL_COLS` (Task 2); valores `monitorRows` (Task 4) e `routing` (Task 3).
+- Consumes: `mc.view`, `mc.visibleFor`, `mc.LABEL_COLS` (Task 2); `ROWS`, `ROUTING` (Tasks 3–4).
 - Produces: hook `ui.render` com matcher `{ component: "AbovePrompt" }`.
 
 - [ ] **Step 1: Escrever o teste falhando**
@@ -1014,7 +1153,7 @@ git commit -m "feat(router-monitor): módulo observa spawn, ferramentas e passos
 Acrescentar ao fim de `tests/integration/test-router-monitor-mod.mjs`:
 
 ```js
-const render = (H, props = { hasSurvey: false }) =>
+const render = (H, props = { hasSurvey: false, maxRows: 20 }) =>
   H.call("ui.render", { component: "AbovePrompt", surface: "terminal", props }, async () => "ENGINE");
 
 test("render: sem linha viva a faixa cede ao engine", async () => {
@@ -1025,39 +1164,41 @@ test("render: sem linha viva a faixa cede ao engine", async () => {
 test("render: hasSurvey cede ao engine mesmo com linha viva", async () => {
   const H = await load();
   await H.spawn({ description: "Task 1" });
-  assert.equal(await render(H, { hasSurvey: true }), "ENGINE");
+  assert.equal(await render(H, { hasSurvey: true, maxRows: 20 }), "ENGINE");
 });
 
-test("render: linha com modelo publicado, origem, tempo, falhas e retentativas", async () => {
-  const store = { routing: { active: true, failureStreak: 3, loops: { a2: { model: "claude-sonnet-5-5", effort: "medium", origin: "roteado" } } } };
-  const H = await load({ store });
+test("render: linha com modelo publicado, origem, tempo, falhas e retentativas; cor ausente omitida", async () => {
+  const H = await load();
   await H.spawn({ description: "Implement Task 3: x" }, "a1");
   await H.spawn({ description: "Implement Task 3: x" }, "a2");
+  H.store.routing = { active: true, failureStreak: 3, loops: { a2: { model: "claude-sonnet-5-5", effort: "medium", origin: "roteado" } } };
   H.clock.now = 72_000;
   const tree = await render(H);
-  const lines = tree.children.map(textOf);
-  const a2 = lines.find((l) => l.includes("Retentativas: 1"));
-  assert.ok(a2.startsWith("devflow:test-writer · Task 3"));
-  assert.ok(a2.includes("Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1"));
-  const a1 = lines.find((l) => l.includes("Retentativas: 0"));
-  assert.ok(a1.includes("(teto)"));
   assert.equal(tree.tag, "Box");
   assert.equal(tree.props.flexDirection, "column");
-  assert.equal(tree.children[0].props.wrap, "truncate-end");
+  const lines = tree.children.map(textOf);
+  const a2 = lines.find((l) => l.includes("Retentativas: 1"));
+  assert.ok(a2.startsWith("general-purpose · Task 3 · implement"));
+  assert.ok(a2.includes("Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1"));
+  assert.ok(lines.find((l) => l.includes("Retentativas: 0")).includes("(teto)"));
+  const first = tree.children[0];
+  assert.equal(first.props.wrap, "truncate-end");
+  const falhas = first.children.find((c) => typeof c === "object" && textOf(c).startsWith("Falhas"));
+  assert.equal("color" in falhas.props, false);
 });
 
-test("render: sem valor routing a linha marca router off", async () => {
+test("render: router desligado marca router off", async () => {
   const H = await load();
   await H.spawn({ description: "Task 1" });
   assert.ok(textOf(await render(H)).includes("(router off)"));
 });
 
-test("render: mais de 6 agentes mostra +N agentes", async () => {
+test("render: maxRows limita as linhas e mostra +N agentes", async () => {
   const H = await load();
   for (let i = 0; i < 8; i++) await H.spawn({ description: `Task ${i}` }, `a${i}`);
-  const tree = await render(H);
-  assert.equal(tree.children.length, 7);
-  assert.equal(textOf(tree.children[6]), "+2 agentes");
+  const tree = await render(H, { hasSurvey: false, maxRows: 5 });
+  assert.equal(tree.children.length, 5);
+  assert.equal(textOf(tree.children[4]), "+4 agentes");
 });
 
 test("render: $.state lançando cede ao engine", async () => {
@@ -1069,18 +1210,28 @@ test("render: $.state lançando cede ao engine", async () => {
 Criar `hooks/router-monitor.test.ts`:
 
 ```ts
-// hooks/router-monitor.test.ts — roda com `claude plugin test .`. Smoke: o módulo carrega no engine
-// e um despacho com Task N vira linha em monitorRows. Comportamento fino: tests/integration/test-router-monitor-mod.mjs.
-import { test, expect } from "claude-code/testing";
+// hooks/router-monitor.test.ts — roda com `claude plugin test .`. Prova no engine que a faixa do monitor
+// desenha a linha de um despacho (terminal e desktop). Comportamento fino: tests/integration/test-router-monitor-mod.mjs.
+// No kit: `mock.clock` é obrigatório para $.clock.every; Text não guarda `key` (buscar por texto).
+import { test, expect, mock } from "claude-code/testing";
 
-test("despacho com Task 3 vira linha do monitor", async ($, on) => {
+const BAND = { plugin: "devflow", component: "AbovePrompt", props: { hasSurvey: false, maxRows: 20 } } as const;
+
+test("despacho do SDD aparece na faixa com tipo, task e papel", async ($, on) => {
+  mock.clock(on);
   on("agent.spawn", async () => ({ model: "claude-haiku-5-5", agentId: "a1" }));
-  on("agent.list", async () => ({ value: [{ id: "a1", description: "d", type: "devflow:test-writer", status: "running" }] }));
-  await $.agent.spawn({ prompt: "x", description: "Implement Task 3: parser", subagentType: "devflow:test-writer" });
-  const { value } = await $.state.get({ plugin: "devflow", key: "monitorRows" });
-  expect(value?.some((r) => r.label === "devflow:test-writer · Task 3")).toBe(true);
+  await $.agent.spawn({ prompt: "x", description: "Implement Task 3: parser", subagentType: "general-purpose" });
+  for (const surface of ["terminal", "desktop"] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface } as any);
+    expect(await ui.find({ text: /general-purpose · Task 3 · implement/ })).toBeDefined();
+    expect(await ui.find({ text: /Retentativas: 0/ })).toBeDefined();
+  }
 });
 ```
+
+Em `hooks/router.test.ts`:
+- trocar `import { test, expect } from "claude-code/testing";` por `import { test, expect, mock } from "claude-code/testing";`
+- primeira linha do corpo de `stubEnv`: `mock.clock(on); // o monitor abre $.clock.every no session.start`
 
 - [ ] **Step 2: Rodar e ver falhar**
 
@@ -1089,15 +1240,12 @@ Expected: FAIL nos 6 testes novos — `Cannot destructure property 'h' of 'hooks
 
 - [ ] **Step 3: Implementar o mínimo**
 
-Em `hooks/router-monitor.mjs`:
-
-1. Depois de `const RETRIES = …`: `const ROUTING = { plugin: "devflow", key: "routing" }; // publicado por hooks/router.mjs`
-
-2. Antes de `/** @type {import('claude-code').Register} */`:
+Em `hooks/router.mjs`, na seção "Monitor ao vivo", depois de `monTurnStep`:
 
 ```js
-// Desenho: lê de $.state (assina o redesenho); nunca escreve aqui. Usa h(...) global, sem JSX, para seguir importável no node.
-async function onRender($, e, next) {
+// Desenho: lê de $.state (assina o redesenho), nunca escreve aqui. h(...) global, sem JSX, para seguir
+// importável no node. Sem cor, a prop `color` fica de fora.
+async function monRender($, e, next) {
   if (e.props?.hasSurvey) return next(e);
   let rows, routing;
   try {
@@ -1105,140 +1253,236 @@ async function onRender($, e, next) {
   } catch { return next(e); }
   const st = { rows: Array.isArray(rows?.value) ? rows.value : [], retries: {} };
   if (!mc.isLive(st)) return next(e);
-  const v = mc.view(st, { routing: routing?.value, now: await $.clock.now() });
+  const v = mc.view(st, { routing: routing?.value, now: await $.clock.now(), visible: mc.visibleFor(e.props?.maxRows) });
   const { Box, Text } = $.ui.resolve(e);
-  const line = (r) => h(Text, { key: r.id, wrap: "truncate-end" },
+  const tint = (color) => (color ? { color } : {});
+  const line = (r) => h(Text, { wrap: "truncate-end" },
     h(Text, { bold: true }, r.label.padEnd(mc.LABEL_COLS)),
     ` Modelo: ${r.model} `,
-    h(Text, { color: r.originColor }, `(${r.origin})`),
+    h(Text, tint(r.originColor), `(${r.origin})`),
     ` | Tempo: ${r.time} | `,
-    h(Text, { color: r.streakColor }, `Falhas: ${r.streak}`),
+    h(Text, tint(r.streakColor), `Falhas: ${r.streak}`),
     " | ",
-    h(Text, { color: r.retriesColor }, `Retentativas: ${r.retries}`));
+    h(Text, tint(r.retriesColor), `Retentativas: ${r.retries}`));
   return h(Box, { flexDirection: "column" },
     ...v.rows.map(line),
-    v.more ? h(Text, { key: "more", dimColor: true }, `+${v.more} agentes`) : null);
+    v.more ? h(Text, { dimColor: true }, `+${v.more} agentes`) : null);
 }
 ```
 
-3. No `register`, acrescentar:
+No `register`, acrescentar como última linha:
 
 ```js
-  on("ui.render", { component: "AbovePrompt" }, onRender).catch(($, e, next) => next(e));
+  on("ui.render", { component: "AbovePrompt" }, monRender).catch(($, e, next) => next(e));
 ```
-
-Em `hooks/hooks.json`, trocar `"modules": ["./router.mjs"],` por `"modules": ["./router.mjs", "./router-monitor.mjs"],`.
 
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `node --test tests/integration/test-router-monitor-mod.mjs`
-Expected: PASS (14 testes)
+Expected: PASS (15 testes)
 
 Run: `bash tests/run-integration.sh`
-Expected: PASS, incluindo `claude plugin test .` com `router.test.ts` e `router-monitor.test.ts`. Se o kit não aceitar o stub de `agent.list` nesse formato, ajustar o stub ao que o tipo `OpValueOf['agent.list']` pede (`claude-code/testing`), sem mudar o módulo.
+Expected: PASS, incluindo `claude plugin test .` com `router.test.ts` (5) e `router-monitor.test.ts` (1).
 
 Run: `claude plugin validate .`
-Expected: sem erro (o hook `ui.render` e as chaves `monitorRows`/`monitorRetries`/`routing` batem com `types/index.d.ts`).
+Expected: sem erro.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add hooks/router-monitor.mjs hooks/hooks.json hooks/router-monitor.test.ts tests/integration/test-router-monitor-mod.mjs
-git commit -m "feat(router-monitor): faixa AbovePrompt por agente e registro do módulo" -- hooks/router-monitor.mjs hooks/hooks.json hooks/router-monitor.test.ts tests/integration/test-router-monitor-mod.mjs
+git add hooks/router.mjs hooks/router-monitor.test.ts hooks/router.test.ts tests/integration/test-router-monitor-mod.mjs
+git commit -m "feat(router-monitor): faixa AbovePrompt por agente e testes do kit" -- hooks/router.mjs hooks/router-monitor.test.ts hooks/router.test.ts tests/integration/test-router-monitor-mod.mjs
 ```
 
 ---
 
-### Task 6: e2e do contrato, documentação e CHANGELOG
+### Task 6: onboarding — check `router-monitor` no doctor, init e config
 
-**Agent:** test-writer (e2e) → documentation-writer (docs)
-**Tests:** e2e
+**Agent:** feature-developer
+**Tests:** unit
 
 **Files:**
-- Create: `tests/e2e/router-monitor-validate.e2e.test.mjs`
-- Modify: `docs/model-routing.md` (nova seção antes de `## Medição` — ou, se não houver esse título, ao fim)
-- Modify: `CHANGELOG.md` (seção `[Unreleased]`)
+- Modify: `scripts/lib/doctor.mjs`
+- Create: `tests/lib/test-doctor-router-monitor.mjs`
+- Modify: `skills/project-init/SKILL.md` (novo Step 0.8, depois do Step 0.7)
+- Modify: `skills/config/SKILL.md` (seção `### 4. Confirmar e informar`)
+- Modify: `skills/doctor/SKILL.md` (lista de checks, se houver)
 
 **Interfaces:**
-- Consumes: tudo das Tasks 3–5.
-- Produces: nada consumido por outras tasks.
+- Consumes: `claudeVersionOf(ctx)` e `belowMin(version)` já existentes em `scripts/lib/doctor.mjs`.
+- Produces: check `{ id: "router-monitor" }` em `CHECKS`; rodável por `node scripts/doctor.mjs --check router-monitor`.
 
 - [ ] **Step 1: Escrever o teste falhando**
 
-`tests/e2e/router-monitor-validate.e2e.test.mjs`:
+`tests/lib/test-doctor-router-monitor.mjs`:
 
 ```js
-// e2e: o plugin real passa no `claude plugin validate .` com o módulo do monitor e o contrato de $.state.
-// Pulado com aviso quando o `claude` não está instalado (mesma regra do tests/run-integration.sh).
+// tests/lib/test-doctor-router-monitor.mjs — o monitor é sempre ligado; o onboarding só verifica que o mod carrega.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CHECKS } from "../../scripts/lib/doctor.mjs";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const hasClaude = spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0;
+const check = CHECKS.find((c) => c.id === "router-monitor");
+const cwd = () => mkdtempSync(join(tmpdir(), "doctor-rm-")); // sem .context: o check não depende do repo
 
-test("hooks.json registra o módulo do monitor e o plugin.json aponta o contrato", () => {
-  const hooks = JSON.parse(fs.readFileSync(path.join(REPO, "hooks/hooks.json"), "utf8"));
-  assert.deepEqual(hooks.modules, ["./router.mjs", "./router-monitor.mjs"]);
-  const plugin = JSON.parse(fs.readFileSync(path.join(REPO, ".claude-plugin/plugin.json"), "utf8"));
-  assert.equal(plugin.types, "./types/index.d.ts");
-  const types = fs.readFileSync(path.join(REPO, "types/index.d.ts"), "utf8");
-  for (const k of ["routing", "monitorRows", "monitorRetries"]) assert.match(types, new RegExp(`\\b${k}:`));
+test("check registrado, não destrutivo, severidade warn", () => {
+  assert.ok(check);
+  assert.equal(check.destructive, false);
+  assert.equal(check.severity, "warn");
 });
 
-test("claude plugin validate . passa", { skip: hasClaude ? false : "claude ausente — validate NÃO rodou" }, () => {
-  const r = spawnSync("claude", ["plugin", "validate", "."], { cwd: REPO, encoding: "utf8", timeout: 120_000 });
-  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+test("versão testada → OK, citando a versão", () => {
+  const r = check.run({ cwd: cwd(), claudeVersion: "2.1.296 (Claude Code)" });
+  assert.equal(r.status, "OK");
+  assert.match(r.diagnosis, /2\.1\.296/);
+});
+
+test("anterior a 2.1.293 → WARN com reparo", () => {
+  const r = check.run({ cwd: cwd(), claudeVersion: "2.1.292 (Claude Code)" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /2\.1\.293/);
+  assert.match(r.repair, /Atualize o Claude Code/);
+});
+
+test("versão ilegível → WARN", () => {
+  const r = check.run({ cwd: cwd(), claudeVersion: "" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.repair, /claude --version/);
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar o estado**
+- [ ] **Step 2: Rodar e ver falhar**
 
-Run: `node --test tests/e2e/router-monitor-validate.e2e.test.mjs`
-Expected: PASS se as Tasks 3–5 estão feitas. Para provar que o teste morde, trocar temporariamente em `hooks/hooks.json` a lista para `["./router.mjs"]`, rodar e ver FAIL no 1º teste (`deepEqual`); desfazer com `git checkout -- hooks/hooks.json` e rodar de novo (PASS).
+Run: `node --test tests/lib/test-doctor-router-monitor.mjs`
+Expected: FAIL — `check` é `undefined`.
 
-- [ ] **Step 3: Documentar**
+- [ ] **Step 3: Implementar o mínimo**
+
+Em `scripts/lib/doctor.mjs`, depois do objeto `modelRouting`:
+
+```js
+// Monitor ao vivo do roteamento: sempre ligado em todo projeto com o plugin (spec 2026-10-09-router-monitor-toolbar M8).
+// O onboarding só verifica que o Claude Code carrega o mod (hooks.json → modules).
+const routerMonitor = {
+  id: "router-monitor",
+  title: "Monitor ao vivo do roteamento (faixa acima do prompt)",
+  severity: "warn",
+  destructive: false,
+  run(ctx) {
+    const version = claudeVersionOf(ctx);
+    if (!/\d+\.\d+\.\d+/.test(String(version))) {
+      return { status: "WARN", diagnosis: "Não foi possível ler a versão do Claude Code; o monitor ao vivo só aparece quando o mod carrega.", repair: "Confira `claude --version` (testado a partir de 2.1.293)." };
+    }
+    if (belowMin(version)) {
+      return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.293): o monitor ao vivo e o roteamento por mod podem não carregar.`, repair: "Atualize o Claude Code." };
+    }
+    return { status: "OK", diagnosis: `Monitor ao vivo do roteamento disponível (Claude Code ${version}).`, repair: "" };
+  },
+};
+```
+
+E acrescentar `routerMonitor` ao fim do array `CHECKS` (depois de `modelRouting`).
+
+Em `skills/project-init/SKILL.md`, depois do Step 0.7 e antes de `## Initialization Strategy`:
+
+````markdown
+## Step 0.8: Monitor ao vivo do roteamento (verificação)
+
+O DevFlow mostra, acima do prompt, uma linha por agente em execução (modelo·esforço e origem, tempo, falhas, retentativas). É **sempre ligado** e não grava nada no projeto; aqui só se verifica que o Claude Code carrega o mod:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor
+```
+
+Mostre o resultado ao usuário. WARN não bloqueia o init: repasse o reparo indicado (normalmente atualizar o Claude Code).
+````
+
+Em `skills/config/SKILL.md`, ao fim da seção `### 4. Confirmar e informar` (antes de `### 4.5`):
+
+````markdown
+Em seguida, verifique o monitor ao vivo do roteamento (sempre ligado; nada a configurar) e mostre o resultado:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/scripts/doctor.mjs" --check router-monitor
+```
+
+WARN não bloqueia: repasse o reparo indicado.
+````
+
+Em `skills/doctor/SKILL.md`: se a skill lista os checks, acrescentar `router-monitor` (monitor ao vivo; WARN quando o Claude Code é anterior a 2.1.293 ou a versão é ilegível) no mesmo formato das linhas vizinhas. Se não lista, não mexer.
+
+- [ ] **Step 4: Rodar e ver passar**
+
+Run: `node --test tests/lib/test-doctor-router-monitor.mjs tests/lib/test-doctor-model-routing.mjs && node scripts/doctor.mjs --check router-monitor`
+Expected: PASS; o comando imprime o check `router-monitor` com OK nesta máquina.
+
+Run: `bash tests/run-unit.sh`
+Expected: PASS (se algum teste listar os checks ou o conteúdo das skills, ajustá-lo ao check novo).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/lib/doctor.mjs tests/lib/test-doctor-router-monitor.mjs skills/project-init/SKILL.md skills/config/SKILL.md skills/doctor/SKILL.md
+git commit -m "feat(router-monitor): onboarding verifica que o mod carrega (check router-monitor no doctor, init e config)" -- scripts/lib/doctor.mjs tests/lib/test-doctor-router-monitor.mjs skills/project-init/SKILL.md skills/config/SKILL.md skills/doctor/SKILL.md
+```
+
+---
+
+### Task 7: documentação, CHANGELOG e os quatro sinais
+
+**Agent:** documentation-writer
+**Tests:** e2e (rodada completa dos sinais)
+
+**Files:**
+- Modify: `docs/model-routing.md` (nova seção antes de `## Medição`; se não houver esse título, ao fim)
+- Modify: `CHANGELOG.md` (seção `[Unreleased]`)
+
+**Interfaces:**
+- Consumes: tudo das Tasks 1–6.
+- Produces: nada consumido por outras tasks.
+
+- [ ] **Step 1: Documentar**
 
 Em `docs/model-routing.md`, nova seção:
 
 ```markdown
 ## Monitor ao vivo
 
-Com o plugin carregado como mod, uma faixa acima do prompt mostra uma linha por agente em execução (a sessão e cada subagente):
+Em todo projeto com o DevFlow, uma faixa acima do prompt mostra uma linha por agente em execução (a sessão e cada subagente):
 
-    devflow:test-writer · Task 3     Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1
+    general-purpose · Task 3 · review        Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1
 
-- **Modelo** e esforço aplicados. A origem diz de onde veio a escolha: `roteado` (o roteador escolheu um tier abaixo do teto), `teto` (o roteador não mexeu) ou `router off` (roteamento desligado: o modelo é o que o Claude Code escolheu).
+- **Modelo** e esforço aplicados. A origem diz de onde veio a escolha: `roteado` (o roteador mudou o modelo ou o esforço), `teto` (o roteador não mexeu) ou `router off` (roteamento desligado: o modelo é o que o Claude Code escolheu).
 - **Tempo:** desde o despacho (subagente) ou o início do turno (sessão).
-- **Falhas:** falhas de ferramenta seguidas, a mesma contagem que dispara a escalada no meio; amarelo a partir de 1, vermelho ao chegar ao `failureStreak` (padrão 3).
-- **Retentativas:** quantas vezes a mesma task foi redespachada para o mesmo tipo de agente. A task é reconhecida pelo `Task N` da descrição do despacho (subagent-driven-development) ou pela linha `Current story: S<n>` do prompt (autonomous-loop); sem isso, `—`.
+- **Falhas:** falhas de ferramenta seguidas, a contagem que dispara a escalada no meio; amarelo a partir de 1, vermelho ao chegar ao `failureStreak` (padrão 3).
+- **Retentativas:** quantas vezes a mesma task foi despachada de novo para o mesmo papel. A task vem do `Task N` da descrição do despacho (subagent-driven-development) ou da linha `Current story: S<n>` do prompt (autonomous-loop); o papel separa implementação de revisão. No subagent-driven-development, a revisão conta as rodadas de re-review e a implementação conta os implementers novos (as rodadas que sobem de modelo); um implementer retomado por mensagem não conta. Sem task, `—`.
 
-A faixa aparece só enquanto há agente em execução, mostra até 6 linhas (`+N agentes` além disso) e nunca exibe o texto do prompt. O monitor só observa: não muda modelo, não lê arquivos do repositório e não grava ledger. Ele funciona com o roteamento desligado, para comparar o antes e o depois.
+A faixa só aparece com agente em execução, mostra até 6 linhas (menos em terminal baixo; `+N agentes` além disso) e nunca exibe o texto do prompt. O monitor só observa: não muda modelo, não lê arquivos do repositório e não grava ledger, e funciona com o roteamento desligado, para comparar o antes e o depois. Ele vem sempre ligado; o `/devflow init`, o `/devflow config` e o `/devflow:devflow-doctor` (check `router-monitor`) verificam se o seu Claude Code carrega o mod.
 ```
 
 Em `CHANGELOG.md`, sob `## [Unreleased]` (criar `### Added` se não existir):
 
 ```markdown
-- Monitor ao vivo do roteamento de modelos: faixa acima do prompt com modelo·esforço aplicados e origem (`roteado`/`teto`/`router off`), cronômetro, falhas de ferramenta seguidas e retentativas da mesma task, por agente em execução (`hooks/router-monitor.mjs`).
+- Monitor ao vivo do roteamento de modelos: faixa acima do prompt com modelo·esforço aplicados e origem (`roteado`/`teto`/`router off`), cronômetro, falhas de ferramenta seguidas e retentativas da mesma task por papel, para cada agente em execução; sempre ligado. Check `router-monitor` no doctor, chamado pelo `/devflow init` e pelo `/devflow config`.
 ```
 
-- [ ] **Step 4: Rodar os quatro sinais**
+- [ ] **Step 2: Rodar os quatro sinais**
 
 Run: `bash tests/run-unit.sh && bash tests/run-integration.sh && bash tests/run-e2e.sh && bash tests/run-lint.sh`
 Expected: tudo PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add tests/e2e/router-monitor-validate.e2e.test.mjs docs/model-routing.md CHANGELOG.md
-git commit -m "test(router-monitor): e2e do contrato do plugin; docs e changelog do monitor ao vivo" -- tests/e2e/router-monitor-validate.e2e.test.mjs docs/model-routing.md CHANGELOG.md
+git add docs/model-routing.md CHANGELOG.md
+git commit -m "docs(router-monitor): monitor ao vivo no guia de roteamento e changelog" -- docs/model-routing.md CHANGELOG.md
 ```
 
 ---
 
 ## Verificação ao vivo (fase V, manual)
 
-`claude -p` não desenha a faixa. Na fase V: sessão interativa `claude --plugin-dir .` com `models.enabled: true` e `DEVFLOW_MODEL_ROUTING=1`, uma rodada SDD curta com 2 subagentes e 1 redespacho forçado da mesma task; capturar a faixa mostrando `(roteado)`, `Falhas` subindo num erro forçado e `Retentativas: 1`. Repetir com `/devflow-route off` e conferir `(router off)`.
+`claude -p` não desenha a faixa. Na fase V: sessão interativa `claude --plugin-dir .` com `models.enabled: true` e `DEVFLOW_MODEL_ROUTING=1`, uma rodada SDD curta (implement + review + 1 re-review) e um erro de ferramenta forçado; capturar a faixa mostrando `(roteado)`, `Falhas` subindo e `Retentativas: 1` na linha do review. Repetir com `/devflow-route off` e conferir `(router off)`.

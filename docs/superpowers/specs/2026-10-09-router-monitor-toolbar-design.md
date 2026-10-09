@@ -2,16 +2,17 @@
 type: spec
 name: router-monitor-toolbar
 title: Monitor do roteamento de modelos — faixa ao vivo por agente
-status: aprovado-em-seções
+status: aprovado-em-seções (rev.2 — fase R)
 scale: MEDIUM
 autonomy: supervised
 created: "2026-10-09"
+revised: "2026-10-09 — rev.2: restrições do engine medidas nas sondas (CC 2.1.296) + revisão do architect + onboarding"
 requiredSignals: [unit, integration, e2e, lint]
 ---
 
 # Monitor do roteamento de modelos — Design
 
-> **Workflow:** `router-monitor-toolbar` | **Fase:** P | **Branch:** `feature/router-monitor-toolbar`
+> **Workflow:** `router-monitor-toolbar` | **Fase:** R | **Branch:** `feature/router-monitor-toolbar`
 > Base: roteamento de modelos e esforço da v3.7.0 ([ADR-017](../../../.context/engineering/adrs/017-model-routing-v1.0.0.md), `hooks/router.mjs`).
 
 ## 1. Objetivo
@@ -21,147 +22,164 @@ e para cada subagente em execução, uma linha com modelo e esforço aplicados, 
 há quanto tempo o agente roda, quantas falhas de ferramenta seguidas ele acumula e quantas vezes a
 mesma task já foi redespachada.
 
+O monitor roda em **todo projeto** com o plugin DevFlow habilitado (é parte do plugin; nada a instalar
+por projeto). O onboarding (`/devflow init`, `/devflow config`) **verifica** que o Claude Code do
+projeto carrega o mod.
+
 **Critério de sucesso:** durante um `/devflow` real, o operador confirma de relance, por exemplo, que o
-`devflow:test-writer` da Task 3 está em `sonnet·medium (roteado)` há 01:12, sem falhas, na 2ª tentativa,
+reviewer da Task 3 está em `sonnet·medium (roteado)` há 01:12, sem falhas, na 2ª rodada de revisão,
 sem abrir ledger nem relatório. O relatório pós-fato (`model-route.mjs report`) segue sendo a medição;
 o monitor é a observação ao vivo.
 
 **Fora de escopo:** histórico de agentes encerrados, botão de esconder, comando de liga/desliga,
-persistência entre sessões, envio de dados para fora.
+persistência entre sessões, envio de dados para fora, reaparecer agente retomado por SendMessage (§6).
 
 ## 2. Decisões
 
 | # | Decisão | Origem |
 |---|---|---|
-| M1 | A linha mostra `Modelo: {modelo}·{esforço} ({origem}) \| Tempo: {cronômetro} \| Falhas: {streak} \| Retentativas: {n}` | operador; esforço proposto e aceito |
-| M2 | **Falhas** é o streak de falhas de ferramenta seguidas, a mesma regra do `router-core` (erro soma 1, sucesso zera) | operador |
-| M3 | **Retentativas** conta redespachos da mesma task: mesma chave `subagentType + id da task do plano`. 1º despacho = 0; sem id = `—` | operador |
-| M4 | A faixa aparece **sempre** que há agente vivo, com a origem por linha: `roteado`, `teto` ou `router off` | operador |
-| M5 | Abordagem A: lib pura + módulo próprio; o router só publica a decisão aplicada num valor de `$.state` | operador |
-| M6 | O módulo é `.mjs`, desenha com `h(...)` e usa `$.state.get/set` puros, para seguir importável no node como o `router.mjs` | revisão da seção 4 |
+| M1 | Linha: `{rótulo} Modelo: {modelo}·{esforço} ({origem}) \| Tempo: {cronômetro} \| Falhas: {streak} \| Retentativas: {n}` | operador; esforço proposto e aceito |
+| M2 | **Falhas** = streak de falhas de ferramenta seguidas, a regra do `router-core` (erro soma 1, sucesso zera) | operador |
+| M3 | **Retentativas** = redespachos da mesma task pelo mesmo papel: chave `subagentType::papel::id da task`. 1º despacho = 0; sem id = `—` | operador; papel acrescentado na R (architect #1) |
+| M4 | Faixa **sempre** visível com agente vivo; origem por linha: `roteado`, `teto` ou `router off` | operador |
+| M5 | **rev.2.** Um único módulo de hooks: a cola do monitor (o que usa `$`) mora em `hooks/router.mjs`, numa seção própria, e envolve cada hook do router por fora. A lógica pura fica em `scripts/lib/monitor-core.mjs`. | restrição do engine medida nas sondas (§8) |
+| M6 | Sem JSX: `h(...)` global, `$.state.get/set` puros, para seguir importável no node | sonda confirmou |
 | M7 | O monitor só observa: nunca reescreve evento, nunca nega, nunca lê arquivo do repositório, nunca grava ledger | seção 3 |
+| M8 | **Sempre ligado, sem opt-in.** Onboarding só verifica: check `router-monitor` no doctor, chamado pelo `project-init` e pelo `config` | operador (2026-10-09) |
+| M9 | Um único cronômetro por sessão, aberto no `session.start` (inclusive o da recarga); tick sem linha viva não escreve nada; trava contra tick sobreposto | architect #4 + reference.md |
 
 ## 3. Arquitetura
 
 | Peça | Papel | Depende de |
 |---|---|---|
-| `scripts/lib/monitor-core.mjs` | Lib pura (sem `$`, sem `node:*`): estado das linhas, extração do id da task, chave e contagem de retentativas, streak, ciclo de vida, formatação | nada |
-| `hooks/router-monitor.mjs` | Segundo módulo em `hooks/hooks.json` → `modules`. Observa eventos, mantém o cronômetro, desenha a faixa `AbovePrompt` | `monitor-core.mjs`, valor `routing` do `$.state` |
-| `hooks/router.mjs` | Mudança mínima: publica, dentro de `try`, o modelo/esforço **aplicados** e a origem por loop | já existente |
-| `types/index.d.ts` + `"types": "./types/index.d.ts"` no `.claude-plugin/plugin.json` | Contrato do `$.state` do plugin `devflow` (o `claude plugin validate` o exige) | — |
+| `scripts/lib/monitor-core.mjs` | Lib pura (sem `$`, sem `node:*`): estado das linhas, id da task e papel, chave e contagem de retentativas, streak, ciclo de vida, formatação | nada |
+| `hooks/router.mjs` (seção "Monitor ao vivo") | Funções `mon*` que observam os eventos, o cronômetro e o desenho da faixa `AbovePrompt`; o `register` compõe `mon*` por fora dos hooks do router | `monitor-core.mjs` |
+| `hooks/router.mjs` (router) | Mudança mínima: publica, em `try` próprio, modelo/esforço **aplicados** e a origem em `devflow.routing` | já existente |
+| `types/index.d.ts` + `"types": "./types/index.d.ts"` no `.claude-plugin/plugin.json` | Contrato do `$.state` do plugin `devflow` | — |
+| `scripts/lib/doctor.mjs` (check `router-monitor`) + `skills/project-init`, `skills/config` | Onboarding: verificar que o mod carrega | `claude --version` |
 
-### 3.1 Valores em `$.state` (plugin `devflow`)
+`hooks/hooks.json` **não muda** (`modules: ["./router.mjs"]`).
+
+### 3.1 Restrições do engine (medidas no Claude Code 2.1.296, §8)
+
+1. `hooks.json` → `modules` aceita **um** módulo por plugin.
+2. Um plugin registra cada evento **uma vez** sem matcher; o validador confere estaticamente, inclusive nos arquivos importados.
+3. O hook passado a `on` é uma **função literal ou o nome de uma** (nada de `chain(a, b)` nem `ns.fn`).
+4. `$` só é passado a funções **declaradas no mesmo arquivo** dos `on(...)`; nunca através de import.
+
+Composição resultante (validada na sonda):
+
+```js
+on("agent.spawn", ($, e, next) => monAgentSpawn($, e, (x) => onAgentSpawn($, x, next))).catch(($, e, next) => next(e));
+on("turn.step", async function* ($, e, next) { return yield* monTurnStep($, e, (x) => routerTurnStep($, x, next)); });
+on("ui.render", { component: "AbovePrompt" }, monRender).catch(($, e, next) => next(e));
+```
+
+O monitor fica **por fora**: no `agent.spawn` ele vê o resultado final (depois da reescrita do router e
+da resolução do engine); no `turn.step` ele vê `e` **antes** da reescrita, por isso o modelo aplicado
+vem do valor publicado pelo router (§3.4).
+
+### 3.2 Valores em `$.state` (plugin `devflow`)
 
 ```ts
-type Origin = "roteado" | "teto";
-type RoutingSnapshot = {
-  active: boolean;              // router ligado (opt-in duplo + não desligado por /devflow-route off)
-  failureStreak: number;        // config.midRun.failureStreak, padrão 3
-  loops: Record<string, {       // chave: agentId, ou "main" para a sessão
-    model?: string; effort?: string; origin: Origin;
-  }>;
-};
+type RoutingOrigin = "roteado" | "teto";
+type RoutingLoop = { model: string | null; effort: string | null; origin: RoutingOrigin };
+type RoutingSnapshot = { active: boolean; failureStreak: number; loops: Record<string, RoutingLoop> }; // chave: agentId | "main"
 type MonitorRow = {
-  id: string;                   // agentId ou "main"
-  label: string;                // "sessão" | subagentType [+ " · " + taskId]
-  startedAt: number;            // $.clock.now()
-  lastEventAt: number;
-  model?: string; effort?: string;
-  streak: number;
-  retries: number | null;       // null = sem id de task
+  id: string; label: string; startedAt: number; lastEventAt: number;
+  model: string | null; effort: string | null; streak: number; retries: number | null;
 };
 interface PluginState {
-  devflow: {
-    routing: RoutingSnapshot;
-    monitorRows: MonitorRow[];
-    monitorRetries: Record<string, number>; // chave "tipo::taskId" → despachos vistos
-  };
+  devflow: { routing: RoutingSnapshot; monitorRows: MonitorRow[]; monitorRetries: Record<string, number> };
 }
 ```
 
-Só o próprio plugin escreve. O router escreve `routing`; o monitor escreve `monitorRows` e
+Valores JSON, nunca `undefined`. O router escreve `routing`; o monitor escreve `monitorRows` e
 `monitorRetries`; o desenho só lê.
 
-### 3.2 Fluxo
+### 3.3 Fluxo
 
-1. **`agent.spawn`**: `res = await next(e)`. Com `res.agentId`, cria a linha: tipo, `startedAt`,
-   `res.model`, id da task (seção 4), retentativas = despachos anteriores com a mesma chave, depois
-   incrementa a chave.
-2. **`tool.call`**: `res = await next(e)`. Loop = `e.agentId ?? "main"`. Se há linha para o loop,
-   `res?.isError` soma 1 ao streak e sucesso zera. `agentId` sem linha (forks internos do engine,
-   agentes de workflow) é ignorado.
-3. **`turn.start`** sem `agentId`: abre (ou reinicia) a linha `main`.
-4. **`turn.step`**: atualiza `model`/`effort` da linha com `e.model`/`e.effort` **só quando**
-   `routing.loops[loop]` não existe. Motivo: se o hook do monitor envolve o do router, `e` chega
-   **antes** da reescrita; o valor confiável é o que o router publicou como aplicado.
-5. **`turn.complete`** sem `agentId`: encerra a linha `main`.
-6. **Tick** `$.clock.every(1000)`, aberto quando surge a 1ª linha viva e encerrado quando não sobra
-   nenhuma: consulta `$.agent.list()`, remove subagentes em `completed`, `failed` ou `killed`, ou
-   ausentes da lista; e grava o snapshot em `monitorRows`, o que redesenha a faixa (cronômetro).
-7. **`session.start`**: reabre o tick se `monitorRows` traz linha viva (recarga a quente).
+1. **`session.start`**: hidrata a cópia de trabalho a partir de `$.state` e abre o **único**
+   `$.clock.every(1000)` da sessão (M9).
+2. **`turn.start`**: abre (ou reinicia) a linha `main`.
+3. **`agent.spawn`**: `res = await next(e)`; com `res.agentId`, cria a linha (tipo, papel, id da task,
+   `startedAt`, `res.model`), calcula as retentativas e grava `monitorRows` e `monitorRetries`.
+4. **`tool.call`**: `res = await next(e)`; loop = `e.agentId ?? "main"`; erro soma 1 ao streak,
+   sucesso zera; `agentId` sem linha é ignorado.
+5. **`turn.step`**: anota `e.model`/`e.effort` na linha (o desenho prefere o valor publicado; §3.4).
+6. **`turn.complete`** sem `agentId`: fecha a linha `main`.
+7. **Tick** (1 s): sem linha viva, não faz nada; com linha viva, consulta `$.agent.list()`, remove
+   subagentes `completed`/`failed`/`killed` ou ausentes e grava `monitorRows` (a escrita redesenha a
+   faixa e anda o cronômetro). Trava `inTick` impede ticks sobrepostos.
 
-### 3.3 O que o router publica
+### 3.4 O que o router publica
 
-- No `agent.spawn` roteado: `loops[agentId] = { model: res.model, effort: route.effort, origin: route.tier !== route.ceiling ? "roteado" : "teto" }`.
-- No `turn.step` de subagente com patch (escalada, esforço por streak): atualiza `model`/`effort` aplicados.
-- No `turn.step` da sessão: `loops.main` com o modelo/esforço efetivos (`patch.model ?? e.model`,
-  `patch.effort ?? e.effort`) e a origem do `sessionTier` contra o teto.
+- No `agent.spawn` roteado: `loops[agentId] = { model: res.model, effort: route.effort, origin }`, com
+  `origin = "roteado"` quando o tier difere do teto **ou** o esforço difere do esforço do usuário.
+- No `turn.step` de subagente com patch (escalada, esforço por streak): atualiza `model`/`effort`.
+- No `turn.step` da sessão: `loops.main = { model: patch?.model ?? e.model, effort: patch?.effort ?? e.effort, origin }`,
+  `origin = "roteado"` quando `patch` trouxe `model` ou `effort`.
 - `active` reflete `active()`; `/devflow-route off` grava `active: false`.
-- Origem exibida pelo monitor: `loops[loop].origin` quando existe; sem entrada para o loop e
-  `active: true` (agente fora da tabela, rota nula), `teto`; sem o valor `routing` ou com
-  `active: false`, `router off`.
-- Toda escrita fica em `try` próprio e não altera o que o hook do router devolve.
+- A escrita é deduplicada por JSON e o último JSON só é memorizado depois de um `set` bem-sucedido.
+- Origem exibida: `loops[loop].origin` quando existe; sem entrada e `active: true`, `teto`; sem o valor
+  ou `active: false`, `router off` (e o valor publicado, velho, é ignorado).
 
-## 4. Id da task e retentativas
+## 4. Id da task, papel e retentativas
 
-Formatos reais das skills de despacho (aterrado nos arquivos das skills):
+Formatos reais (aterrado nos arquivos das skills):
 
-| Fonte | Onde | Exemplo |
-|---|---|---|
-| `superpowers:subagent-driven-development` | `description` | `Implement Task 3: …`, `Review Task 3 (spec + quality)`, `Re-review Task 3 fix round 2` |
-| `devflow:autonomous-loop` | `prompt` | linha `Current story: S2 — …` |
+| Fonte | Tipo despachado | Onde | Exemplo |
+|---|---|---|---|
+| `superpowers:subagent-driven-development` | `general-purpose` para todos os papéis | `description` | `Implement Task 3: …`, `Review Task 3 (spec + quality)`, `Re-review Task 3 fix round 2` |
+| `devflow:autonomous-loop` | agente da story | `prompt` | linha `- Current story: S2 — …` |
 
-Regra:
+Regras:
 
-1. `description` com `\bTask (\d+[a-z]?)\b` → `Task N`.
-2. Senão, os primeiros 2 KB do `prompt`, linha a linha, com `^\s*Current story:\s*(S\d+)\b` → `S2`.
-3. Senão, sem id: `retries = null`, exibido `—`.
+1. **Id da task:** `description` com `\bTask (\d+[a-z]?)\b` → `Task N`; senão, os primeiros 2048
+   caracteres do `prompt` com `^\s*(?:[-*]\s+)?Current story:\s*(S\d+)\b` (multilinha) → `S2`; senão `null`.
+2. **Papel:** início da `description`: `Implement`/`Fix` → `implement`; `Review`/`Re-review` → `review`;
+   senão sem papel.
+3. **Chave:** `subagentType::papel::id` (sem papel: `subagentType::-::id`). Sem id: sem retentativa (`—`).
+4. **Rótulo:** `tipo · id` e, com papel, `tipo · id · papel` (ex.: `general-purpose · Task 3 · review`).
 
-Chave = `subagentType + "::" + id`. O implementer e o reviewer da mesma task têm chaves diferentes
-(tipos diferentes); o `Re-review Task 3` do mesmo tipo do `Review Task 3` conta como retentativa.
+Leitura no SDD: o `review` conta as rodadas de revisão (cada `Re-review` é +1); o `implement` conta os
+implementers **novos** (rodadas 4–5 do SDD, despachadas num modelo mais capaz). As rodadas 1–3 retomam
+o mesmo implementer por SendMessage (sem `agent.spawn`) e não contam como retentativa.
 
 ## 5. Exibição
 
 - Faixa só com linha viva; sem linha, `next(e)`. Cede quando `e.props.hasSurvey`.
-- Ordem: `sessão` primeiro, depois subagentes por `startedAt`. Até 6 linhas; acima, `+N agentes`.
-- Rótulo: tipo + id da task, cortado em 32 colunas. Nunca trecho do prompt nem da descrição livre.
-- Modelo: ID sem o prefixo `claude-` (`sonnet-5-5`); alias como veio (`sonnet`). Esforço após `·`; `-`
-  enquanto desconhecido.
-- Tempo: `mm:ss`; `h:mm:ss` a partir de 1 h. Parede desde o spawn (subagente) ou o início do turno (sessão).
-- Cores: `Falhas` amarelo de 1 a `failureStreak − 1`, vermelho a partir de `failureStreak`;
-  `Retentativas ≥ 1` amarelo; origem `roteado` verde, `teto` cinza, `router off` apagada.
-- Cada linha é um `Text` que corta no fim (não quebra), para a altura da faixa não oscilar.
-
-Exemplo:
+- Ordem: `sessão` primeiro, depois subagentes por `startedAt`.
+- Linhas visíveis: `min(6, maxRows − 1)` (prop `maxRows` da faixa); acima, `+N agentes`.
+- Rótulo cortado em 40 colunas. Nunca trecho do prompt nem da descrição livre.
+- Modelo: ID sem `claude-` (`sonnet-5-5`); alias como veio. Esforço após `·`; `-` enquanto desconhecido.
+- Tempo: `mm:ss`; `h:mm:ss` a partir de 1 h.
+- Cores (ThemeKey): `Falhas` `warning` de 1 a `failureStreak − 1`, `error` a partir de `failureStreak`;
+  `Retentativas ≥ 1` `warning`; origem `roteado` `success`, `teto` `subtle`, `router off` `inactive`.
+  Sem cor, a prop `color` é omitida.
+- Cada linha é um `Text` com `wrap: "truncate-end"`.
 
 ```
-devflow:test-writer · Task 3   Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1
-sessão                         Modelo: opus-5-5·high (teto)        | Tempo: 04:37 | Falhas: 2 | Retentativas: —
+general-purpose · Task 3 · review         Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1
+sessão                                    Modelo: opus-5-5·high (teto)        | Tempo: 04:37 | Falhas: 2 | Retentativas: —
 ```
 
 ## 6. Erros, limites e segurança
 
-- **Só observação.** Todo hook repassa `e` intacto via `next(e)` e é registrado com
-  `.catch(($, e, next) => next(e))`. Falha do monitor nunca afeta despacho, modelo ou ferramenta.
-- **Independência.** O monitor funciona sem o router (`router off`); o router não depende do monitor.
-- **Recarga a quente.** Linhas e mapa de retentativas vivem em `$.state`; o tick reabre no `session.start`.
-- **Limites.** No máximo 50 linhas rastreadas; mapa de retentativas com 500 chaves (sai a mais antiga);
-  extração do id restrita aos primeiros 2 KB do prompt, regex ancorada.
+- **Só observação.** Cada `mon*` devolve o resultado de `next` com `e` intacto; toda a lógica própria
+  fica em `try`. Falha do monitor nunca afeta despacho, modelo ou ferramenta. Exceção do router dentro
+  do `next` sobe como antes (mesmo `.catch`).
+- **Independência.** O monitor funciona com o router desligado (`router off`).
+- **Recarga a quente.** Linhas e retentativas vivem em `$.state`; o `session.start` da recarga reabre o cronômetro.
+- **Limites.** 50 linhas; 500 chaves de retentativa (sai a mais antiga); 100 loops publicados; id da task
+  só nos primeiros 2048 caracteres do prompt, regex ancorada.
 - **Linha fantasma.** Se `$.agent.list()` falhar, um subagente sem evento há 30 s sai da faixa.
-- **Background.** Subagentes em background seguem na faixa após o fim do turno da sessão, até
-  encerrarem na lista.
-- **ADR-017.** Relação **alinhada**: o monitor não lê arquivo do repositório (o `failureStreak` vem do
-  router; sem router, 3), não grava ledger e não envia nada para fora. Nenhum guardrail novo.
+- **Background.** Subagentes em background seguem na faixa após o fim do turno, até encerrarem na lista.
+- **Limitação conhecida.** Agente retomado por SendMessage depois de `completed` não volta à faixa (não
+  há `agent.spawn`); backlog.
+- **Sempre ligado.** A linha `sessão` aparece a cada turno em todo projeto com o plugin (M8).
+- **ADR-017.** Relação **alinhada**: o monitor não lê arquivo do repositório, não grava ledger e não envia
+  nada para fora. O router só publica; nunca consome o estado do monitor.
 
 ## 7. Testes
 
@@ -169,20 +187,33 @@ TDD: teste falhando antes do código, em cada task.
 
 | Sinal | Arquivo | O que prova |
 |---|---|---|
-| unit | `tests/lib/monitor-core.test.mjs` | extração do id (SDD, story, ausente, além de 2 KB); retentativas por chave; streak; ciclo de vida e fallback de 30 s; formatação (`mm:ss`/`h:mm:ss`, `claude-`, corte, `+N`, cores por limiar); limites 50/500 |
-| integration | `tests/integration/test-router-monitor-mod.mjs` | módulo real com `$` falso: spawn → linha; erro → Falhas; redespacho → Retentativas 1; `completed` → linha some; atom → `(roteado)`; sem atom → `router off`; `$` que lança → `next(e)` com `e` intacto; render com os textos esperados |
-| integration | `tests/integration/test-router-mod.mjs` (ampliado) | o router publica modelo/esforço/origem **aplicados** no spawn e no passo da sessão; `off` grava `active: false` |
-| integration | `hooks/router-monitor.test.ts` | smoke do kit (`claude plugin test .`): o módulo carrega no engine |
-| e2e | `tests/e2e/test-router-monitor-validate.mjs` | `claude plugin validate .` passa com o contrato de `$.state`; pulado com aviso sem `claude` |
+| unit | `tests/lib/monitor-core.test.mjs` | id da task (SDD, story com marcador `- `, ausente, além de 2048); papel; retentativas por `tipo::papel::id` com as descriptions reais do SDD em `general-purpose`; streak; ciclo de vida e 30 s; formatação; limites |
+| unit | `tests/lib/test-doctor-router-monitor.mjs` | check `router-monitor`: OK na versão testada, WARN abaixo, WARN sem versão legível |
+| integration | `tests/integration/test-router-mod.mjs` (ampliado) | publicação de `routing` (origem por modelo **ou** esforço; `off`; `set` lançando não muda o retorno) |
+| integration | `tests/integration/test-router-monitor-mod.mjs` | `hooks/router.mjs` real com `$` falso: spawn → linha; erro → Falhas; redespacho → Retentativas; `completed` → some; background; recarga; `agent.list` falhando; tick sem linha não escreve; render (texto, origem, `+N`, `maxRows`, `hasSurvey`); `$` lançando → resultado de `next` intacto |
+| integration | `hooks/router-monitor.test.ts` + `hooks/router.test.ts` | kit (`claude plugin test .`), com `mock.clock`: faixa montada no terminal e no desktop mostra a linha |
+| e2e | `tests/e2e/router-monitor-validate.e2e.test.mjs` | contrato (`plugin.json` → `types`, chaves do `PluginState`) e `claude plugin validate .` (pulado com aviso sem `claude`) |
 | lint | `tests/run-lint.sh` | gate de sempre |
 
-**Verificação ao vivo (fase V, manual, declarada como tal):** `claude -p` não desenha a faixa. Na V,
-sessão interativa com `--plugin-dir`, rodada SDD curta (2 subagentes + 1 retentativa forçada), com captura.
+**Verificação ao vivo (fase V, manual):** sessão interativa com `--plugin-dir`, rodada SDD curta
+(implement + review + 1 re-review), captura da faixa; repetir com `/devflow-route off`.
 
-## 8. Premissas para a fase R (sondas)
+## 8. Sondas da fase R (Claude Code 2.1.296, plugin descartável)
 
-1. Um módulo `.mjs` desenha no `ui.render` `AbovePrompt` chamando o `h` global (sem JSX).
-2. Dois módulos do mesmo plugin leem e escrevem os mesmos valores de `$.state` (`plugin: "devflow"`).
-3. `$.clock.every` pode ser encerrado pelo próprio mod quando não há linha viva (forma exata de cancelar).
-4. `tool.call` traz `agentId` nos loops de subagente e `res.isError` nas falhas (o router já depende disso).
-5. Adicionar `"types"` ao `plugin.json` não quebra a instalação nem o `version-guard` do pre-commit.
+| Premissa | Resultado |
+|---|---|
+| `.mjs` com `h` global desenha `AbovePrompt` | **Confirmada**: `Text` aninhado, `wrap`, `color`; terminal e desktop |
+| Dois módulos do mesmo plugin dividem `$.state` | **Refutada como desenho**: um módulo por plugin. Dentro do módulo, o valor escrito pelo hook interno é lido pelo externo (confirmado) |
+| `$.clock.every` com `$` capturado e `cancel()` | **Confirmada** (no kit exige `mock.clock`); a escrita em `$.state` redesenha a faixa a cada tick |
+| `tool.call` com `agentId`/`isError` | Coberta pela verificação real da v3.7.0 (o router já depende disso) |
+| `"types"` no `plugin.json` × `version-guard` | **Confirmada**: o guard lê só `"version"`; o validate aceita o contrato (sem `export {}` — só `export type`) |
+| Extra | Restrições 3.1 (um evento por plugin; hook literal; `$` só para função do mesmo arquivo). No kit: `Text` não guarda `key` na árvore desenhada (buscar por texto); o `$` do teste não tem `.state` (ler pela faixa montada) |
+
+## 9. Onboarding
+
+- **Check `router-monitor`** em `scripts/lib/doctor.mjs`, sempre ativo: lê `claude --version`; abaixo
+  de 2.1.293 (menor versão medida carregando o mod) → WARN "o monitor e o roteamento por mod não
+  carregam; atualize o Claude Code"; versão ilegível → WARN; senão OK.
+- **`/devflow init`** (`skills/project-init/SKILL.md`, novo Step 0.8) e **`/devflow config`**
+  (`skills/config/SKILL.md`, passo final): rodam `node "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs" --check router-monitor`
+  e mostram o resultado. Nunca bloqueiam; não gravam nada no `.devflow.yaml`.
