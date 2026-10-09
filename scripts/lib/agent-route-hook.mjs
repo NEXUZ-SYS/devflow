@@ -5,7 +5,7 @@ import { readFileSync, openSync, readSync, fstatSync, closeSync, realpathSync, c
 import { join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readModels } from "./models-config.mjs";
-import { resolveSubagentRoute, effectiveConfig, phaseFromPrevcJson } from "./model-routing.mjs";
+import { resolveSubagentRoute, effectiveConfig, phaseFromPrevcJson, functionHooksOn } from "./model-routing.mjs";
 import { readRegularFileSafe, SAFE_READ_MAX_BYTES } from "./safe-read.mjs";
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -40,9 +40,6 @@ export function sessionModelFromTranscript(path) {
   }
   return last;
 }
-
-// Mesma verdade do Claude Code: 1|true|yes|on, com trim e sem diferenciar caixa.
-const functionHooksOn = (v) => ["1", "true", "yes", "on"].includes(String(v ?? "").trim().toLowerCase());
 
 // Leitura segura de arquivo do projeto: o caminho REAL tem de ficar sob a raiz REAL
 // (symlink de diretório intermediário não escapa); qualquer erro = ausente.

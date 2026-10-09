@@ -6,6 +6,11 @@ export const TIERS = Object.freeze(["cheap", "standard", "capable", "top"]);
 export const EFFORTS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
 export const PHASES = Object.freeze(["P", "R", "E", "V", "C"]);
 
+// Mesma verdade do Claude Code: 1|true|yes|on, com trim e sem diferenciar caixa.
+export function functionHooksOn(v) {
+  return ["1", "true", "yes", "on"].includes(String(v ?? "").trim().toLowerCase());
+}
+
 const ALIAS = Object.freeze({ cheap: "haiku", standard: "sonnet", capable: "opus", top: "fable" });
 const ROLE = Object.freeze({ cheap: "pi/smol", standard: "default", capable: "pi/slow", top: "pi/plan" });
 const FAMILY = [

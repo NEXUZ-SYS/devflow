@@ -493,6 +493,28 @@ AskUserQuestion:
       description: "Bump patch/minor disparam o release.yml automaticamente; major sempre espera você. O PR ainda precisa de merge humano para publicar — o auto-disparo evita o passo manual de abrir, não o gate."
 ```
 
+### 2.7 (opcional) Roteamento de modelos
+
+Passo "Roteamento de modelos" (perguntas em pt-BR, uma por vez):
+
+1. Detecte: `grep -q "^models:" .context/.devflow.yaml`; `printenv DEVFLOW_MODEL_ROUTING`; `printenv CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`; runtimes ativos.
+2. Pergunte: ligar o roteamento neste projeto? Camadas: sessão por fase (só com function hooks) e/ou subagentes. `maxTier` (opcional). Ledger de medição (opt-in; fica em `~/.local/share/devflow-model-routing/`, nunca no repo, sem conteúdo).
+3. Pergunte: ligar a **escalada no meio da execução** (`midRun.enabled`)? Padrão: não. Explique: com N falhas seguidas de ferramenta, um Haiku decide se o subagente sobe um degrau; uma consulta por subagente; só com function hooks.
+4. Explique o custo de cache: cada troca de fase faz a primeira mensagem seguinte reler o contexto sem cache; o default troca uma vez por workflow (R→E). Trocar só o esforço não custa cache.
+5. Confirmação do usuário (obrigatória): sem `DEVFLOW_MODEL_ROUTING=1` no ambiente, nada é roteado — o `.devflow.yaml` sozinho só pede. Mostre o bloco `env` para o usuário colar no `~/.claude/settings.json` (inclua `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` se ele quiser a camada de sessão); **nunca** escreva no `settings.json`.
+6. Grave o bloco `models:` no `.devflow.yaml` em estilo bloco (o leitor não aceita mapas inline):
+   ```yaml
+   models:
+     enabled: true
+     session: true
+     subagents: true
+     ledger: true
+     midRun:
+       enabled: false
+   ```
+7. omp ∈ runtimes: rode `DEVFLOW_MODEL_ROUTING=1 node "$CLAUDE_PLUGIN_ROOT/scripts/lib/omp-enrich-project-agents.mjs" .`.
+8. Confirme com `/devflow:devflow-doctor` (check `model-routing`).
+
 ### 3. Gerar `.context/.devflow.yaml`
 
 Com base nas respostas, gerar o arquivo:

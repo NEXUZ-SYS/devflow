@@ -255,7 +255,8 @@ You MUST create a task for each of these items and complete them in order:
 6.5. **Scaffold knowledge layers** — create 4-layer tree; delegate initial fill to curators; surface migration path if legacy layout detected
 7. **Verify compatibility** — all frontmatter matches dotcontext v2 format
 8. **Configure MemPalace** — detect and optionally set up MemPalace integration (via devflow:config)
-9. **Enable Lite/Full mode** — `.context/` now exists, DevFlow auto-detects
+9. **Configure model routing** — opcional: roteamento de modelos por fase/agente, incluindo a escalada no meio da execução (desligada por padrão) e a confirmação `DEVFLOW_MODEL_ROUTING=1` do usuário (via devflow:config, passo "Roteamento de modelos")
+10. **Enable Lite/Full mode** — `.context/` now exists, DevFlow auto-detects
 
 ## Step 1: Detect Available Tools
 
