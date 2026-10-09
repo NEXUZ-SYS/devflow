@@ -79,3 +79,70 @@ export function effectiveConfig(config, envValue) {
   const base = config && typeof config === "object" ? config : {};
   return { ...base, enabled: base.enabled === true && envValue === "1" };
 }
+
+// ---- resolvedores (spec §5, D3 revisada na fase R, D21) ----
+
+export function agentName(agentType) {
+  return String(agentType ?? "").replace(/^devflow:/, "");
+}
+
+function isRoutable(table, agentType) {
+  const t = String(agentType ?? "");
+  return (table?.routable ?? []).includes(t) || (table?.routablePrefix ? t.startsWith(table.routablePrefix) : false);
+}
+
+function pick(...cands) {
+  for (const [tier, source] of cands) if (TIERS.includes(tier)) return { tier, source };
+  return null;
+}
+
+export function resolveSubagentRoute({ table, config, agentType, phase, skill, taskTier, explicitModel, ceilingModel, ceilingEffort }) {
+  if (!config?.enabled || !config.subagents || !table) return null;
+  if (!isRoutable(table, agentType)) return null;
+  const ceiling = tierOf(ceilingModel);
+  if (!ceiling) return null;
+  const name = agentName(agentType);
+
+  let chosen;
+  const hasExplicit = explicitModel !== undefined && explicitModel !== null && explicitModel !== "";
+  if (hasExplicit) {
+    const t = tierOf(explicitModel);
+    if (!t) return null;
+    chosen = { tier: t, source: "explicit" };
+  } else {
+    chosen = pick(
+      [taskTier, "plan"],
+      [table.skills?.[skill]?.[name] ?? table.skills?.[skill]?.["*"], "skill"],
+      [config.overrides?.phases?.[phase]?.[name], "project"],
+      [table.phases?.[phase]?.[name], "phase"],
+      [config.overrides?.agents?.[name], "project"],
+      [table.agents?.[name]?.tier, "agent"],
+    ) ?? { tier: ceiling, source: "inherit" };
+  }
+
+  const tier = capAtCeiling(chosen.tier, ceiling, config.maxTier);
+  if (!tier) return null;
+  const effort = capEffort(table.agents?.[name]?.effort ?? table.effortByTier?.[tier], ceilingEffort);
+  // D21: alias só quando muda algo. Igual ao teto (herda) ou explícito já dentro do teto → não toca.
+  const unchanged = hasExplicit ? tier === chosen.tier : tier === ceiling;
+  return { tier, model: unchanged ? null : toAlias(tier), effort, source: chosen.source, ceiling };
+}
+
+export function resolveSessionRoute({ table, config, phase, skill, userModel, userEffort }) {
+  if (!config?.enabled || !config.session || !table) return null;
+  const ceiling = tierOf(userModel);
+  if (!ceiling) return null;
+
+  let want = ceiling;
+  let source = "inherit";
+  if (PHASES.includes(phase)) {
+    const raw = config.overrides?.session?.phases?.[phase] ?? table.session?.phases?.[phase];
+    want = raw === "ceiling" ? ceiling : TIERS.includes(raw) ? raw : ceiling;
+    source = "phase";
+  }
+  const tier = capAtCeiling(want, ceiling, config.maxTier);
+  if (!tier) return null;
+  const rawEffort = table.session?.skills?.[skill];
+  const wantEffort = rawEffort === "ceiling" ? userEffort : rawEffort ?? table.effortByTier?.[tier];
+  return { tier, effort: capEffort(wantEffort, userEffort), source, ceiling };
+}
