@@ -185,3 +185,56 @@ test("tick com agent.list atrasada não apaga o subagente criado nesse intervalo
   await new Promise((r) => setTimeout(r, 5));
   assert.ok(H.store.monitorRows.some((r) => r.id === "a2"));
 });
+
+const render = (H, props = { hasSurvey: false, maxRows: 20 }) =>
+  H.call("ui.render", { component: "AbovePrompt", surface: "terminal", props }, async () => "ENGINE");
+
+test("render: sem linha viva a faixa cede ao engine", async () => {
+  const H = await load();
+  assert.equal(await render(H), "ENGINE");
+});
+
+test("render: hasSurvey cede ao engine mesmo com linha viva", async () => {
+  const H = await load();
+  await H.spawn({ description: "Task 1" });
+  assert.equal(await render(H, { hasSurvey: true, maxRows: 20 }), "ENGINE");
+});
+
+test("render: linha com modelo publicado, origem, tempo, falhas e retentativas; cor ausente omitida", async () => {
+  const H = await load();
+  await H.spawn({ description: "Implement Task 3: x" }, "a1");
+  await H.spawn({ description: "Implement Task 3: x" }, "a2");
+  H.store.routing = { active: true, failureStreak: 3, loops: { a2: { model: "claude-sonnet-5-5", effort: "medium", origin: "roteado" } } };
+  H.clock.now = 72_000;
+  const tree = await render(H);
+  assert.equal(tree.tag, "Box");
+  assert.equal(tree.props.flexDirection, "column");
+  const lines = tree.children.map(textOf);
+  const a2 = lines.find((l) => l.includes("Retentativas: 1"));
+  assert.ok(a2.startsWith("general-purpose · Task 3 · implement"));
+  assert.ok(a2.includes("Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1"));
+  assert.ok(lines.find((l) => l.includes("Retentativas: 0")).includes("(teto)"));
+  const first = tree.children[0];
+  assert.equal(first.props.wrap, "truncate-end");
+  const falhas = first.children.find((c) => typeof c === "object" && textOf(c).startsWith("Falhas"));
+  assert.equal("color" in falhas.props, false);
+});
+
+test("render: router desligado marca router off", async () => {
+  const H = await load();
+  await H.spawn({ description: "Task 1" });
+  assert.ok(textOf(await render(H)).includes("(router off)"));
+});
+
+test("render: maxRows limita as linhas e mostra +N agentes", async () => {
+  const H = await load();
+  for (let i = 0; i < 8; i++) await H.spawn({ description: `Task ${i}` }, `a${i}`);
+  const tree = await render(H, { hasSurvey: false, maxRows: 5 });
+  assert.equal(tree.children.length, 5);
+  assert.equal(textOf(tree.children[4]), "+4 agentes");
+});
+
+test("render: $.state lançando cede ao engine", async () => {
+  const H = await load({ throwsState: true });
+  assert.equal(await render(H), "ENGINE");
+});

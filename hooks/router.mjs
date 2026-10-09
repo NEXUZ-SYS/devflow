@@ -325,6 +325,32 @@ async function* monTurnStep($, e, next) {
   return yield* next(e);
 }
 
+// Desenho: lê de $.state (assina o redesenho), nunca escreve aqui. h(...) global, sem JSX, para seguir
+// importável no node. Sem cor, a prop `color` fica de fora.
+async function monRender($, e, next) {
+  if (e.props?.hasSurvey) return next(e);
+  let rows, routing;
+  try {
+    [rows, routing] = await Promise.all([$.state.get(ROWS), $.state.get(ROUTING)]);
+  } catch { return next(e); }
+  const st = { rows: Array.isArray(rows?.value) ? rows.value : [], retries: {} };
+  if (!mc.isLive(st)) return next(e);
+  const v = mc.view(st, { routing: routing?.value, now: await $.clock.now(), visible: mc.visibleFor(e.props?.maxRows) });
+  const { Box, Text } = $.ui.resolve(e);
+  const tint = (color) => (color ? { color } : {});
+  const line = (r) => h(Text, { wrap: "truncate-end" },
+    h(Text, { bold: true }, r.label.padEnd(mc.LABEL_COLS)),
+    ` Modelo: ${r.model} `,
+    h(Text, tint(r.originColor), `(${r.origin})`),
+    ` | Tempo: ${r.time} | `,
+    h(Text, tint(r.streakColor), `Falhas: ${r.streak}`),
+    " | ",
+    h(Text, tint(r.retriesColor), `Retentativas: ${r.retries}`));
+  return h(Box, { flexDirection: "column" },
+    ...v.rows.map(line),
+    v.more ? h(Text, { dimColor: true }, `+${v.more} agentes`) : null);
+}
+
 /** @type {import('claude-code').Register} */
 export const register = (on) => {
   on("session.start", ($, e, next) => monSessionStart($, e, (x) => onSessionStart($, x, next))).catch(($, e, next) => next(e));
@@ -334,4 +360,5 @@ export const register = (on) => {
   on("tool.call", ($, e, next) => monToolCall($, e, (x) => onToolCall($, x, next))).catch(($, e, next) => next(e));
   on("turn.complete", ($, e, next) => monTurnComplete($, e, (x) => onTurnComplete($, x, next))).catch(($, e, next) => next(e));
   on("turn.step", async function* ($, e, next) { return yield* monTurnStep($, e, (x) => routerTurnStep($, x, next)); });
+  on("ui.render", { component: "AbovePrompt" }, monRender).catch(($, e, next) => next(e));
 };

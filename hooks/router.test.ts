@@ -1,5 +1,5 @@
 // hooks/router.test.ts — roda com `claude plugin test .` (o kit só procura *.test.ts / *.test.tsx).
-import { test, expect } from "claude-code/testing";
+import { test, expect, mock } from "claude-code/testing";
 
 // Tabela mínima embutida: o ambiente do kit não tem fs e módulos não aceitam import() dinâmico.
 const ROUTES = JSON.stringify({
@@ -12,6 +12,7 @@ const ROUTES = JSON.stringify({
 const YAML_ON = "models:\n  enabled: true\n";
 
 function stubEnv(on, { yaml = YAML_ON, optIn = "1", phase = "E" } = {}) {
+  mock.clock(on); // o monitor abre $.clock.every no session.start
   const files = {
     ".context/.devflow.yaml": yaml,
     ".context/runtime/workflows/prevc.json": JSON.stringify({ status: { project: { name: "x", current_phase: phase } } }),
