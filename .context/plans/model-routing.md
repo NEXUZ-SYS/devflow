@@ -6,7 +6,7 @@ planSlug: model-routing
 scope: LARGE
 autonomy: supervised
 status: filled
-progress: 54
+progress: 62
 generated: "2026-10-08"
 scaffoldVersion: "2.0.0"
 summary: "Escolhe modelo e esforço da sessão principal (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task do plano), sempre abaixo do modelo e do esforço do usuário, com escalada por rubrica e medição por ledger. Lib única com tier abstrato e três adaptadores: mod (function hooks), fallback clássico PreToolUse e omp. Opt-in por models.enabled. Jev avaliado e descartado na v1."
@@ -93,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T02:17:02.170Z"
+lastUpdated: "2026-10-09T02:42:48.047Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -120,11 +120,11 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T02:17:02.170Z | Progress: 54%
+> Last updated: 2026-10-09T02:42:48.047Z | Progress: 62%
 
 ### phase-2 [DONE]
 - Started: 2026-10-09T01:58:34.711Z
-- Completed: 2026-10-09T02:17:02.170Z
+- Completed: 2026-10-09T02:42:48.047Z
 
 - [x] Step 1: Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs) *(2026-10-09T02:01:20.851Z)*
   - Output: 54c13eb + 1c4079b — scripts/lib/model-routing.mjs (núcleo puro) e tests/lib/model-routing.test.mjs (11 testes)
@@ -147,3 +147,6 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 - [x] Step 7: Task 7 — router-core, máquina de estado pura do mod *(2026-10-09T02:17:02.170Z)*
   - Output: 187176f + c05bcae — scripts/lib/router-core.mjs (máquina de estado pura do mod); 12 testes
   - Notes: Revisão: 2 Important de D5 na escalada no meio (/model após escalada; maxTier) corrigidos na rodada 1; applyMidRun ganhou 4º parâmetro maxTier; ruling para a Task 8 chamar learnId(e.model) na sessão. Sensor unit verde.
+- [x] Step 8: Task 8 — adaptador mod hooks/router.mjs (revisão pesada) *(2026-10-09T02:42:48.047Z)*
+  - Output: bcd7aea + 675e479 — hooks/router.mjs (adaptador mod), hooks/router.test.ts (smoke do kit), tests/integration/test-router-mod.mjs (8 testes reais), modules no hooks.json, kit no run-integration
+  - Notes: Revisão pesada (security-auditor/opus, PoCs): segurança confirmada; 3 Important + 1 ⚠️ corrigidos na rodada 1 (teste node do mod; skill via tool.call; raiz pelo cwd da sessão; esforço no teto). Risco aberto: hooks.json com "modules" em Claude Code antigo — decisão do operador. Sensores unit e integration verdes.
