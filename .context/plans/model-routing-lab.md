@@ -80,8 +80,8 @@ phases:
   - id: "phase-4"
     name: "Confirmation"
     prevc: "C"
-    status: pending
-    summary: "Spec, plano e tracking no repo devflow via PR; laboratório fica local (sem remoto). Memória e handoff atualizados."
+    status: completed
+    summary: "Repo devflow: spec, plano, achados, tracking e CHANGELOG [Unreleased] via PR squash (autoFinish all; versioning pipeline → release pendente sinalizado, sem bump local). Laboratório: merge local feature/routing-lab → main no repo irmão (sem remoto). WIP pré-existente do operador fora dos commits. Campanha real A+B a cargo do operador (tmux), runbook no laboratório."
 lastUpdated: "2026-10-09T16:48:00.660Z"
 ---
 
