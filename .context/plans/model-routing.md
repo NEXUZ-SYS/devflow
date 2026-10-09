@@ -6,7 +6,7 @@ planSlug: model-routing
 scope: LARGE
 autonomy: supervised
 status: filled
-progress: 77
+progress: 85
 generated: "2026-10-08"
 scaffoldVersion: "2.0.0"
 summary: "Escolhe modelo e esforço da sessão principal (por fase do PREVC e skill) e dos subagentes (por agente, fase e tier da task do plano), sempre abaixo do modelo e do esforço do usuário, com escalada por rubrica e medição por ledger. Lib única com tier abstrato e três adaptadores: mod (function hooks), fallback clássico PreToolUse e omp. Opt-in por models.enabled. Jev avaliado e descartado na v1."
@@ -93,7 +93,7 @@ phases:
     required_artifacts:
       - validation-summary
     summary: "Sinais unit, integration, e2e e lint observados no ledger pelo verify-run (ADR-013). Verificação real: sessão com o mod ativo atravessando P→E (uma troca de modelo da sessão, subagente no modelo roteado, teto respeitado) e sessão sem o mod (fallback clássico pelo meta.json), com model-route report sobre as duas."
-lastUpdated: "2026-10-09T03:02:15.896Z"
+lastUpdated: "2026-10-09T03:07:16.242Z"
 ---
 
 # Roteamento de modelos do DevFlow — Plano (dotcontext tracking)
@@ -120,11 +120,11 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 
 ## Execution History
 
-> Last updated: 2026-10-09T03:02:15.896Z | Progress: 77%
+> Last updated: 2026-10-09T03:07:16.242Z | Progress: 85%
 
 ### phase-2 [DONE]
 - Started: 2026-10-09T01:58:34.711Z
-- Completed: 2026-10-09T03:02:15.896Z
+- Completed: 2026-10-09T03:07:16.242Z
 
 - [x] Step 1: Task 1 — núcleo de tiers, esforço e opt-in (scripts/lib/model-routing.mjs) *(2026-10-09T02:01:20.851Z)*
   - Output: 54c13eb + 1c4079b — scripts/lib/model-routing.mjs (núcleo puro) e tests/lib/model-routing.test.mjs (11 testes)
@@ -156,3 +156,6 @@ Reduzir o consumo da cota da assinatura escolhendo modelo e esforço conforme o 
 - [x] Step 10: Task 10 — adaptador omp com teto *(2026-10-09T03:02:15.896Z)*
   - Output: scripts/lib/omp-enrich-project-agents.mjs — adaptador omp (tier → role com teto); commits afeea96 + 2a1e8a6
   - Notes: Revisão leve + 1 fix round (teto = model: do próprio agente fora do yaml; sem model → intocado). Minor adiado para a revisão final: parseFrontmatter lança em âncora YAML antes de checar a rota e aborta o laço. Sensor unit verde.
+- [x] Step 11: Task 11 — skills: tier no plano e escalada entre tentativas *(2026-10-09T03:07:16.242Z)*
+  - Output: Skills prevc-planning (Tier), prevc-execution e autonomous-loop (resolve/escalate sem --ceiling) + tests/e2e/test-skill-model-route-commands.mjs; commit bbb6d23
+  - Notes: Revisão leve aprovada; 2 Minor adiados para a revisão final (role sob omp no escalate; assert de action no E2E). Sensor e2e verde.
