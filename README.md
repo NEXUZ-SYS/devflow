@@ -337,7 +337,7 @@ devflow/
 ├── assets/skills/    # profiles/<fw>/ — skills de framework, NÃO registradas; copiadas sob detecção de perfil
 ├── templates/        # Templates para scaffolding (stories-schema.yaml)
 ├── scripts/          # devflow-runner.mjs, runner-lib.mjs (safety net)
-├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n
+├── hooks/            # SessionStart, PreCompact, PostCompact, PreToolUse, PostToolUse, i18n + mod de function hooks (router.mjs, roteamento de modelos)
 ├── locales/          # Traduções (en-US, pt-BR, es-ES)
 ├── references/       # Mapa de skills + mapeamento de ferramentas por plataforma
 ├── tests/            # 208 testes (unit, E2E, validação estrutural)
