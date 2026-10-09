@@ -12,7 +12,7 @@ let n = 0;
 globalThis.h = (tag, props, ...children) => ({ tag, props: props ?? {}, children: children.flat().filter((c) => c !== null && c !== undefined && c !== false) });
 const textOf = (node) => (node === null || node === undefined ? "" : typeof node === "string" || typeof node === "number" ? String(node) : node.children.map(textOf).join(""));
 
-async function load({ store = {}, list = async () => [], throwsState = false } = {}) {
+async function load({ store = {}, list = async () => [], throwsState = false, prevc = null } = {}) {
   const mod = await import(pathToFileURL(path.join(REPO, "hooks/router.mjs")).href + `?t=${n++}`);
   const hooks = {};
   const on = (ev, a, b) => { hooks[ev] = { h: b ?? a, c: null }; return { catch(c) { hooks[ev].c = c; return this; } }; };
@@ -23,10 +23,16 @@ async function load({ store = {}, list = async () => [], throwsState = false } =
   const $ = {
     plugin: { root: REPO },
     env: { get: async () => undefined },
-    session: { cwd: async () => null },
+    session: { cwd: async () => (prevc ? "/proj" : null) },
     settings: { read: async () => ({ enabledPlugins: {} }) },
     command: { register: async () => ({}) },
-    fs: { stat: fail, read: fail, write: async () => {} },
+    fs: prevc
+      ? {
+          stat: async (p) => ({ kind: p === "/proj" ? "dir" : "file", size: 100, isLink: false, realPath: p }),
+          read: async (p) => { const t = p.endsWith(".context/runtime/workflows/prevc.json") ? prevc() : null; if (t === null || t === undefined) throw new Error("ENOENT"); return t; },
+          write: async () => {},
+        }
+      : { stat: fail, read: fail, write: async () => {} },
     model: { complete: async () => ({ isAnswered: false, reason: "empty-reply" }) },
     state: {
       get: async (r) => { if (throwsState) throw new Error("x"); return { value: store[r.key], version: 0 }; },
@@ -79,7 +85,22 @@ test("SDD real: resultado do spawn intacto; reviewer e implementer contam separa
   const by = Object.fromEntries(H.store.monitorRows.map((r) => [r.id, r]));
   assert.equal(by.a1.label, "general-purpose · Task 3 · implement");
   assert.deepEqual([by.a1.retries, by.a2.retries, by.a3.retries, by.a4.retries], [0, 0, 1, 1]);
-  assert.equal(H.store.monitorRetries["general-purpose::review::Task 3"], 2);
+  assert.equal(H.store.monitorRetries["-::general-purpose::review::Task 3"], 2);
+});
+
+test("retentativas têm escopo por workflow do PREVC: trocar zera, voltar retoma", async () => {
+  let wf = "wf-a";
+  const H = await load({ prevc: () => JSON.stringify({ status: { project: { name: wf, current_phase: "E" } } }) });
+  await H.start();
+  const sp = async (id) => { await H.call("turn.start", { text: "x", turnId: id }); await H.spawn({ description: "Implement Task 1: x" }, id); return H.store.monitorRows.find((r) => r.id === id).retries; };
+  assert.equal(await sp("a1"), 0);
+  assert.equal(await sp("a2"), 1);
+  wf = "wf-b";
+  assert.equal(await sp("a3"), 0);
+  wf = "wf-a";
+  assert.equal(await sp("a4"), 2);
+  assert.equal(H.store.monitorRetries["wf-a::general-purpose::implement::Task 1"], 3);
+  assert.equal(H.store.monitorRetries["wf-b::general-purpose::implement::Task 1"], 1);
 });
 
 test("tool.call: erros somam no loop do subagente, sucesso zera, agentId sem linha é ignorado", async () => {

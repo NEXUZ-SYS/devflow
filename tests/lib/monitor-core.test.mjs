@@ -41,14 +41,14 @@ test("onSpawned: SDD real (tudo general-purpose) — reviewer não vira retentat
   assert.equal(gp("a2", "Review Task 3 (spec + quality)", 2000).retries, 0);
   assert.equal(gp("a3", "Re-review Task 3 fix round 1", 3000).retries, 1);
   assert.equal(gp("a4", "Implement Task 3: parser", 4000).retries, 1);
-  assert.equal(st.retries["general-purpose::review::Task 3"], 2);
+  assert.equal(st.retries["-::general-purpose::review::Task 3"], 2);
 });
 
 test("onSpawned: story sem papel usa '-' na chave; sem id de task → retries null", () => {
   const st = mc.createMonitorState();
   const s = mc.onSpawned(st, { agentId: "a1", subagentType: "devflow:test-writer", description: "story", prompt: "- Current story: S2 — x", now: 1 });
   assert.equal(s.label, "devflow:test-writer · S2");
-  assert.equal(st.retries["devflow:test-writer::-::S2"], 1);
+  assert.equal(st.retries["-::devflow:test-writer::-::S2"], 1);
   const r = mc.onSpawned(st, { agentId: "a2", subagentType: "Explore", description: "mapear", now: 1 });
   assert.equal(r.retries, null);
   assert.equal(r.label, "Explore");
@@ -60,7 +60,7 @@ test("onSpawned: limite de 500 chaves descarta a mais antiga; 50 linhas preserva
   mc.openMain(st, { now: 0 });
   for (let i = 0; i < mc.MAX_KEYS + 1; i++) mc.onSpawned(st, { agentId: `a${i}`, subagentType: "t", description: `Task ${i}`, now: i });
   assert.equal(Object.keys(st.retries).length, mc.MAX_KEYS);
-  assert.equal(st.retries["t::-::Task 0"], undefined);
+  assert.equal(st.retries["-::t::-::Task 0"], undefined);
   assert.equal(st.rows.length, mc.MAX_ROWS);
   assert.equal(st.rows[0].id, "main");
 });
@@ -231,4 +231,16 @@ test("view: visible + more; rótulo cortado em 40 colunas com reticências", () 
   assert.equal(v.rows[0].label.length, mc.LABEL_COLS);
   assert.ok(v.rows[0].label.endsWith("…"));
   assert.equal(mc.view(st, { routing: undefined, now: 10, visible: 2 }).more, 7);
+});
+
+test("onSpawned: scope separa a contagem por workflow; scope ausente usa '-'", () => {
+  const st = mc.createMonitorState();
+  const sp = (agentId, scope) => mc.onSpawned(st, { agentId, subagentType: "general-purpose", description: "Implement Task 1: x", now: 1, scope });
+  assert.equal(sp("a1", "wfA").retries, 0);
+  assert.equal(sp("a2", "wfA").retries, 1);
+  assert.equal(sp("a3", "wfB").retries, 0);
+  assert.equal(sp("a4", undefined).retries, 0);
+  assert.equal(st.retries["wfA::general-purpose::implement::Task 1"], 2);
+  assert.equal(st.retries["-::general-purpose::implement::Task 1"], 1);
+  assert.equal(sp("a5", "wfA").label, "general-purpose · Task 1 · implement");
 });

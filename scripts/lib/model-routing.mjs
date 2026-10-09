@@ -79,6 +79,18 @@ export function phaseFromPrevcJson(text) {
   }
 }
 
+// Nome do workflow ativo (status.project.name do prevc.json); só [A-Za-z0-9._-], até 128 chars.
+// Escopo das retentativas do monitor: não confiável (ADR-014), por isso a allowlist.
+export function workflowFromPrevcJson(text) {
+  if (typeof text !== "string" || !text) return null;
+  try {
+    const n = JSON.parse(text)?.status?.project?.name;
+    return typeof n === "string" && /^[A-Za-z0-9._-]{1,128}$/.test(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 // D18: o repositório pede (models.enabled); só o usuário liga (DEVFLOW_MODEL_ROUTING=1).
 export function effectiveConfig(config, envValue) {
   const base = config && typeof config === "object" ? config : {};

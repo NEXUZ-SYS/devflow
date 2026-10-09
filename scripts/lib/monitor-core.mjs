@@ -39,12 +39,12 @@ function bumpRetry(state, key) {
   return seen;
 }
 
-export function onSpawned(state, { agentId, subagentType, description, prompt, model, now }) {
+export function onSpawned(state, { agentId, subagentType, description, prompt, model, now, scope }) {
   if (typeof agentId !== "string" || !agentId) return null;
   const type = typeof subagentType === "string" && subagentType ? subagentType : "agente";
   const taskId = extractTaskId({ description, prompt });
   const role = taskId ? extractRole(description) : null;
-  const retries = taskId ? bumpRetry(state, `${type}::${role ?? "-"}::${taskId}`) : null;
+  const retries = taskId ? bumpRetry(state, `${scope ?? "-"}::${type}::${role ?? "-"}::${taskId}`) : null;
   const label = taskId ? `${type} · ${taskId}${role ? ` · ${role}` : ""}` : type;
   const row = {
     id: agentId, label, startedAt: now, lastEventAt: now,

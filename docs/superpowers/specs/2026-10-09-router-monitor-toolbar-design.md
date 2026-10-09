@@ -47,6 +47,7 @@ persistência entre sessões, envio de dados para fora, reaparecer agente retoma
 | M7 | O monitor só observa: nunca reescreve evento, nunca nega, nunca lê arquivo do repositório, nunca grava ledger | seção 3 |
 | M8 | **Sempre ligado, sem opt-in.** Onboarding só verifica: check `router-monitor` no doctor, chamado pelo `project-init` e pelo `config` | operador (2026-10-09) |
 | M9 | Um único cronômetro por sessão, aberto no `session.start` (inclusive o da recarga); tick sem linha viva não escreve nada; trava contra tick sobreposto | architect #4 + reference.md |
+| M10 | Retentativas com escopo por workflow do PREVC (operador, fase V): todo plano tem uma "Task 1", e sem escopo despachos de planos diferentes somavam na sessão. Trocar de workflow zera a contagem; sem workflow PREVC ativo, conta pela sessão (escopo `-`) | verificação ao vivo |
 
 ## 3. Arquitetura
 
@@ -140,7 +141,7 @@ Regras:
    caracteres do `prompt` com `^\s*(?:[-*]\s+)?Current story:\s*(S\d+)\b` (multilinha) → `S2`; senão `null`.
 2. **Papel:** início da `description`: `Implement`/`Fix` → `implement`; `Review`/`Re-review` → `review`;
    senão sem papel.
-3. **Chave:** `subagentType::papel::id` (sem papel: `subagentType::-::id`). Sem id: sem retentativa (`—`).
+3. **Chave:** `workflow|-::subagentType::papel|-::id` (M10). O router lê `status.project.name` do `prevc.json` (allowlist `workflowFromPrevcJson`) em todo `turn.start`, mesmo com o roteamento desligado, e passa o nome como `scope` ao monitor; sem workflow, `-`. Sem id: sem retentativa (`—`).
 4. **Rótulo:** `tipo · id` e, com papel, `tipo · id · papel` (ex.: `general-purpose · Task 3 · review`).
 
 Leitura no SDD: o `review` conta as rodadas de revisão (cada `Re-review` é +1); o `implement` conta os
@@ -171,7 +172,7 @@ sessão                                    Modelo: opus-5-5·high (teto)        
   fica em `try`. Falha do monitor nunca afeta despacho, modelo ou ferramenta. Exceção do router dentro
   do `next` sobe como antes (mesmo `.catch`).
 - **Independência.** O monitor funciona com o router desligado (`router off`).
-- **Recarga a quente.** Linhas e retentativas vivem em `$.state`; o `session.start` da recarga reabre o cronômetro.
+- **Recarga a quente.** Linhas e retentativas vivem em `$.state`; o `session.start` da recarga reabre o cronômetro. Após a recarga o escopo vale `-` até o próximo `turn.start` (que lê o `prevc.json`).
 - **Limites.** 50 linhas; 500 chaves de retentativa (sai a menos usada recentemente; recontar renova a chave); 100 loops publicados; id da task
   só nos primeiros 2048 caracteres do prompt, regex ancorada.
 - **Linha fantasma.** Se `$.agent.list()` falhar, um subagente sem evento há 30 s sai da faixa.

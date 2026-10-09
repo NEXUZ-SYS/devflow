@@ -4,7 +4,7 @@
 // Exigência do validate: toda função que recebe `$` é declarada aqui no topo; o estado é do módulo.
 import * as core from "../scripts/lib/router-core.mjs";
 import { readModels } from "../scripts/lib/models-config.mjs";
-import { effectiveConfig, phaseFromPrevcJson } from "../scripts/lib/model-routing.mjs";
+import { effectiveConfig, phaseFromPrevcJson, workflowFromPrevcJson } from "../scripts/lib/model-routing.mjs";
 import { rubricPrompt, parseAnswers, combine } from "../scripts/lib/escalation.mjs";
 import { buildEntry, ledgerDirFrom } from "../scripts/lib/routing-ledger.mjs";
 import * as mc from "../scripts/lib/monitor-core.mjs";
@@ -22,6 +22,7 @@ const S = {
   sessionOff: false,
   pendingSwitch: false,
   cwd: null,
+  workflow: null,
   ledgerPath: null,
   lines: [],
   dirty: false,
@@ -102,10 +103,6 @@ async function detectOtherRouter($) {
   } catch { /* sem leitura de settings: segue */ }
 }
 
-async function readPhase($) {
-  return phaseFromPrevcJson((await safeRead($, ".context/runtime/workflows/prevc.json")) ?? "");
-}
-
 function ledger(fields) {
   if (!S.ledgerPath || S.lines.length >= MAX_LEDGER_LINES) return;
   S.lines.push(JSON.stringify(buildEntry({ ts: new Date().toISOString(), sessionId: S.sessionKey, adapter: "mod", ...fields })));
@@ -157,7 +154,10 @@ async function onCommand($, e, next) {
 
 async function onTurnStart($, e, next) {
   await ensure($);
-  if (active()) core.onTurnStart(S.core, { phase: await readPhase($) });
+  // Lê o prevc.json uma vez por turno, com ou sem roteamento: fase p/ o roteador, workflow p/ o escopo do monitor.
+  const prevc = (await safeRead($, ".context/runtime/workflows/prevc.json")) ?? "";
+  S.workflow = workflowFromPrevcJson(prevc);
+  if (active()) core.onTurnStart(S.core, { phase: phaseFromPrevcJson(prevc) });
   return next(e);
 }
 
@@ -290,7 +290,7 @@ async function monAgentSpawn($, e, next) {
   try {
     if (res && typeof res.agentId === "string") {
       await monHydrate($);
-      mc.onSpawned(M.st, { agentId: res.agentId, subagentType: e.subagentType, description: e.description, prompt: e.prompt, model: res.model, now: await $.clock.now() });
+      mc.onSpawned(M.st, { agentId: res.agentId, subagentType: e.subagentType, description: e.description, prompt: e.prompt, model: res.model, now: await $.clock.now(), scope: S.workflow });
       await $.state.set(ROWS, M.st.rows);
       await $.state.set(RETRIES, M.st.retries);
     }
