@@ -49,7 +49,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - R-5: `updatedInput` funciona sem `permissionDecision` (ferramenta `Agent`).
 - R-6: `$.fs.write` fora do plugin e `$.model.complete` com alias funcionam; `$.fs.stat` expõe `isLink`, `kind`, `size`, `realPath`; não há append.
 - R-7: não existe `$.plugin.list`; outro roteador de sessão é detectado por `$.settings.read().enabledPlugins`.
-- R-8: versão mínima = 2.1.294 (a testada); abaixo, o `doctor` avisa.
+- R-8: versão mínima = 2.1.293 (a menor medida carregando o mod na fase V; as sondas da fase R usaram 2.1.294); abaixo, o `doctor` avisa.
 - R-10: trocar só o esforço não invalida o cache.
 - Restrição do `claude plugin validate`: a função que recebe `$` fica no topo do módulo; hooks que decidem pedem `.catch`.
 
@@ -96,7 +96,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - [ ] Teste: unit da lib (sessão, subagente, teto, `maxTier`, tier→alias/role) e propriedade "libs sem import de `node:*`".
 - [ ] Teste: integration do hook clássico (sem `permissionDecision`, teto do transcript, FIFO e `/dev/zero`, C0) e do mod.
 - [ ] Teste: ledger com chaves ⊆ allowlist; e2e do CLI `resolve|escalate|report` em tmpdir.
-- [ ] Doctor: check `model-routing` (repo pede roteamento sem confirmação; versão abaixo de 2.1.294).
+- [ ] Doctor: check `model-routing` (repo pede roteamento sem confirmação; versão abaixo de 2.1.293).
 - [ ] Gate PREVC: lint (`bash tests/run-lint.sh`) e revisão de segurança dos adaptadores.
 
 ## Evidências / Anexos

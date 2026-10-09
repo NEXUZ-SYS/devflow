@@ -617,7 +617,7 @@ const mempalaceEnv = {
   },
 };
 
-const MODEL_ROUTING_MIN = [2, 1, 294]; // versão testada (sondas da fase R)
+const MODEL_ROUTING_MIN = [2, 1, 293]; // menor versão medida carregando o mod (fase V)
 
 function claudeVersionOf(ctx) {
   if (typeof ctx.claudeVersion === "string") return ctx.claudeVersion;
@@ -650,7 +650,7 @@ const modelRouting = {
     }
     const version = claudeVersionOf(ctx);
     if (belowMin(version)) {
-      return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.294): o mod pode não carregar.`, repair: "Atualize o Claude Code." };
+      return { status: "WARN", diagnosis: `Claude Code ${version} é anterior à versão testada (2.1.293): o mod pode não carregar.`, repair: "Atualize o Claude Code." };
     }
     return { status: "OK", diagnosis: "Roteamento de modelos ativo (mod + fallback clássico).", repair: "" };
   },

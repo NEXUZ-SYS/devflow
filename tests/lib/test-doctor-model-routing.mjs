@@ -43,7 +43,7 @@ test("ligado sem function hooks na versão testada → OK (mod + fallback cláss
 test("Claude Code abaixo da versão testada → WARN", () => {
   const r = check.run({ cwd: cwdWith(ON), env: ALL, claudeVersion: "2.1.200" });
   assert.equal(r.status, "WARN");
-  assert.match(r.diagnosis, /2\.1\.294/);
+  assert.match(r.diagnosis, /2\.1\.293/);
 });
 
 test("tudo ligado na versão testada → OK", () => {
@@ -53,4 +53,15 @@ test("tudo ligado na versão testada → OK", () => {
 test("function hooks aceitos como o Claude Code: ' True ' → OK", () => {
   const env = { DEVFLOW_MODEL_ROUTING: "1", CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: " True " };
   assert.equal(check.run({ cwd: cwdWith(ON), env, claudeVersion: "2.1.294" }).status, "OK");
+});
+
+test("2.1.293 (medida na fase V: carrega o mod) → OK, sem WARN de versão", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: { DEVFLOW_MODEL_ROUTING: "1" }, claudeVersion: "2.1.293" });
+  assert.equal(r.status, "OK", r.diagnosis);
+});
+
+test("2.1.292 (abaixo da medida) → WARN citando a versão testada 2.1.293", () => {
+  const r = check.run({ cwd: cwdWith(ON), env: { DEVFLOW_MODEL_ROUTING: "1" }, claudeVersion: "2.1.292" });
+  assert.equal(r.status, "WARN");
+  assert.match(r.diagnosis, /2\.1\.293/);
 });

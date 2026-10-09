@@ -381,7 +381,7 @@ Executadas com `claude -p` e um plugin de sonda descartável (hook clássico + m
 | # | Pergunta | Resultado |
 |---|---|---|
 | R-1 | `hooks` clássicos e `modules` no mesmo `hooks/hooks.json` | **Sim** — `claude plugin validate` aceita e os dois rodam na mesma sessão. O mod fica no próprio plugin. |
-| R-2 | Mod depende de `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | **Sim** — sem a variável o módulo não carrega. A verdade é a do Claude Code: `1|true|yes|on`, com trim e sem diferenciar caixa (`functionHooksOn`). O hook clássico usa a variável como sinal de exclusão mútua. |
+| R-2 | Mod depende de `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` | ~~**Sim** — sem a variável o módulo não carrega.~~ **Superada na fase V (linha abaixo).** A verdade é a do Claude Code: `1|true|yes|on`, com trim e sem diferenciar caixa (`functionHooksOn`). O hook clássico usa a variável como sinal de exclusão mútua. |
 | R-2 (fase V) | Reteste da R-2 em sessões reais | **A R-2 acima não vale mais.** Os Claude Code 2.1.293, 2.1.294 e 2.1.295 carregam o mod SEM `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`, até com valor `0` (provável mudança de flag no servidor). O clássico segue consultando a variável só para a exclusão mútua; com ela ausente, mod e clássico podem decidir o mesmo despacho e o resultado converge (clássico só rebaixa abaixo do modelo atual; mod nunca passa do original). Verificado com `devflow:architect` e por simulação. |
 | R-2 (nota F2) | Primeiro despacho no clássico | O transcript ainda não tem mensagem do assistente no `PreToolUse` do primeiro despacho: teto ilegível, o clássico não roteia (D5). Do 2º turno em diante roteia. O mod roteia desde o primeiro. |
 | R-3 | Reescrever o `model` no `turn.step` da sessão | **Sim, só com ID completo** (`claude-haiku-4-5-20251001` respondeu; o alias `haiku` fez o turno falhar). `e.model` e `e.effort` que chegam são sempre os do usuário; `parentModel` do `agent.spawn` também. Ver D21. Fase V: por isso a troca de sessão é medida contra o último modelo **aplicado**, não contra `e.model`; o `report` conta "Despachos" por `agentId` distinto. |
@@ -389,7 +389,7 @@ Executadas com `claude -p` e um plugin de sonda descartável (hook clássico + m
 | R-5 | `updatedInput` sem `permissionDecision` | **Sim** — o subagente rodou com `model: haiku` (`meta.json`). Ferramenta: `Agent`. |
 | R-6 | `$.fs.write` fora do plugin; `$.model.complete` com alias | **Sim** nos dois. `$.fs.stat` existe (`isLink`, `kind`, `size`, `realPath`). Não há append. |
 | R-7 | Detectar outro roteador de sessão | Não há `$.plugin.list`; `$.settings.read().enabledPlugins` expõe os plugins habilitados. |
-| R-8 | Versão mínima | **2.1.294** (versão testada); abaixo dela o `doctor` avisa e o mod pode não carregar (o mod não checa versão; quem avisa é o `doctor`). |
+| R-8 | Versão mínima | **2.1.293** (menor versão medida carregando o mod na fase V; as sondas da fase R usaram 2.1.294); abaixo dela o `doctor` avisa e o mod pode não carregar (o mod não checa versão; quem avisa é o `doctor`). |
 | R-10 | Trocar só o esforço invalida o cache? | **Não** — esforço alternado `high/low` a cada passo, leitura de cache igual ao controle. |
 
 Restrição do `claude plugin validate` descoberta na sonda: uma função que recebe `$` precisa ser
