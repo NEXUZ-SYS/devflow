@@ -136,3 +136,26 @@ test("beforeAfter: linha adulterada com scope:'cut' é ignorada e não lança", 
   assert.doesNotThrow(() => { ba = beforeAfter(ledger, []); });
   assert.equal(typeof ba.cut, "number");
 });
+
+test("Despachos conta agentId distintos por agente (não linhas de usage); sem agentId conta 1 por entrada", () => {
+  const u = { input_tokens: 1, output_tokens: 1 };
+  const agg = aggregate([
+    { scope: "subagent", agentId: "a1", agentType: "x", model: "sonnet", usage: u },
+    { scope: "subagent", agentId: "a1", agentType: "x", model: "sonnet", usage: u },
+    { scope: "subagent", agentId: "a1", agentType: "x", model: "sonnet", usage: u },
+    { scope: "subagent", agentId: "a2", agentType: "x", model: "sonnet", usage: u },
+    { scope: "subagent", agentType: "t", model: "haiku", usage: u },
+    { scope: "subagent", agentType: "t", model: "haiku", usage: u },
+  ]);
+  const md = renderMarkdown(agg);
+  assert.match(md, /\| x \| sonnet \| 2 \|/);
+  assert.match(md, /\| t \| haiku \| 2 \|/);
+  assert.match(md, /\| x \| 2 \| 0 \|/, "tabela de escaladas");
+  assert.match(md, /\| t \| 2 \| 0 \|/);
+});
+
+test("beforeAfter não estoura a pilha com 200 mil entradas de ledger", () => {
+  const ledger = Array.from({ length: 200000 }, (_, i) => ({ ts: new Date(Date.UTC(2026, 9, 8, 12, 0, 0) + i * 1000).toISOString(), scope: "session", model: "sonnet", usage: { input_tokens: 1, output_tokens: 1 } }));
+  const ba = beforeAfter(ledger, []);
+  assert.equal(ba.cut, Date.UTC(2026, 9, 8, 12, 0, 0));
+});
