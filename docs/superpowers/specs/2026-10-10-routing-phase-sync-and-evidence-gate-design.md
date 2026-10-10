@@ -97,9 +97,9 @@ da escala (QUICK/SMALL não têm R nem C). Na última fase da escala, o `workflo
 |---|---|---|
 | **P** | Plano linkado ao workflow e o arquivo do plano existe e tem corpo além do frontmatter. | `plans.json` do runtime do dotcontext (local exato confirmado na fase R) e `.context/plans/<slug>.md` |
 | **R** | Bloco `review:` no frontmatter do plano linkado com `verdict: PROCEED`. `REVISE` ou `BLOCK` negam. | frontmatter do plano (escrito pela `prevc-review`) |
-| **E** | ≥ 1 commit no `HEAD` posterior a `phases.E.started_at`; branch atual fora de `git.protectedBranches`; se existir `.context/workflow/stories.yaml`, nenhuma story `pending` ou `in_progress`. | `git log`, `git branch --show-current`, `.devflow.yaml`, stories |
+| **E** | ≥ 1 commit no `HEAD` posterior a `phases.E.started_at`; branch atual fora de `git.protectedBranches`; se existir `.context/workflow/stories.yaml` **deste workflow** (`created` ≥ `status.project.started`; um arquivo de workflow anterior é ignorado), nenhuma story `pending` ou `in_progress`. | `git log`, `git branch --show-current`, `.devflow.yaml`, stories |
 | **V** | Veredito `pass` do `verify-gate.mjs` com os `requiredSignals` do plano linkado (um `warnOnly` também passa — é a regra da ADR-013 para projeto sem `verify:`). | `evaluateGate` |
-| **C** (concluir) | `HEAD` alcançável pela branch base (merge feito) **ou** a branch atual existe em `refs/remotes/*` (publicada). Não depende de `gh`/`glab`. | `git merge-base --is-ancestor`, `git for-each-ref` |
+| **C** (concluir) | Alguma branch de `git.protectedBranches` (local ou `refs/remotes/*/<branch>`) tem commit posterior a `phases.E.started_at` — o trabalho chegou à base, inclusive por squash merge ou merge local em projeto sem remoto — **ou** a branch atual existe em `refs/remotes/*` (publicada, PR possível). Não depende de `gh`/`glab`. Como a saída de E já exige commits fora de branch protegida, commit novo na base significa entrega. | `git log --since`, `git for-each-ref` |
 
 Cada item de `missing[]` traz `howTo` (ex.: "rode a `prevc-review` e grave `review.verdict` no plano";
 "commite o trabalho da fase E numa branch de feature").
@@ -108,7 +108,7 @@ Cada item de `missing[]` traz `howTo` (ex.: "rode a `prevc-review` e grave `revi
 
 - `mcp__dotcontext__workflow-advance`, com ou sem `force: true` — o `force` é exatamente o bypass que o gate
   fecha.
-- Bash cujo comando cita a CLI do dotcontext com `workflow` e `advance` (heurístico, como a catraca).
+- Bash cujo comando invoca a CLI do dotcontext como comando (`dotcontext workflow advance`, `npx [-y] @dotcontext/cli[@versão] workflow advance`), no início ou depois de espaço, `;`, `&`, `|` ou `(`. Texto entre aspas, como numa mensagem de commit, não casa. Heurístico, como a catraca.
 - Qualquer outra ferramenta ou comando: o hook sai calado.
 
 ### 4.4 Configuração e modos de falha
