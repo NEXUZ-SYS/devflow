@@ -9,6 +9,8 @@
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { readVerify, readEvidenceGate } from "./devflow-config.mjs";
 
+const GATE_RANK = { block: 2, warn: 1, off: 0 };
+
 export function parseGitSection(yamlText) {
   try {
     const data = parseFrontmatter(`---\n${yamlText}\n---\n`).data || {};
@@ -43,7 +45,6 @@ export function detectWeakenings(currentText, proposedText) {
   }
 
   // ADR-018: o gate de evidência não pode ser rebaixado pelo próprio agente (block > warn > off).
-  const GATE_RANK = { block: 2, warn: 1, off: 0 };
   const curG = readEvidenceGate(currentText), propG = readEvidenceGate(proposedText);
   if (GATE_RANK[propG] < GATE_RANK[curG]) weakenings.push(`prevc.evidenceGate rebaixado (${curG}→${propG})`);
 

@@ -53,3 +53,19 @@ test('consecutiveReds zera após um GREEN', () => {
 test('readEntries em repo sem ledger → []', () => {
   assert.deepEqual(readEntries(mk()), []);
 });
+
+test('ledger como FIFO não trava: readEntries devolve [] em menos de 3 s (F1)', async () => {
+  const { spawnSync, execFileSync } = await import('node:child_process');
+  const { mkdirSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const r = mkdtempSync(join(tmpdir(), 'ledger-fifo-'));
+  mkdirSync(join(r, '.context', 'runtime'), { recursive: true });
+  execFileSync('mkfifo', [join(r, '.context', 'runtime', 'verify-ledger.jsonl')]);
+  const mod = new URL('../../scripts/lib/verify-ledger.mjs', import.meta.url).href;
+  const t = Date.now();
+  const out = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(mod)}).then(m => console.log(JSON.stringify(m.readEntries(${JSON.stringify(r)}))))`], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.ok(Date.now() - t < 3000, 'travou na leitura do FIFO');
+  assert.equal(out.status, 0);
+  assert.equal(out.stdout.trim(), '[]');
+});

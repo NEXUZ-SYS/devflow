@@ -36,3 +36,22 @@ test('mexer só em .context/workflow NÃO muda o digest (anti-livelock)', () => 
   writeFileSync(join(d, '.context', 'workflow', 'plans.json'), '{"changed":true}');
   assert.equal(treeDigest(d), before);
 });
+
+test('falha do git status muda o digest em vez de colapsar para só o HEAD (F2)', async () => {
+  const { mkdtempSync: mk, writeFileSync: wf, chmodSync } = await import('node:fs');
+  const { tmpdir: td } = await import('node:os');
+  const { join: j } = await import('node:path');
+  const { d } = repo();
+  const clean = treeDigest(d);
+  const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  const bin = mk(j(td(), 'fakegit-'));
+  wf(j(bin, 'git'), `#!/bin/sh\nfor a in "$@"; do [ "$a" = status ] && exit 1; done\nexec ${real} "$@"\n`);
+  chmodSync(j(bin, 'git'), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  try {
+    assert.notEqual(treeDigest(d), clean);
+    assert.equal(treeDigest(d), treeDigest(d)); // marcador estável
+  } finally { process.env.PATH = saved; }
+  assert.equal(treeDigest(d), clean); // repo benigno mantém o digest
+});
