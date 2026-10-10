@@ -64,6 +64,19 @@ models:
 
 O cache de prompt é por modelo: trocar o modelo faz o passo seguinte reler o contexto sem cache. Por isso a sessão troca só na fronteira de fase (padrão: uma vez por workflow). Trocar **só o esforço** não invalida o cache, então o esforço varia por skill e por passo sem esse custo. O relatório mostra a razão de cache após cada troca, para você ver se o cache frio está comendo a economia.
 
+## Monitor ao vivo
+
+Em todo projeto com o DevFlow, uma faixa acima do prompt mostra uma linha por agente em execução (a sessão e cada subagente):
+
+    general-purpose · Task 3 · review        Modelo: sonnet-5-5·medium (roteado) | Tempo: 01:12 | Falhas: 0 | Retentativas: 1
+
+- **Modelo** e esforço aplicados. A origem diz de onde veio a escolha: `roteado` (o roteador mudou o modelo ou o esforço), `teto` (o roteador não mexeu) ou `router off` (roteamento desligado: o modelo é o que o Claude Code escolheu).
+- **Tempo:** desde o despacho (subagente) ou o início do turno (sessão).
+- **Falhas:** falhas de ferramenta seguidas, a contagem que dispara a escalada no meio; amarelo a partir de 1, vermelho ao chegar ao `failureStreak` (padrão 3).
+- **Retentativas:** quantas vezes a mesma task foi despachada de novo para o mesmo papel, dentro do mesmo workflow do PREVC (trocar de workflow zera; fora do PREVC, conta na sessão). A task vem do `Task N` da descrição do despacho (subagent-driven-development) ou da linha `Current story: S<n>` do prompt (autonomous-loop); o papel separa implementação de revisão. No subagent-driven-development, a revisão conta as rodadas de re-review e a implementação conta os implementers novos (as rodadas que sobem de modelo); um implementer retomado por mensagem não conta. Sem task, `—`.
+
+A faixa só aparece com agente em execução, mostra até 6 linhas (menos em terminal baixo; `+N agentes` além disso) e nunca exibe o texto do prompt. O monitor só observa: não muda modelo, não lê arquivos do repositório (só o roteador lê o `prevc.json`, com a leitura segura, para o escopo das retentativas) e não grava ledger, e funciona com o roteamento desligado, para comparar o antes e o depois. Ele vem sempre ligado; o `/devflow init`, o `/devflow config` e o `/devflow:devflow-doctor` (check `router-monitor`) verificam se a versão do seu Claude Code é uma das que carregam o mod (testado a partir de 2.1.293). A faixa pode ser recolhida com o atalho do próprio motor (`ctrl+x ctrl+a`); o monitor em si não tem chave para desligar.
+
 ## Medição
 
 Com `models.ledger: true`, cada decisão vira uma linha JSONL fora do repositório (diretório de dados do usuário), só com campos numéricos ou de lista fixa: nunca prompt, resposta ou erro em texto. No mod, o `usage` vem do `turn.complete`; no clássico e no omp, dos transcripts.

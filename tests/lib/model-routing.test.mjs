@@ -95,3 +95,16 @@ test("módulo é puro: sem node:* e sem require", () => {
   assert.doesNotMatch(src, /from\s+["']node:/);
   assert.doesNotMatch(src, /\brequire\s*\(/);
 });
+
+test("workflowFromPrevcJson só aceita nome seguro (allowlist, até 128)", () => {
+  const mk = (name) => JSON.stringify({ status: { project: { name } } });
+  assert.equal(R.workflowFromPrevcJson(mk("router-monitor.v2_x")), "router-monitor.v2_x");
+  assert.equal(R.workflowFromPrevcJson(mk("a/b")), null);
+  assert.equal(R.workflowFromPrevcJson(mk("a b")), null);
+  assert.equal(R.workflowFromPrevcJson(mk("a".repeat(128))), "a".repeat(128));
+  assert.equal(R.workflowFromPrevcJson(mk("a".repeat(129))), null);
+  assert.equal(R.workflowFromPrevcJson(mk(42)), null);
+  assert.equal(R.workflowFromPrevcJson("{nao json"), null);
+  assert.equal(R.workflowFromPrevcJson(""), null);
+  assert.equal(R.workflowFromPrevcJson(undefined), null);
+});

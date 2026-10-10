@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Monitor ao vivo do roteamento de modelos: faixa acima do prompt com modelo·esforço aplicados e origem (`roteado`/`teto`/`router off`), cronômetro, falhas de ferramenta seguidas e retentativas da mesma task por papel, para cada agente em execução; sempre ligado. Check `router-monitor` no doctor, chamado pelo `/devflow init` e pelo `/devflow config`.
+
 ### Docs — laboratório de validação do roteamento de modelos
 
 - Spec, plano e achados do laboratório que roda o PREVC inteiro de forma autônoma (`claude -p` + `/devflow auto`) sobre um software-alvo pequeno, em braços com e sem roteamento, contra um oráculo independente e a fase real do `prevc.json`. O laboratório vive num repositório à parte; aqui ficam `docs/superpowers/specs/2026-10-09-model-routing-lab-design.md`, `docs/superpowers/plans/2026-10-09-model-routing-lab.md` e `docs/superpowers/2026-10-09-model-routing-lab-findings.md`.

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { stepEffort } from "../../scripts/lib/model-routing.mjs";
 import { aggregate, renderMarkdown } from "../../scripts/lib/routing-report.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -24,10 +25,11 @@ function mkRepo(yaml = YAML_ON, phase = "E") {
   return root;
 }
 
-async function load({ root, env = ON, statOverride, complete } = {}) {
+async function load({ root, env = ON, statOverride, complete, stateThrows = false } = {}) {
+  const flags = { stateThrows };
   const mod = await import(pathToFileURL(path.join(REPO, "hooks/router.mjs")).href + `?t=${n++}`);
   const hooks = {};
-  const log = { reads: [], writes: [], completes: [], status: [] };
+  const log = { reads: [], writes: [], completes: [], status: [], state: {} };
   const on = (ev, h) => { hooks[ev] = { h, c: null }; return { catch(c) { hooks[ev].c = c; return this; } }; };
   mod.register(on);
   const abs = (p) => (path.isAbsolute(p) ? p : path.join(root, p));
@@ -38,6 +40,10 @@ async function load({ root, env = ON, statOverride, complete } = {}) {
     settings: { read: async () => ({ enabledPlugins: {} }) },
     command: { register: async () => ({}) },
     ui: { status: (t) => log.status.push(t), toast: () => {} },
+    state: {
+      get: async (r) => ({ value: log.state[r.key], version: 0 }),
+      set: async (r, v) => { if (flags.stateThrows) throw new Error("state off"); log.state[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
+    },
     model: { complete: async (req) => { log.completes.push(req); return complete ? complete(req) : { isAnswered: false, reason: "empty-reply" }; } },
     fs: {
       stat: async (p, opt) => {
@@ -75,7 +81,7 @@ async function load({ root, env = ON, statOverride, complete } = {}) {
     await call("turn.start", { text: "x", turnId: "t1" });
     return step({ turnId: "t1", index: 0, model: OPUS, effort: "xhigh", messageCount: 1, ...extra });
   };
-  return { call, step, spawn, turn, log, $ };
+  return { call, step, spawn, turn, log, $, flags };
 }
 
 test("D18: sem DEVFLOW_MODEL_ROUTING=1 o spawn segue intocado e nada é gravado", async () => {
@@ -265,4 +271,87 @@ test("D17: outro roteador desabilitado (false) não desliga a sessão; habilitad
   H.$.ui.toast = (t) => toasts.push(t);
   await H.turn();
   assert.deepEqual(toasts, []);
+});
+
+test("monitor: spawn roteado publica modelo, esforço e origem aplicados", async () => {
+  const H = await load({ root: mkRepo() });
+  await H.turn();
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS });
+  const r = H.log.state.routing;
+  assert.equal(r.active, true);
+  assert.equal(r.failureStreak, 3);
+  assert.equal(r.loops.a1.model, "haiku");
+  assert.equal(r.loops.a1.origin, "roteado");
+  assert.equal(typeof r.loops.a1.effort, "string");
+});
+
+test("monitor: tipo não roteável não publica loop (o monitor mostra teto)", async () => {
+  const H = await load({ root: mkRepo() });
+  await H.turn();
+  await H.spawn({ subagentType: "Explore", parentModel: OPUS });
+  assert.equal(H.log.state.routing.active, true);
+  assert.equal(H.log.state.routing.loops.a1, undefined);
+});
+
+test("monitor: só o esforço roteado na sessão já conta como roteado", async () => {
+  const H = await load({ root: mkRepo() });
+  const first = await H.turn(); // fase E, sem ID de sonnet aprendido: só o esforço muda
+  assert.equal(first.effort, "medium");
+  const main = H.log.state.routing.loops.main;
+  assert.equal(main.model, OPUS);
+  assert.equal(main.effort, "medium");
+  assert.equal(main.origin, "roteado");
+});
+
+test("monitor: passo da sessão publica o modelo aplicado (não o e.model do usuário)", async () => {
+  const H = await load({ root: mkRepo() });
+  await H.turn();
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, SONNET);
+  await H.step({ turnId: "t1", index: 1, model: OPUS, effort: "xhigh", messageCount: 2 });
+  const main = H.log.state.routing.loops.main;
+  assert.equal(main.model, SONNET);
+  assert.equal(main.origin, "roteado");
+});
+
+test("monitor: failureStreak vem do .devflow.yaml", async () => {
+  const H = await load({ root: mkRepo("models:\n  enabled: true\n  midRun:\n    failureStreak: 5\n") });
+  await H.turn();
+  assert.equal(H.log.state.routing.failureStreak, 5);
+});
+
+test("monitor: /devflow-route off publica active false; sem opt-in também", async () => {
+  const H = await load({ root: mkRepo() });
+  await H.turn();
+  await H.call("command.run", { command: "devflow-route", args: "off" });
+  assert.equal(H.log.state.routing.active, false);
+  const H2 = await load({ root: mkRepo(), env: { HOME: "/home/t" } });
+  await H2.turn();
+  assert.equal(H2.log.state.routing.active, false);
+});
+
+test("monitor: $.state.set lançando não muda o que o router devolve, e a publicação é tentada de novo", async () => {
+  const H = await load({ root: mkRepo(), stateThrows: true });
+  await H.turn();
+  const seen = await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS });
+  assert.equal(seen.model, "haiku");
+  assert.equal(H.log.state.routing, undefined);
+  H.flags.stateThrows = false;
+  await H.call("command.run", { command: "devflow-route", args: "status" });
+  assert.equal(H.log.state.routing.active, true);
+});
+
+test("I1: o esforço publicado do subagente acompanha o enviado a cada passo (com e sem patch)", async () => {
+  const H = await load({ root: mkRepo(YAML_MIDRUN) });
+  await H.turn();
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, "claude-haiku-5-5");
+  // com patch: o motor manda xhigh e o roteador reescreve
+  const withPatch = await H.step({ turnId: "t1", index: 1, model: OPUS, effort: "xhigh", messageCount: 2, agentId: "a1" });
+  assert.equal(H.log.state.routing.loops.a1.effort, withPatch.effort);
+  // a escalada por falhas muda o esforço desejado; o evento já traz exatamente esse valor (sem patch)
+  for (let i = 0; i < 3; i++) await H.call("tool.call", { tool: "Bash", tool_use_id: `u${i}`, agentId: "a1" }, async () => ({ isError: true, text: "x" }));
+  const escalado = stepEffort("low", 3, "xhigh");
+  assert.notEqual(escalado, withPatch.effort, "a escalada precisa mudar o esforço desejado");
+  const noPatch = await H.step({ turnId: "t1", index: 2, model: OPUS, effort: escalado, messageCount: 3, agentId: "a1" });
+  assert.equal(noPatch.effort, escalado);
+  assert.equal(H.log.state.routing.loops.a1.effort, noPatch.effort);
 });
