@@ -1291,6 +1291,6 @@ git commit -m "docs: changelog, resultados da campanha do laboratório e backlog
 
 ## Pendências para a fase R (da spec §7)
 
-- Confirmar onde o `plan link` grava o vínculo (runtime × legado) — o `linkedPlan` da Task 5 assume "o primeiro que existe decide".
+- ~~Onde o `plan link` grava o vínculo~~ — **resolvido na P (2026-10-10):** em `.context/runtime/workflows/plans.json`; o legado `.context/workflow/plans.json` fica parado num plano antigo. Confirma a regra "o primeiro que existe decide" do `linkedPlan`.
 - Confirmar que o dotcontext preserva a chave `review:` no frontmatter do plano quando reescreve o arquivo (`plan updatePhase`/`commitPhase`). Se não preservar, o veredito passa para um arquivo próprio e as Tasks 5 e 7 mudam.
 - Confirmar o formato do `tool_input` do `workflow-advance` no evento PreToolUse (o gate não depende do `force`, mas o teste E2E simula `{"force": true}`).
