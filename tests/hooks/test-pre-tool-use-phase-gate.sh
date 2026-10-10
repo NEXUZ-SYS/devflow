@@ -62,9 +62,14 @@ pre = json.load(open(sys.argv[1]))["hooks"]["PreToolUse"]
 hit = [e for e in pre if any("pre-tool-use-phase-gate" in h["command"] for h in e["hooks"])]
 assert len(hit) == 1 and hit[0]["matcher"] == "Bash|mcp__dotcontext__workflow-advance", hit
 PY
-OUT=$(ev_mcp "$R" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" "$REPO_ROOT/hooks/run-hook.cmd" pre-tool-use-phase-gate || true)
+# run-hook.cmd precisa ACHAR o hook: sem evidência exige deny (saída vazia não prova nada), com evidência exige vazio.
+RH() { printf '%s' "$2" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" "$REPO_ROOT/hooks/run-hook.cmd" "${1:-pre-tool-use-phase-gate}"; }
+NE="$TMP/r-sem-plano"; mkrepo "$NE"
+OUT=$(RH pre-tool-use-phase-gate "$(ev_mcp "$NE")")
+case "$OUT" in *'"permissionDecision":"deny"'*) ;; *) echo "FAIL: run-hook.cmd sem evidência deveria negar: '$OUT'"; fail=1;; esac
+OUT=$(RH pre-tool-use-phase-gate "$(ev_mcp "$R")")
 [ -z "$OUT" ] || { echo "FAIL: run-hook.cmd com evidência deveria ficar calado: $OUT"; fail=1; }
-OUT=$(ev_mcp "$TMP/r-sem" | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" "$REPO_ROOT/hooks/run-hook.cmd" pre-tool-use-phase-gate || true)
+OUT=$(RH pre-tool-use-phase-gate "$(ev_mcp "$TMP/r-sem")" || true)
 [ -z "$OUT" ] || { echo "FAIL: run-hook.cmd sem workflow deveria ficar calado: $OUT"; fail=1; }
 ln -s "$REPO_ROOT" "$TMP/plugin-link"
 S="$TMP/s"; mkrepo "$S"
@@ -78,6 +83,20 @@ BIG=$(python3 -c 'import json; print(json.dumps({"tool_name":"Bash","tool_input"
 expect "$(dec "$BIG")" deny "evento acima do teto com marcador"
 BIGQ=$(python3 -c 'import json; print(json.dumps({"tool_name":"Bash","tool_input":{"command":"x"*1100000},"cwd":"/tmp"}))')
 expect "$(dec "$BIGQ")" "" "evento acima do teto sem marcador"
+
+# marcador atravessando a fronteira de 1 MiB (sobreposição de 64 bytes entre blocos)
+CROSS=$(python3 - <<'PY'
+import json
+# "dotcontext" começa em 1048576-5 (cortado ao meio): o marcador atravessa o corte dos blocos de 1 MiB
+head = '{"tool_name":"Bash","tool_input":{"command":"'
+cmd = "x" * (1048576 - 5 - len(head)) + "dotcontext workflow advance" + "y" * 2000
+ev = head + cmd + '"},"cwd":"/tmp"}'
+assert ev.index("dotcontext") < 1048576 < ev.index("dotcontext") + len("dotcontext")
+json.loads(ev)
+print(ev)
+PY
+)
+expect "$(dec "$CROSS")" deny "marcador cruzando a fronteira de 1 MiB"
 
 # --- 7: custo do caminho rápido -------------------------------------------------------------------
 EV=$(ev_bash "$R" 'ls -la')

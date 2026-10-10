@@ -6,6 +6,8 @@
 # (scripts/lib/phase-gate-cli.mjs) e a saída é UM JSON numa linha (deny ou aviso) ou nada; nunca "allow".
 # O stdin é lido ATÉ O FIM em todos os caminhos (hook que fecha o stdin cedo perde a decisão), em blocos
 # de MAX_BYTES como na catraca. Evento acima do teto que cita o avanço → deny fixo (não dá para decidir).
+# O deny fixo acima também pode vir de um marcador presente no `cwd` (aceito: só afeta Bash > 1 MiB em
+# projeto cujo caminho contenha esse nome); o comportamento não muda.
 set -u
 LC_ALL=C
 MAX_BYTES=1048576
