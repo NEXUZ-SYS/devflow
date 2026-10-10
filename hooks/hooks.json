@@ -76,6 +76,17 @@
         ]
       },
       {
+        "matcher": "Bash|mcp__dotcontext__workflow-advance",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" pre-tool-use-phase-gate",
+            "async": false,
+            "timeout": 15
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
