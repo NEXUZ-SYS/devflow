@@ -22,7 +22,14 @@ const MODES = new Set(["block", "warn", "off"]);
 const GIT_ENV = { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" };
 const HARDEN = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
-const git = (root, args) => execFileSync("git", [...HARDEN, ...args], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000, env: { ...process.env, ...GIT_ENV } }).trim();
+const REPO_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"];
+// Ambiente do git sem variáveis de repositório herdadas: elas desviariam o git para outro repo.
+function gitEnv() {
+  const e = { ...process.env, ...GIT_ENV };
+  for (const k of REPO_ENV) delete e[k];
+  return e;
+}
+const git = (root, args) => execFileSync("git", [...HARDEN, ...args], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000, env: gitEnv() }).trim();
 const read = (root, rel) => readInRoot(root, rel, MAX);
 const isoOrNull = (s) => { const t = Date.parse(String(s ?? "")); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
@@ -122,6 +129,9 @@ function verifyFacts(root, plan) {
 }
 
 export function collectFacts(root, phase, prevc) {
+  // Falha de EXECUÇÃO do git (binário ausente) sobe sem tratamento → aviso em decide (spec §4.4);
+  // falha de DADO (ref ausente, log vazio) segue contando como falta de evidência.
+  if (phase !== "P" && phase !== "R") git(root, ["--version"]);
   if (phase === "P" || phase === "R") return { plan: planFacts(root, prevc) };
   if (phase === "E") return { git: eFacts(root, prevc), stories: storyFacts(root, prevc) };
   if (phase === "V") return { verify: verifyFacts(root, planFacts(root, prevc)) };
@@ -148,8 +158,16 @@ export function decide(event, env = process.env) {
   try {
     const dirs = [env.CLAUDE_PROJECT_DIR, typeof event.cwd === "string" && event.cwd ? event.cwd : process.cwd()].filter(Boolean);
     const roots = [...new Set(dirs.map(rootOf))];
-    const outs = roots.map((r) => decideAt(r, env.DEVFLOW_EVIDENCE_GATE)).filter(Boolean);
-    return outs.find((o) => o.includes('"permissionDecision":"deny"')) ?? outs[0] ?? "";
+    const outs = [];
+    let failure = null;
+    for (const r of roots) {
+      try { outs.push(decideAt(r, env.DEVFLOW_EVIDENCE_GATE)); } catch (e) { failure ??= e; } // um erro não anula o deny da outra raiz
+    }
+    const found = outs.filter(Boolean);
+    const deny = found.find((o) => o.includes('"permissionDecision":"deny"'));
+    if (deny) return deny;
+    if (failure) return renderInternalError(String(failure?.message ?? failure).split("\n")[0]);
+    return found[0] ?? "";
   } catch (e) {
     return renderInternalError(String(e?.message ?? e).split("\n")[0]);
   }

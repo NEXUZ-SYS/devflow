@@ -214,17 +214,6 @@ test("raiz: CLAUDE_PROJECT_DIR é avaliado mesmo com o cwd numa subpasta sem wor
   assert.equal(decision(decide(ADV(elsewhere), { CLAUDE_PROJECT_DIR: root })).permissionDecision, "deny");
 });
 
-test("repo com log.showSignature + gpg.program no config local não executa o programa", () => {
-  const root = mkRepo({ cur: "E", phases: { E: { status: "in_progress", started_at: T0 } } });
-  const marker = path.join(tmp("phase-gate-mark-"), "ran");
-  const prog = path.join(root, "evil.sh");
-  fs.writeFileSync(prog, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
-  sh(root, "config", "log.showSignature", "true");
-  sh(root, "config", "gpg.program", prog);
-  decide(ADV(root), ENV);
-  assert.equal(fs.existsSync(marker), false);
-});
-
 test("git ausente (PATH vazio) → passa com aviso, nunca deny", () => {
   const root = mkRepo({ cur: "C" });
   const saved = process.env.PATH;
@@ -235,5 +224,89 @@ test("git ausente (PATH vazio) → passa com aviso, nunca deny", () => {
     assert.match(d.additionalContext, /não foi possível conferir/);
   } finally {
     process.env.PATH = saved;
+  }
+});
+
+function withEmptyPath(fn) {
+  const saved = process.env.PATH;
+  process.env.PATH = "";
+  try { return fn(); } finally { process.env.PATH = saved; }
+}
+
+test("git ausente (PATH vazio) nas fases E e V → aviso, nunca deny", () => {
+  const e = mkRepo({ cur: "E", phases: { E: { status: "in_progress", started_at: T0 } } });
+  const v = mkRepo({ cur: "V", yaml: "git:\n  protectedBranches: [main]\nverify:\n  unit: [\"node\", \"--test\"]\n" });
+  planFile(v);
+  for (const root of [e, v]) {
+    const d = withEmptyPath(() => dec(ADV(root)));
+    assert.equal(d.permissionDecision, undefined);
+    assert.match(d.additionalContext, /não foi possível conferir/);
+  }
+});
+
+test("erro interno numa raiz não anula o deny da outra", () => {
+  const a = mkRepo(); // P sem plano → deny, sem precisar de git
+  const b = mkRepo({ cur: "C" }); // C precisa do git: com PATH vazio, erro interno
+  for (const [proj, cwd] of [[a, b], [b, a]]) {
+    const d = withEmptyPath(() => decision(decide(ADV(cwd), { CLAUDE_PROJECT_DIR: proj })));
+    assert.equal(d.permissionDecision, "deny");
+  }
+});
+
+// Commit com cabeçalho gpgsig forjado: com showSignature ativo o git TENTARIA verificar (gpg.program).
+function forgeSigned(root) {
+  const tree = sh(root, "rev-parse", "HEAD^{tree}");
+  const parent = sh(root, "rev-parse", "HEAD");
+  const body = `tree ${tree}\nparent ${parent}\nauthor t <t@t> 1790000000 +0000\ncommitter t <t@t> 1790000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n abcd\n -----END PGP SIGNATURE-----\n\nsigned\n`;
+  const sha = execFileSync("git", ["hash-object", "-t", "commit", "-w", "--stdin"], { cwd: root, input: body, encoding: "utf8", env: { ...process.env, ...ID } }).trim();
+  sh(root, "update-ref", "refs/heads/main", sha);
+  return sha;
+}
+
+test("repo com log.showSignature + gpg.program e commit assinado não executa o programa", () => {
+  const root = mkRepo({ cur: "E", phases: { E: { status: "in_progress", started_at: T0 } } });
+  forgeSigned(root);
+  const marker = path.join(tmp("phase-gate-mark-"), "ran");
+  const prog = path.join(root, "evil.sh");
+  fs.writeFileSync(prog, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+  sh(root, "config", "log.showSignature", "true");
+  sh(root, "config", "gpg.program", prog);
+  // controle: sem o hardening o git realmente chama o programa
+  try { sh(root, "log", "-1", "--format=%H"); } catch { /* ignora */ }
+  assert.equal(fs.existsSync(marker), true, "controle: o commit forjado precisa acionar o gpg.program");
+  fs.rmSync(marker);
+  decide(ADV(root), ENV);
+  assert.equal(fs.existsSync(marker), false);
+});
+
+test("core.fsmonitor no config local não executa na fase V", () => {
+  const root = mkRepo({ cur: "V", yaml: "git:\n  protectedBranches: [main]\nverify:\n  unit: [\"node\", \"--test\"]\n" });
+  planFile(root);
+  const marker = path.join(tmp("phase-gate-mark-"), "ran");
+  const prog = path.join(root, "evil-fsm.sh");
+  fs.writeFileSync(prog, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+  sh(root, "config", "core.fsmonitor", prog);
+  // controle: o git sem hardening executa o hook
+  sh(root, "status", "--porcelain");
+  assert.equal(fs.existsSync(marker), true, "controle: fsmonitor precisa disparar no status");
+  fs.rmSync(marker);
+  decide(ADV(root), ENV);
+  assert.equal(fs.existsSync(marker), false);
+});
+
+test("GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE herdados não desviam o git do gate", () => {
+  const root = mkRepo({ cur: "E", phases: { E: { status: "in_progress", started_at: T0 } } });
+  sh(root, "switch", "-q", "-c", "feature/x");
+  commit(root, "src.txt", "feat: x");
+  const other = tmp("phase-gate-other-");
+  sh(other, "init", "-q", "-b", "main");
+  const saved = { ...process.env };
+  process.env.GIT_DIR = path.join(other, ".git");
+  process.env.GIT_WORK_TREE = other;
+  process.env.GIT_INDEX_FILE = path.join(other, ".git", "index");
+  try {
+    assert.equal(decide(ADV(root), ENV), "");
+  } finally {
+    for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
   }
 });

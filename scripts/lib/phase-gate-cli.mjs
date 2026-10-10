@@ -3,9 +3,11 @@
 // principal": com o plugin instalado por symlink a comparação de caminhos falharia e o gate passaria calado.
 import { decide } from "./phase-gate.mjs";
 
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
 let ev = null;
-try { ev = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { ev = null; }
+try {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  ev = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+} catch { ev = null; }
 const o = decide(ev);
 if (o) process.stdout.write(o + "\n");
