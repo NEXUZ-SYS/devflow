@@ -81,6 +81,7 @@ Um **hook `PreToolUse` dedicado** (`hooks/pre-tool-use-phase-gate`, matcher `mcp
 - na escala MEDIUM a C é pulada pelo dotcontext: a entrega não é conferida (só a V);
 - o fallback do squash aceita qualquer commit na base desde o início de E;
 - sem `prevc.json` (ou ilegível) ou com a fase já concluída, o gate sai calado: só vale dentro de um workflow existente.
+- o gate lê config (`readVerifyFromPath`) e standards (`loadEffectiveStandards`) do repo sem a contenção do `readInRoot` (fora do alcance): um FIFO num arquivo de config pode travar o hook até o timeout, que o Claude Code trata como não bloqueante.
 
 ## Guardrails
 

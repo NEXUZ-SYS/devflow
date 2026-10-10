@@ -201,6 +201,8 @@ O dotcontext desliga os próprios gates com `autonomous: true`. O DevFlow manté
 
 Fases fora da escala vêm `skipped` do dotcontext e não são conferidas (MEDIUM pula a C, SMALL pula R e C, QUICK pula P, R e C).
 
+Em QUICK, SMALL e MEDIUM faltam fases na escala, mas a saída da E ainda exige commit: commite o trabalho antes de avançar da fase E.
+
 Um deny lista o que falta e como produzir. Não contorne: produza a evidência.
 
 ## Anti-Patterns
