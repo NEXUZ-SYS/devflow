@@ -255,11 +255,11 @@ When escalation is triggered:
    - "stop" → exit loop, generate final report
    - Any other input → treat as guidance, apply to current story, resume
 
+### Step 6: Final Report
+
 **Saída da fase E (gate de evidência, ADR-018):** o `workflow-advance` só passa com pelo menos um commit
 na branch de feature desde o início da fase E (nunca numa branch protegida) e, se houver
 `.context/workflow/stories.yaml` deste workflow, sem story `pending` ou `in_progress`.
-
-### Step 6: Final Report
 
 When the loop exits (all stories processed or stopped):
 

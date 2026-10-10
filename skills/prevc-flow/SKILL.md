@@ -197,6 +197,10 @@ O dotcontext desliga os próprios gates com `autonomous: true`. O DevFlow manté
 | V | `verify-gate` aprovado |
 | C (concluir) | trabalho na branch base (merge, inclusive squash ou local) ou branch publicada no remoto |
 
+`DEVFLOW_EVIDENCE_GATE` (`block | warn | off`) no ambiente do Claude Code tem precedência sobre `prevc.evidenceGate` do `.devflow.yaml`.
+
+Fases fora da escala vêm `skipped` do dotcontext e não são conferidas (MEDIUM pula a C, SMALL pula R e C, QUICK pula P, R e C).
+
 Um deny lista o que falta e como produzir. Não contorne: produza a evidência.
 
 ## Anti-Patterns

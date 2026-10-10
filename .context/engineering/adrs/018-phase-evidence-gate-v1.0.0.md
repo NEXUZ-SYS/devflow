@@ -42,7 +42,7 @@ Um **hook `PreToolUse` dedicado** (`hooks/pre-tool-use-phase-gate`, matcher `mcp
 |---|---|
 | P | Plano linkado ao workflow e arquivo do plano com corpo além do frontmatter |
 | R | Bloco `review:` no frontmatter do plano com `verdict: PROCEED` (`REVISE`, `BLOCK` ou frontmatter ilegível negam) |
-| E | ≥ 1 commit posterior ao início de E, branch fora de `git.protectedBranches` e nenhuma story pendente ou em andamento do workflow |
+| E | ≥ 1 commit posterior ao início de E, branch fora de `git.protectedBranches` e nenhuma story pendente ou em andamento do workflow (a checagem de branch protegida só vale com `git.branchProtection` diferente de false e `git.strategy` diferente de trunk-based) |
 | V | Veredito `pass` do `verify-gate.mjs` com os `requiredSignals` do plano (ADR-013) |
 | C | Branch contida numa base, ou publicada em `refs/remotes/*`, ou (fallback de squash) commit novo numa base desde o início de E; sem `gh`/`glab` |
 
@@ -79,7 +79,8 @@ Um **hook `PreToolUse` dedicado** (`hooks/pre-tool-use-phase-gate`, matcher `mcp
 - `git update-ref` forjando a branch publicada;
 - parar antes da C — hook intercepta chamadas, não ausência delas (fica para o `INV-PREVC` do laboratório);
 - na escala MEDIUM a C é pulada pelo dotcontext: a entrega não é conferida (só a V);
-- o fallback do squash aceita qualquer commit na base desde o início de E.
+- o fallback do squash aceita qualquer commit na base desde o início de E;
+- sem `prevc.json` (ou ilegível) ou com a fase já concluída, o gate sai calado: só vale dentro de um workflow existente.
 
 ## Guardrails
 
