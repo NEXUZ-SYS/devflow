@@ -91,7 +91,9 @@ async function refreshPhase($, force = false) {
   const prevc = valid ? text : "";
   S.prevcSig = valid ? sig : null;
   S.workflow = workflowFromPrevcJson(prevc);
-  if (active()) core.onPhaseChange(S.core, { phase: phaseFromPrevcJson(prevc) });
+  const phase = phaseFromPrevcJson(prevc);
+  if (!force && phase === null) return; // JSON válido sem fase no meio do turno: mantém a fase (só o turn.start zera)
+  if (active()) core.onPhaseChange(S.core, { phase });
 }
 
 async function ensure($) {

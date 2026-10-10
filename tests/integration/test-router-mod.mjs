@@ -377,6 +377,7 @@ async function sessionInR(yaml = YAML_ON) {
   return { root, H };
 }
 const stepAt = (H, i) => H.step({ turnId: "t1", index: i, model: OPUS, effort: "xhigh", messageCount: i + 1 });
+const faseDe = async (H) => (await H.call("command.run", { command: "devflow-route", args: "" })).text;
 const prevcReads = (H) => H.log.reads.filter((p) => String(p).endsWith(PREVC_REL)).length;
 
 test("H1: a fase muda no meio do turno → o passo seguinte da sessão já usa a fase nova", async () => {
@@ -412,8 +413,10 @@ test("H1: JSON parcial no meio do turno → mantém a fase e relê quando o arqu
   await stepAt(H, 0);
   writePrevc(root, "{\"status\":{\"proj", 5); // escrita em andamento
   assert.equal((await stepAt(H, 1)).model, OPUS); // continua em R
+  assert.match(await faseDe(H), /fase: R/); // retida de verdade (sem fase o teto também seria OPUS)
   writePrevc(root, phaseJson("E"), 10);
   assert.equal((await stepAt(H, 2)).model, SONNET);
+  assert.match(await faseDe(H), /fase: E/);
 });
 
 test("H1: JSON válido sem fase grava a assinatura (não relê a cada passo)", async () => {
@@ -431,4 +434,14 @@ test("H1: prevc.json some no meio do turno → mantém a fase (só o turn.start 
   assert.equal((await stepAt(H, 0)).model, SONNET);
   fs.rmSync(path.join(root, PREVC_REL));
   assert.equal((await stepAt(H, 1)).model, SONNET);
+  assert.match(await faseDe(H), /fase: E/);
+});
+
+test("H1: JSON válido sem fase no meio do turno mantém a fase; só o turn.start zera", async () => {
+  const { root, H } = await sessionInR();
+  writePrevc(root, JSON.stringify({ status: { project: {} } }), 5);
+  await stepAt(H, 0);
+  assert.match(await faseDe(H), /fase: R/);
+  await H.call("turn.start", { text: "y", turnId: "t2" });
+  assert.match(await faseDe(H), /fase: —/);
 });
