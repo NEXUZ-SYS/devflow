@@ -13,7 +13,7 @@ requiredSignals: [unit, integration, e2e, lint]
 # Monitor do roteamento de modelos — Design
 
 > **Workflow:** `router-monitor-toolbar` | **Fase:** R | **Branch:** `feature/router-monitor-toolbar`
-> Base: roteamento de modelos e esforço da v3.7.0 ([ADR-017](../../../.context/engineering/adrs/017-model-routing-v1.0.0.md), `hooks/router.mjs`).
+> Base: roteamento de modelos e esforço da v3.7.0 ([ADR-017](../../../.context/engineering/adrs/017-model-routing-v1.1.0.md), `hooks/router.mjs`).
 
 ## 1. Objetivo
 
