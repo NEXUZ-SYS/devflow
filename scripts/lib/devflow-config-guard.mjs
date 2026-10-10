@@ -7,7 +7,7 @@
 // Função pura + zero-dep. O gate de "branch protegida" é responsabilidade do
 // chamador (CLI/hook); aqui só se compara atual vs proposto.
 import { parseFrontmatter } from "./frontmatter.mjs";
-import { readVerify } from "./devflow-config.mjs";
+import { readVerify, readEvidenceGate } from "./devflow-config.mjs";
 
 export function parseGitSection(yamlText) {
   try {
@@ -41,6 +41,11 @@ export function detectWeakenings(currentText, proposedText) {
   if (cur.strategy && cur.strategy !== "trunk-based" && prop.strategy === "trunk-based") {
     weakenings.push("git.strategy trocada para 'trunk-based' (sem proteção de branch)");
   }
+
+  // ADR-018: o gate de evidência não pode ser rebaixado pelo próprio agente (block > warn > off).
+  const GATE_RANK = { block: 2, warn: 1, off: 0 };
+  const curG = readEvidenceGate(currentText), propG = readEvidenceGate(proposedText);
+  if (GATE_RANK[propG] < GATE_RANK[curG]) weakenings.push(`prevc.evidenceGate rebaixado (${curG}→${propG})`);
 
   // R-C2: enfraquecimento do contrato verify:. A troca por código inline é barrada
   // porque readVerify(proposedText) LANÇA (TG1/R-C1) em -c/-e/--eval/-p/-lc/... em
