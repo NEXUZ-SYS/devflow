@@ -11,6 +11,10 @@ generated: "2026-10-10"
 scaffoldVersion: "2.0.0"
 summary: "H1: o mod de roteamento relê o prevc.json no turn.step e no agent.spawn quando (mtimeMs, size) muda (ADR-017 v1.1.0). D5: hook PreToolUse pre-tool-use-phase-gate nega o workflow-advance (MCP, force incluso, e a CLI do dotcontext) sem a evidência mínima da fase atual, em qualquer autonomia, configurável em prevc.evidenceGate block|warn|off (ADR-018). 9 tasks TDD."
 requiredSignals: [unit, integration, e2e, lint, standards]
+review:
+  verdict: PROCEED
+  reviewers: [architect, security-auditor]
+  date: "2026-10-10"
 sources:
   spec: docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md
   plan: docs/superpowers/plans/2026-10-10-routing-phase-sync-and-evidence-gate.md
@@ -20,13 +24,13 @@ phases:
   - id: "phase-1"
     name: "Planning"
     prevc: "P"
-    status: in_progress
+    status: completed
     summary: "Brainstorming supervisionado com o operador: caminho arquitetural; gate mecânico (hook) em qualquer autonomia; matriz de evidência aprovada; evidenceGate block por padrão; ADR-018 nova e ADR-017 v1.1.0. dotcontext não tem 'skip' de fase: parar antes da C fica para o INV-PREVC do laboratório. Emenda: C prova entrega por commit novo numa branch protegida (cobre squash e merge sem remoto) ou branch publicada."
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
-    status: pending
-    summary: "Architect + security-auditor. Pendências: onde o plan link grava o vínculo; se o dotcontext preserva review: no frontmatter; formato do tool_input do workflow-advance."
+    status: completed
+    summary: "Architect REVISE (13 achados, 2 BLOCK) e security-auditor REPROVADO (9 achados, 1 BLOCK), sem mudança de desenho; tudo incorporado (6710c73): leitura contida ADR-014 + slug pelo prevc.json; git endurecido; regex sem aspas; trunk-based; V com requiredSignals vazio e std block; C por merge-base + fallback squash; raiz CLAUDE_PROJECT_DIR; CLI sem guarda de main; teto no hook; DEVFLOW_EVIDENCE_GATE; rebaixamento barrado no config-guard. Sondas: review: preservado pelo dotcontext; tool_input {outputs?, force?}. Operador aprovou PROCEED."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
@@ -69,7 +73,7 @@ phases:
     name: "Confirmation"
     prevc: "C"
     status: pending
-lastUpdated: "2026-10-10T19:00:00.000Z"
+lastUpdated: "2026-10-10T18:30:37.686Z"
 ---
 
 # Fase sincronizada no roteamento (H1) e gate de evidência por fase (D5)
@@ -94,4 +98,8 @@ nem subagentes, com `autonomous: true` desligando os gates do dotcontext).
 
 ## Execution History
 
-> Last updated: 2026-10-10 | Progress: 0%
+> Last updated: 2026-10-10T18:30:37.686Z | Progress: 0%
+
+### phase-1 [DONE]
+- Started: 2026-10-10T18:30:37.686Z
+- Completed: 2026-10-10T18:30:37.686Z
