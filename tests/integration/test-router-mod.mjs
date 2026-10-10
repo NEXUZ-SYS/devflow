@@ -355,3 +355,80 @@ test("I1: o esforço publicado do subagente acompanha o enviado a cada passo (co
   assert.equal(noPatch.effort, escalado);
   assert.equal(H.log.state.routing.loops.a1.effort, noPatch.effort);
 });
+
+// ─── H1: fase relida no meio do turno ────────────────────────────────────────────────────────────
+const PREVC_REL = ".context/runtime/workflows/prevc.json";
+// Grava a fase e empurra o mtime para frente: duas escritas no mesmo ms não podem parecer iguais.
+function writePrevc(root, text, bumpS) {
+  const f = path.join(root, PREVC_REL);
+  fs.writeFileSync(f, text);
+  const t = new Date(Date.now() + bumpS * 1000);
+  fs.utimesSync(f, t, t);
+}
+const phaseJson = (p) => JSON.stringify({ status: { project: { current_phase: p } } });
+
+async function sessionInR(yaml = YAML_ON) {
+  const root = mkRepo(yaml, "R");
+  const H = await load({ root });
+  await H.call("session.start", {});
+  // aprende o ID do sonnet (a troca efetiva de modelo exige um ID completo)
+  await H.call("agent.spawn", { prompt: "p", fork: false, subagentType: "devflow:code-reviewer", parentModel: OPUS }, async () => ({ agentId: "a0", model: SONNET }));
+  await H.call("turn.start", { text: "x", turnId: "t1" });
+  return { root, H };
+}
+const stepAt = (H, i) => H.step({ turnId: "t1", index: i, model: OPUS, effort: "xhigh", messageCount: i + 1 });
+const prevcReads = (H) => H.log.reads.filter((p) => String(p).endsWith(PREVC_REL)).length;
+
+test("H1: a fase muda no meio do turno → o passo seguinte da sessão já usa a fase nova", async () => {
+  const { root, H } = await sessionInR();
+  assert.equal((await stepAt(H, 0)).model, OPUS); // R: sessão no teto
+  writePrevc(root, phaseJson("E"), 5);
+  assert.equal((await stepAt(H, 1)).model, SONNET); // E: sessão em standard, sem novo turn.start
+});
+
+test("H1: a fase muda antes do despacho → o ledger do subagente registra a fase nova", async () => {
+  const { root, H } = await sessionInR(YAML_LEDGER);
+  await stepAt(H, 0);
+  writePrevc(root, phaseJson("E"), 5);
+  await H.call("agent.spawn", { prompt: "p", fork: false, subagentType: "devflow:documentation-writer", parentModel: OPUS }, async () => ({ agentId: "a1", model: "claude-haiku-5-5" }));
+  await H.call("turn.complete", {}, async () => ({ usage: { model: OPUS, input_tokens: 10, output_tokens: 5 } }));
+  const entries = H.log.writes.at(-1).text.trim().split("\n").map((l) => JSON.parse(l));
+  const sub = entries.find((e) => e.scope === "subagent" && e.agentId === "a1");
+  assert.equal(sub.phase, "E");
+});
+
+test("H1: uma mudança do arquivo custa exatamente uma leitura; sem mudança, nenhuma", async () => {
+  const { root, H } = await sessionInR();
+  const before = prevcReads(H);
+  for (let i = 0; i < 3; i++) await stepAt(H, i);
+  assert.equal(prevcReads(H), before);
+  writePrevc(root, phaseJson("E"), 5);
+  for (let i = 3; i < 6; i++) await stepAt(H, i);
+  assert.equal(prevcReads(H), before + 1);
+});
+
+test("H1: JSON parcial no meio do turno → mantém a fase e relê quando o arquivo fica válido", async () => {
+  const { root, H } = await sessionInR();
+  await stepAt(H, 0);
+  writePrevc(root, "{\"status\":{\"proj", 5); // escrita em andamento
+  assert.equal((await stepAt(H, 1)).model, OPUS); // continua em R
+  writePrevc(root, phaseJson("E"), 10);
+  assert.equal((await stepAt(H, 2)).model, SONNET);
+});
+
+test("H1: JSON válido sem fase grava a assinatura (não relê a cada passo)", async () => {
+  const { root, H } = await sessionInR();
+  writePrevc(root, JSON.stringify({ status: { project: {} } }), 5);
+  await stepAt(H, 0);
+  const after = prevcReads(H);
+  for (let i = 1; i < 4; i++) await stepAt(H, i);
+  assert.equal(prevcReads(H), after);
+});
+
+test("H1: prevc.json some no meio do turno → mantém a fase (só o turn.start zera)", async () => {
+  const { root, H } = await sessionInR();
+  writePrevc(root, phaseJson("E"), 5);
+  assert.equal((await stepAt(H, 0)).model, SONNET);
+  fs.rmSync(path.join(root, PREVC_REL));
+  assert.equal((await stepAt(H, 1)).model, SONNET);
+});
