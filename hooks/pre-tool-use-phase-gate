@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# hooks/pre-tool-use-phase-gate — gate de evidência por fase do PREVC (D5, ADR-018).
+# Matcher `Bash|mcp__dotcontext__workflow-advance`. Separado da catraca (pre-tool-use-ratchet), que
+# nunca nega por desenho (ADR-015 P0); este nega.
+# Caminho rápido só com builtins: evento sem marcador de avanço sai calado. Com marcador, o node decide
+# (scripts/lib/phase-gate-cli.mjs) e a saída é UM JSON numa linha (deny ou aviso) ou nada; nunca "allow".
+# O stdin é lido ATÉ O FIM em todos os caminhos (hook que fecha o stdin cedo perde a decisão), em blocos
+# de MAX_BYTES como na catraca. Evento acima do teto que cita o avanço → deny fixo (não dá para decidir).
+# O deny fixo acima também pode vir de um marcador presente no `cwd` (aceito: só afeta Bash > 1 MiB em
+# projeto cujo caminho contenha esse nome); o comportamento não muda.
+set -u
+LC_ALL=C
+MAX_BYTES=1048576
+MARKERS='workflow-advance|dotcontext'
+CHUNK=""
+if ((BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 1))); then
+  read_chunk() { IFS= read -r -N "$MAX_BYTES" CHUNK; }
+else
+  read_chunk() { IFS= read -r -d '' -n "$MAX_BYTES" CHUNK; }
+fi
+read_chunk
+MORE=$?
+INPUT="$CHUNK"
+HIT=0
+OVER=0
+[[ $INPUT =~ $MARKERS ]] && HIT=1
+if ((MORE == 0)); then
+  TAIL="${INPUT: -64}"
+  while :; do
+    read_chunk
+    MORE=$?
+    if [ -n "$CHUNK" ]; then
+      OVER=1
+      if ((HIT == 0)) && [[ "${TAIL}${CHUNK}" =~ $MARKERS ]]; then HIT=1; fi
+      TAIL="${CHUNK: -64}"
+    fi
+    ((MORE == 0)) || break
+  done
+fi
+((HIT)) || exit 0
+if ((OVER)); then
+  printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"[devflow phase-gate] evento grande demais para conferir o avanço de fase (ADR-018); rode o comando sem o conteúdo extenso."}}'
+  exit 0
+fi
+command -v node >/dev/null 2>&1 || exit 0
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+printf '%s' "$INPUT" | node "${PLUGIN_ROOT}/scripts/lib/phase-gate-cli.mjs" 2>/dev/null
+exit 0

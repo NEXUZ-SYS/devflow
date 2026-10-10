@@ -108,7 +108,7 @@ Guia completo: **[docs/guia-enforcement-standards.md](docs/guia-enforcement-stan
 
 O DevFlow pode escolher modelo e esforço conforme a fase do PREVC, a skill ativa, o agente e a task do plano: a sessão principal troca de modelo só na fronteira de fase e os subagentes recebem o tier que o trabalho pede, sempre **limitados ao modelo e ao esforço que você escolheu**. É opt-in duplo (`models.enabled` no repositório e `DEVFLOW_MODEL_ROUTING=1` no seu ambiente), funciona no Claude Code (mod ou fallback clássico; a variável `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` é opcional nas versões testadas) e no omp, e mede a economia em tokens por modelo. Um **monitor ao vivo** (sempre ligado, só observa) mostra acima do prompt uma linha por agente em execução, com modelo, esforço, origem da escolha, tempo, falhas de ferramenta e retentativas da mesma task.
 
-Guia completo: **[docs/model-routing.md](docs/model-routing.md)** · decisão: [ADR-017](.context/engineering/adrs/017-model-routing-v1.0.0.md).
+Guia completo: **[docs/model-routing.md](docs/model-routing.md)** · decisão: [ADR-017](.context/engineering/adrs/017-model-routing-v1.1.0.md).
 
 ---
 

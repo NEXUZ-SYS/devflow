@@ -99,6 +99,13 @@ export function readBlockField(src, block, field) {
   }
 }
 
+// prevc.evidenceGate: block | warn | off (D5, spec 2026-10-10 §4.4). Ausente ou inválido → block.
+export function readEvidenceGate(src) {
+  const raw = readBlockField(src, "prevc", "evidenceGate");
+  const v = raw === null ? null : String(raw).replace(/^["']|["']$/g, "");
+  return v === "warn" || v === "off" ? v : "block";
+}
+
 // local | pipeline | none  (default local — preserva o check != pipeline && != none do hook)
 export function readVersioning(src) {
   try {

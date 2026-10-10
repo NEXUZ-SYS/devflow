@@ -119,6 +119,23 @@ The Review phase gate requires:
 - No BLOCK findings unresolved
 - User explicitly approves advancement
 
+### Registrar o veredito no plano (gate de evidência, ADR-018)
+
+Ao fechar a revisão, grave o veredito no frontmatter do plano linkado (`.context/plans/<slug>.md`). O
+`workflow-advance` da fase R é negado pelo hook `pre-tool-use-phase-gate` enquanto este bloco não
+existir com `verdict: PROCEED` — em qualquer autonomia, e `force: true` não contorna:
+
+<!-- review-frontmatter -->
+```yaml
+review:
+  verdict: PROCEED
+  reviewers: [architect, security-auditor]
+  date: "2026-10-10"
+```
+
+`verdict` é `PROCEED`, `REVISE` ou `BLOCK` (o mesmo da seção "Recommendation"). Com `REVISE`/`BLOCK` o
+plano volta para correção e a revisão é refeita.
+
 **When gate is met:**
 
 Full mode:

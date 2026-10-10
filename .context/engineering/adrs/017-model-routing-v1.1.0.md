@@ -7,13 +7,13 @@ source: local
 stack: universal
 category: arquitetura
 status: Proposto
-version: 1.0.0
+version: 1.1.0
 created: 2026-10-09
 supersedes: []
 refines: []
 protocol_contract: null
 decision_kind: gated
-summary: "Uma lib pura resolve um tier abstrato (cheap/standard/capable/top) a partir do estado do PREVC; três adaptadores o traduzem (mod, PreToolUse clássico, omp); nada roda acima do modelo e do esforço do usuário; liga só com opt-in duplo."
+summary: "Uma lib pura resolve um tier abstrato (cheap/standard/capable/top) a partir do estado do PREVC; três adaptadores o traduzem (mod, PreToolUse clássico, omp); nada roda acima do modelo e do esforço do usuário; liga só com opt-in duplo. (v1.1.0) A fase vem do prevc.json relido também no meio do turno."
 ---
 
 # ADR — Roteamento de modelos do DevFlow
@@ -37,6 +37,8 @@ Uma lib pura (`scripts/lib/model-routing.mjs`, sem `node:*`) resolve um **tier a
 - **mod** (function hooks): sessão por fase (sticky, uma troca por workflow R→E), esforço por skill e por passo, subagentes em `agent.spawn`, `usage` no ledger;
 - **clássico** (`PreToolUse` na ferramenta Agent): só subagentes, via `updatedInput`;
 - **omp**: tier → model role, só subagentes.
+
+**(v1.1.0)** A fase vem do `prevc.json`, relido no `turn.start` e, no meio do turno, no `turn.step` e no `agent.spawn` quando `(mtimeMs, size)` muda (H1 confirmada na campanha do laboratório de 2026-10-09: em `claude -p` um turno cruza várias fases, e a fase lida só no `turn.start` ficava presa — `INV-PHASE-SYNC` falhou em 12/12 despachos). Fase nova zera a skill da sessão.
 
 Precedência no subagente: tier da task → skill → fase → agente → `inherit`. Teto = modelo/esforço do usuário. Liga com `models.enabled` no repo **e** `DEVFLOW_MODEL_ROUTING=1` do usuário. Escalada entre tentativas por rubrica; no meio da execução, desligada por padrão.
 
@@ -70,6 +72,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Troca de modelo da sessão custa cache frio; default limita a uma por workflow.
 - Sem mod: sem sessão por fase, esforço por passo nem escalada no meio.
 - Peso de cada modelo na cota não é público: relatório em tokens, não em % da cota.
+- (v1.1.0) A troca de fase no meio do turno zera a skill da sessão e pode trocar o modelo da sessão no passo seguinte (cache frio já previsto: uma troca por fase; o `switched` do ledger a marca). Custo: um `stat` por passo; leitura e parse só quando o arquivo muda.
 
 **Riscos aceitos**
 - Claude Code antigo com schema estrito pode recusar o `hooks.json` inteiro por causa da chave `"modules"`, e todos os hooks do DevFlow somem. Medido na fase V: 2.1.293, 2.1.294 e 2.1.295 leem o `hooks.json` inteiro e carregam hooks clássicos e mod; versões anteriores não estavam disponíveis para medir, e o operador aceitou o risco para elas em 2026-10-10.
@@ -90,11 +93,14 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - NUNCA negar despacho nem emitir `permissionDecision` no fallback clássico.
 - QUANDO o mod precisar do bloco `models:`, ENTÃO importar `models-config.mjs` direto (puro); o parser segue único (ADR-011).
 - SEMPRE manter a escalada no meio desligada por padrão e limitada a uma consulta por subagente.
+- SEMPRE reler a fase do `prevc.json` no `turn.step` e no `agent.spawn` (antes de decidir a rota) quando `(mtimeMs, size)` mudou, com a mesma leitura contida do `turn.start`; mesmo par → não relê.
+- QUANDO o `prevc.json` estiver ilegível, parcial ou sem fase no meio do turno, ENTÃO manter a fase atual e não guardar o par (tenta de novo no passo seguinte); só o `turn.start` zera a fase.
 
 ## Enforcement
 
 - [ ] Teste: unit da lib (sessão, subagente, teto, `maxTier`, tier→alias/role) e propriedade "libs sem import de `node:*`".
 - [ ] Teste: integration do hook clássico (sem `permissionDecision`, teto do transcript, FIFO e `/dev/zero`, C0) e do mod.
+- [ ] Teste (v1.1.0): mod com `prevc.json` falso que muda entre dois `turn.step` e antes de um `agent.spawn` (rota e ledger com a fase nova), `mtimeMs` igual não relê, `stat` que falha mantém a fase; unit do `onPhaseChange` (troca zera a skill, mesma fase não).
 - [ ] Teste: ledger com chaves ⊆ allowlist; e2e do CLI `resolve|escalate|report` em tmpdir.
 - [ ] Doctor: check `model-routing` (repo pede roteamento sem confirmação; versão abaixo de 2.1.293).
 - [ ] Gate PREVC: lint (`bash tests/run-lint.sh`) e revisão de segurança dos adaptadores.
@@ -109,3 +115,5 @@ tier (lib) --+-- mod:     agent.spawn / turn.step  (alias | ID completo)
              +-- omp:     tier -> model role
 teto = modelo/esforço do usuário (nunca excedido)
 ```
+
+**Histórico:** v1.0.0 (2026-10-09) decisão inicial · v1.1.0 (2026-10-10, minor) fase relida no meio do turno (`turn.step`, `agent.spawn`) por `(mtimeMs, size)`; spec `docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md` §3.

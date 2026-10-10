@@ -183,6 +183,28 @@ Triggered by: `/devflow autonomy:autonomous` during an active workflow, or natur
 
 **Important:** Upgrade/downgrade preserves ALL progress — completed stories, attempt counts, and stats remain intact. Only the execution mode changes.
 
+## Gate de evidência por fase (ADR-018)
+
+O dotcontext desliga os próprios gates com `autonomous: true`. O DevFlow mantém um gate mecânico no
+`workflow-advance` (MCP e CLI), em qualquer autonomia, configurável em `.context/.devflow.yaml`
+(`prevc.evidenceGate: block | warn | off`, padrão `block`). Para sair de cada fase:
+
+| Fase | Evidência mínima |
+|---|---|
+| P | plano linkado ao workflow, com corpo |
+| R | `review.verdict: PROCEED` no frontmatter do plano (skill `prevc-review`) |
+| E | commit na branch de feature desde o início da fase E; stories deste workflow fechadas |
+| V | `verify-gate` aprovado |
+| C (concluir) | trabalho na branch base (merge, inclusive squash ou local) ou branch publicada no remoto |
+
+`DEVFLOW_EVIDENCE_GATE` (`block | warn | off`) no ambiente do Claude Code tem precedência sobre `prevc.evidenceGate` do `.devflow.yaml`.
+
+Fases fora da escala vêm `skipped` do dotcontext e não são conferidas (MEDIUM pula a C, SMALL pula R e C, QUICK pula P, R e C).
+
+Em QUICK, SMALL e MEDIUM faltam fases na escala, mas a saída da E ainda exige commit: commite o trabalho antes de avançar da fase E.
+
+Um deny lista o que falta e como produzir. Não contorne: produza a evidência.
+
 ## Anti-Patterns
 
 | Thought | Reality |
@@ -221,5 +243,5 @@ Read these files if they exist:
 - Scale can be adjusted mid-workflow if scope changes (with user approval)
 - In Full mode, use `workflow-status()` to check current state at any time
 - Autonomy mode is passed to phase skills as context — each skill adapts its behavior
-- `autonomous` mode still respects all quality gates — it just doesn't ask the human
+- `autonomous` mode still respects all quality gates — it just doesn't ask the human. O gate de evidência por fase (hook `pre-tool-use-phase-gate`, ADR-018) vale em todas as autonomias e `force: true` não o contorna.
 - If autonomy mode causes a phase to fail, the skill can downgrade to `assisted` automatically

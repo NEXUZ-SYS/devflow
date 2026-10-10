@@ -66,3 +66,20 @@ node scripts/score.mjs --out results/<data>-A+B <runDir-A> <runDir-B>
 
 Referência de custo: a rodada parcial do braço A (32 min, até a fase E) consumiu ~182k tokens de saída de
 opus pelos transcripts.
+
+## Campanha 2026-10-09 — resultados (n = 1, v3.7.0)
+
+Uma rodada por braço. A = sem roteamento, B = roteado, C = teto sonnet/medium.
+
+| | A | B | C |
+|---|---|---|---|
+| Duração | 64 min | 40 min | cerca de 3 min de fases |
+| Aceitação oculta | 13/13 | 13/13 | 13/13 |
+| Saída total | 325k (100% opus) | 188k (0,58× A) | 38,7k (0,12× A) |
+| PREVC | P→R→E→V→C | P→R→E→V (C pulada) | nominal (ver D5) |
+
+- **H1 confirmada.** `INV-PHASE-SYNC` com MISS em 12/12 despachos e `INV-SESS` com MISS em 45/102 mensagens: a sessão ficou em opus/xhigh durante toda a fase E e parte da V. Mecanismo: a fase só era relida no `turn.start`, e em `-p` os `turn.start` intermediários vêm de notificações de tarefas em background, de forma não determinística. Cerca de 26,7k de saída em opus na E que a tabela daria a sonnet.
+- **D5 observada no C.** Em autonomia `autonomous` os gates do dotcontext são ignorados e nada exigia artefato real por fase: P em 31 s, R em 2 s, nenhum commit além do seed, nenhum subagente. Com teto baixo o PREVC virou nominal; o roteamento não causa isso, apenas o expõe.
+- **O que funcionou.** Tier por task no plano (`backend-specialist` em opus, sonnet e haiku conforme o `**Tier:**`, origem `explicit`); `INV-EFF` HELD em 62 pontos; defaults por agente (`architect` e `security-auditor` em capable/high, `documentation-writer` em haiku/low); ledger com 30 linhas válidas e nada fora da allowlist; teto respeitado nos três braços.
+- **Ressalvas.** n = 1; no B o agente pulou a C e fez um P mais curto; o custo de lista do scorecard não é confiável (o `modelUsage` do stream é acumulado). Não exercitado: escalada, override de fase e `final-review`.
+- **Corrigido em** `docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md`: releitura da fase em `turn.step` e `agent.spawn` (H1, ADR-017 v1.1.0) e gate de evidência por fase no `workflow-advance` (D5, ADR-018).

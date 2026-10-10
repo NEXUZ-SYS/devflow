@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Roteamento de modelos: a fase do PREVC é relida no meio do turno (`turn.step` e `agent.spawn`) quando o `prevc.json` muda; antes ficava presa no `turn.start` e, em `claude -p`, sessão e subagentes rodavam na fase errada (ADR-017 v1.1.0).
+
+### Added
+
+- Gate de evidência por fase: o hook `pre-tool-use-phase-gate` nega o `workflow-advance` (MCP, `force` incluso, e a CLI do dotcontext) sem a evidência mínima da fase atual, em qualquer autonomia. Configurável em `prevc.evidenceGate: block | warn | off` (padrão `block`; `DEVFLOW_EVIDENCE_GATE` no ambiente tem precedência). ADR-018.
+
+### Changed
+
+- A saída da fase V passa a exigir o `verify-gate` aprovado de forma mecânica. Projeto com standard que pode chegar a `block` e sem `verify.standards` declarado tem a V negada até declarar `verify.standards: ["devflow-standards", "gate"]` (regra da ADR-013 v1.1.0, agora aplicada pelo gate).
+
 ## [3.8.0] — 2026-10-10
 
 ### Added

@@ -1,6 +1,6 @@
 # Roteamento de modelos
 
-O DevFlow pode escolher o modelo e o esforço de cada etapa conforme o que ele já sabe do trabalho (fase do PREVC, skill ativa, agente, task do plano). O objetivo é gastar menos da cota da assinatura, com economia **medida** e com a garantia de que nada roda acima do modelo e do esforço que você escolheu. Decisão: [ADR-017](../.context/engineering/adrs/017-model-routing-v1.0.0.md) (status Proposto, `gated`).
+O DevFlow pode escolher o modelo e o esforço de cada etapa conforme o que ele já sabe do trabalho (fase do PREVC, skill ativa, agente, task do plano). O objetivo é gastar menos da cota da assinatura, com economia **medida** e com a garantia de que nada roda acima do modelo e do esforço que você escolheu. Decisão: [ADR-017](../.context/engineering/adrs/017-model-routing-v1.1.0.md) (status Proposto, `gated`).
 
 ## As três camadas
 

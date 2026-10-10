@@ -13,6 +13,7 @@ const MAX_FILE = 256 * 1024;
 const MAX_LEDGER_LINES = 2000;
 const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo monitor ao vivo (seção abaixo)
 const MAX_PUB_LOOPS = 100;
+const PREVC = ".context/runtime/workflows/prevc.json";
 const S = {
   core: core.createRouterState(),
   table: null,
@@ -23,6 +24,7 @@ const S = {
   pendingSwitch: false,
   cwd: null,
   workflow: null,
+  prevcSig: null,
   ledgerPath: null,
   lines: [],
   dirty: false,
@@ -52,19 +54,46 @@ async function publish($) {
   } catch {}
 }
 
-// Leitura de arquivo do repositório com a contenção da ADR-014: sem link, só arquivo regular,
-// tamanho limitado, caminho real sob a raiz do projeto. Qualquer dúvida → null.
-async function safeRead($, rel) {
+// Contenção da ADR-014 para arquivo do repositório: sem link, só arquivo regular, tamanho limitado,
+// caminho real sob a raiz do projeto. Qualquer dúvida → null.
+async function safeStat($, rel) {
   try {
     if (!S.cwd) return null;
-    const abs = `${S.cwd}/${rel}`; // $.fs resolve relativo contra o cwd da sessão; absoluto não depende disso
-    const st = await $.fs.stat(abs, { resolve: true });
+    const st = await $.fs.stat(`${S.cwd}/${rel}`, { resolve: true }); // absoluto: não depende do cwd do $.fs
     if (st.isLink || st.kind !== "file" || st.size > MAX_FILE) return null;
     if (!st.realPath || !st.realPath.startsWith(S.cwd + "/")) return null;
-    return await $.fs.read(abs);
+    return st;
   } catch {
     return null;
   }
+}
+
+async function safeRead($, rel) {
+  try {
+    return (await safeStat($, rel)) ? await $.fs.read(`${S.cwd}/${rel}`) : null;
+  } catch {
+    return null;
+  }
+}
+
+// H1 (spec 2026-10-10 §3): a fase vem do prevc.json, relido quando (mtimeMs, size) muda. No turn.start
+// (force) lê sempre e arquivo ausente zera a fase, como antes. No meio do turno, falha de stat ou de
+// leitura e JSON inválido (escrita em andamento) mantêm a fase atual e tentam de novo no próximo passo.
+async function refreshPhase($, force = false) {
+  const st = await safeStat($, PREVC);
+  if (!st && !force) return;
+  const sig = st ? `${st.mtimeMs}:${st.size}` : null;
+  if (!force && sig === S.prevcSig) return;
+  const text = st ? await safeRead($, PREVC) : null;
+  let valid = text !== null;
+  if (valid) { try { JSON.parse(text); } catch { valid = false; } }
+  if (!force && !valid) return;
+  const prevc = valid ? text : "";
+  S.prevcSig = valid ? sig : null;
+  S.workflow = workflowFromPrevcJson(prevc);
+  const phase = phaseFromPrevcJson(prevc);
+  if (!force && phase === null) return; // JSON válido sem fase no meio do turno: mantém a fase (só o turn.start zera)
+  if (active()) core.onPhaseChange(S.core, { phase });
 }
 
 async function ensure($) {
@@ -155,14 +184,13 @@ async function onCommand($, e, next) {
 async function onTurnStart($, e, next) {
   await ensure($);
   // Lê o prevc.json uma vez por turno, com ou sem roteamento: fase p/ o roteador, workflow p/ o escopo do monitor.
-  const prevc = (await safeRead($, ".context/runtime/workflows/prevc.json")) ?? "";
-  S.workflow = workflowFromPrevcJson(prevc);
-  if (active()) core.onTurnStart(S.core, { phase: phaseFromPrevcJson(prevc) });
+  await refreshPhase($, true);
   return next(e);
 }
 
 async function onAgentSpawn($, e, next) {
   await ensure($);
+  await refreshPhase($); // H1: os despachos do braço B saíam com a fase do último turn.start
   if (!active()) return next(e);
   const route = core.onSpawn(S.core, e, { table: S.table, config: S.config, phase: S.core.phase, skill: S.core.skill });
   const res = await next(route?.model ? { ...e, model: route.model } : e);
@@ -212,6 +240,7 @@ async function* routerTurnStep($, e, next) {
     let patch = null;
     try {
       await ensure($);
+      await refreshPhase($);
       if (active()) {
         if (e.agentId) patch = core.onSubagentStep(S.core, e);
         else {
