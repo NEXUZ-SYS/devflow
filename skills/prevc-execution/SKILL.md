@@ -191,6 +191,10 @@ Read the relevant agent playbook before each task group:
 
 Execute tasks per superpowers workflow without agent guidance.
 
+**Saída da fase E (gate de evidência, ADR-018):** o `workflow-advance` só passa com pelo menos um commit
+na branch de feature desde o início da fase E (nunca numa branch protegida) e, se houver
+`.context/workflow/stories.yaml` deste workflow, sem story `pending` ou `in_progress`.
+
 ## Step 4: Gate Check
 
 The Execution phase gate requires:
