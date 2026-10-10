@@ -186,3 +186,17 @@ test("sessão: e.model sempre igual ao do usuário (R-3) — 3 passos em E dão 
   }
   assert.deepEqual(marks, [true, false, false, true]);
 });
+
+test("H1: onPhaseChange troca a fase e zera a skill; mesma fase preserva a skill; onTurnStart é alias", () => {
+  const s = C.createRouterState();
+  C.onPhaseChange(s, { phase: "R" });
+  C.onSkill(s, { skill: "devflow:prevc-review" });
+  C.onPhaseChange(s, { phase: "R" });
+  assert.equal(s.skill, "devflow:prevc-review");
+  C.onPhaseChange(s, { phase: "E" });
+  assert.equal(s.phase, "E");
+  assert.equal(s.skill, null);
+  C.onPhaseChange(s, { phase: undefined });
+  assert.equal(s.phase, null);
+  assert.equal(C.onTurnStart, C.onPhaseChange);
+});

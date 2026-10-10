@@ -16,10 +16,14 @@ export function observeSession(state, { model, effort }) {
   if (effort !== undefined && effort !== null) state.userEffort = effort;
 }
 
-export function onTurnStart(state, { phase }) {
+// Fase nova → grava e zera a skill da sessão. O adaptador chama no turn.start e sempre que o
+// prevc.json muda no meio do turno (H1, spec 2026-10-10 §3).
+export function onPhaseChange(state, { phase }) {
   const p = phase ?? null;
   if (p !== state.phase) { state.phase = p; state.skill = null; }
 }
+
+export const onTurnStart = onPhaseChange; // nome antigo, mantido para consumidores e testes
 
 export function onSkill(state, { skill, agentId }) {
   if (agentId) return;
