@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.8.0] — 2026-10-10
+
 ### Added
 
 - Monitor ao vivo do roteamento de modelos: faixa acima do prompt com modelo·esforço aplicados e origem (`roteado`/`teto`/`router off`), cronômetro, falhas de ferramenta seguidas e retentativas da mesma task por papel, para cada agente em execução; sempre ligado. Check `router-monitor` no doctor, chamado pelo `/devflow init` e pelo `/devflow config`.
