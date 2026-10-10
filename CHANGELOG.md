@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.8.1] — 2026-10-10
+
 ### Fixed
 
 - Roteamento de modelos: a fase do PREVC é relida no meio do turno (`turn.step` e `agent.spawn`) quando o `prevc.json` muda; antes ficava presa no `turn.start` e, em `claude -p`, sessão e subagentes rodavam na fase errada (ADR-017 v1.1.0).
