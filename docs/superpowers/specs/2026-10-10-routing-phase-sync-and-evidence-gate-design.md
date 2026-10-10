@@ -82,7 +82,7 @@ Arquivos: `hooks/router.mjs` (adaptador) e `scripts/lib/router-core.mjs` (puro).
 | Unidade | Papel | Depende de |
 |---|---|---|
 | `scripts/lib/phase-evidence.mjs` | **Puro.** `evaluateTransition(facts) → { ok, missing: [{ code, message, howTo }] }`. Implementa a matriz §4.2. | nada (só dados) |
-| `scripts/phase-gate.mjs` | **CLI.** Lê o evento do hook (stdin JSON), decide se é um avanço, coleta os fatos (fs, `git` via `execFile`, `verify-gate`), lê a config, chama a lib e imprime a decisão. | lib acima, `devflow-config.mjs`, `verify-gate.mjs` |
+| `scripts/lib/phase-gate.mjs` + `scripts/lib/phase-gate-cli.mjs` | **Coletor + CLI.** Decide se o evento é um avanço, coleta os fatos (leitura contida por `readInRoot`, `git` endurecido via `execFileSync`, `verify-gate`), lê a config e imprime a decisão. O CLI não tem guarda de "módulo principal" (plugin por symlink). | lib acima, `safe-read.mjs`, `devflow-config.mjs`, `verify-gate.mjs` |
 | `hooks/pre-tool-use-phase-gate` | **Hook** fino em bash, matcher `mcp__dotcontext__workflow-advance\|Bash`. Caminho rápido só com builtins: evento sem marcador de avanço sai calado; com marcador, chama o CLI. | CLI acima |
 
 Hook dedicado, separado do `pre-tool-use-ratchet`: a catraca nunca nega por desenho (ADR-015 P0) e este gate
@@ -91,15 +91,15 @@ nega.
 ### 4.2 Matriz de evidência
 
 A transição é a da **fase atual** do `prevc.json` (`status.project.current_phase`) para a próxima fase ativa
-da escala (QUICK/SMALL não têm R nem C). Na última fase da escala, o `workflow-advance` conclui o workflow.
+da escala. O dotcontext marca como `skipped` as fases fora da escala: MEDIUM pula C; SMALL pula R e C; QUICK pula P, R e C. Na última fase da escala, o `workflow-advance` conclui o workflow.
 
 | Fase atual | Evidência exigida para sair dela | Fonte |
 |---|---|---|
-| **P** | Plano linkado ao workflow e o arquivo do plano existe e tem corpo além do frontmatter. | `plans.json` do runtime do dotcontext (local exato confirmado na fase R) e `.context/plans/<slug>.md` |
-| **R** | Bloco `review:` no frontmatter do plano linkado com `verdict: PROCEED`. `REVISE` ou `BLOCK` negam. | frontmatter do plano (escrito pela `prevc-review`) |
+| **P** | Plano linkado ao workflow e o arquivo do plano existe e tem corpo além do frontmatter. | slug em `status.project.plan` do `prevc.json` (senão `active` + `completed` do `plans.json` do runtime); arquivo sempre `.context/plans/<slug>.md` |
+| **R** | Bloco `review:` no frontmatter do plano linkado com `verdict: PROCEED` (vocabulário fechado `PROCEED`/`REVISE`/`BLOCK`; outro valor ou frontmatter ilegível negam). | frontmatter do plano (escrito pela `prevc-review`) |
 | **E** | ≥ 1 commit no `HEAD` posterior a `phases.E.started_at`; branch atual fora de `git.protectedBranches`; se existir `.context/workflow/stories.yaml` **deste workflow** (`created` ≥ `status.project.started`; um arquivo de workflow anterior é ignorado), nenhuma story `pending` ou `in_progress`. | `git log`, `git branch --show-current`, `.devflow.yaml`, stories |
-| **V** | Veredito `pass` do `verify-gate.mjs` com os `requiredSignals` do plano linkado (um `warnOnly` também passa — é a regra da ADR-013 para projeto sem `verify:`). | `evaluateGate` |
-| **C** (concluir) | Alguma branch de `git.protectedBranches` (local ou `refs/remotes/*/<branch>`) tem commit posterior a `phases.E.started_at` — o trabalho chegou à base, inclusive por squash merge ou merge local em projeto sem remoto — **ou** a branch atual existe em `refs/remotes/*` (publicada, PR possível). Não depende de `gh`/`glab`. Como a saída de E já exige commits fora de branch protegida, commit novo na base significa entrega. | `git log --since`, `git for-each-ref` |
+| **V** | Veredito `pass` do `verify-gate.mjs` com os `requiredSignals` do plano linkado; sem a lista no frontmatter e com `verify:` declarado, todos os sinais declarados. `warnOnly` passa (projeto sem `verify:` e sem standard que chegue a `block`). Projeto com standard que pode chegar a `block` (inclusive standard local sem nível) e sem `verify.standards` é negado até declarar o sinal (ADR-013 v1.1.0). | `evaluateGate` |
+| **C** (concluir) | A branch de feature está contida numa branch base (`git merge-base --is-ancestor`, local ou `refs/remotes/*`), **ou** está publicada em `refs/remotes/*`, **ou** — fallback declarado para squash merge — alguma base tem commit posterior a `phases.E.started_at`. Bases = `git.protectedBranches` (padrão `main`, `master`). Não depende de `gh`/`glab`. | `git merge-base`, `git log --since`, `git for-each-ref` |
 
 Cada item de `missing[]` traz `howTo` (ex.: "rode a `prevc-review` e grave `review.verdict` no plano";
 "commite o trabalho da fase E numa branch de feature").
@@ -129,16 +129,17 @@ Lido pelo parser único (`devflow-config.mjs`, ADR-011), com um leitor novo `rea
 | `evidenceGate: warn` e falta evidência | passa, com `additionalContext` listando o que falta |
 | `evidenceGate: block` (ou ausente) e falta evidência | `deny` com o que falta e como produzir |
 | Valor inválido em `evidenceGate` | trata como `block` (fail-closed) |
-| Erro interno do coletor (git ausente, exceção) | passa com aviso em `additionalContext` (o gate é anti-teatro; não pode travar o projeto) |
+| `DEVFLOW_EVIDENCE_GATE` no ambiente do Claude Code | prevalece sobre o `.devflow.yaml` (escape humano; o agente não altera o ambiente dos hooks) |
+| Dado faltando ou ilegível (log que falha, `since` inválido, frontmatter inválido) | conta como falta de evidência → nega |
+| Erro de ambiente do coletor (binário do git ausente, exceção) | passa com aviso em `additionalContext` (o gate é anti-teatro; não pode travar o projeto) |
 
-Rebaixar a chave exige editar o `.devflow.yaml`, que já passa pelo gate de permissões e pela proteção de
-branch. Vale em **qualquer** autonomia: em supervised o humano aprova a transição, mas a evidência também
+Rebaixar a chave exige editar o `.devflow.yaml`; o `config-guard` passa a tratar o rebaixamento (`block→warn→off`) como enfraquecimento, como já faz com `git.*`. A raiz avaliada é a do `CLAUDE_PROJECT_DIR` (onde o servidor MCP age) e a do `cwd` do evento; nega se qualquer uma negar. Vale em **qualquer** autonomia: em supervised o humano aprova a transição, mas a evidência também
 precisa existir.
 
 ### 4.5 Mudanças nas skills
 
 - `prevc-review`: ao fechar a fase, grava no frontmatter do plano linkado
-  `review: { verdict: PROCEED|REVISE|BLOCK, reviewers: [<agentes>], date: <ISO> }`.
+  o bloco `review:` em forma de bloco (`verdict: PROCEED|REVISE|BLOCK`, `reviewers: [<agentes>]`, `date: "<ISO>"`).
 - `prevc-flow` e `autonomous-loop`: documentam o gate, o que cada fase precisa deixar e que o `force: true`
   não o contorna.
 - `prevc-execution`: lembra que a fase E termina com commits na branch de feature e stories fechadas.
@@ -147,10 +148,11 @@ precisa existir.
 
 - **Anti-teatro, não anti-adversário.** Um agente decidido a burlar consegue escrever um `review:` falso ou
   editar o `prevc.json` direto (Write/Bash). O gate faz o caminho de menor esforço passar pelo trabalho real.
-- A detecção do avanço via Bash é por texto (variável, alias ou script intermediário passam).
+- A detecção do avanço via Bash é por texto, sem o conteúdo entre aspas (variável, alias, `sh -c "…"` ou script intermediário passam). `git update-ref` forja a "branch publicada".
+- Na escala MEDIUM a C é pulada pelo dotcontext: a entrega não é conferida. O fallback do squash aceita qualquer commit novo na base.
 - Parar antes da C não é detectável por hook; fica para a validação do laboratório (`INV-PREVC` rigoroso).
 - **Alcance em projeto-cliente:** o gate roda em qualquer projeto com o plugin (Node, Python, Odoo) — só
-  depende de `git` e `node`. Projetos sem `verify:` caem no `warnOnly` da ADR-013 na fase V.
+  depende de `git` e `node`. Projetos sem `verify:` e sem standard que possa chegar a `block` caem no `warnOnly` da ADR-013 na fase V; com standard `block` (inclusive local sem nível), a V exige `verify.standards`.
 
 ### 4.7 Testes
 
@@ -177,11 +179,10 @@ precisa existir.
 | D4 | `prevc.evidenceGate: block` por padrão, com `warn`/`off`; inválido → `block`; erro interno → passa com aviso. | `warn` por padrão (não resolve D5 sem config); fail-closed em erro interno (trava projeto por falha de ambiente). |
 | D5 | Hook dedicado, separado da catraca. | Estender o `pre-tool-use-ratchet` (ele nunca nega por desenho). |
 
-## 7. Pendências para a fase R
+## 7. Pendências da fase R (resolvidas em 2026-10-10)
 
-- Confirmar onde o `plan link` do dotcontext grava o vínculo (`.context/runtime/workflows/plans.json` ou o
-  legado `.context/workflow/plans.json`) e se `status.approval.plan_created` acompanha.
-- Confirmar o formato do `tool_input` do `workflow-advance` no evento PreToolUse (para o `force`).
+- Vínculo: `.context/runtime/workflows/plans.json` (o plano pode estar em `completed`); o slug também está em `status.project.plan`.
+- `review:` preservado pelo dotcontext ao reescrever o plano; `tool_input` do `workflow-advance` = `{ outputs?, force? }`.
 - Achado lateral, fora deste escopo: `scripts/lib/check-prevc-bypass.mjs` procura o workflow em
   `.context/harness/workflows/prevc.json`, mas o dotcontext grava em `.context/runtime/workflows/prevc.json` —
   o lembrete de bypass dispara mesmo com workflow ativo. Vai para o backlog.
