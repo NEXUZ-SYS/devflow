@@ -83,3 +83,9 @@ Uma rodada por braço. A = sem roteamento, B = roteado, C = teto sonnet/medium.
 - **O que funcionou.** Tier por task no plano (`backend-specialist` em opus, sonnet e haiku conforme o `**Tier:**`, origem `explicit`); `INV-EFF` HELD em 62 pontos; defaults por agente (`architect` e `security-auditor` em capable/high, `documentation-writer` em haiku/low); ledger com 30 linhas válidas e nada fora da allowlist; teto respeitado nos três braços.
 - **Ressalvas.** n = 1; no B o agente pulou a C e fez um P mais curto; o custo de lista do scorecard não é confiável (o `modelUsage` do stream é acumulado). Não exercitado: escalada, override de fase e `final-review`.
 - **Corrigido em** `docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md`: releitura da fase em `turn.step` e `agent.spawn` (H1, ADR-017 v1.1.0) e gate de evidência por fase no `workflow-advance` (D5, ADR-018).
+
+## Campanha 2026-10-10 (v3.8.1)
+
+- **D-stress.** `INV-PHASE-SYNC` HELD em 0/3 despachos com falha: a releitura da fase no meio do turno (H1) está validada. `INV-SESS` com MISS em 27/130 mensagens por falta de ID: sem o ID completo do tier a sessão só mudava o esforço e ficava no modelo do usuário. Causa e correção estão em `docs/superpowers/specs/2026-10-10-routing-session-tier-ids-design.md` (sonda de 1 token, cache com proveniência, `models.ids`; ADR-017 v1.2.0).
+- **B-routed.** O ledger saiu com 3 linhas e sem subagentes. Investigação em aberto.
+- **C-ceiling.** Incompleto por `max-resumes`, sem `prevc.json`; sem conclusão sobre o teto.

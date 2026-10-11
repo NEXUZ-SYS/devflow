@@ -60,6 +60,29 @@ models:
   - `report [--since ISO] [--transcripts DIR]` (`--transcripts` é o caminho do clássico e do omp, que leem os transcripts em vez do ledger do mod) soma tokens por modelo e por agente/fase, taxa de escalada e o custo das trocas de fase, e fecha com a seção "Antes × depois" (ver Medição).
 - `doctor`: o check `model-routing` avisa quando o repositório pede roteamento sem a sua confirmação ou, com o roteamento pedido e confirmado, quando a versão do Claude Code é anterior à testada.
 
+## ID do tier e sonda
+
+A tabela de rotas usa aliases (`sonnet`, `opus`), mas a troca de modelo da sessão (`turn.step`) exige o ID completo do tier. Sem ele a sessão só muda o esforço. O ID vem de duas fontes:
+
+1. **O engine**: o ID que ele resolve num despacho (`agent.spawn`) roteado pelo mod.
+2. **A sonda**: uma chamada de 1 token com esforço `low`, agendada no relógio (fora do passo), feita só quando falta o ID do tier. Os candidatos, nesta ordem: o cache do usuário, `models.ids` e os IDs da tabela. O ID aprendido do engine vence o da sonda. Só "modelo inexistente" rejeita um candidato (passa ao próximo); outros erros contam como erro, com limite por tier. A troca vem no passo seguinte à resposta da sonda.
+
+**Custo:** uma chamada de 1 token por candidato e por tier na sessão, apenas enquanto o ID não é conhecido.
+
+**Cache e proveniência.** O cache é por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`, nunca no repositório). Só entra nele o ID da tabela com sonda ok, ou o ID que o engine resolveu num despacho roteado de tier igual ao pedido. O ID de `models.ids` nunca vai para o cache, e um candidato vindo do cache só chega ao `turn.step` depois de sonda ok na sessão. Diretório ou arquivo do cache com link simbólico: não lê nem grava.
+
+**`models.ids`** (opcional) escolhe a geração dentro do tier, útil para gateway ou conta com IDs próprios. Só vale tier conhecido com ID do próprio tier; o teto continua valendo:
+
+```yaml
+models:
+  enabled: true
+  ids:
+    standard: claude-sonnet-5-5
+    capable: claude-opus-5-5
+```
+
+**No ledger e no relatório.** Cada sonda grava uma linha `scope: probe` (`tier`, `model`, `probe: ok|rejected|error`). Linhas de sessão trazem `idPending` (o tier que esperava ID naquele turno) e `idSource` (`learned` ou `probe`). O `model-route report` mostra a seção "Sondas de ID" (ok/rejected/error por tier) e "Turnos com ID pendente".
+
 ## Custo de cache
 
 O cache de prompt é por modelo: trocar o modelo faz o passo seguinte reler o contexto sem cache. Por isso a sessão troca só na fronteira de fase (padrão: uma vez por workflow). Trocar **só o esforço** não invalida o cache, então o esforço varia por skill e por passo sem esse custo. O relatório mostra a razão de cache após cada troca, para você ver se o cache frio está comendo a economia.

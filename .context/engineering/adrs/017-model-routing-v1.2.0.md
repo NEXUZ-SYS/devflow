@@ -79,7 +79,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Risco residual do teto no hook clássico: um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript. É raro; no Claude Code a CLI resolve contra o teto `top`.
 - Garantia de teto só vale quando o adaptador lê o teto; ilegível → não roteia.
 - Gate: o relatório de 2 semanas deve confirmar economia sem regressão de escaladas.
-- (v1.2.0) `models.ids` escolhe a geração dentro do tier (config explícita do projeto, limitada ao tier e ao teto, nunca vai ao cache). Sonda ok não garante o `turn.step` (medido na R-11 e em campo); o pior caso é o comportamento anterior, só esforço. O bloco `env` do `settings` do projeto pode definir `DEVFLOW_MODEL_ROUTING`/`XDG_DATA_HOME` (anterior a esta mudança; backlog).
+- (v1.2.0) `models.ids` escolhe a geração dentro do tier (config explícita do projeto, limitada ao tier e ao teto, nunca vai ao cache). Sonda ok não garante o `turn.step` (medido na R-11 e em campo); o pior caso é o comportamento anterior, só esforço. O bloco `env` do `settings` do projeto pode definir `DEVFLOW_MODEL_ROUTING`/`XDG_DATA_HOME` (anterior a esta mudança; backlog). Residuais aceitos: janela entre a checagem de contenção do cache e a gravação; o engine pode trocar o modelo dentro do mesmo tier no `agent.spawn`; link válido num diretório acima do cache equivale a escolher o HOME.
 
 ## Guardrails
 
