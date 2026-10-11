@@ -44,8 +44,12 @@ Vale só para T abaixo do teto (no teto o `turn.step` não é tocado). Ordem:
    2. `models.ids.<T>` do `.devflow.yaml`;
    3. a tabela padrão do plugin, em `assets/model-routing/routes.json` → `ids`:
       `cheap: claude-haiku-5-5`, `standard: claude-sonnet-5-5`, `capable: claude-opus-5-5`, `top: claude-fable-5-1`.
-3. **Filtro de candidato:** só entra o que casa `^claude-[a-z0-9-]+$` e tem `tierOf(id) === T`. Um repositório não
-   consegue mapear `cheap` para opus, nem injetar texto livre.
+3. **Filtro de candidato** (`isTierId(id, T)`, em `model-routing.mjs`, ao lado de `tierOf`): casa
+   `^claude-[a-z0-9-]+$`, tem até 64 caracteres, traz **exatamente um** token de família (haiku, sonnet, opus, fable)
+   com fronteira de hífen, e `tierOf(id) === T`. `claude-opus-4-haiku` e `claude-haikuopus` são recusados. Um
+   repositório não consegue mapear `cheap` para opus, nem injetar texto livre. `learnId` usa o mesmo filtro.
+   **Risco aceito:** `models.ids` escolhe a geração dentro do tier (ex.: uma versão antiga do mesmo tier). É config
+   explícita do projeto, limitada ao tier e ao teto, e nunca vai para o cache (§3.3).
 4. **Sonda:** nenhum candidato vai ao `turn.step` sem verificação na sessão corrente (§3.2). Verificado, vira
    `state.ids[T]`, com origem `probe`.
 5. **Sem ID verificado:** só esforço, como hoje, e o ledger registra (§3.4).
@@ -56,18 +60,23 @@ O pior caso é o comportamento atual. Um ID errado nunca chega ao `turn.step`.
 
 - **Quando:** sob demanda, no primeiro `turn.step` da sessão em que a rota pede T abaixo do teto e não há ID
   verificado de T. Nunca no `session.start` (não gasta nada em sessão que não troca).
-- **Como:** `$.model.complete({ model: <candidato>, prompt: "ok", maxTokens: 1, timeoutMs: 15000 })`, sem `await`
-  no passo: o passo segue só com esforço e a troca acontece no próximo passo depois que a sonda resolve.
+- **Como:** `$.model.complete({ model: <candidato>, prompt: "ok", maxTokens: 1, effort: "low", timeoutMs: 15000 })`,
+  agendada com `$.clock.after(0, …)`: roda num dispatch próprio, fora do passo (a API manda trabalho que sobrevive ao
+  dispatch para o relógio; uma chamada presa ao passo resolve `aborted` se o passo for abandonado). O passo segue só
+  com esforço e a troca acontece no próximo passo depois que a sonda resolve. Ao resolver, a linha `probe` vai ao
+  ledger e o ledger é gravado na hora (não espera o `turn.complete`).
 - **Uma sonda por tier em voo.** Passos seguintes não disparam outra enquanto ela não resolve.
 - **Classificação do resultado** (função pura no core):
   - `isAnswered: true` ou `reason: "empty-reply"` → **ok**: o ID foi aceito. Vira `state.ids[T]` e vai ao cache;
-  - `api-error` com `error` em `invalid_request` ou `model_not_found`, ou `status` 400/404 → **rejected**: descarta o
-    candidato e passa ao próximo da cadeia na próxima necessidade;
+  - `api-error` com `error: "model_not_found"` ou `status` 404 → **rejected**: descarta o candidato e passa ao
+    próximo da cadeia na próxima necessidade. `invalid_request`/400 **não** rejeita (pode vir de outra causa e
+    descartaria um ID válido): conta como `error`;
   - a chamada lança: o engine recusou enviar (modelo bloqueado ou fora da allowlist), o que não se resolve sozinho →
     **rejected**;
-  - qualquer outro (`rate_limit`, `overloaded`, `status` nulo, `aborted`) → **error** transitório: tenta de
-    novo o mesmo candidato numa necessidade seguinte, até 3 tentativas por tier na sessão; esgotado, desiste do tier
-    na sessão.
+  - qualquer outro (`invalid_request`, `rate_limit`, `overloaded`, `status` nulo, `aborted`) → **error**
+    transitório: tenta de novo o mesmo candidato numa necessidade seguinte. O limite é **por tier**: 3 erros no total
+    (um `rejected` não zera a conta); esgotado, desiste do tier na sessão. No máximo, por tier e sessão: uma sonda
+    por candidato (até 3) mais 3 erros.
 - **Custo:** uma chamada de 1 token de saída por tier e por sessão, só quando falta ID. Declarado no CHANGELOG e na
   ADR.
 
@@ -77,11 +86,18 @@ O pior caso é o comportamento atual. Um ID errado nunca chega ao `turn.step`.
   função pura `idsCachePathFrom({ xdgDataHome, home })` mora em `routing-ledger.mjs`, ao lado de `ledgerDirFrom`.
 - Formato: `{ "version": 1, "ids": { "<tier>": "<id>" } }`. Leitura tolerante: JSON inválido, versão diferente,
   tier fora do enum ou ID que não passa no filtro → entrada ignorada.
-- Gravado sempre que um ID fica verificado (sonda ok) ou aprendido do engine (`agent.spawn`), desde que o roteamento
-  esteja ligado. Independe de `models.ledger`. Falha de escrita é silenciosa.
+- **Proveniência:** só entra no cache ID que (a) é igual ao `ids` da tabela do plugin e teve sonda ok, ou (b) o engine
+  resolveu num `agent.spawn` em que o **próprio mod** mandou o alias do tier (despacho roteado). Nunca grava ID vindo de
+  `models.ids`, de despacho não roteado nem do `turn.step`: um repositório não envenena o cache dos outros projetos do
+  usuário.
+- Candidato do cache rejeitado pela sonda sai do cache.
+- Independe de `models.ledger`. Falha de escrita é silenciosa.
 - **É só fonte de candidato:** um ID do cache passa pela sonda na sessão antes de uso. Isso cobre quem troca de conta
   ou de provedor entre sessões.
-- Contenção: `$.fs.stat` com `resolve`, sem link, arquivo regular, até 4 KiB, antes de ler.
+- **Contenção (ADR-014)**, num helper único usado antes de ler **e** antes de gravar: o diretório do cache, se existe,
+  tem `realPath` igual ao próprio caminho (sem link de diretório); o arquivo, se existe, não é link, é regular, tem até
+  4 KiB e `realPath` igual ao caminho. Arquivo ausente pode ser criado. Qualquer recusa desliga o cache na sessão: não
+  lê, não grava, nunca "conserta" um link.
 
 ### 3.4 Ledger
 
@@ -123,7 +139,9 @@ Chave fora de `TIERS` ou valor que não passa no filtro é ignorado.
 | `scripts/lib/models-config.mjs` | `models.ids` |
 | `scripts/lib/routing-report.mjs` | seção de sondas (contagem por tier e resultado) e turnos com ID pendente |
 | `assets/model-routing/routes.json` | `ids` padrão |
-| ADR-017 → v1.2.0 | D21 com cadeia e sonda; guardrail "sem ID verificado, só esforço" |
+| ADR-017 → v1.2.0 | D21 com cadeia e sonda; guardrail "NUNCA ID fixo na tabela" vira "IDs na tabela só como candidatos de sonda"; guardrail "sem ID verificado, só esforço"; riscos aceitos |
+| `scripts/lib/model-routing.mjs` | `isTierId` |
+| `docs/model-routing.md`, `skills/config/SKILL.md` | `models.ids`, cache, custo da sonda |
 | `CHANGELOG.md` | entrada em `[Unreleased]` |
 | laboratório `lib/invariants.mjs` | evidência do `INV-SESS` |
 
@@ -133,7 +151,15 @@ As libs continuam puras (sem `node:*`); o adaptador só traduz eventos.
 
 - Sonda lança (o engine recusa enviar: `model` bloqueado) → `rejected`; não afeta o passo.
 - Teto muda no meio da sessão (`/model`) → os IDs aprendidos continuam válidos; a rota recalcula o tier.
-- Fase volta para P/R (teto) → nenhum tier abaixo do teto é pedido; nenhuma sonda.
+- Fase volta para P/R (teto) → nenhum tier abaixo do teto é pedido; nenhuma sonda (salvo `maxTier` abaixo do teto,
+  quando P/R também pedem tier abaixo do teto e sondam).
+- IDs verificados por sonda também servem à escalada de subagente no meio da execução (`applyMidRun`), sempre limitada
+  ao teto. É efeito colateral aceito: antes a escalada exigia um despacho anterior daquele tier.
+- Sonda ok não garante que o `turn.step` aceite o ID (outro plugin pode interceptar `model.complete`). Risco residual,
+  medido na sonda R-11 (§6) e em campo (§7).
+- O ambiente do processo pode receber `DEVFLOW_MODEL_ROUTING` e `XDG_DATA_HOME` do bloco `env` do settings do
+  projeto. É anterior a esta mudança (afeta o opt-in duplo da ADR-017) e fica no backlog; a contenção do cache é a
+  defesa local.
 - Duas necessidades do mesmo tier enquanto a sonda está em voo → uma sonda só.
 - Reload do módulo (hot reload) → estado zera; o cache reduz o custo de reaprender.
 - Cache com ID de outra conta → a sonda rejeita; o candidato seguinte é testado.
@@ -152,6 +178,11 @@ As libs continuam puras (sem `node:*`); o adaptador só traduz eventos.
   `probe` e `idPending` conta as sondas por resultado e não quebra. A troca de modelo de ponta a ponta numa sessão real
   é medida em campo (§7), não na suíte: exigiria chamar a API.
 - **Laboratório:** unit do `INV-SESS` com ledger contendo `idPending`/`probe`.
+
+- **Sonda R-11 (antes da Task 1 da fase E):** com um mod mínimo carregado num `claude -p` curto, medir no engine real:
+  (a) o `reason`/`error`/`status` de `$.model.complete` com um ID inexistente; (b) que um ID completo válido responde;
+  (c) que a sonda agendada por `$.clock.after(0, …)` dentro do `turn.step` resolve; (d) que o `turn.step` aceita o ID
+  verificado. O resultado ajusta `classifyProbe` se preciso.
 
 `requiredSignals: [unit, integration, e2e, lint, standards]`.
 
