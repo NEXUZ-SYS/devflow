@@ -11,6 +11,10 @@ generated: "2026-10-10"
 scaffoldVersion: "2.0.0"
 summary: "D21 v1.2: a sessão do roteamento só trocava de tier depois de aprender o ID completo por um subagente. Agora resolve candidatos (cache por usuário, models.ids, tabela padrão) e verifica cada um com uma sonda de 1 token ($.model.complete) antes de usar no turn.step. Ledger com probe/idPending/idSource; relatório e INV-SESS do laboratório explicam a causa. ADR-017 v1.2.0. Sonda R-11 + 9 tasks TDD (rev. 2 após a fase R)."
 requiredSignals: [unit, integration, e2e, lint, standards]
+review:
+  verdict: PROCEED
+  reviewers: [architect, security-auditor]
+  date: "2026-10-10"
 sources:
   spec: docs/superpowers/specs/2026-10-10-routing-session-tier-ids-design.md
   plan: docs/superpowers/plans/2026-10-10-routing-session-tier-ids.md
@@ -25,8 +29,8 @@ phases:
   - id: "phase-1r"
     name: "Review"
     prevc: "R"
-    status: pending
-    summary: "Architect + security-auditor."
+    status: completed
+    summary: "Architect REVISE (15 achados, 2 BLOCK) e security-auditor REPROVADO (10 achados, 1 BLOCK), desenho mantido; tudo incorporado (1cecfe2): ADR-017 antes do código, isTierId com uma família, cache com proveniência e realPath, 400 = erro, sonda no relógio, sonda R-11 antes da E. env do settings do projeto → backlog (risco aceito). Operador aprovou PROCEED."
   - id: "phase-2"
     name: "Execution"
     prevc: "E"
