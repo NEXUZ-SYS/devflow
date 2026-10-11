@@ -200,3 +200,99 @@ test("H1: onPhaseChange troca a fase e zera a skill; mesma fase preserva a skill
   assert.equal(s.phase, null);
   assert.equal(C.onTurnStart, C.onPhaseChange);
 });
+
+const SONNET = "claude-sonnet-5-5";
+const OPUS = "claude-opus-5-5";
+
+test("idCandidates: cache → models.ids → tabela, sem repetir e só do próprio tier", () => {
+  const got = C.idCandidates("standard", {
+    cache: { standard: "claude-sonnet-9" },
+    config: { ids: { standard: SONNET } },
+    table: { ids: { standard: SONNET, cheap: "claude-haiku-5-5" } },
+  });
+  assert.deepEqual(got, ["claude-sonnet-9", SONNET]);
+  assert.deepEqual(C.idCandidates("standard", { cache: { standard: OPUS }, config: {}, table: {} }), []);
+  assert.deepEqual(C.idCandidates("standard", {}), []);
+});
+
+test("classifyProbe: ok, rejected (só modelo inexistente) e error", () => {
+  assert.equal(C.classifyProbe({ isAnswered: true, text: "ok" }), "ok");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "empty-reply" }), "ok");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 }), "rejected");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "api-error", error: "unknown", status: 404 }), "rejected");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "api-error", error: "invalid_request", status: 400 }), "error");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "api-error", error: "rate_limit", status: 429 }), "error");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "api-error", error: "overloaded", status: null }), "error");
+  assert.equal(C.classifyProbe({ isAnswered: false, reason: "aborted" }), "error");
+  assert.equal(C.classifyProbe(undefined), "error");
+});
+
+test("nextProbe: uma sonda em voo; rejected passa ao próximo; 3 erros por TIER desistem", () => {
+  const s = C.createRouterState();
+  const c = { cache: {}, config: { ids: { standard: "claude-sonnet-9" } }, table: { ids: { standard: SONNET } } };
+  const p1 = C.nextProbe(s, "standard", c);
+  assert.deepEqual(p1, { tier: "standard", id: "claude-sonnet-9" });
+  assert.equal(C.nextProbe(s, "standard", c), null, "em voo: nenhuma outra");
+  C.onProbeResult(s, "standard", p1.id, "error");
+  assert.equal(C.nextProbe(s, "standard", c)?.id, "claude-sonnet-9", "erro transitório: tenta o mesmo");
+  C.onProbeResult(s, "standard", "claude-sonnet-9", "rejected");
+  assert.equal(C.nextProbe(s, "standard", c)?.id, SONNET);
+  C.onProbeResult(s, "standard", SONNET, "error");
+  assert.equal(C.nextProbe(s, "standard", c)?.id, SONNET);
+  C.onProbeResult(s, "standard", SONNET, "error"); // 3o erro do tier (rejected não zerou)
+  assert.equal(C.nextProbe(s, "standard", c), null, "desistiu do tier");
+  assert.equal(s.ids.standard, undefined);
+});
+
+test("nextProbe: candidatos esgotados → null; tier com ID já conhecido → null", () => {
+  assert.equal(C.nextProbe(C.createRouterState(), "standard", {}), null);
+  const t = C.createRouterState();
+  C.learnId(t, SONNET);
+  assert.equal(C.nextProbe(t, "standard", { table: { ids: { standard: SONNET } } }), null);
+});
+
+test("onProbeResult ok: vira ID da sessão com origem probe; o aprendido do engine vence", () => {
+  const s = C.createRouterState();
+  const p = C.nextProbe(s, "standard", { table: { ids: { standard: SONNET } } });
+  C.onProbeResult(s, "standard", p.id, "ok");
+  assert.equal(s.ids.standard, SONNET);
+  assert.equal(s.idSource.standard, "probe");
+
+  const t = C.createRouterState();
+  const q = C.nextProbe(t, "standard", { table: { ids: { standard: SONNET } } });
+  C.learnId(t, "claude-sonnet-9");
+  C.onProbeResult(t, "standard", q.id, "ok");
+  assert.equal(t.ids.standard, "claude-sonnet-9");
+  assert.equal(t.idSource.standard, "learned");
+});
+
+test("learnId usa isTierId: ID com duas famílias não é aprendido", () => {
+  const s = C.createRouterState();
+  C.learnId(s, "claude-opus-4-haiku");
+  assert.deepEqual(s.ids, {});
+});
+
+test("onSessionStep: sem ID do tier pedido → idPending e só esforço; com ID de sonda → troca com idSource probe", () => {
+  const s = C.createRouterState();
+  C.onTurnStart(s, { phase: "E" });
+  const a = step(s, OPUS, "xhigh");
+  assert.equal(a.idPending, "standard");
+  assert.equal(a.model, undefined);
+  const p = C.nextProbe(s, "standard", { table });
+  C.onProbeResult(s, "standard", p.id, "ok");
+  const b = step(s, OPUS, "xhigh");
+  assert.equal(b.model, SONNET);
+  assert.equal(b.switched, true);
+  assert.equal(b.idSource, "probe");
+  assert.equal(b.idPending, undefined);
+  assert.equal(step(s, OPUS, "xhigh")?.idSource, undefined, "idSource só na troca efetiva");
+});
+
+test("onSessionStep: no teto (P) nunca pede ID; troca com ID aprendido marca idSource learned", () => {
+  const s = C.createRouterState();
+  C.onTurnStart(s, { phase: "P" });
+  assert.equal(step(s, OPUS, "xhigh")?.idPending, undefined);
+  C.learnId(s, SONNET);
+  C.onTurnStart(s, { phase: "E" });
+  assert.equal(step(s, OPUS, "xhigh").idSource, "learned");
+});
