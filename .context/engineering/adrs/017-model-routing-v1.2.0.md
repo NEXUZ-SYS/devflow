@@ -79,7 +79,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Risco residual do teto no hook clássico: um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript. É raro; no Claude Code a CLI resolve contra o teto `top`.
 - Garantia de teto só vale quando o adaptador lê o teto; ilegível → não roteia.
 - Gate: o relatório de 2 semanas deve confirmar economia sem regressão de escaladas.
-- (v1.2.0) `models.ids` escolhe a geração dentro do tier (config explícita do projeto, limitada ao tier e ao teto, nunca vai ao cache). Sonda ok não garante o `turn.step` (medido na R-11 e em campo); o pior caso é o comportamento anterior, só esforço. O bloco `env` do `settings` do projeto pode definir `DEVFLOW_MODEL_ROUTING`/`XDG_DATA_HOME` (anterior a esta mudança; backlog). Residuais aceitos: janela entre a checagem de contenção do cache e a gravação; o engine pode trocar o modelo dentro do mesmo tier no `agent.spawn`; link válido num diretório acima do cache equivale a escolher o HOME.
+- (v1.2.0) `models.ids` escolhe a geração dentro do tier (config explícita do projeto, limitada ao tier e ao teto, nunca vai ao cache). Sonda ok não garante o `turn.step` (medido na R-11 e em campo); o pior caso é o comportamento anterior, só esforço. O bloco `env` do `settings` do projeto pode definir `DEVFLOW_MODEL_ROUTING`/`XDG_DATA_HOME` (anterior a esta mudança; backlog). Residuais aceitos: janela entre a checagem de contenção do cache e a gravação; o engine pode trocar o modelo dentro do mesmo tier no `agent.spawn`; link num diretório acima do cache (HOME em `/var/home`, dotfiles com stow) é aceito e equivale a escolher o HOME; sessões paralelas gravam o `ids.json` em last-writer-wins (a entrada perdida custa uma re-sonda).
 
 ## Guardrails
 
@@ -96,7 +96,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - QUANDO o `prevc.json` estiver ilegível, parcial ou sem fase no meio do turno, ENTÃO manter a fase atual e não guardar o par (tenta de novo no passo seguinte); só o `turn.start` zera a fase.
 - NUNCA mandar ao turn.step um ID só porque está no cache, em models.ids ou na tabela: sempre sonda ok na sessão antes.
 - NUNCA gravar no cache por usuário ID vindo de models.ids, de despacho não roteado ou do turn.step.
-- SEMPRE contenção por realPath (arquivo e diretório) antes de ler e antes de gravar o cache (ADR-014).
+- SEMPRE contenção por realPath (arquivo e diretório) antes de ler e antes de gravar o cache (ADR-014): ancorada no realPath do pai do diretório do cache; o diretório e o arquivo do cache nunca são link e resolvem exatamente para `<pai real>/devflow-model-routing` e `<dir real>/ids.json`; ausência só vale provada pela listagem.
 
 ## Enforcement
 
@@ -104,7 +104,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - [ ] Teste: integration do hook clássico (sem `permissionDecision`, teto do transcript, FIFO e `/dev/zero`, C0) e do mod.
 - [ ] Teste (v1.1.0): mod com `prevc.json` falso que muda entre dois `turn.step` e antes de um `agent.spawn` (rota e ledger com a fase nova), `mtimeMs` igual não relê, `stat` que falha mantém a fase; unit do `onPhaseChange` (troca zera a skill, mesma fase não).
 - [ ] Teste: ledger com chaves ⊆ allowlist; e2e do CLI `resolve|escalate|report` em tmpdir.
-- [ ] Teste (v1.2.0): "cache não é usado sem sonda" (ID do cache só vai ao `turn.step` depois de sonda ok na sessão), "models.ids não vai ao cache" e "link não é gravado" (diretório ou arquivo do cache com link: não lê, não grava).
+- [ ] Teste (v1.2.0): "cache não é usado sem sonda" (ID do cache só vai ao `turn.step` depois de sonda ok na sessão), "models.ids não vai ao cache" e "link não é gravado" (diretório ou arquivo do cache com link, ou link pendurado: não lê, não grava; link num ancestral é aceito).
 - [ ] Doctor: check `model-routing` (repo pede roteamento sem confirmação; versão abaixo de 2.1.293).
 - [ ] Gate PREVC: lint (`bash tests/run-lint.sh`) e revisão de segurança dos adaptadores.
 

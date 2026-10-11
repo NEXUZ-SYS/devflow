@@ -61,6 +61,8 @@ async function load({ root, env = ON, statOverride, complete, stateThrows = fals
         const ov = statOverride?.(a);
         if (ov) return ov;
         if (Object.hasOwn(links, a)) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); // link pendurado: stat segue e rejeita
+        // diretório virtual do HOME: existe se algum arquivo/link virtual mora abaixo dele
+        if (a === VHOME || [...Object.keys(files), ...Object.keys(links)].some((k) => k.startsWith(a + "/"))) return { kind: "dir", size: 0, mtimeMs: 0, isLink: false, ...(opt?.resolve ? { realPath: a } : {}) };
         if (Object.hasOwn(files, a)) return { kind: "file", size: files[a].length, mtimeMs: 0, isLink: false, ...(opt?.resolve ? { realPath: a } : {}) };
         const l = fs.lstatSync(a);
         const s = fs.statSync(a);
@@ -656,6 +658,91 @@ test("D21 v1.2: HOME relativo → cache desligado (não lê nem grava)", async (
   assert.equal(H.log.completes.length, 1, "a sonda segue");
   assert.equal(H.log.writes.some((w) => w.path.includes("ids.json")), false);
   assert.equal(H.log.reads.some((p) => String(p).includes("ids.json")), false);
+});
+
+// ─── D21 v1.2, fix wave da revisão final ─────────────────────────────────────────────────────────
+const CACHE_DIR = CACHE.slice(0, CACHE.lastIndexOf("/"));
+const DATA = CACHE_DIR.slice(0, CACHE_DIR.lastIndexOf("/")); // ~/.local/share
+const st = (kind, realPath, extra = {}) => ({ kind, size: kind === "file" ? 50 : 0, mtimeMs: 0, isLink: false, realPath, ...extra });
+
+test("D21 v1.2: link num ANCESTRAL do cache (HOME em /var/home, stow) → o cache funciona", async () => {
+  const REAL = "/var/home/t/.local/share";
+  const cache = JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-9" } });
+  const ov = (a) => (a === DATA ? st("dir", REAL) : a === CACHE_DIR ? st("dir", `${REAL}/devflow-model-routing`) : a === CACHE ? st("file", `${REAL}/devflow-model-routing/ids.json`) : null);
+  const H = await load({ root: mkRepo(), files: { [CACHE]: cache }, statOverride: ov, complete: () => ({ isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle();
+  assert.equal(H.log.completes[0]?.model, "claude-sonnet-9", "o cache foi lido: é o 1o candidato");
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, "claude-haiku-5-5");
+  assert.deepEqual(JSON.parse(cacheWrites(H).at(-1).text).ids, { standard: "claude-sonnet-9", cheap: "claude-haiku-5-5" });
+});
+
+test("D21 v1.2: link no diretório do cache ou no arquivo, mesmo com ancestral resolvido → recusa", async () => {
+  const REAL = "/var/home/t/.local/share";
+  const cache = JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-9" } });
+  const base = (a) => (a === DATA ? st("dir", REAL) : null);
+  const cases = [
+    (a) => base(a) ?? (a === CACHE_DIR ? st("dir", `${REAL}/outro-dir`, { isLink: true }) : null), // dir link para irmão
+    (a) => base(a) ?? (a === CACHE_DIR ? st("dir", `${REAL}/devflow-model-routing`, { isLink: true }) : a === CACHE ? st("file", `${REAL}/devflow-model-routing/ids.json`) : null), // dir marcado como link, mesmo com realPaths coerentes
+    (a) => base(a) ?? (a === CACHE_DIR ? st("dir", `${REAL}/devflow-model-routing`) : a === CACHE ? st("file", `${REAL}/devflow-model-routing/ids.json`, { isLink: true }) : null), // arquivo link
+    (a) => base(a) ?? (a === CACHE_DIR ? st("dir", `${REAL}/devflow-model-routing`) : a === CACHE ? st("file", `${REAL}/devflow-model-routing/outro.json`) : null), // arquivo resolve a outro nome
+  ];
+  for (const ov of cases) {
+    const H = await load({ root: mkRepo(), files: { [CACHE]: cache }, statOverride: ov, complete: () => ({ isAnswered: true, text: "ok" }) });
+    await H.turn();
+    await settle();
+    assert.equal(H.log.completes[0]?.model, SONNET, "cache recusado: a tabela é o 1o candidato");
+    assert.equal(cacheWrites(H).length, 0);
+  }
+});
+
+test("D21 v1.2: diretório do cache ainda ausente sob ancestral link → valida só o pai e cria", async () => {
+  const ov = (a) => (a === DATA ? st("dir", "/var/home/t/.local/share") : null);
+  const H = await load({ root: mkRepo(), files: { [`${DATA}/outra-coisa`]: "x" }, statOverride: ov, complete: () => ({ isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle();
+  assert.equal(cacheWrites(H).length, 1);
+});
+
+test("D21 v1.2: diretório do cache ausente e pai que não é diretório real → recusa", async () => {
+  for (const pai of [st("file", "/var/home/t/.local/share"), st("dir", undefined)]) {
+    const H = await load({ root: mkRepo(), files: { [`${DATA}/outra-coisa`]: "x" }, statOverride: (a) => (a === DATA ? pai : null), complete: () => ({ isAnswered: true, text: "ok" }) });
+    await H.turn();
+    await settle();
+    assert.equal(cacheWrites(H).length, 0);
+  }
+});
+
+test("D21 v1.2: gravações do ledger são serializadas — a linha da sessão nunca some do disco", async () => {
+  let k = 0;
+  const H = await load({ root: mkRepo(YAML_LEDGER), writeDelay: (p) => (p.endsWith(".jsonl") && k++ === 0 ? 30 : 0), complete: () => ({ isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle(); // sonda resolve → 1o flush (lento), só com a linha probe
+  await later(H, 1);
+  await H.call("turn.complete", { turnId: "t1" }, async () => ({ usage: { model: SONNET, input_tokens: 1, output_tokens: 1 } }));
+  await new Promise((r) => setTimeout(r, 60));
+  assert.deepEqual(ledgerLines(H).map((l) => l.scope), ["probe", "session"]);
+});
+
+test("D21 v1.2: sonda que LANÇA rejeita o candidato na sessão, mas não apaga o ID do cache", async () => {
+  const cache = JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-9" } });
+  const H = await load({ root: mkRepo(), files: { [CACHE]: cache }, complete: (req) => { if (req.model === "claude-sonnet-9") throw new Error("rede caiu"); return { isAnswered: false, reason: "api-error", error: "overloaded", status: 529 }; } });
+  await H.turn();
+  await settle();
+  await later(H, 1); // o candidato que lançou não é re-sondado: passa ao da tabela
+  await settle();
+  assert.deepEqual(H.log.completes.map((r) => r.model), ["claude-sonnet-9", SONNET]);
+  assert.equal(cacheWrites(H).some((w) => JSON.parse(w.text).ids.standard !== "claude-sonnet-9"), false, "exceção não apaga do cache");
+});
+
+test("D21 v1.2: passo só com idPending (esforço já igual) não mexe na barra de status", async () => {
+  const H = await load({ root: mkRepo(), complete: () => new Promise(() => {}) });
+  const sent = await H.turn({ effort: "medium" });
+  assert.equal(sent.model, OPUS);
+  assert.equal(sent.effort, "medium");
+  await settle();
+  assert.equal(H.log.completes.length, 1, "a sonda saiu");
+  assert.deepEqual(H.log.status, []);
 });
 
 // ─── H1: fase relida no meio do turno ────────────────────────────────────────────────────────────

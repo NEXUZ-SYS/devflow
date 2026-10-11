@@ -65,11 +65,11 @@ models:
 A tabela de rotas usa aliases (`sonnet`, `opus`), mas a troca de modelo da sessão (`turn.step`) exige o ID completo do tier. Sem ele a sessão só muda o esforço. O ID vem de duas fontes:
 
 1. **O engine**: o ID que ele resolve num despacho (`agent.spawn`) roteado pelo mod.
-2. **A sonda**: uma chamada de 1 token com esforço `low`, agendada no relógio (fora do passo), feita só quando falta o ID do tier. Os candidatos, nesta ordem: o cache do usuário, `models.ids` e os IDs da tabela. O ID aprendido do engine vence o da sonda. Só "modelo inexistente" rejeita um candidato (passa ao próximo); outros erros contam como erro, com limite por tier. A troca vem no passo seguinte à resposta da sonda.
+2. **A sonda**: uma chamada de 1 token com esforço `low`, agendada no relógio (fora do passo), feita só quando falta o ID do tier. Os candidatos, nesta ordem: o cache do usuário, `models.ids` e os IDs da tabela. O ID aprendido do engine vence o da sonda. Rejeitam um candidato (passa ao próximo) o "modelo inexistente" (404/`model_not_found`) ou o engine recusar enviar (a chamada lança, como com modelo bloqueado); só o "modelo inexistente" tira o ID do cache. Outros erros contam como erro, com limite por tier. A troca vem no passo seguinte à resposta da sonda.
 
 **Custo:** uma chamada de 1 token por candidato e por tier na sessão, apenas enquanto o ID não é conhecido.
 
-**Cache e proveniência.** O cache é por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`, nunca no repositório). Só entra nele o ID da tabela com sonda ok, ou o ID que o engine resolveu num despacho roteado de tier igual ao pedido. O ID de `models.ids` nunca vai para o cache, e um candidato vindo do cache só chega ao `turn.step` depois de sonda ok na sessão. Diretório ou arquivo do cache com link simbólico: não lê nem grava.
+**Cache e proveniência.** O cache é por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`, nunca no repositório). Só entra nele o ID da tabela com sonda ok, ou o ID que o engine resolveu num despacho roteado de tier igual ao pedido. O ID de `models.ids` nunca vai para o cache, e um candidato vindo do cache só chega ao `turn.step` depois de sonda ok na sessão. Diretório ou arquivo do cache com link simbólico (inclusive pendurado): não lê nem grava; link num diretório acima (HOME em `/var/home`, dotfiles com stow) é aceito. Sessões paralelas gravam o `ids.json` em last-writer-wins: uma pode descartar a entrada da outra, o que custa só uma re-sonda na sessão seguinte.
 
 **`models.ids`** (opcional) escolhe a geração dentro do tier, útil para gateway ou conta com IDs próprios. Só vale tier conhecido com ID do próprio tier; o teto continua valendo:
 

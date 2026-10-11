@@ -36,7 +36,8 @@ const S = {
   idsCachePath: null, // null = cache desligado na sessão (ausente ou recusado pela contenção)
   idsCacheText: "",
   turnIdPending: null,
-  savingIds: Promise.resolve(), // fila das gravações do cache: nunca reordena
+  savingIds: Promise.resolve(),
+  flushing: Promise.resolve(), // fila das gravações do ledger // fila das gravações do cache: nunca reordena
   pendingIdSource: null,
   sessionKey: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
 };
@@ -91,17 +92,29 @@ async function provenAbsent($, abs) {
   return false;
 }
 
-// Cache de IDs fica no diretório de dados do usuário (ADR-014): caminho absoluto, diretório e arquivo sem link,
-// realPath igual ao caminho, arquivo regular até 4 KiB. Ausente (provado) pode ser criado. Qualquer dúvida → false.
+// Cache de IDs fica no diretório de dados do usuário (ADR-014). Link nos ANCESTRAIS é aceito (HOME em /var/home,
+// dotfiles com stow): a contenção ancora no realPath do pai do diretório do cache. O diretório do cache e o arquivo
+// não podem ser link e têm de resolver exatamente para <pai real>/<nome> e <dir real>/<nome>; arquivo regular até
+// 4 KiB. Ausente (provado pela listagem) pode ser criado. Caminho relativo ou qualquer dúvida → false.
 async function userFileOk($, abs) {
   try {
     if (typeof abs !== "string" || !abs.startsWith("/")) return false; // HOME relativo resolveria no cwd da sessão
     const dir = abs.slice(0, abs.lastIndexOf("/"));
-    const d = await $.fs.stat(dir, { resolve: true }).catch(() => null);
-    if (d && (d.kind !== "dir" || d.realPath !== dir)) return false;
-    const f = await $.fs.stat(abs, { resolve: true }).catch(() => null);
+    const base = dir.slice(0, dir.lastIndexOf("/"));
+    if (!dir || !base) return false;
+    const stat = (p) => $.fs.stat(p, { resolve: true }).catch(() => null);
+    const b = await stat(base);
+    const d = await stat(dir);
+    const f = await stat(abs);
+    // Nível ausente: tudo abaixo dele tem de estar ausente também (senão é incoerente → recusa) e a ausência do
+    // arquivo tem de ser provada pela listagem (link pendurado em qualquer nível → recusa).
+    if (!b) return !d && !f && await provenAbsent($, abs);
+    if (b.kind !== "dir" || typeof b.realPath !== "string" || !b.realPath.startsWith("/")) return false;
+    if (!d) return !f && await provenAbsent($, abs); // diretório do cache ainda não existe: validado só o pai
+    const realDir = `${b.realPath.replace(/\/+$/, "")}${dir.slice(base.length)}`;
+    if (d.isLink || d.kind !== "dir" || d.realPath !== realDir) return false;
     if (!f) return await provenAbsent($, abs);
-    return !f.isLink && f.kind === "file" && f.size <= MAX_IDS_CACHE && f.realPath === abs;
+    return !f.isLink && f.kind === "file" && f.size <= MAX_IDS_CACHE && f.realPath === `${realDir}${abs.slice(dir.length)}`;
   } catch {
     return false;
   }
@@ -187,7 +200,13 @@ function ledger(fields) {
   S.dirty = true;
 }
 
-async function flushLedger($) {
+// Em fila (a sonda grava fora do passo, concorrendo com o turn.complete): cada gravação pega as linhas na sua vez.
+function flushLedger($) {
+  S.flushing = S.flushing.then(() => writeLedger($), () => writeLedger($));
+  return S.flushing;
+}
+
+async function writeLedger($) {
   if (!S.ledgerPath || !S.dirty) return;
   S.dirty = false;
   try { await $.fs.write(S.ledgerPath, S.lines.join("\n") + "\n"); } catch { S.ledgerPath = null; }
@@ -202,14 +221,15 @@ function startProbe($, tier) {
 }
 
 async function runProbe($, { tier, id }) {
-  let outcome;
+  let outcome, threw = false;
   try { outcome = core.classifyProbe(await $.model.complete({ model: id, prompt: "ok", maxTokens: 1, effort: "low", timeoutMs: 15000 })); }
-  catch { outcome = "rejected"; } // o engine recusou enviar (modelo bloqueado): não melhora sozinho
+  catch { outcome = "rejected"; threw = true; } // o engine recusou enviar (modelo bloqueado): não melhora na sessão
   try {
     core.onProbeResult(S.core, tier, id, outcome); // sempre: libera o inFlight
     if (!active()) return; // /devflow-route off com a sonda em voo: nada vai a ledger nem a cache
     if (outcome === "ok" && id === S.table?.ids?.[tier]) S.cacheable[tier] = id;
-    if (outcome === "rejected" && S.idsCache[tier] === id) delete S.idsCache[tier];
+    // Só "modelo inexistente" (404/model_not_found) tira o ID do cache; exceção pode ser transitória (rede, abort).
+    if (outcome === "rejected" && !threw && S.idsCache[tier] === id) delete S.idsCache[tier];
     ledger({ scope: "probe", tier, model: id, probe: outcome });
     await flushLedger($);
     if (outcome !== "error") await saveIdsCache($);
@@ -348,7 +368,7 @@ async function* routerTurnStep($, e, next) {
           if (patch?.switched) S.pendingSwitch = true;
           if (patch?.idPending) { S.turnIdPending = patch.idPending; startProbe($, patch.idPending); }
           if (patch?.switched) S.pendingIdSource = patch.idSource ?? null; // a última troca manda: volta ao teto não tem fonte
-          if (patch) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
+          if (patch && (patch.model || patch.effort || patch.switched)) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
         }
         if (e.agentId && S.pub[e.agentId]) {
           // republica a cada passo: sem patch o valor enviado pode ter mudado (escalada por streak) e o publicado ficaria velho
