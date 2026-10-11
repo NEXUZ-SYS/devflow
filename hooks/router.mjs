@@ -36,8 +36,8 @@ const S = {
   idsCachePath: null, // null = cache desligado na sessão (ausente ou recusado pela contenção)
   idsCacheText: "",
   turnIdPending: null,
-  savingIds: Promise.resolve(),
-  flushing: Promise.resolve(), // fila das gravações do ledger // fila das gravações do cache: nunca reordena
+  savingIds: Promise.resolve(), // fila das gravações do cache: nunca reordena
+  flushing: Promise.resolve(), // fila das gravações do ledger
   pendingIdSource: null,
   sessionKey: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
 };
