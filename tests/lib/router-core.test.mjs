@@ -171,6 +171,41 @@ test("applyMidRun: respeita maxTier", () => {
   assert.equal(C.applyMidRun(mk(), "a", { action: "escalate", tier: "standard" }, "standard"), true);
 });
 
+// spec 2026-10-10-routing-session-tier-ids §5: maxTier abaixo do teto faz P/R pedirem tier abaixo do teto e sondarem.
+test("onSessionStep: maxTier abaixo do teto → P e R também pedem ID (idPending) e sondam", () => {
+  for (const phase of ["P", "R"]) {
+    const s = C.createRouterState();
+    C.observeSession(s, { model: "claude-opus-5-5", effort: "xhigh" });
+    C.onTurnStart(s, { phase });
+    const c = { ...config, maxTier: "standard" };
+    const rw = C.onSessionStep(s, { model: "claude-opus-5-5", effort: "xhigh" }, { table, config: c });
+    assert.equal(rw?.idPending, "standard", `fase ${phase}`);
+    assert.equal(rw.model, undefined, "sem ID verificado não troca");
+    assert.deepEqual(C.nextProbe(s, "standard", { config: c, table }), { tier: "standard", id: table.ids.standard });
+  }
+});
+
+test("applyMidRun: ID vindo de sonda (onProbeResult ok) escala, sempre limitado ao teto", () => {
+  const mk = (ceiling) => {
+    const s = C.createRouterState();
+    C.observeSession(s, { model: ceiling, effort: "high" });
+    C.onSpawned(s, "a", C.onSpawn(s, { subagentType: "devflow:documentation-writer", parentModel: ceiling }, { ...ctx, phase: "E" }), "claude-haiku-5-5");
+    for (const tier of ["standard", "capable"]) {
+      const p = C.nextProbe(s, tier, { table });
+      C.onProbeResult(s, tier, p.id, "ok");
+    }
+    return s;
+  };
+  const sonnet = mk("claude-sonnet-5-5");
+  assert.equal(sonnet.idSource.capable, "probe");
+  assert.equal(C.applyMidRun(sonnet, "a", { action: "escalate", tier: "capable" }), false, "acima do teto sonnet");
+  assert.equal(C.applyMidRun(sonnet, "a", { action: "escalate", tier: "standard" }), true);
+  assert.equal(C.onSubagentStep(sonnet, { agentId: "a", model: "claude-haiku-5-5", effort: "low" }).model, table.ids.standard);
+  const opus = mk("claude-opus-5-5");
+  assert.equal(C.applyMidRun(opus, "a", { action: "escalate", tier: "capable" }), true);
+  assert.equal(C.onSubagentStep(opus, { agentId: "a", model: "claude-haiku-5-5", effort: "low" }).model, table.ids.capable);
+});
+
 test("router-core é puro", () => {
   const src = readFileSync(new URL("../../scripts/lib/router-core.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /from\s+["']node:/);
