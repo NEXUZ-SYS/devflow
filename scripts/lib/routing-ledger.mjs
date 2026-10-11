@@ -1,21 +1,25 @@
 // scripts/lib/routing-ledger.mjs — formato do ledger de roteamento (spec §8). PURO.
 // Chaves por allowlist e VALORES por regex/enum: nunca prompt, resposta ou texto livre (ADR-005).
-import { TIERS, EFFORTS, PHASES } from "./model-routing.mjs";
+import { TIERS, EFFORTS, PHASES, isTierId } from "./model-routing.mjs";
 
 export const LEDGER_KEYS = Object.freeze([
   "ts", "sessionId", "scope", "agentId", "agentType", "phase", "skill", "tier", "model", "effort",
   "source", "ceiling", "adapter", "usage", "cacheReadRatio", "switched", "escalation",
+  "idPending", "idSource", "probe",
 ]);
 const SAFE = /^[A-Za-z0-9:_./@[\]-]{1,64}$/;
 const TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const ENUM = {
-  scope: ["session", "subagent"],
+  scope: ["session", "subagent", "probe"],
   phase: PHASES,
   tier: TIERS,
   ceiling: TIERS,
   effort: EFFORTS,
   source: ["plan", "skill", "project", "phase", "agent", "explicit", "inherit"],
   adapter: ["mod", "classic", "omp", "cli"],
+  idPending: TIERS,
+  idSource: ["learned", "probe"],
+  probe: ["ok", "rejected", "error"],
 };
 const SAFE_KEYS = ["sessionId", "agentId", "agentType", "skill", "model"];
 const USAGE_KEYS = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
@@ -60,7 +64,32 @@ export function projectKey(path) {
   return h.toString(16).padStart(16, "0");
 }
 
+const dataBase = ({ xdgDataHome, home }) =>
+  (typeof xdgDataHome === "string" && xdgDataHome.startsWith("/") ? xdgDataHome : `${home}/.local/share`).replace(/\/+$/, "");
+
 export function ledgerDirFrom({ xdgDataHome, home, cwd }) {
-  const base = typeof xdgDataHome === "string" && xdgDataHome.startsWith("/") ? xdgDataHome : `${home}/.local/share`;
-  return `${base}/devflow-model-routing/${projectKey(cwd)}`;
+  return `${dataBase({ xdgDataHome, home })}/devflow-model-routing/${projectKey(cwd)}`;
+}
+
+// Cache de IDs verificados (spec 2026-10-10-routing-session-tier-ids §3.3): por usuário, não por projeto.
+// É só fonte de candidato: o mod re-sonda antes de usar.
+export function idsCachePathFrom({ xdgDataHome, home }) {
+  return `${dataBase({ xdgDataHome, home })}/devflow-model-routing/ids.json`;
+}
+
+function pickIds(src) {
+  const out = {};
+  if (!src || typeof src !== "object" || Array.isArray(src)) return out;
+  for (const t of TIERS) if (Object.hasOwn(src, t) && isTierId(src[t], t)) out[t] = src[t];
+  return out;
+}
+
+export function parseIdsCache(text) {
+  let d;
+  try { d = JSON.parse(text); } catch { return {}; }
+  return d && d.version === 1 ? pickIds(d.ids) : {};
+}
+
+export function serializeIdsCache(ids) {
+  return JSON.stringify({ version: 1, ids: pickIds(ids) }) + "\n";
 }

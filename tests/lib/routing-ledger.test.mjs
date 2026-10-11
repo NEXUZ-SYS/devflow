@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildEntry, LEDGER_KEYS, projectKey, ledgerDirFrom } from "../../scripts/lib/routing-ledger.mjs";
+import { buildEntry, LEDGER_KEYS, projectKey, ledgerDirFrom, idsCachePathFrom, parseIdsCache, serializeIdsCache } from "../../scripts/lib/routing-ledger.mjs";
 import { aggregate, renderMarkdown, beforeAfter, renderBeforeAfter } from "../../scripts/lib/routing-report.mjs";
 
 test("buildEntry: só chaves da allowlist, nunca conteúdo", () => {
@@ -158,4 +158,40 @@ test("beforeAfter não estoura a pilha com 200 mil entradas de ledger", () => {
   const ledger = Array.from({ length: 200000 }, (_, i) => ({ ts: new Date(Date.UTC(2026, 9, 8, 12, 0, 0) + i * 1000).toISOString(), scope: "session", model: "sonnet", usage: { input_tokens: 1, output_tokens: 1 } }));
   const ba = beforeAfter(ledger, []);
   assert.equal(ba.cut, Date.UTC(2026, 9, 8, 12, 0, 0));
+});
+
+test("buildEntry: linha de sonda e campos de ID por enum", () => {
+  const p = buildEntry({ scope: "probe", tier: "standard", model: "claude-sonnet-5-5", probe: "ok" });
+  assert.deepEqual(p, { scope: "probe", tier: "standard", model: "claude-sonnet-5-5", probe: "ok" });
+  const s = buildEntry({ scope: "session", idPending: "standard", idSource: "probe", switched: true });
+  assert.equal(s.idPending, "standard");
+  assert.equal(s.idSource, "probe");
+  const bad = buildEntry({ scope: "probe", probe: "talvez", idPending: "ultra", idSource: "chute" });
+  assert.equal(bad.probe, undefined);
+  assert.equal(bad.idPending, undefined);
+  assert.equal(bad.idSource, undefined);
+  for (const k of ["idPending", "idSource", "probe"]) assert.ok(LEDGER_KEYS.includes(k), k);
+});
+
+test("idsCachePathFrom: por usuário, não por projeto, sem barra dupla", () => {
+  assert.equal(idsCachePathFrom({ xdgDataHome: "/x", home: "/h" }), "/x/devflow-model-routing/ids.json");
+  assert.equal(idsCachePathFrom({ xdgDataHome: "/x/", home: "/h" }), "/x/devflow-model-routing/ids.json");
+  assert.equal(idsCachePathFrom({ xdgDataHome: "rel", home: "/h" }), "/h/.local/share/devflow-model-routing/ids.json");
+  assert.equal(idsCachePathFrom({ home: "/h" }), "/h/.local/share/devflow-model-routing/ids.json");
+});
+
+test("parseIdsCache: tolerante; só entradas válidas", () => {
+  assert.deepEqual(parseIdsCache("{"), {});
+  assert.deepEqual(parseIdsCache(JSON.stringify({ version: 2, ids: { standard: "claude-sonnet-5-5" } })), {});
+  assert.deepEqual(parseIdsCache(JSON.stringify({ version: 1, ids: [] })), {});
+  assert.deepEqual(
+    parseIdsCache(JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-5-5", cheap: "claude-opus-5-5", ultra: "claude-x", top: 7, capable: "claude-opus-4-haiku" } })),
+    { standard: "claude-sonnet-5-5" },
+  );
+});
+
+test("serializeIdsCache: ida e volta, filtrando inválidos e o protótipo", () => {
+  const txt = serializeIdsCache({ standard: "claude-sonnet-5-5", cheap: "lixo", __proto__: { capable: "claude-opus-5-5" } });
+  assert.deepEqual(JSON.parse(txt), { version: 1, ids: { standard: "claude-sonnet-5-5" } });
+  assert.deepEqual(parseIdsCache(txt), { standard: "claude-sonnet-5-5" });
 });
