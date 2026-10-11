@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Roteamento de modelos: config `models.ids` (opcional) no `.devflow.yaml`, que escolhe a geração do ID dentro do tier; é só candidato (passa pela sonda) e nunca vai para o cache do usuário.
+- Ledger do roteamento: linha `scope: probe` (uma por sonda resolvida, resultado `ok | rejected | error`) e as chaves `idPending` e `idSource` nas linhas da sessão. O `model-route report` ganhou a seção "Sondas de ID" (ADR-017 v1.2.0).
+
 ### Fixed
 
-- Roteamento de modelos: a sessão não trocava de tier sem um subagente do tier ter rodado antes (sem ID completo, só o esforço mudava; campanha com a sessão em opus na fase E inteira). Agora, quando falta o ID, a sessão sonda um candidato (1 token, esforço low, agendada no relógio, só quando falta ID) antes da primeira troca. Candidatos: cache do usuário, `models.ids`, IDs da tabela. O cache por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`) só guarda ID da tabela com sonda ok ou ID que o engine resolveu num despacho roteado de tier igual ao pedido; o ID de `models.ids` nunca vai para o cache. Config nova: `models.ids` (opcional). O ledger ganhou `scope: probe` e as chaves `probe`, `idPending` e `idSource`; o `model-route report` ganhou a seção "Sondas de ID" (ADR-017 v1.2.0).
+- Roteamento de modelos: a sessão não trocava de tier sem um subagente do tier ter rodado antes (sem ID completo, só o esforço mudava; campanha com a sessão em opus na fase E inteira). Agora, quando falta o ID, a sessão sonda um candidato (1 token, esforço low, agendada no relógio, só quando falta ID) antes da primeira troca. Candidatos: cache do usuário, `models.ids`, IDs da tabela. O cache por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`) só guarda ID da tabela com sonda ok ou ID que o engine resolveu num despacho roteado de tier igual ao pedido (ADR-017 v1.2.0).
 
 ## [3.8.1] — 2026-10-10
 
