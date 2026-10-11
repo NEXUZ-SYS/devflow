@@ -195,3 +195,30 @@ test("serializeIdsCache: ida e volta, filtrando inválidos e o protótipo", () =
   assert.deepEqual(JSON.parse(txt), { version: 1, ids: { standard: "claude-sonnet-5-5" } });
   assert.deepEqual(parseIdsCache(txt), { standard: "claude-sonnet-5-5" });
 });
+
+test("aggregate/render: sondas por tier e resultado; turnos com ID pendente; linha probe não entra em sessão", () => {
+  const agg = aggregate([
+    { scope: "probe", tier: "standard", model: "claude-sonnet-9", probe: "rejected" },
+    { scope: "probe", tier: "standard", model: "claude-sonnet-5-5", probe: "ok" },
+    { scope: "session", phase: "E", model: "claude-opus-5-5", idPending: "standard", usage: { input_tokens: 1, output_tokens: 1 } },
+    { scope: "session", phase: "E", model: "claude-sonnet-5-5", switched: true, idSource: "probe", usage: { input_tokens: 1, output_tokens: 1 } },
+  ]);
+  assert.deepEqual(agg.probes.get("standard"), { ok: 1, rejected: 1, error: 0 });
+  assert.equal(agg.idPending.get("standard"), 1);
+  assert.equal([...agg.session.get("E").keys()].length, 2);
+  const md = renderMarkdown(agg);
+  assert.match(md, /## Sondas de ID/);
+  assert.match(md, /\| standard \| 1 \| 1 \| 0 \|/);
+  assert.match(md, /Turnos com ID pendente: standard×1/);
+  const empty = renderMarkdown(aggregate([]));
+  assert.match(empty, /## Sondas de ID\n\n—/);
+  assert.match(empty, /Turnos com ID pendente: —/);
+});
+
+test("beforeAfter: linha probe sem usage não desloca o corte", () => {
+  const ledger = [
+    { ts: "2026-10-10T10:00:00.000Z", scope: "probe", tier: "standard", probe: "ok" },
+    { ts: "2026-10-10T11:00:00.000Z", scope: "session", phase: "E", model: "claude-sonnet-5-5", usage: { input_tokens: 1, output_tokens: 1 } },
+  ];
+  assert.equal(beforeAfter(ledger, []).cut, Date.parse("2026-10-10T11:00:00.000Z"));
+});
