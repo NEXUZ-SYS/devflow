@@ -7,13 +7,13 @@ source: local
 stack: universal
 category: arquitetura
 status: Proposto
-version: 1.1.0
+version: 1.2.0
 created: 2026-10-09
 supersedes: []
 refines: []
 protocol_contract: null
 decision_kind: gated
-summary: "Uma lib pura resolve um tier abstrato (cheap/standard/capable/top) a partir do estado do PREVC; três adaptadores o traduzem (mod, PreToolUse clássico, omp); nada roda acima do modelo e do esforço do usuário; liga só com opt-in duplo. (v1.1.0) A fase vem do prevc.json relido também no meio do turno."
+summary: "Uma lib pura resolve um tier abstrato (cheap/standard/capable/top) a partir do estado do PREVC; três adaptadores o traduzem (mod, PreToolUse clássico, omp); nada roda acima do modelo e do esforço do usuário; liga só com opt-in duplo. (v1.1.0) A fase vem do prevc.json relido também no meio do turno. (v1.2.0) Sem ID aprendido, a sessão sonda um candidato (cache, models.ids, tabela) antes da primeira troca."
 ---
 
 # ADR — Roteamento de modelos do DevFlow
@@ -47,13 +47,11 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - R-1: `hooks` clássicos e `modules` no mesmo `hooks.json` — aceito pelo `claude plugin validate`; os dois rodam na mesma sessão.
 - R-2: na fase R, o mod só carregava com `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` (`1|true|yes|on`). **Fase V (F1): não vale mais.** Os Claude Code 2.1.293, 2.1.294 e 2.1.295 carregam o mod sem a variável, até com valor `0` (provável mudança de flag no servidor). O hook clássico consulta a variável só para a exclusão mútua.
 - R-3: o `model` do `turn.step` da sessão só é reescrito com ID completo (alias falha); `e.model`/`e.effort` e `parentModel` chegam sempre com os valores do usuário.
-- R-4: `skill.prompt` dispara para skill de plugin, com nome qualificado.
-- R-5: `updatedInput` funciona sem `permissionDecision` (ferramenta `Agent`).
-- R-6: `$.fs.write` fora do plugin e `$.model.complete` com alias funcionam; `$.fs.stat` expõe `isLink`, `kind`, `size`, `realPath`; não há append.
-- R-7: não existe `$.plugin.list`; outro roteador de sessão é detectado por `$.settings.read().enabledPlugins`.
-- R-8: versão mínima = 2.1.293 (a menor medida carregando o mod na fase V; as sondas da fase R usaram 2.1.294); abaixo, o `doctor` avisa.
-- R-10: trocar só o esforço não invalida o cache.
+- R-4: `skill.prompt` dispara para skill de plugin, com nome qualificado. R-5: `updatedInput` funciona sem `permissionDecision` (ferramenta `Agent`).
+- R-6: `$.fs.write` fora do plugin e `$.model.complete` com alias funcionam; `$.fs.stat` expõe `isLink`, `kind`, `size`, `realPath`; não há append. R-7: não existe `$.plugin.list`; outro roteador de sessão é detectado por `$.settings.read().enabledPlugins`.
+- R-8: versão mínima = 2.1.293 (a menor medida carregando o mod na fase V; as sondas da fase R usaram 2.1.294); abaixo, o `doctor` avisa. R-10: trocar só o esforço não invalida o cache.
 - Restrição do `claude plugin validate`: a função que recebe `$` fica no topo do módulo; hooks que decidem pedem `.catch`.
+- D21 (v1.2.0): o ID completo do tier vem do engine (agent.spawn/turn.step) ou de uma sonda de 1 token (`$.model.complete`, agendada no relógio) sobre candidatos — cache por usuário, `models.ids`, `ids` da tabela. Nenhum candidato chega ao `turn.step` sem sonda ok na sessão. O cache só guarda ID da tabela com sonda ok ou ID que o engine resolveu num despacho roteado. Custo: uma chamada de 1 token por candidato e por tier na sessão, só quando falta ID. Origem: campanha 2026-10-10-D, sessão em opus na fase E inteira.
 
 ## Alternativas Consideradas
 
@@ -81,20 +79,24 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - Risco residual do teto no hook clássico: um `model` explícito vindo da CLI passa sem teto quando o hook não consegue ler o transcript. É raro; no Claude Code a CLI resolve contra o teto `top`.
 - Garantia de teto só vale quando o adaptador lê o teto; ilegível → não roteia.
 - Gate: o relatório de 2 semanas deve confirmar economia sem regressão de escaladas.
+- (v1.2.0) `models.ids` escolhe a geração dentro do tier (config explícita do projeto, limitada ao tier e ao teto, nunca vai ao cache). Sonda ok não garante o `turn.step` (medido na R-11 e em campo); o pior caso é o comportamento anterior, só esforço. O bloco `env` do `settings` do projeto pode definir `DEVFLOW_MODEL_ROUTING`/`XDG_DATA_HOME` (anterior a esta mudança; backlog). Residuais aceitos: janela entre a checagem de contenção do cache e a gravação; o engine pode trocar o modelo dentro do mesmo tier no `agent.spawn`; link num diretório acima do cache (HOME em `/var/home`, dotfiles com stow) é aceito e equivale a escolher o HOME; sessões paralelas gravam o `ids.json` em last-writer-wins (a entrada perdida custa uma re-sonda).
 
 ## Guardrails
 
-- SEMPRE resolver a rota na lib pura (sem `node:*`) e traduzir tier por adaptador; NUNCA ID fixo de modelo na tabela.
+- SEMPRE resolver a rota na lib pura (sem `node:*`) e traduzir tier por adaptador; a tabela pode trazer IDs **só como candidatos de sonda**.
 - NUNCA rotear acima do modelo/esforço do usuário; teto ilegível → não rotear.
 - QUANDO a CLI roda com `--runtime omp`, ENTÃO limitar a saída ao teto do agente (decisão do operador de 2026-10-10), lido nesta ordem: `agent_role_defaults` de `omp/omp-roles.yaml`, depois o `model:` de `.context/agents/<nome>.md`, depois `activities.execution`; teto ilegível → não rotear.
 - SEMPRE exigir opt-in duplo: `models.enabled` do repo **e** `DEVFLOW_MODEL_ROUTING=1`; o repositório sozinho nunca liga.
-- SEMPRE alias na ferramenta Agent/`agent.spawn` e ID completo no `turn.step`; sem ID conhecido, só esforço.
+- SEMPRE alias na ferramenta Agent/`agent.spawn` e ID completo no `turn.step`; sem ID verificado (aprendido do engine ou sonda ok na sessão), só esforço.
 - SEMPRE ler arquivos do repositório com leitura segura (sem link, sem bloqueio, arquivo regular, tamanho limitado; no mod, `$.fs.stat` com `realPath` sob a raiz).
 - NUNCA negar despacho nem emitir `permissionDecision` no fallback clássico.
 - QUANDO o mod precisar do bloco `models:`, ENTÃO importar `models-config.mjs` direto (puro); o parser segue único (ADR-011).
 - SEMPRE manter a escalada no meio desligada por padrão e limitada a uma consulta por subagente.
 - SEMPRE reler a fase do `prevc.json` no `turn.step` e no `agent.spawn` (antes de decidir a rota) quando `(mtimeMs, size)` mudou, com a mesma leitura contida do `turn.start`; mesmo par → não relê.
 - QUANDO o `prevc.json` estiver ilegível, parcial ou sem fase no meio do turno, ENTÃO manter a fase atual e não guardar o par (tenta de novo no passo seguinte); só o `turn.start` zera a fase.
+- NUNCA mandar ao turn.step um ID só porque está no cache, em models.ids ou na tabela: sempre sonda ok na sessão antes.
+- NUNCA gravar no cache por usuário ID vindo de models.ids, de despacho não roteado ou do turn.step.
+- SEMPRE contenção por realPath (arquivo e diretório) antes de ler e antes de gravar o cache (ADR-014): ancorada no realPath do pai do diretório do cache; o diretório e o arquivo do cache nunca são link e resolvem exatamente para `<pai real>/devflow-model-routing` e `<dir real>/ids.json`; ausência só vale provada pela listagem.
 
 ## Enforcement
 
@@ -102,6 +104,7 @@ Sondas (Claude Code 2.1.294, `claude -p` com plugin descartável):
 - [ ] Teste: integration do hook clássico (sem `permissionDecision`, teto do transcript, FIFO e `/dev/zero`, C0) e do mod.
 - [ ] Teste (v1.1.0): mod com `prevc.json` falso que muda entre dois `turn.step` e antes de um `agent.spawn` (rota e ledger com a fase nova), `mtimeMs` igual não relê, `stat` que falha mantém a fase; unit do `onPhaseChange` (troca zera a skill, mesma fase não).
 - [ ] Teste: ledger com chaves ⊆ allowlist; e2e do CLI `resolve|escalate|report` em tmpdir.
+- [ ] Teste (v1.2.0): "cache não é usado sem sonda" (ID do cache só vai ao `turn.step` depois de sonda ok na sessão), "models.ids não vai ao cache" e "link não é gravado" (diretório ou arquivo do cache com link, ou link pendurado: não lê, não grava; link num ancestral é aceito).
 - [ ] Doctor: check `model-routing` (repo pede roteamento sem confirmação; versão abaixo de 2.1.293).
 - [ ] Gate PREVC: lint (`bash tests/run-lint.sh`) e revisão de segurança dos adaptadores.
 
@@ -116,4 +119,4 @@ tier (lib) --+-- mod:     agent.spawn / turn.step  (alias | ID completo)
 teto = modelo/esforço do usuário (nunca excedido)
 ```
 
-**Histórico:** v1.0.0 (2026-10-09) decisão inicial · v1.1.0 (2026-10-10, minor) fase relida no meio do turno (`turn.step`, `agent.spawn`) por `(mtimeMs, size)`; spec `docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md` §3.
+**Histórico:** v1.0.0 (2026-10-09) decisão inicial · v1.1.0 (2026-10-10, minor) fase relida no meio do turno (`turn.step`, `agent.spawn`) por `(mtimeMs, size)`; spec `docs/superpowers/specs/2026-10-10-routing-phase-sync-and-evidence-gate-design.md` §3 · v1.2.0 (2026-10-10, minor) ID completo do tier por sonda de 1 token antes da primeira troca da sessão (D21); evidência R-11 no engine real: ID inexistente em `$.model.complete` → `api-error` `model_not_found`/404, IDs válidos respondem, a sonda agendada com `$.clock.after(0, …)` dentro do `turn.step` resolve e o `turn.step` aceita o ID verificado; spec `docs/superpowers/specs/2026-10-10-routing-session-tier-ids-design.md` §3 e §5.

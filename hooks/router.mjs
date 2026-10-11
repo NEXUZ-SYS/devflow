@@ -4,13 +4,14 @@
 // Exigência do validate: toda função que recebe `$` é declarada aqui no topo; o estado é do módulo.
 import * as core from "../scripts/lib/router-core.mjs";
 import { readModels } from "../scripts/lib/models-config.mjs";
-import { effectiveConfig, phaseFromPrevcJson, workflowFromPrevcJson } from "../scripts/lib/model-routing.mjs";
+import { effectiveConfig, phaseFromPrevcJson, workflowFromPrevcJson, tierOf, isTierId } from "../scripts/lib/model-routing.mjs";
 import { rubricPrompt, parseAnswers, combine } from "../scripts/lib/escalation.mjs";
-import { buildEntry, ledgerDirFrom } from "../scripts/lib/routing-ledger.mjs";
+import { buildEntry, ledgerDirFrom, idsCachePathFrom, parseIdsCache, serializeIdsCache } from "../scripts/lib/routing-ledger.mjs";
 import * as mc from "../scripts/lib/monitor-core.mjs";
 
 const MAX_FILE = 256 * 1024;
 const MAX_LEDGER_LINES = 2000;
+const MAX_IDS_CACHE = 4096;
 const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo monitor ao vivo (seção abaixo)
 const MAX_PUB_LOOPS = 100;
 const PREVC = ".context/runtime/workflows/prevc.json";
@@ -30,6 +31,14 @@ const S = {
   dirty: false,
   pub: {},
   pubLast: "",
+  idsCache: {}, // candidatos lidos do cache do usuário (só fonte de candidato: passam pela sonda)
+  cacheable: {}, // IDs com proveniência para o cache (spec §3.3)
+  idsCachePath: null, // null = cache desligado na sessão (ausente ou recusado pela contenção)
+  idsCacheText: "",
+  turnIdPending: null,
+  savingIds: Promise.resolve(), // fila das gravações do cache: nunca reordena
+  flushing: Promise.resolve(), // fila das gravações do ledger
+  pendingIdSource: null,
   sessionKey: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
 };
 
@@ -65,6 +74,49 @@ async function safeStat($, rel) {
     return st;
   } catch {
     return null;
+  }
+}
+
+// O $.fs.stat segue link e rejeita quando o alvo falta: um link pendurado parece "ausente". Ausência só vale
+// provada pela listagem do pai (que mostra o link como entrada); pai ausente → prova no avô, e assim por diante.
+// Sem prova (listagem falhou até a raiz) → false.
+async function provenAbsent($, abs) {
+  try {
+    for (let cur = abs; cur.lastIndexOf("/") > 0; cur = cur.slice(0, cur.lastIndexOf("/"))) {
+      const parent = cur.slice(0, cur.lastIndexOf("/"));
+      const name = cur.slice(cur.lastIndexOf("/") + 1);
+      const entries = await $.fs.list(parent).catch(() => null);
+      if (Array.isArray(entries)) return !entries.some((x) => x?.name === name);
+    }
+  } catch {}
+  return false;
+}
+
+// Cache de IDs fica no diretório de dados do usuário (ADR-014). Link nos ANCESTRAIS é aceito (HOME em /var/home,
+// dotfiles com stow): a contenção ancora no realPath do pai do diretório do cache. O diretório do cache e o arquivo
+// não podem ser link e têm de resolver exatamente para <pai real>/<nome> e <dir real>/<nome>; arquivo regular até
+// 4 KiB. Ausente (provado pela listagem) pode ser criado. Caminho relativo ou qualquer dúvida → false.
+async function userFileOk($, abs) {
+  try {
+    if (typeof abs !== "string" || !abs.startsWith("/")) return false; // HOME relativo resolveria no cwd da sessão
+    const dir = abs.slice(0, abs.lastIndexOf("/"));
+    const base = dir.slice(0, dir.lastIndexOf("/"));
+    if (!dir || !base) return false;
+    const stat = (p) => $.fs.stat(p, { resolve: true }).catch(() => null);
+    const b = await stat(base);
+    const d = await stat(dir);
+    const f = await stat(abs);
+    // Nível ausente: tudo abaixo dele tem de estar ausente também (senão é incoerente → recusa) e a ausência do
+    // arquivo tem de ser provada pela listagem (link pendurado em qualquer nível → recusa).
+    if (!b) return !d && !f && await provenAbsent($, abs);
+    if (b.kind !== "dir" || typeof b.realPath !== "string" || !b.realPath.startsWith("/")) return false;
+    if (!d) return !f && await provenAbsent($, abs); // diretório do cache ainda não existe: validado só o pai
+    const realDir = `${b.realPath.replace(/\/+$/, "")}${dir.slice(base.length)}`;
+    if (d.isLink || d.kind !== "dir" || d.realPath !== realDir) return false;
+    if (!f) return await provenAbsent($, abs);
+    return !f.isLink && f.kind === "file" && f.size <= MAX_IDS_CACHE && f.realPath === `${realDir}${abs.slice(dir.length)}`;
+  } catch {
+    return false;
   }
 }
 
@@ -109,10 +161,20 @@ async function ensure($) {
   try {
     const optIn = await $.env.get("DEVFLOW_MODEL_ROUTING");
     S.config = effectiveConfig(readModels((await safeRead($, ".context/.devflow.yaml")) ?? ""), optIn);
-    if (S.config.enabled && S.config.ledger) {
+    if (S.config.enabled) {
       const home = await $.env.get("HOME");
       const xdg = await $.env.get("XDG_DATA_HOME");
-      if (home && S.cwd) S.ledgerPath = `${ledgerDirFrom({ xdgDataHome: xdg, home, cwd: S.cwd })}/${S.sessionKey}.jsonl`;
+      if (S.config.ledger && home && S.cwd) S.ledgerPath = `${ledgerDirFrom({ xdgDataHome: xdg, home, cwd: S.cwd })}/${S.sessionKey}.jsonl`;
+      // Cache de IDs independe de models.ledger (spec §3.3).
+      if (home) {
+        const p = idsCachePathFrom({ xdgDataHome: xdg, home });
+        if (await userFileOk($, p)) {
+          S.idsCachePath = p;
+          const txt = await $.fs.read(p).catch(() => null);
+          S.idsCache = typeof txt === "string" && txt.length <= MAX_IDS_CACHE ? parseIdsCache(txt) : {};
+          S.idsCacheText = typeof txt === "string" ? txt : "";
+        } // recusado: cache desligado na sessão (não lê, não grava)
+      }
     }
   } catch { S.config = effectiveConfig(readModels(""), undefined); S.ledgerPath = null; } // falha ao ler o ambiente → roteamento desligado
   if (S.config.enabled) await detectOtherRouter($);
@@ -138,10 +200,58 @@ function ledger(fields) {
   S.dirty = true;
 }
 
-async function flushLedger($) {
+// Em fila (a sonda grava fora do passo, concorrendo com o turn.complete): cada gravação pega as linhas na sua vez.
+function flushLedger($) {
+  S.flushing = S.flushing.then(() => writeLedger($), () => writeLedger($));
+  return S.flushing;
+}
+
+async function writeLedger($) {
   if (!S.ledgerPath || !S.dirty) return;
   S.dirty = false;
   try { await $.fs.write(S.ledgerPath, S.lines.join("\n") + "\n"); } catch { S.ledgerPath = null; }
+}
+
+// D21 v1.2 (spec 2026-10-10-routing-session-tier-ids §3.2): agendada no relógio (dispatch próprio, fora do passo);
+// a troca vem no passo seguinte à resposta.
+function startProbe($, tier) {
+  const p = core.nextProbe(S.core, tier, { cache: S.idsCache, config: S.config, table: S.table });
+  if (!p) return;
+  try { $.clock.after(0, () => { void runProbe($, p); }); } catch { core.onProbeResult(S.core, tier, p.id, "error"); }
+}
+
+async function runProbe($, { tier, id }) {
+  let outcome, threw = false;
+  try { outcome = core.classifyProbe(await $.model.complete({ model: id, prompt: "ok", maxTokens: 1, effort: "low", timeoutMs: 15000 })); }
+  catch { outcome = "rejected"; threw = true; } // o engine recusou enviar (modelo bloqueado): não melhora na sessão
+  try {
+    core.onProbeResult(S.core, tier, id, outcome); // sempre: libera o inFlight
+    if (!active()) return; // /devflow-route off com a sonda em voo: nada vai a ledger nem a cache
+    if (outcome === "ok" && id === S.table?.ids?.[tier]) S.cacheable[tier] = id;
+    // Só "modelo inexistente" (404/model_not_found) tira o ID do cache; exceção pode ser transitória (rede, abort).
+    if (outcome === "rejected" && !threw && S.idsCache[tier] === id) delete S.idsCache[tier];
+    ledger({ scope: "probe", tier, model: id, probe: outcome });
+    await flushLedger($);
+    if (outcome !== "error") await saveIdsCache($);
+  } catch { /* sonda nunca afeta a sessão */ }
+}
+
+// Proveniência (spec §3.3): só ID da tabela com sonda ok ou resolvido pelo engine num despacho roteado.
+// Gravações em fila: cada uma calcula o texto na sua vez, a partir do estado (fonte), depois da contenção.
+function saveIdsCache($) {
+  S.savingIds = S.savingIds.then(() => writeIdsCache($), () => writeIdsCache($));
+  return S.savingIds;
+}
+
+async function writeIdsCache($) {
+  try {
+    if (!S.idsCachePath) return;
+    if (!(await userFileOk($, S.idsCachePath))) { S.idsCachePath = null; return; } // nunca segue link
+    const text = serializeIdsCache({ ...S.idsCache, ...S.cacheable });
+    if (text === S.idsCacheText) return;
+    await $.fs.write(S.idsCachePath, text);
+    S.idsCacheText = text;
+  } catch { /* cache é otimização */ }
 }
 
 async function decideMidRun($, agentId) {
@@ -196,6 +306,9 @@ async function onAgentSpawn($, e, next) {
   const res = await next(route?.model ? { ...e, model: route.model } : e);
   if (res && "agentId" in res) {
     core.onSpawned(S.core, res.agentId, route, res.model, e.subagentType);
+    // Só alias escolhido pelo mod conta como "o engine resolveu o tier" (spec §3.3); explícito não alimenta o cache.
+    const t = tierOf(res.model);
+    if (route?.model && route.source !== "explicit" && t && t === route.tier && isTierId(res.model, t)) { S.cacheable[t] = res.model; await saveIdsCache($); }
     if (route) ledger({ scope: "subagent", agentId: res.agentId, agentType: e.subagentType, phase: S.core.phase, tier: route.tier, model: res.model, effort: route.effort, source: route.source, ceiling: route.ceiling });
     if (route) {
       const effortRouted = S.core.userEffort != null && route.effort != null && route.effort !== S.core.userEffort;
@@ -222,6 +335,8 @@ async function onToolCall($, e, next) {
 
 async function onTurnComplete($, e, next) {
   const res = await next(e);
+  const turnIdPending = S.turnIdPending;
+  if (!e.agentId) S.turnIdPending = null; // fim do turno da sessão zera mesmo sem usage ou com o roteamento desligado
   try {
     if (active() && res?.usage) {
       const u = res.usage;
@@ -229,7 +344,10 @@ async function onTurnComplete($, e, next) {
       // A troca de fase marcada no turn.step vai na próxima linha da sessão que tem usage (o relatório só lê essas).
       const switched = !e.agentId && S.pendingSwitch ? true : undefined;
       if (!e.agentId) S.pendingSwitch = false;
-      ledger({ scope: e.agentId ? "subagent" : "session", agentId: e.agentId, agentType: e.agentId ? S.core.agentTypes[e.agentId] : undefined, switched, phase: S.core.phase, skill: S.core.skill, model: u.model, usage: u, cacheReadRatio: total ? (u.cache_read_input_tokens ?? 0) / total : undefined });
+      const idPending = e.agentId ? undefined : turnIdPending ?? undefined;
+      const idSource = switched ? S.pendingIdSource ?? undefined : undefined;
+      ledger({ scope: e.agentId ? "subagent" : "session", agentId: e.agentId, agentType: e.agentId ? S.core.agentTypes[e.agentId] : undefined, switched, idPending, idSource, phase: S.core.phase, skill: S.core.skill, model: u.model, usage: u, cacheReadRatio: total ? (u.cache_read_input_tokens ?? 0) / total : undefined });
+      if (switched) S.pendingIdSource = null; // segue o pendingSwitch: vai na próxima linha de sessão com usage
       if (!e.agentId) await flushLedger($);
     }
   } catch { /* ledger nunca quebra o turno */ }
@@ -248,7 +366,9 @@ async function* routerTurnStep($, e, next) {
           core.learnId(S.core, e.model); // ID completo do tier do teto sempre conhecido
           if (!S.sessionOff) patch = core.onSessionStep(S.core, e, { table: S.table, config: S.config });
           if (patch?.switched) S.pendingSwitch = true;
-          if (patch) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
+          if (patch?.idPending) { S.turnIdPending = patch.idPending; startProbe($, patch.idPending); }
+          if (patch?.switched) S.pendingIdSource = patch.idSource ?? null; // a última troca manda: volta ao teto não tem fonte
+          if (patch && (patch.model || patch.effort || patch.switched)) $.ui.status(`devflow → ${patch.model ?? e.model} · ${patch.effort ?? e.effort ?? "-"} · fase ${S.core.phase ?? "-"}`);
         }
         if (e.agentId && S.pub[e.agentId]) {
           // republica a cada passo: sem patch o valor enviado pode ter mudado (escalada por streak) e o publicado ficaria velho

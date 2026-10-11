@@ -15,8 +15,16 @@ const zeroIn = (map, key) => { if (!map.has(key)) map.set(key, ZERO()); return m
 const esc = (map, key) => { if (!map.has(key)) map.set(key, { ids: new Set(), anon: 0, escalated: 0 }); return map.get(key); };
 
 export function aggregate(entries) {
-  const agg = { subagents: new Map(), session: new Map(), escalations: new Map(), midRunSwitches: 0, phaseSwitches: [] };
+  const agg = { subagents: new Map(), session: new Map(), escalations: new Map(), midRunSwitches: 0, phaseSwitches: [], probes: new Map(), idPending: new Map() };
   for (const e of entries ?? []) {
+    if (e?.scope === "probe") {
+      if (typeof e.tier === "string" && ["ok", "rejected", "error"].includes(e.probe)) {
+        if (!agg.probes.has(e.tier)) agg.probes.set(e.tier, { ok: 0, rejected: 0, error: 0 });
+        agg.probes.get(e.tier)[e.probe] += 1;
+      }
+      continue;
+    }
+    if (e?.scope === "session" && typeof e.idPending === "string") agg.idPending.set(e.idPending, (agg.idPending.get(e.idPending) ?? 0) + 1);
     const agent = String(e?.agentType ?? "?");
     if (e?.escalation) {
       if (e.escalation.action === "escalate") {
@@ -53,7 +61,7 @@ const addTok = (map, model, usage) => {
 
 export function beforeAfter(ledger, messages) {
   const ba = { cut: null, subagent: WIN(), session: WIN() };
-  const stamps = (ledger ?? []).map((e) => Date.parse(e?.ts)).filter(Number.isFinite);
+  const stamps = (ledger ?? []).filter((e) => e?.scope !== "probe").map((e) => Date.parse(e?.ts)).filter(Number.isFinite);
   if (!stamps.length) return ba;
   ba.cut = stamps.reduce((a, b) => (b < a ? b : a), Infinity); // sem spread: o report nunca lança
   const ledgerHasUsage = (ledger ?? []).some((e) => e?.usage);
@@ -100,6 +108,13 @@ export function renderMarkdown(agg, ba = null) {
   for (const [a, s] of agg.escalations) lines.push(`| ${a} | ${dispatchesOf(s)} | ${s.escalated} |`);
   lines.push("", `Trocas no meio da execução: ${agg.midRunSwitches}`);
   lines.push(`Trocas de fase da sessão: ${agg.phaseSwitches.length} (cache lido no passo seguinte: ${agg.phaseSwitches.map((s) => s.cacheReadRatio ?? "?").join(", ") || "—"})`);
+  const probes = [...(agg.probes ?? new Map())];
+  lines.push("", "## Sondas de ID", "");
+  if (probes.length) {
+    lines.push("| Tier | ok | rejected | error |", "|---|---|---|---|");
+    for (const [t, c] of probes) lines.push(`| ${t} | ${c.ok} | ${c.rejected} | ${c.error} |`);
+  } else lines.push("—");
+  lines.push("", `Turnos com ID pendente: ${[...(agg.idPending ?? new Map())].map(([t, n]) => `${t}×${n}`).join(", ") || "—"}`);
   if (ba) lines.push("", renderBeforeAfter(ba));
   lines.push("", "_Tokens por modelo. O peso de cada modelo na cota do plano não é público._");
   return lines.join("\n");

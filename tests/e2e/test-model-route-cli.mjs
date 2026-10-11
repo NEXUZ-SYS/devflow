@@ -295,3 +295,21 @@ test("omp: .context/agents symlink de diretório para fora → resolve null (§9
   symlinkSync(fora, join(f.dir, ".context/agents"));
   assert.equal(JSON.parse(run(["resolve", "--agent", "devflow:x", "--runtime", "omp"], f)).route, null);
 });
+
+test("report: sondas de ID e turnos com ID pendente aparecem no relatório", () => {
+  const f = fixture();
+  const dir = ledgerDirFrom({ xdgDataHome: f.xdg, home: f.xdg, cwd: f.dir });
+  mkdirSync(dir, { recursive: true });
+  const ts = "2026-10-10T12:00:00.000Z";
+  const lines = [
+    { ts, scope: "probe", tier: "standard", model: "claude-sonnet-9", probe: "ok" },
+    { ts, scope: "probe", tier: "standard", model: "claude-sonnet-8", probe: "rejected" },
+    { ts, scope: "session", phase: "E", model: "claude-opus-5-5", idPending: "standard", usage: { input_tokens: 1, output_tokens: 1 } },
+  ];
+  writeFileSync(join(dir, "mod.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const r = spawnSync("node", [CLI, "report", "--cwd", f.dir], { encoding: "utf8", env: f.env, timeout: 10000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /## Sondas de ID/);
+  assert.match(r.stdout, /\| standard \| 1 \| 1 \| 0 \|/);
+  assert.match(r.stdout, /Turnos com ID pendente: standard×1/);
+});

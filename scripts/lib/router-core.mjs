@@ -1,13 +1,14 @@
 // scripts/lib/router-core.mjs — máquina de estado do mod de roteamento (spec §4.2/§4.3). PURO.
 // O adaptador (hooks/router.mjs) só traduz eventos do engine para estas funções.
-import { resolveSessionRoute, resolveSubagentRoute, stepEffort, tierOf, TIERS, capAtCeiling, minTier } from "./model-routing.mjs";
+import { resolveSessionRoute, resolveSubagentRoute, stepEffort, tierOf, TIERS, capAtCeiling, minTier, isTierId } from "./model-routing.mjs";
 
 const MAX_ERRORS = 6;
 const MAX_SUMMARY = 300;
+export const PROBE_MAX_ERRORS = 3;
 const rank = (t) => TIERS.indexOf(t);
 
 export function createRouterState() {
-  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, lastSessionModel: null, ids: {}, agents: {}, agentTypes: {} };
+  return { userModel: null, userEffort: null, phase: null, skill: null, sessionTier: null, lastSessionModel: null, ids: {}, idSource: {}, probes: {}, agents: {}, agentTypes: {} };
 }
 
 // Sondas R-3: e.model/e.effort que chegam ao turn.step da sessão são sempre os do usuário.
@@ -31,9 +32,49 @@ export function onSkill(state, { skill, agentId }) {
 }
 
 export function learnId(state, modelId) {
-  if (typeof modelId !== "string" || !/^claude-[a-z0-9-]+$/.test(modelId)) return;
   const t = tierOf(modelId);
-  if (t) state.ids[t] = modelId;
+  if (!t || !isTierId(modelId, t)) return;
+  state.ids[t] = modelId;
+  state.idSource[t] = "learned";
+}
+
+// D21 v1.2 (spec 2026-10-10-routing-session-tier-ids §3.1): candidatos a ID do tier, na ordem cache →
+// models.ids → tabela. Nenhum vai ao turn.step sem sonda ok nesta sessão.
+export function idCandidates(tier, { cache, config, table } = {}) {
+  const out = [];
+  for (const id of [cache?.[tier], config?.ids?.[tier], table?.ids?.[tier]]) if (isTierId(id, tier) && !out.includes(id)) out.push(id);
+  return out;
+}
+
+// Só "modelo inexistente" rejeita o candidato; invalid_request/400 pode ter outra causa e conta como erro.
+export function classifyProbe(r) {
+  if (!r || typeof r !== "object") return "error";
+  if (r.isAnswered === true || r.reason === "empty-reply") return "ok";
+  if (r.reason === "api-error" && (r.error === "model_not_found" || r.status === 404)) return "rejected";
+  return "error";
+}
+
+export function nextProbe(state, tier, ctx) {
+  if (state.ids[tier]) return null;
+  const p = (state.probes[tier] ??= { tried: [], errors: 0, inFlight: false, gaveUp: false });
+  if (p.inFlight || p.gaveUp) return null;
+  const id = idCandidates(tier, ctx).find((c) => !p.tried.includes(c));
+  if (!id) { p.gaveUp = true; return null; }
+  p.inFlight = true;
+  return { tier, id };
+}
+
+export function onProbeResult(state, tier, id, outcome) {
+  const p = state.probes[tier];
+  if (!p) return;
+  p.inFlight = false;
+  if (outcome === "ok") {
+    if (!state.ids[tier]) { state.ids[tier] = id; state.idSource[tier] = "probe"; } // aprendido do engine vence
+    return;
+  }
+  if (outcome === "rejected") { p.tried.push(id); return; }
+  p.errors += 1; // limite por tier: rejected não zera
+  if (p.errors >= PROBE_MAX_ERRORS) p.gaveUp = true;
 }
 
 // e.model chega SEMPRE com o modelo do usuário (sonda R-3), mesmo depois de uma troca. Por isso a troca
@@ -54,11 +95,13 @@ export function onSessionStep(state, { model, effort }, { table, config }) {
   state.sessionTier = route.tier;
   if (route.tier !== route.ceiling) {
     const id = state.ids[route.tier];
-    if (id && id !== model) rw.model = id; // D21: sem ID aprendido, só esforço
+    if (id && id !== model) rw.model = id;
+    if (!id) rw.idPending = route.tier; // D21: sem ID verificado, só esforço; o adaptador sonda
   }
   if (route.effort && route.effort !== effort) rw.effort = route.effort;
   markSwitch(state, rw, model);
-  return rw.model || rw.effort || rw.switched ? rw : null;
+  if (rw.switched && rw.model) rw.idSource = state.idSource[route.tier] ?? "learned";
+  return rw.model || rw.effort || rw.switched || rw.idPending ? rw : null;
 }
 
 export function onSpawn(state, e, { table, config, phase, skill }) {

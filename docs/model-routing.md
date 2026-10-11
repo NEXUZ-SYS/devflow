@@ -1,6 +1,6 @@
 # Roteamento de modelos
 
-O DevFlow pode escolher o modelo e o esforço de cada etapa conforme o que ele já sabe do trabalho (fase do PREVC, skill ativa, agente, task do plano). O objetivo é gastar menos da cota da assinatura, com economia **medida** e com a garantia de que nada roda acima do modelo e do esforço que você escolheu. Decisão: [ADR-017](../.context/engineering/adrs/017-model-routing-v1.1.0.md) (status Proposto, `gated`).
+O DevFlow pode escolher o modelo e o esforço de cada etapa conforme o que ele já sabe do trabalho (fase do PREVC, skill ativa, agente, task do plano). O objetivo é gastar menos da cota da assinatura, com economia **medida** e com a garantia de que nada roda acima do modelo e do esforço que você escolheu. Decisão: [ADR-017](../.context/engineering/adrs/017-model-routing-v1.2.0.md) (status Proposto, `gated`).
 
 ## As três camadas
 
@@ -59,6 +59,29 @@ models:
   - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--mid-run` (só no ramo da rubrica) a rubrica é a da escalada no meio da execução; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`, aceitando `--signal-red` (há sinal vermelho no ledger do `verify:`) e `--runtime omp` (limita a saída ao teto do agente e devolve também `role`; sob omp, `role` é o campo útil, não `model`);
   - `report [--since ISO] [--transcripts DIR]` (`--transcripts` é o caminho do clássico e do omp, que leem os transcripts em vez do ledger do mod) soma tokens por modelo e por agente/fase, taxa de escalada e o custo das trocas de fase, e fecha com a seção "Antes × depois" (ver Medição).
 - `doctor`: o check `model-routing` avisa quando o repositório pede roteamento sem a sua confirmação ou, com o roteamento pedido e confirmado, quando a versão do Claude Code é anterior à testada.
+
+## ID do tier e sonda
+
+A tabela de rotas usa aliases (`sonnet`, `opus`), mas a troca de modelo da sessão (`turn.step`) exige o ID completo do tier. Sem ele a sessão só muda o esforço. O ID vem de duas fontes:
+
+1. **O engine**: o ID que ele resolve num despacho (`agent.spawn`) roteado pelo mod.
+2. **A sonda**: uma chamada de 1 token com esforço `low`, agendada no relógio (fora do passo), feita só quando falta o ID do tier. Os candidatos, nesta ordem: o cache do usuário, `models.ids` e os IDs da tabela. O ID aprendido do engine vence o da sonda. Rejeitam um candidato (passa ao próximo) o "modelo inexistente" (404/`model_not_found`) ou o engine recusar enviar (a chamada lança, como com modelo bloqueado); só o "modelo inexistente" tira o ID do cache. Outros erros contam como erro, com limite por tier. A troca vem no passo seguinte à resposta da sonda.
+
+**Custo:** uma chamada de 1 token por candidato e por tier na sessão, apenas enquanto o ID não é conhecido.
+
+**Cache e proveniência.** O cache é por usuário (`ids.json` em `~/.local/share/devflow-model-routing/`, nunca no repositório). Só entra nele o ID da tabela com sonda ok, ou o ID que o engine resolveu num despacho roteado de tier igual ao pedido. O ID de `models.ids` nunca vai para o cache, e um candidato vindo do cache só chega ao `turn.step` depois de sonda ok na sessão. Diretório ou arquivo do cache com link simbólico (inclusive pendurado): não lê nem grava; link num diretório acima (HOME em `/var/home`, dotfiles com stow) é aceito, e um link acima que aponte para fora equivale a escolher o HOME (risco aceito na ADR-017). Sessões paralelas gravam o `ids.json` em last-writer-wins: uma pode descartar a entrada da outra, o que custa só uma re-sonda na sessão seguinte.
+
+**`models.ids`** (opcional) escolhe a geração dentro do tier, útil para gateway ou conta com IDs próprios. Só vale tier conhecido com ID do próprio tier; o teto continua valendo:
+
+```yaml
+models:
+  enabled: true
+  ids:
+    standard: claude-sonnet-5-5
+    capable: claude-opus-5-5
+```
+
+**No ledger e no relatório.** Cada sonda grava uma linha `scope: probe` (`tier`, `model`, `probe: ok|rejected|error`). Linhas de sessão trazem `idPending` (o tier que esperava ID naquele turno) e `idSource` (`learned` ou `probe`). O `model-route report` mostra a seção "Sondas de ID" (ok/rejected/error por tier) e "Turnos com ID pendente".
 
 ## Custo de cache
 
