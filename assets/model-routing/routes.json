@@ -3,6 +3,7 @@
   "routable": ["general-purpose"],
   "routablePrefix": "devflow:",
   "effortByTier": { "cheap": "low", "standard": "medium", "capable": "high", "top": "high" },
+  "ids": { "cheap": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "capable": "claude-opus-5-5", "top": "claude-fable-5-1" },
   "agents": {
     "architect": { "tier": "capable", "effort": "high" },
     "security-auditor": { "tier": "capable", "effort": "high" },

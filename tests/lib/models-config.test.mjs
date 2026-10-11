@@ -90,3 +90,23 @@ test("yaml-block e models-config são puros", () => {
     assert.doesNotMatch(src, /from\s+["']node:/, f);
   }
 });
+
+test("models.ids: só tier conhecido com ID do próprio tier", () => {
+  const m = readModels(`models:
+  enabled: true
+  ids:
+    standard: claude-sonnet-5-5   # verificado
+    cheap: claude-opus-5-5
+    ultra: claude-x
+    capable: opus
+`);
+  assert.deepEqual(m.ids, { standard: "claude-sonnet-5-5" });
+  assert.deepEqual(readModels("models:\n  enabled: true\n").ids, {});
+  assert.deepEqual(readModels("").ids, {});
+});
+
+test("routes.json traz IDs candidatos válidos para os quatro tiers", async () => {
+  const { isTierId } = await import("../../scripts/lib/model-routing.mjs");
+  const t = JSON.parse(readFileSync(new URL("../../assets/model-routing/routes.json", import.meta.url), "utf8"));
+  for (const tier of ["cheap", "standard", "capable", "top"]) assert.ok(isTierId(t.ids?.[tier], tier), tier);
+});

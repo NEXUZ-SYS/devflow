@@ -3,7 +3,7 @@
 // Lembrete (D18): este bloco é o PEDIDO do repositório; quem liga é effectiveConfig + env do usuário.
 import { namedBlock, dedentBlock } from "./yaml-block.mjs";
 import { parseYaml } from "./frontmatter.mjs";
-import { TIERS, PHASES } from "./model-routing.mjs";
+import { TIERS, PHASES, isTierId } from "./model-routing.mjs";
 
 const MAX_BYTES = 256 * 1024;
 const AGENT_RE = /^[A-Za-z0-9_-]+$/;
@@ -15,6 +15,7 @@ function defaults() {
     subagents: true,
     maxTier: null,
     ledger: false,
+    ids: {},
     overrides: { agents: {}, phases: {}, session: { phases: {} } },
     midRun: { enabled: false, failureStreak: 3 },
     thresholds: { capability: 0.6, claimsDone: 0.8 },
@@ -71,5 +72,6 @@ export function readModels(src) {
     const t = clean(v);
     if (PHASES.includes(ph) && (TIERS.includes(t) || t === "ceiling")) out.overrides.session.phases[ph] = t;
   }
+  if (isMap(data.ids)) for (const t of TIERS) if (Object.hasOwn(data.ids, t) && isTierId(clean(data.ids[t]), t)) out.ids[t] = clean(data.ids[t]);
   return out;
 }
