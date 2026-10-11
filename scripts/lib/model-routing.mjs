@@ -33,6 +33,16 @@ export function tierOf(value) {
   return null;
 }
 
+// ID completo de modelo do tier (spec 2026-10-10-routing-session-tier-ids §3.1): forma, tamanho, exatamente uma
+// família com fronteira de hífen e o tier que o próprio ID declara.
+const ID_RE = /^claude-[a-z0-9-]+$/;
+export function isTierId(id, tier) {
+  if (typeof id !== "string" || id.length > 64 || !ID_RE.test(id)) return false;
+  const fams = id.match(/haiku|sonnet|opus|fable/g) ?? [];
+  if (fams.length !== 1 || !new RegExp(`-${fams[0]}(-|$)`).test(id)) return false;
+  return tierOf(id) === tier;
+}
+
 export const toAlias = (tier) => (Object.hasOwn(ALIAS, tier) ? ALIAS[tier] : null);
 export const toRole = (tier) => (Object.hasOwn(ROLE, tier) ? ROLE[tier] : null);
 

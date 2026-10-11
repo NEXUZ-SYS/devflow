@@ -108,3 +108,19 @@ test("workflowFromPrevcJson só aceita nome seguro (allowlist, até 128)", () =>
   assert.equal(R.workflowFromPrevcJson(""), null);
   assert.equal(R.workflowFromPrevcJson(undefined), null);
 });
+
+test("isTierId: regex, tamanho, uma família com fronteira e o tier do próprio ID", () => {
+  const { isTierId } = R;
+  assert.equal(isTierId("claude-sonnet-5-5", "standard"), true);
+  assert.equal(isTierId("claude-haiku-4-5-20251001", "cheap"), true);
+  assert.equal(isTierId("claude-3-5-sonnet-20241022", "standard"), true);
+  assert.equal(isTierId("claude-fable-5-1", "top"), true);
+  assert.equal(isTierId("claude-opus-5-5", "cheap"), false);
+  assert.equal(isTierId("sonnet", "standard"), false);
+  assert.equal(isTierId("claude-opus-4-haiku", "cheap"), false, "duas famílias");
+  assert.equal(isTierId("claude-haikuopus", "cheap"), false, "duas famílias coladas");
+  assert.equal(isTierId("claude-opusx", "capable"), false, "sem fronteira");
+  assert.equal(isTierId("claude-sonnet-5-5 ; rm", "standard"), false);
+  assert.equal(isTierId(`claude-sonnet-${"9".repeat(60)}`, "standard"), false);
+  assert.equal(isTierId(null, "standard"), false);
+});
