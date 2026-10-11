@@ -63,7 +63,9 @@ O pior caso é o comportamento atual. Um ID errado nunca chega ao `turn.step`.
   - `isAnswered: true` ou `reason: "empty-reply"` → **ok**: o ID foi aceito. Vira `state.ids[T]` e vai ao cache;
   - `api-error` com `error` em `invalid_request` ou `model_not_found`, ou `status` 400/404 → **rejected**: descarta o
     candidato e passa ao próximo da cadeia na próxima necessidade;
-  - qualquer outro (`rate_limit`, `overloaded`, `status` nulo, `aborted`, exceção) → **error** transitório: tenta de
+  - a chamada lança: o engine recusou enviar (modelo bloqueado ou fora da allowlist), o que não se resolve sozinho →
+    **rejected**;
+  - qualquer outro (`rate_limit`, `overloaded`, `status` nulo, `aborted`) → **error** transitório: tenta de
     novo o mesmo candidato numa necessidade seguinte, até 3 tentativas por tier na sessão; esgotado, desiste do tier
     na sessão.
 - **Custo:** uma chamada de 1 token de saída por tier e por sessão, só quando falta ID. Declarado no CHANGELOG e na
@@ -129,7 +131,7 @@ As libs continuam puras (sem `node:*`); o adaptador só traduz eventos.
 
 ## 5. Erros e bordas
 
-- Sonda lança ou o engine recusa enviar (`model` bloqueado) → `error`; não afeta o passo.
+- Sonda lança (o engine recusa enviar: `model` bloqueado) → `rejected`; não afeta o passo.
 - Teto muda no meio da sessão (`/model`) → os IDs aprendidos continuam válidos; a rota recalcula o tier.
 - Fase volta para P/R (teto) → nenhum tier abaixo do teto é pedido; nenhuma sonda.
 - Duas necessidades do mesmo tier enquanto a sonda está em voo → uma sonda só.
