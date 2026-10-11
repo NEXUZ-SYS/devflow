@@ -19,7 +19,7 @@ sources:
   spec: docs/superpowers/specs/2026-10-10-routing-session-tier-ids-design.md
   plan: docs/superpowers/plans/2026-10-10-routing-session-tier-ids.md
   adrs:
-    - .context/engineering/adrs/017-model-routing-v1.1.0.md
+    - .context/engineering/adrs/017-model-routing-v1.2.0.md
 phases:
   - id: "phase-1"
     name: "Planning"
@@ -76,7 +76,7 @@ phases:
     name: "Confirmation"
     prevc: "C"
     status: pending
-lastUpdated: "2026-10-11T00:13:08.765Z"
+lastUpdated: "2026-10-11T01:11:35.897Z"
 ---
 
 # ID verificado do tier antes da primeira troca da sessão
@@ -101,4 +101,4 @@ MISS sem nenhuma troca.
 
 ## Execution History
 
-> Last updated: 2026-10-11T00:13:08.765Z | Progress: 0%
+> Last updated: 2026-10-11T01:11:35.897Z | Progress: 0%
