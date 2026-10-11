@@ -25,7 +25,7 @@ function mkRepo(yaml = YAML_ON, phase = "E") {
   return root;
 }
 
-async function load({ root, env = ON, statOverride, complete, stateThrows = false } = {}) {
+async function load({ root, env = ON, statOverride, complete, stateThrows = false, files = {} } = {}) {
   const flags = { stateThrows };
   const mod = await import(pathToFileURL(path.join(REPO, "hooks/router.mjs")).href + `?t=${n++}`);
   const hooks = {};
@@ -44,17 +44,19 @@ async function load({ root, env = ON, statOverride, complete, stateThrows = fals
       get: async (r) => ({ value: log.state[r.key], version: 0 }),
       set: async (r, v) => { if (flags.stateThrows) throw new Error("state off"); log.state[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
     },
+    clock: { after: (ms, fn) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); } },
     model: { complete: async (req) => { log.completes.push(req); return complete ? complete(req) : { isAnswered: false, reason: "empty-reply" }; } },
     fs: {
       stat: async (p, opt) => {
         const a = abs(p);
         const ov = statOverride?.(a);
         if (ov) return ov;
+        if (Object.hasOwn(files, a)) return { kind: "file", size: files[a].length, mtimeMs: 0, isLink: false, ...(opt?.resolve ? { realPath: a } : {}) };
         const l = fs.lstatSync(a);
         const s = fs.statSync(a);
         return { kind: s.isFile() ? "file" : "dir", size: s.isFile() ? s.size : 0, mtimeMs: s.mtimeMs, isLink: l.isSymbolicLink(), ...(opt?.resolve ? { realPath: fs.realpathSync(a) } : {}) };
       },
-      read: async (p) => { log.reads.push(p); return fs.readFileSync(abs(p), "utf8"); },
+      read: async (p) => { log.reads.push(p); return Object.hasOwn(files, abs(p)) ? files[abs(p)] : fs.readFileSync(abs(p), "utf8"); },
       write: async (p, text) => { log.writes.push({ path: p, text }); },
     },
   };
@@ -143,10 +145,14 @@ async function failures(H, count) {
 test("midRun ligado: 1 consulta a model.complete em N falhas seguidas; desligado: 0", async () => {
   const H = await load({ root: mkRepo(YAML_MIDRUN) });
   await failures(H, 5);
-  assert.equal(H.log.completes.length, 1);
+  // a sonda do ID do tier da sessão (prompt "ok", D21 v1.2) também usa model.complete: conta só o decisor
+  const decisor = (X) => X.log.completes.filter((r) => r.prompt !== "ok");
+  await settle();
+  assert.equal(decisor(H).length, 1);
   const off = await load({ root: mkRepo(YAML_ON) });
   await failures(off, 5);
-  assert.equal(off.log.completes.length, 0);
+  await settle();
+  assert.equal(decisor(off).length, 0);
 });
 
 test("ledger: só valores validados, sem texto de erro", async () => {
@@ -172,6 +178,135 @@ test("Skill: a da sessão (tool.call sem agentId) muda a skill; a de subagente n
 });
 
 const YAML_LEDGER = "models:\n  enabled: true\n  ledger: true\n";
+
+// ─── D21 v1.2: sonda do ID do tier, cache contido e ledger ─────────────────────────────────────────
+const settle = () => new Promise((r) => setTimeout(r, 5));
+const ledgerLines = (H) => H.log.writes.filter((w) => w.path.endsWith(".jsonl")).at(-1)?.text.trim().split("\n").map((l) => JSON.parse(l)) ?? [];
+const CACHE = "/home/t/.local/share/devflow-model-routing/ids.json";
+const cacheWrites = (H) => H.log.writes.filter((w) => w.path === CACHE);
+const later = (H, index) => H.step({ turnId: "t1", index, model: OPUS, effort: "xhigh", messageCount: index + 1 });
+
+test("D21 v1.2: fase E sem ID → 1a etapa só esforço e agenda 1 sonda; a seguinte troca para o ID sondado", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER) });
+  const first = await H.turn();
+  assert.equal(first.model, OPUS);
+  await settle();
+  const probes = H.log.completes.filter((r) => r.prompt === "ok");
+  assert.equal(probes.length, 1);
+  assert.deepEqual({ model: probes[0].model, maxTokens: probes[0].maxTokens, effort: probes[0].effort }, { model: SONNET, maxTokens: 1, effort: "low" });
+  assert.equal((await later(H, 1)).model, SONNET);
+  assert.equal(H.log.completes.filter((r) => r.prompt === "ok").length, 1, "nenhuma sonda nova depois do ok");
+});
+
+test("D21 v1.2: passos com a sonda em voo não disparam outra", async () => {
+  let release;
+  const H = await load({ root: mkRepo(), complete: () => new Promise((r) => { release = () => r({ isAnswered: true, text: "ok" }); }) });
+  await H.turn();
+  await settle();
+  await later(H, 1);
+  await later(H, 2);
+  assert.equal(H.log.completes.length, 1);
+  release();
+  await settle();
+  assert.equal((await later(H, 3)).model, SONNET);
+});
+
+test("D21 v1.2: candidato rejeitado (404) → testa o próximo; models.ids vem antes da tabela", async () => {
+  const yaml = "models:\n  enabled: true\n  ids:\n    standard: claude-sonnet-9\n";
+  const H = await load({ root: mkRepo(yaml), complete: (req) => (req.model === "claude-sonnet-9" ? { isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 } : { isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle();
+  await later(H, 1); // agenda a 2a sonda
+  await settle();
+  assert.deepEqual(H.log.completes.map((r) => r.model), ["claude-sonnet-9", SONNET]);
+  assert.equal((await later(H, 2)).model, SONNET);
+});
+
+test("D21 v1.2: invalid_request/400 é erro transitório: tenta o mesmo candidato de novo", async () => {
+  const H = await load({ root: mkRepo(), complete: () => ({ isAnswered: false, reason: "api-error", error: "invalid_request", status: 400 }) });
+  await H.turn();
+  await settle();
+  await later(H, 1);
+  await settle();
+  assert.deepEqual(H.log.completes.map((r) => r.model), [SONNET, SONNET]);
+});
+
+test("D21 v1.2: a sonda que lança conta como rejected e nunca quebra o passo", async () => {
+  const H = await load({ root: mkRepo(), complete: () => { throw new Error("modelo bloqueado"); } });
+  assert.equal((await H.turn()).model, OPUS);
+  await settle();
+  assert.equal((await later(H, 1)).model, OPUS, "sem candidato verificado: segue no teto");
+  assert.equal(H.log.completes.length, 1, "rejeitado não é re-sondado");
+});
+
+test("D21 v1.2: ledger registra probe (gravado na hora), idPending e idSource; texto da resposta nunca entra", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => ({ isAnswered: true, text: "SEGREDO" }) });
+  await H.turn();
+  await settle();
+  const probe = ledgerLines(H).find((l) => l.scope === "probe");
+  assert.ok(probe, "a linha probe vai ao disco sem esperar o turn.complete");
+  assert.deepEqual([probe.tier, probe.model, probe.probe], ["standard", SONNET, "ok"]);
+  await later(H, 1);
+  await H.call("turn.complete", { turnId: "t1" }, async () => ({ usage: { model: SONNET, input_tokens: 1, output_tokens: 1 } }));
+  const sess = ledgerLines(H).find((l) => l.scope === "session");
+  assert.equal(sess.idPending, "standard");
+  assert.equal(sess.switched, true);
+  assert.equal(sess.idSource, "probe");
+  assert.equal(JSON.stringify(ledgerLines(H)).includes("SEGREDO"), false);
+});
+
+test("D21 v1.2: cache recebe só ID da tabela com sonda ok (nunca o teto do turn.step)", async () => {
+  const H = await load({ root: mkRepo(), complete: () => ({ isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle();
+  assert.deepEqual(JSON.parse(cacheWrites(H).at(-1).text), { version: 1, ids: { standard: SONNET } });
+});
+
+test("D21 v1.2: ID de models.ids com sonda ok é usado na sessão mas nunca vai ao cache", async () => {
+  const yaml = "models:\n  enabled: true\n  ids:\n    standard: claude-sonnet-9\n";
+  const H = await load({ root: mkRepo(yaml), complete: () => ({ isAnswered: true, text: "ok" }) });
+  await H.turn();
+  await settle();
+  assert.equal((await later(H, 1)).model, "claude-sonnet-9");
+  assert.equal(cacheWrites(H).some((w) => w.text.includes("claude-sonnet-9")), false);
+});
+
+test("D21 v1.2: despacho roteado alimenta o cache; despacho com modelo explícito não", async () => {
+  const H = await load({ root: mkRepo() });
+  await H.call("session.start", {});
+  await H.call("turn.start", { text: "x", turnId: "t1" });
+  await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, "claude-haiku-5-5");
+  assert.deepEqual(JSON.parse(cacheWrites(H).at(-1).text).ids, { cheap: "claude-haiku-5-5" });
+  const n = cacheWrites(H).length;
+  await H.spawn({ subagentType: "general-purpose", parentModel: OPUS, model: "claude-sonnet-9" }, "claude-sonnet-9");
+  assert.equal(cacheWrites(H).length, n, "explícito/não roteado não grava");
+});
+
+test("D21 v1.2: cache existente é só candidato — passa pela sonda antes de usar; rejeitado sai do cache", async () => {
+  const cache = JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-9" } });
+  const H = await load({ root: mkRepo(), files: { [CACHE]: cache }, complete: (req) => (req.model === "claude-sonnet-9" ? { isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 } : { isAnswered: true, text: "ok" }) });
+  assert.equal((await H.turn()).model, OPUS, "cache não é usado sem sonda");
+  await settle();
+  assert.equal(H.log.completes[0].model, "claude-sonnet-9");
+  assert.equal(JSON.parse(cacheWrites(H).at(-1).text).ids.standard, undefined, "rejeitado saiu do cache");
+});
+
+test("D21 v1.2: contenção — arquivo link, maior que 4 KiB ou diretório link → não lê nem grava o cache", async () => {
+  const cache = JSON.stringify({ version: 1, ids: { standard: "claude-sonnet-9" } });
+  const dir = CACHE.slice(0, CACHE.lastIndexOf("/"));
+  const cases = [
+    (a) => (a === CACHE ? { kind: "file", size: 50, mtimeMs: 0, isLink: true, realPath: CACHE } : null),
+    (a) => (a === CACHE ? { kind: "file", size: 5000, mtimeMs: 0, isLink: false, realPath: CACHE } : null),
+    (a) => (a === dir ? { kind: "dir", size: 0, mtimeMs: 0, isLink: false, realPath: "/outro/lugar" } : null),
+  ];
+  for (const ov of cases) {
+    const H = await load({ root: mkRepo(), files: { [CACHE]: cache }, statOverride: ov, complete: () => ({ isAnswered: true, text: "ok" }) });
+    await H.turn();
+    await settle();
+    assert.equal(H.log.completes[0]?.model, SONNET, "o cache recusado é pulado: a tabela é o 1o candidato");
+    assert.equal(cacheWrites(H).length, 0, "cache recusado nunca é gravado");
+  }
+});
 
 test("contrato ponta a ponta: o ledger REAL do mod fecha com o relatório (agentType nos subagentes, trocas de fase = 1)", async () => {
   const root = mkRepo(YAML_LEDGER, "R");
