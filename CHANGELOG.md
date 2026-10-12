@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.8.2] — 2026-10-12
+
 ### Added
 
 - Roteamento de modelos: config `models.ids` (opcional) no `.devflow.yaml`, que escolhe a geração do ID dentro do tier; é só candidato (passa pela sonda) e nunca vai para o cache do usuário.
