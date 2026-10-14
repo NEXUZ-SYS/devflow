@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.9.1] — 2026-10-14
+
 ### Fixed
 
 - Roteamento de modelos: a 1ª mensagem de cada processo que precisava de um tier abaixo do teto saía no teto enquanto a sonda do ID rodava (INV-SESS, campanha D da v3.9.0: 2 de 142 mensagens). O mod agora sonda os tiers abaixo do teto já no 1º passo da sessão e o passo que pede um tier com sonda em voo espera até 3 s pela resposta; passado o prazo, segue só com o esforço como antes.
