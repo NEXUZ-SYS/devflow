@@ -79,6 +79,29 @@ export function onProbeResult(state, tier, id, outcome) {
   if (p.errors >= PROBE_MAX_ERRORS) p.gaveUp = true;
 }
 
+// Sonda antecipada: tiers abaixo do teto que a tabela de sessão (ou o override) pede em alguma fase e ainda
+// sem ID. O mod os sonda no 1o passo, para que a troca de fase não pague a sonda no passo que precisa do ID.
+export function sessionProbeTiers(state, { table, config }) {
+  if (!config?.enabled || !config.session || !table || !state.userModel) return [];
+  const ceiling = tierOf(state.userModel);
+  if (!ceiling) return [];
+  const wanted = new Set();
+  for (const phase of Object.keys(table.session?.phases ?? {})) {
+    const raw = config.overrides?.session?.phases?.[phase] ?? table.session.phases[phase];
+    if (!TIERS.includes(raw)) continue; // "ceiling" ou valor ilegível: fica no teto
+    const t = capAtCeiling(raw, ceiling, config.maxTier);
+    if (t && t !== ceiling && !state.ids[t]) wanted.add(t);
+  }
+  return TIERS.filter((t) => wanted.has(t));
+}
+
+// Tier que a rota atual da sessão pede abaixo do teto e ainda não tem ID verificado (null se nada a esperar).
+export function neededTier(state, { table, config }) {
+  if (!state.userModel) return null;
+  const route = resolveSessionRoute({ table, config, phase: state.phase, skill: state.skill, userModel: state.userModel, userEffort: state.userEffort });
+  return route && route.tier !== route.ceiling && !state.ids[route.tier] ? route.tier : null;
+}
+
 // /devflow-route status: o que a sessão sabe de cada tier (ID e origem, ou o estado da sonda) e se o cache está ligado.
 export function idStatusLines(state, { cacheOn }) {
   const rows = [];

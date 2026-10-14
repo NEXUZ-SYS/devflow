@@ -364,3 +364,46 @@ test("idStatusLines: 3 erros desistem e mostram o contador", () => {
   const line = C.idStatusLines(s, { cacheOn: true }).find((l) => l.startsWith("  standard:"));
   assert.match(line, /^  standard: sem ID · desistiu · erros: 3\/3$/);
 });
+
+// ─── sonda antecipada: tiers que a tabela de sessão vai pedir abaixo do teto ──────────────────────
+const withCeiling = (model = "claude-opus-5-5", cfg = config) => {
+  const s = C.createRouterState();
+  C.observeSession(s, { model, effort: "xhigh" });
+  return { s, ctx: { table, config: cfg } };
+};
+
+test("sessionProbeTiers: teto capable → só o standard (E, V e C usam standard na tabela)", () => {
+  const { s, ctx: c } = withCeiling();
+  assert.deepEqual(C.sessionProbeTiers(s, c), ["standard"]);
+});
+
+test("sessionProbeTiers: teto standard → nada a sondar", () => {
+  const { s, ctx: c } = withCeiling("claude-sonnet-5-5");
+  assert.deepEqual(C.sessionProbeTiers(s, c), []);
+});
+
+test("sessionProbeTiers: tier com ID conhecido sai da lista; maxTier cheap troca o alvo", () => {
+  const { s, ctx: c } = withCeiling();
+  C.learnId(s, "claude-sonnet-5-5");
+  assert.deepEqual(C.sessionProbeTiers(s, c), []);
+  const capped = effectiveConfig(readModels("models:\n  enabled: true\n  maxTier: cheap\n"), "1");
+  const w = withCeiling("claude-opus-5-5", capped);
+  assert.deepEqual(C.sessionProbeTiers(w.s, w.ctx), ["cheap"]);
+});
+
+test("sessionProbeTiers: sem teto observado, roteamento desligado ou sessão off → []", () => {
+  assert.deepEqual(C.sessionProbeTiers(C.createRouterState(), ctx), []);
+  const off = effectiveConfig(readModels("models:\n  enabled: false\n"), "1");
+  const w = withCeiling("claude-opus-5-5", off);
+  assert.deepEqual(C.sessionProbeTiers(w.s, w.ctx), []);
+});
+
+test("neededTier: fase E sem ID → standard; com ID ou na fase P (teto) → null", () => {
+  const { s, ctx: c } = withCeiling();
+  C.onPhaseChange(s, { phase: "P" });
+  assert.equal(C.neededTier(s, c), null);
+  C.onPhaseChange(s, { phase: "E" });
+  assert.equal(C.neededTier(s, c), "standard");
+  C.learnId(s, "claude-sonnet-5-5");
+  assert.equal(C.neededTier(s, c), null);
+});

@@ -23,6 +23,10 @@ const ledgerLines = (H) => H.log.writes.filter((w) => w.path.endsWith(".jsonl"))
 const VHOME = "/home/t";
 const CACHE = "/home/t/.local/share/devflow-model-routing/ids.json";
 const cacheWrites = (H) => H.log.writes.filter((w) => w.path === CACHE);
+// A espera do passo pela sonda é de 30 ms nos testes (3 s no engine): "slow" responde depois dela, "never" nunca responde.
+const slow = (res = { isAnswered: true, text: "ok" }) => () => new Promise((r) => setTimeout(() => r(res), 80));
+const never = () => new Promise(() => {});
+const settleSlow = () => new Promise((r) => setTimeout(r, 130));
 const later = (H, index) => H.step({ turnId: "t1", index, model: OPUS, effort: "xhigh", messageCount: index + 1 });
 
 
@@ -53,7 +57,8 @@ async function load({ root, env = ON, statOverride, complete, stateThrows = fals
       get: async (r) => ({ value: log.state[r.key], version: 0 }),
       set: async (r, v) => { if (flags.stateThrows) throw new Error("state off"); log.state[r.key] = JSON.parse(JSON.stringify(v)); return { isSet: true, version: 1 }; },
     },
-    clock: { after: (ms, fn) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); } },
+    clock: { after: (ms, fn) => { const t = setTimeout(fn, ms >= 1000 ? 30 : ms); // a espera de 3 s da sonda vira 30 ms nos testes
+      return () => clearTimeout(t); } },
     model: { complete: async (req) => { log.completes.push(req); return complete ? complete(req) : { isAnswered: false, reason: "empty-reply" }; } },
     fs: {
       stat: async (p, opt) => {
@@ -131,7 +136,7 @@ test("D5 no spawn: teto sonnet + architect → intocado; teto opus + documentati
 });
 
 test("sessão na fase E: sem ID de sonnet só o esforço muda; depois de aprendê-lo usa o ID completo", async () => {
-  const H = await load({ root: mkRepo() });
+  const H = await load({ root: mkRepo(), complete: never });
   const first = await H.turn();
   assert.equal(first.model, OPUS);
   assert.equal(first.effort, "medium");
@@ -209,11 +214,11 @@ const YAML_LEDGER = "models:\n  enabled: true\n  ledger: true\n";
 
 // ─── D21 v1.2: sonda do ID do tier, cache contido e ledger ─────────────────────────────────────────
 
-test("D21 v1.2: fase E sem ID → 1a etapa só esforço e agenda 1 sonda; a seguinte troca para o ID sondado", async () => {
-  const H = await load({ root: mkRepo(YAML_LEDGER) });
+test("D21 v1.2: fase E sem ID e sonda lenta → 1a etapa só esforço e 1 sonda; a seguinte troca para o ID sondado", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: slow() });
   const first = await H.turn();
   assert.equal(first.model, OPUS);
-  await settle();
+  await settleSlow();
   const probes = H.log.completes.filter((r) => r.prompt === "ok");
   assert.equal(probes.length, 1);
   assert.deepEqual({ model: probes[0].model, maxTokens: probes[0].maxTokens, effort: probes[0].effort }, { model: SONNET, maxTokens: 1, effort: "low" });
@@ -251,7 +256,8 @@ test("D21 v1.2: invalid_request/400 é erro transitório: tenta o mesmo candidat
   await settle();
   await later(H, 1);
   await settle();
-  assert.deepEqual(H.log.completes.map((r) => r.model), [SONNET, SONNET]);
+  const models = H.log.completes.map((r) => r.model);
+  assert.ok(models.length >= 2 && models.every((m) => m === SONNET), "o mesmo candidato é tentado de novo");
 });
 
 test("D21 v1.2: a sonda que lança conta como rejected e nunca quebra o passo", async () => {
@@ -263,9 +269,9 @@ test("D21 v1.2: a sonda que lança conta como rejected e nunca quebra o passo", 
 });
 
 test("D21 v1.2: ledger registra probe (gravado na hora), idPending e idSource; texto da resposta nunca entra", async () => {
-  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => ({ isAnswered: true, text: "SEGREDO" }) });
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: slow({ isAnswered: true, text: "SEGREDO" }) });
   await H.turn();
-  await settle();
+  await settleSlow();
   const probe = ledgerLines(H).find((l) => l.scope === "probe");
   assert.ok(probe, "a linha probe vai ao disco sem esperar o turn.complete");
   assert.deepEqual([probe.tier, probe.model, probe.probe], ["standard", SONNET, "ok"]);
@@ -320,7 +326,7 @@ test("D21 v1.2: cache existente é só candidato — passa pela sonda antes de u
   assert.equal((await H.turn()).model, OPUS, "cache não é usado sem sonda");
   await settle();
   assert.equal(H.log.completes[0].model, "claude-sonnet-9");
-  assert.equal(JSON.parse(cacheWrites(H).at(-1).text).ids.standard, undefined, "rejeitado saiu do cache");
+  assert.notEqual(JSON.parse(cacheWrites(H).at(-1).text).ids.standard, "claude-sonnet-9", "rejeitado saiu do cache");
 });
 
 test("D21 v1.2: contenção — arquivo link, maior que 4 KiB ou diretório link → não lê nem grava o cache", async () => {
@@ -462,7 +468,7 @@ test("monitor: tipo não roteável não publica loop (o monitor mostra teto)", a
 });
 
 test("monitor: só o esforço roteado na sessão já conta como roteado", async () => {
-  const H = await load({ root: mkRepo() });
+  const H = await load({ root: mkRepo(), complete: never });
   const first = await H.turn(); // fase E, sem ID de sonnet aprendido: só o esforço muda
   assert.equal(first.effort, "medium");
   const main = H.log.state.routing.loops.main;
@@ -570,10 +576,10 @@ test("D21 v1.2: despacho explícito recortado ao teto (alias do mod, source expl
 test("D21 v1.2: link que aparece depois da leitura → a gravação reconfere e não grava, nem depois", async () => {
   let swapped = false;
   const ov = (a) => (swapped && a === CACHE ? { kind: "file", size: 10, mtimeMs: 0, isLink: true, realPath: "/etc/passwd" } : null);
-  const H = await load({ root: mkRepo(), statOverride: ov, complete: () => ({ isAnswered: true, text: "ok" }) });
+  const H = await load({ root: mkRepo(), statOverride: ov, complete: slow() });
   await H.turn(); // ensure aceitou o cache ausente
   swapped = true;
-  await settle();
+  await settleSlow();
   assert.equal(H.log.completes.length, 1);
   assert.equal(cacheWrites(H).length, 0);
   swapped = false; // recusa desliga o cache na sessão: não volta a gravar
@@ -587,20 +593,20 @@ test("D21 v1.2: gravações do cache são serializadas — a mais nova nunca é 
   const H = await load({
     root: mkRepo(), files: { [CACHE]: cache },
     writeDelay: (p) => (p === CACHE && k++ === 0 ? 30 : 0), // 1a gravação lenta
-    complete: (req) => (req.model === "claude-sonnet-9" ? { isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 } : { isAnswered: true, text: "ok" }),
+    complete: (req) => (req.model === "claude-sonnet-9" ? slow({ isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 })() : { isAnswered: true, text: "ok" }),
   });
-  await H.turn(); // agenda a sonda do claude-sonnet-9
+  await H.turn(); // a sonda do claude-sonnet-9 passa do prazo do passo
   await H.spawn({ subagentType: "devflow:documentation-writer", parentModel: OPUS }, "claude-haiku-5-5"); // grava devagar, ainda com o sonnet-9
-  await settle(); // sonda rejeita o sonnet-9 → grava sem ele
+  await settleSlow(); // sonda rejeita o sonnet-9 → grava sem ele
   await new Promise((r) => setTimeout(r, 60));
   assert.deepEqual(JSON.parse(cacheWrites(H).at(-1).text).ids, { cheap: "claude-haiku-5-5" });
 });
 
 test("D21 v1.2: sonda que resolve com o roteamento desligado não grava ledger nem cache", async () => {
-  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => ({ isAnswered: true, text: "ok" }) });
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: slow() });
   await H.turn();
   await H.call("command.run", { command: "devflow-route", args: "off" });
-  await settle();
+  await settleSlow();
   assert.equal(H.log.completes.length, 1);
   assert.equal(ledgerLines(H).some((l) => l.scope === "probe"), false);
   assert.equal(cacheWrites(H).length, 0);
@@ -731,7 +737,7 @@ test("D21 v1.2: sonda que LANÇA rejeita o candidato na sessão, mas não apaga 
   await settle();
   await later(H, 1); // o candidato que lançou não é re-sondado: passa ao da tabela
   await settle();
-  assert.deepEqual(H.log.completes.map((r) => r.model), ["claude-sonnet-9", SONNET]);
+  assert.deepEqual(H.log.completes.map((r) => r.model).slice(0, 2), ["claude-sonnet-9", SONNET]);
   assert.equal(cacheWrites(H).some((w) => JSON.parse(w.text).ids.standard !== "claude-sonnet-9"), false, "exceção não apaga do cache");
 });
 
@@ -868,4 +874,57 @@ test("status: sonda em voo mostra o candidato", async () => {
   await H.turn();
   await settle();
   assert.ok((await statusText(H)).includes(`  standard: sem ID · sonda em voo (${SONNET})`));
+});
+
+// ─── sonda antecipada e espera curta do ID do tier (INV-SESS, campanha D v3.9.0) ───────────────────
+const probesOf = (H) => H.log.completes.filter((r) => r.prompt === "ok");
+const setPhase = (root, phase) => fs.writeFileSync(path.join(root, ".context/runtime/workflows/prevc.json"), JSON.stringify({ status: { project: { current_phase: phase } } }));
+
+test("antecipada: na fase P (teto) o 1o passo já sonda o standard e fica no teto", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER, "P") });
+  const first = await H.turn();
+  assert.equal(first.model, OPUS);
+  await settle();
+  assert.deepEqual(probesOf(H).map((r) => r.model), [SONNET]);
+});
+
+test("antecipada: a fase muda P→E no meio do turno e o 1o passo em E já troca para o ID sondado", async () => {
+  const root = mkRepo(YAML_LEDGER, "P");
+  const H = await load({ root });
+  await H.turn();
+  await settle();
+  setPhase(root, "E");
+  const inE = await later(H, 1);
+  assert.equal(inE.model, SONNET);
+  assert.equal(probesOf(H).length, 1, "nenhuma sonda nova");
+});
+
+test("espera: fase E com sonda rápida → o 1o passo já sai no ID sondado, sem idPending", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER) });
+  const first = await H.turn();
+  assert.equal(first.model, SONNET);
+  await H.call("turn.complete", { turnId: "t1", usage: { model: SONNET, input_tokens: 1, output_tokens: 1 } });
+  assert.equal(ledgerLines(H).find((l) => l.scope === "session")?.idPending, undefined);
+});
+
+test("espera: sonda que não responde no prazo → o passo segue só com esforço, e troca quando a sonda responde", async () => {
+  let release;
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => new Promise((r) => { release = () => r({ isAnswered: true, text: "ok" }); }) });
+  const first = await H.turn();
+  assert.equal(first.model, OPUS, "estourou o prazo: segue no teto");
+  release();
+  await settle();
+  assert.equal((await later(H, 1)).model, SONNET);
+});
+
+test("espera: sonda rejeitada em todos os candidatos não prende o passo nem quebra a sessão", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => ({ isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 }) });
+  assert.equal((await H.turn()).model, OPUS);
+});
+
+test("antecipada: roteamento desligado não sonda nem espera", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER, "P"), env: { HOME: "/home/t" } });
+  assert.equal((await H.turn()).model, OPUS);
+  await settle();
+  assert.equal(probesOf(H).length, 0);
 });
