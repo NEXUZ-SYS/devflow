@@ -14,6 +14,7 @@ const MAX_LEDGER_LINES = 2000;
 const MAX_IDS_CACHE = 4096;
 const ROUTING = { plugin: "devflow", key: "routing" }; // lido pelo monitor ao vivo (seção abaixo)
 const MAX_PUB_LOOPS = 100;
+const PROBE_WAIT_MS = 3000; // prazo que o passo espera a sonda do tier que ele pede (INV-SESS, campanha D v3.9.0)
 const PREVC = ".context/runtime/workflows/prevc.json";
 const S = {
   core: core.createRouterState(),
@@ -36,6 +37,7 @@ const S = {
   idsCachePath: null, // null = cache desligado na sessão (ausente ou recusado pela contenção)
   idsCacheText: "",
   turnIdPending: null,
+  probeWait: {}, // tier → promessa da sonda em voo (o passo que pede o tier espera por ela)
   savingIds: Promise.resolve(), // fila das gravações do cache: nunca reordena
   flushing: Promise.resolve(), // fila das gravações do ledger
   pendingIdSource: null,
@@ -217,7 +219,22 @@ async function writeLedger($) {
 function startProbe($, tier) {
   const p = core.nextProbe(S.core, tier, { cache: S.idsCache, config: S.config, table: S.table });
   if (!p) return;
-  try { $.clock.after(0, () => { void runProbe($, p); }); } catch { core.onProbeResult(S.core, tier, p.id, "error"); }
+  // A promessa fica em S.probeWait[tier] até a sonda terminar: o passo que pede esse tier espera por ela, com prazo.
+  const done = new Promise((resolve) => {
+    try { $.clock.after(0, () => { void runProbe($, p).finally(resolve); }); } catch { core.onProbeResult(S.core, tier, p.id, "error"); resolve(); }
+  });
+  S.probeWait[tier] = done;
+  void done.then(() => { if (S.probeWait[tier] === done) delete S.probeWait[tier]; });
+}
+
+// Espera a sonda em voo do tier que o passo pede, no máximo PROBE_WAIT_MS (relógio do engine). Nunca lança.
+async function awaitProbe($, tier) {
+  const pending = S.probeWait[tier];
+  if (!pending) return;
+  let cancel;
+  const timeout = new Promise((resolve) => { try { cancel = $.clock.after(PROBE_WAIT_MS, resolve); } catch { resolve(); } });
+  try { await Promise.race([pending, timeout]); } catch { /* sonda nunca afeta a sessão */ }
+  if (typeof cancel === "function") try { cancel(); } catch { /* cancelar é opcional */ }
 }
 
 async function runProbe($, { tier, id }) {
@@ -365,7 +382,13 @@ async function* routerTurnStep($, e, next) {
         else {
           core.observeSession(S.core, e); // teto observado sempre (D17), mesmo com a sessão desligada
           core.learnId(S.core, e.model); // ID completo do tier do teto sempre conhecido
-          if (!S.sessionOff) patch = core.onSessionStep(S.core, e, { table: S.table, config: S.config });
+          if (!S.sessionOff) {
+            const rctx = { table: S.table, config: S.config };
+            for (const t of core.sessionProbeTiers(S.core, rctx)) startProbe($, t); // sonda antes de a fase pedir o tier
+            const need = core.neededTier(S.core, rctx);
+            if (need) await awaitProbe($, need);
+            patch = core.onSessionStep(S.core, e, rctx);
+          }
           if (patch?.switched) S.pendingSwitch = true;
           if (patch?.idPending) { S.turnIdPending = patch.idPending; startProbe($, patch.idPending); }
           if (patch?.switched) S.pendingIdSource = patch.idSource ?? null; // a última troca manda: volta ao teto não tem fonte
