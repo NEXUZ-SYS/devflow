@@ -37,6 +37,7 @@ phases:
     name: "Validation"
     prevc: "V"
     status: pending
+lastUpdated: "2026-10-14T13:50:52.829Z"
 ---
 
 # Status do roteamento mostra as sondas de ID do tier
@@ -95,3 +96,7 @@ Só os tiers com ID ou sonda nesta sessão aparecem. Sem nenhum: `IDs por tier: 
 ## Fora do escopo
 
 Ler o ledger no status; subcomando novo; sondar no `turn.start` (outro item do backlog).
+
+## Execution History
+
+> Last updated: 2026-10-14T13:50:52.829Z | Progress: 0%
