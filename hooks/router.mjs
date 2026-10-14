@@ -285,8 +285,9 @@ async function onCommand($, e, next) {
     text: [
       `roteamento: ${active() ? "ligado" : "desligado"}${S.sessionOff ? " (sessão off)" : ""}${S.config.enabled ? "" : " — exige models.enabled no repo e DEVFLOW_MODEL_ROUTING=1"}`,
       `fase: ${c.phase ?? "—"} · skill: ${c.skill ?? "—"}`,
-      `teto: ${c.userModel ?? "?"} · ${c.userEffort ?? "?"} · IDs conhecidos: ${Object.values(c.ids).join(", ") || "—"}`,
+      `teto: ${c.userModel ?? "?"} · ${c.userEffort ?? "?"}`,
       `sessão no tier: ${c.sessionTier ?? "—"} · subagentes rastreados: ${Object.keys(c.agents).length}`,
+      ...core.idStatusLines(c, { cacheOn: !!S.idsCachePath }),
     ].join("\n"),
   };
 }

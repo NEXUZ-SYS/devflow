@@ -53,7 +53,7 @@ models:
 
 ## Comandos
 
-- `/devflow-route` (registrado pelo mod): `status`, `on`, `off` e `session off`. Se outro roteador de sessão estiver habilitado, a camada de sessão do DevFlow se desliga e avisa.
+- `/devflow-route` (registrado pelo mod): `status`, `on`, `off` e `session off`. O `status` lista por tier o ID conhecido e a origem (sonda ok ou aprendido de subagente) ou o estado da sonda (em voo, aguardando, desistiu, com os IDs rejeitados e o contador de erros) e diz se o cache de IDs está ligado. Se outro roteador de sessão estiver habilitado, a camada de sessão do DevFlow se desliga e avisa.
 - `node scripts/model-route.mjs resolve|escalate|report`:
   - `resolve --agent <tipo> [--phase P] [--skill S] [--task-tier T] [--runtime claude|omp]` mostra a rota;
   - `escalate --agent <tipo> --tier <T> --report <arquivo>` imprime a rubrica; com `--mid-run` (só no ramo da rubrica) a rubrica é a da escalada no meio da execução; com `--answers <json>` combina as respostas e devolve `keep`, `escalate` ou `human`, aceitando `--signal-red` (há sinal vermelho no ledger do `verify:`) e `--runtime omp` (limita a saída ao teto do agente e devolve também `role`; sob omp, `role` é o campo útil, não `model`);

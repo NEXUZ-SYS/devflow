@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `/devflow-route status` mostra, por tier, o ID que a sessão conhece e de onde veio (sonda ok ou aprendido de subagente) ou o estado da sonda (em voo com o candidato, aguardando, desistiu, com os IDs rejeitados e o contador de erros), mais se o cache de IDs está ligado. Substitui a linha "IDs conhecidos".
+
 ## [3.8.2] — 2026-10-12
 
 ### Added
