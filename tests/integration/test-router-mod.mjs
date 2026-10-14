@@ -834,3 +834,38 @@ test("H1: JSON válido sem fase no meio do turno mantém a fase; só o turn.star
   await H.call("turn.start", { text: "y", turnId: "t2" });
   assert.match(await faseDe(H), /fase: —/);
 });
+
+// ─── /devflow-route status mostra as sondas de ID ─────────────────────────────────────────────────
+
+const statusText = async (H) => (await H.call("command.run", { command: "devflow-route", args: "status" })).text;
+
+test("status: antes de qualquer sonda não inventa ID e diz que o cache está ligado", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER) });
+  const txt = await statusText(H);
+  assert.match(txt, /IDs por tier: — \(nenhuma sonda nesta sessão\)/);
+  assert.match(txt, /cache de IDs: ligado/);
+  assert.equal(txt.includes("IDs conhecidos"), false);
+});
+
+test("status: depois da sonda ok mostra o ID do tier e a origem", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER) });
+  await H.turn();
+  await settle();
+  assert.ok((await statusText(H)).includes(`  standard: ${SONNET} (sonda ok)`));
+});
+
+test("status: sonda rejeitada em todos os candidatos mostra o ID recusado, sem ID para o tier", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => ({ isAnswered: false, reason: "api-error", error: "model_not_found", status: 404 }) });
+  await H.turn();
+  await settle();
+  const line = (await statusText(H)).split("\n").find((l) => l.startsWith("  standard:"));
+  assert.match(line, /^  standard: sem ID · (desistiu|aguardando sonda) · rejeitados: /);
+  assert.ok(line.includes(SONNET));
+});
+
+test("status: sonda em voo mostra o candidato", async () => {
+  const H = await load({ root: mkRepo(YAML_LEDGER), complete: () => new Promise(() => {}) });
+  await H.turn();
+  await settle();
+  assert.ok((await statusText(H)).includes(`  standard: sem ID · sonda em voo (${SONNET})`));
+});
