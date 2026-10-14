@@ -61,6 +61,7 @@ export function nextProbe(state, tier, ctx) {
   const id = idCandidates(tier, ctx).find((c) => !p.tried.includes(c));
   if (!id) { p.gaveUp = true; return null; }
   p.inFlight = true;
+  p.current = id; // só para o /devflow-route status
   return { tier, id };
 }
 
@@ -68,6 +69,7 @@ export function onProbeResult(state, tier, id, outcome) {
   const p = state.probes[tier];
   if (!p) return;
   p.inFlight = false;
+  p.current = null;
   if (outcome === "ok") {
     if (!state.ids[tier]) { state.ids[tier] = id; state.idSource[tier] = "probe"; } // aprendido do engine vence
     return;
@@ -75,6 +77,24 @@ export function onProbeResult(state, tier, id, outcome) {
   if (outcome === "rejected") { p.tried.push(id); return; }
   p.errors += 1; // limite por tier: rejected não zera
   if (p.errors >= PROBE_MAX_ERRORS) p.gaveUp = true;
+}
+
+// /devflow-route status: o que a sessão sabe de cada tier (ID e origem, ou o estado da sonda) e se o cache está ligado.
+export function idStatusLines(state, { cacheOn }) {
+  const rows = [];
+  for (const t of TIERS) {
+    const id = state.ids[t], p = state.probes[t];
+    if (id) { rows.push(`  ${t}: ${id} (${state.idSource[t] === "probe" ? "sonda ok" : "aprendido de subagente"})`); continue; }
+    if (!p) continue;
+    const parts = ["sem ID", p.inFlight ? `sonda em voo (${p.current})` : p.gaveUp ? "desistiu" : "aguardando sonda"];
+    if (p.tried.length) parts.push(`rejeitados: ${p.tried.join(", ")}`);
+    if (p.errors) parts.push(`erros: ${p.errors}/${PROBE_MAX_ERRORS}`);
+    rows.push(`  ${t}: ${parts.join(" · ")}`);
+  }
+  return [
+    ...(rows.length ? ["IDs por tier:", ...rows] : ["IDs por tier: — (nenhuma sonda nesta sessão)"]),
+    `cache de IDs: ${cacheOn ? "ligado" : "desligado (caminho recusado ou roteamento desligado)"}`,
+  ];
 }
 
 // e.model chega SEMPRE com o modelo do usuário (sonda R-3), mesmo depois de uma troca. Por isso a troca

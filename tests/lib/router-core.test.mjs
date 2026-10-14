@@ -331,3 +331,36 @@ test("onSessionStep: no teto (P) nunca pede ID; troca com ID aprendido marca idS
   C.onTurnStart(s, { phase: "E" });
   assert.equal(step(s, OPUS, "xhigh").idSource, "learned");
 });
+
+test("idStatusLines: sem ID nem sonda, uma linha só; o cache aparece ligado ou desligado", () => {
+  const s = C.createRouterState();
+  assert.deepEqual(C.idStatusLines(s, { cacheOn: true }), ["IDs por tier: — (nenhuma sonda nesta sessão)", "cache de IDs: ligado"]);
+  assert.equal(C.idStatusLines(s, { cacheOn: false }).at(-1), "cache de IDs: desligado (caminho recusado ou roteamento desligado)");
+});
+
+test("idStatusLines: ID por sonda ok e ID aprendido de subagente", () => {
+  const s = C.createRouterState();
+  C.nextProbe(s, "standard", ctx);
+  C.onProbeResult(s, "standard", table.ids.standard, "ok");
+  C.learnId(s, "claude-haiku-5-5");
+  const lines = C.idStatusLines(s, { cacheOn: true });
+  assert.ok(lines.includes(`  standard: ${table.ids.standard} (sonda ok)`));
+  assert.ok(lines.includes("  cheap: claude-haiku-5-5 (aprendido de subagente)"));
+});
+
+test("idStatusLines: sonda em voo mostra o candidato; resultado rejected o tira de voo e o lista", () => {
+  const s = C.createRouterState();
+  const p = C.nextProbe(s, "standard", ctx);
+  assert.ok(C.idStatusLines(s, { cacheOn: true }).includes(`  standard: sem ID · sonda em voo (${p.id})`));
+  C.onProbeResult(s, "standard", p.id, "rejected");
+  const after = C.idStatusLines(s, { cacheOn: true }).find((l) => l.startsWith("  standard:"));
+  assert.match(after, /^  standard: sem ID · aguardando sonda · rejeitados: /);
+  assert.ok(after.includes(p.id));
+});
+
+test("idStatusLines: 3 erros desistem e mostram o contador", () => {
+  const s = C.createRouterState();
+  for (let i = 0; i < 3; i++) { const p = C.nextProbe(s, "standard", ctx); C.onProbeResult(s, "standard", p.id, "error"); }
+  const line = C.idStatusLines(s, { cacheOn: true }).find((l) => l.startsWith("  standard:"));
+  assert.match(line, /^  standard: sem ID · desistiu · erros: 3\/3$/);
+});
