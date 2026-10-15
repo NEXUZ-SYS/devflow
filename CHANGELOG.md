@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Testes do roteamento de modelos: o kit (`claude plugin test .`) passa a cobrir a sonda antecipada do ID do tier da sessão e o prazo real de 3 s no engine real (sonda no 1º passo, sonda dentro do prazo, sonda acima do prazo). Só testes; o comportamento do mod não muda.
+
 ## [3.9.1] — 2026-10-14
 
 ### Fixed
